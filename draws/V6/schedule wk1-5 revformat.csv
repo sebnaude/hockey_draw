@@ -1,0 +1,131 @@
+DATE,TIME,FIELD,VENUE,ROUND,GRADE,TEAM 1,TEAM 2
+23/03/2025,17:30,EF,Newcastle International Hockey Centre,1,2ND GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+23/03/2025,17:30,WF,Newcastle International Hockey Centre,1,2ND GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests
+23/03/2025,08:30,EF,Newcastle International Hockey Centre,1,3RD GRADE,Newcastle Hockey Association University,Newcastle Hockey Association Wests Red
+23/03/2025,16:00,EF,Newcastle International Hockey Centre,1,3RD GRADE,Newcastle Hockey Association University Seapigs,Newcastle Hockey Association Wests Green
+23/03/2025,13:00,SF,Newcastle International Hockey Centre,1,3RD GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Tigers
+23/03/2025,08:30,WF,Newcastle International Hockey Centre,1,3RD GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Souths
+23/03/2025,10:00,EF,Newcastle International Hockey Centre,1,4TH GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association University
+23/03/2025,11:30,SF,Newcastle International Hockey Centre,1,4TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association Tigers
+23/03/2025,16:00,SF,Newcastle International Hockey Centre,1,4TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Wests Red
+23/03/2025,10:00,WF,Newcastle International Hockey Centre,1,4TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Wests Green
+23/03/2025,13:00,EF,Newcastle International Hockey Centre,1,5TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Wests
+23/03/2025,08:30,SF,Newcastle International Hockey Centre,1,5TH GRADE,Newcastle Hockey Association Tigers Yellow,Newcastle Hockey Association Tigers Black
+23/03/2025,10:00,SF,Newcastle International Hockey Centre,1,5TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association University
+23/03/2025,11:30,WF,Newcastle International Hockey Centre,1,5TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association University Seapigs
+23/03/2025,13:00,WF,Newcastle International Hockey Centre,1,5TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Maitland
+23/03/2025,11:30,EF,Newcastle International Hockey Centre,1,6TH GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association University
+23/03/2025,14:30,SF,Newcastle International Hockey Centre,1,6TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Wests
+23/03/2025,17:30,SF,Newcastle International Hockey Centre,1,6TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association University Gentlemen
+23/03/2025,14:30,EF,Newcastle International Hockey Centre,1,HCPHL,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests
+23/03/2025,16:00,WF,Newcastle International Hockey Centre,1,HCPHL,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+23/03/2025,15:00,,Central Coast Hockey Park,1,HCPHL,Newcastle Hockey Association Gosford,Newcastle Hockey Association Norths
+23/03/2025,,,,1,2ND GRADE,Newcastle Hockey Association Norths,BYE
+23/03/2025,,,,1,3RD GRADE,Newcastle Hockey Association Port Stephens,BYE
+23/03/2025,,,,1,4TH GRADE,Newcastle Hockey Association Maitland,BYE
+23/03/2025,,,,1,6TH GRADE,Newcastle Hockey Association Maitland,BYE
+23/03/2025,,,,1,6TH GRADE,Newcastle Hockey Association Crusaders,BYE
+30/03/2025,13:30,,Maitland Park,2,2ND GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Wests
+30/03/2025,15:00,WF,Newcastle International Hockey Centre,2,2ND GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Tigers
+30/03/2025,10:30,EF,Newcastle International Hockey Centre,2,3RD GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Wests Green
+30/03/2025,13:30,EF,Newcastle International Hockey Centre,2,3RD GRADE,Newcastle Hockey Association University Seapigs,Newcastle Hockey Association Souths
+30/03/2025,10:30,WF,Newcastle International Hockey Centre,2,3RD GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association Tigers
+30/03/2025,15:00,SF,Newcastle International Hockey Centre,2,3RD GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association University
+30/03/2025,09:00,EF,Newcastle International Hockey Centre,2,4TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+30/03/2025,16:30,EF,Newcastle International Hockey Centre,2,4TH GRADE,Newcastle Hockey Association University,Newcastle Hockey Association Wests Green
+30/03/2025,12:00,WF,Newcastle International Hockey Centre,2,4TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Port Stephens
+30/03/2025,16:30,WF,Newcastle International Hockey Centre,2,4TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests Red
+30/03/2025,12:00,,Maitland Park,2,5TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Wests
+30/03/2025,09:00,WF,Newcastle International Hockey Centre,2,5TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association University Seapigs
+30/03/2025,09:00,SF,Newcastle International Hockey Centre,2,5TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Tigers Black
+30/03/2025,10:30,SF,Newcastle International Hockey Centre,2,5TH GRADE,Newcastle Hockey Association Tigers Yellow,Newcastle Hockey Association University
+30/03/2025,16:30,SF,Newcastle International Hockey Centre,2,5TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Colts
+30/03/2025,10:30,,Maitland Park,2,6TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Wests
+30/03/2025,12:00,EF,Newcastle International Hockey Centre,2,6TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association University
+30/03/2025,12:00,SF,Newcastle International Hockey Centre,2,6TH GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association Tigers
+30/03/2025,13:30,SF,Newcastle International Hockey Centre,2,6TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association University Gentlemen
+30/03/2025,15:00,,Maitland Park,2,HCPHL,Newcastle Hockey Association Maitland,Newcastle Hockey Association Wests
+30/03/2025,15:00,EF,Newcastle International Hockey Centre,2,HCPHL,Newcastle Hockey Association Souths,Newcastle Hockey Association Gosford
+30/03/2025,13:30,WF,Newcastle International Hockey Centre,2,HCPHL,Newcastle Hockey Association Norths,Newcastle Hockey Association Tigers
+30/03/2025,,,,2,2ND GRADE,Newcastle Hockey Association Souths,BYE
+30/03/2025,,,,2,3RD GRADE,Newcastle Hockey Association Wests Red,BYE
+30/03/2025,,,,2,4TH GRADE,Newcastle Hockey Association Colts,BYE
+06/04/2025,16:00,EF,Newcastle International Hockey Centre,3,2ND GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Tigers
+06/04/2025,14:30,WF,Newcastle International Hockey Centre,3,2ND GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Souths
+06/04/2025,17:30,WF,Newcastle International Hockey Centre,3,3RD GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association Wests Red
+06/04/2025,14:30,SF,Newcastle International Hockey Centre,3,3RD GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association University
+06/04/2025,10:00,SF,Newcastle International Hockey Centre,3,3RD GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests Green
+06/04/2025,11:30,WF,Newcastle International Hockey Centre,3,3RD GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Norths
+06/04/2025,17:30,EF,Newcastle International Hockey Centre,3,4TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association University
+06/04/2025,13:00,WF,Newcastle International Hockey Centre,3,4TH GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association Wests Red
+06/04/2025,13:00,SF,Newcastle International Hockey Centre,3,4TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Port Stephens
+06/04/2025,11:30,EF,Newcastle International Hockey Centre,3,5TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association University Seapigs
+06/04/2025,16:00,SF,Newcastle International Hockey Centre,3,5TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Crusaders
+06/04/2025,11:30,SF,Newcastle International Hockey Centre,3,5TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association University
+06/04/2025,10:00,WF,Newcastle International Hockey Centre,3,5TH GRADE,Newcastle Hockey Association Tigers Yellow,Newcastle Hockey Association Wests
+06/04/2025,08:30,WF,Newcastle International Hockey Centre,3,6TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Tigers
+06/04/2025,08:30,EF,Newcastle International Hockey Centre,3,6TH GRADE,Newcastle Hockey Association University Gentlemen,Newcastle Hockey Association Wests
+06/04/2025,10:00,EF,Newcastle International Hockey Centre,3,6TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association University
+06/04/2025,14:30,EF,Newcastle International Hockey Centre,3,HCPHL,Newcastle Hockey Association Maitland,Newcastle Hockey Association Tigers
+06/04/2025,16:00,WF,Newcastle International Hockey Centre,3,HCPHL,Newcastle Hockey Association Norths,Newcastle Hockey Association Souths
+06/04/2025,13:00,EF,Newcastle International Hockey Centre,3,HCPHL,Newcastle Hockey Association Gosford,Newcastle Hockey Association Wests
+06/04/2025,,,,3,2ND GRADE,Newcastle Hockey Association Wests,BYE
+06/04/2025,,,,3,3RD GRADE,Newcastle Hockey Association University Seapigs,BYE
+06/04/2025,,,,3,4TH GRADE,Newcastle Hockey Association Norths,BYE
+06/04/2025,,,,3,4TH GRADE,Newcastle Hockey Association Wests Green,BYE
+06/04/2025,,,,3,4TH GRADE,Newcastle Hockey Association Colts,BYE
+06/04/2025,,,,3,5TH GRADE,Newcastle Hockey Association Norths,BYE
+06/04/2025,,,,3,5TH GRADE,Newcastle Hockey Association Tigers Black,BYE
+06/04/2025,,,,3,6TH GRADE,Newcastle Hockey Association Colts,BYE
+06/04/2025,,,,3,6TH GRADE,Newcastle Hockey Association Souths,BYE
+13/04/2025,17:30,WF,Newcastle International Hockey Centre,4,2ND GRADE,Newcastle Hockey Association Souths,Newcastle Hockey Association Tigers
+13/04/2025,13:00,EF,Newcastle International Hockey Centre,4,2ND GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Wests
+13/04/2025,14:30,WF,Newcastle International Hockey Centre,4,3RD GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association Souths
+13/04/2025,11:30,EF,Newcastle International Hockey Centre,4,3RD GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association University
+13/04/2025,08:30,EF,Newcastle International Hockey Centre,4,3RD GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association University Seapigs
+13/04/2025,11:30,WF,Newcastle International Hockey Centre,4,3RD GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Wests Green
+13/04/2025,13:00,WF,Newcastle International Hockey Centre,4,4TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association Souths
+13/04/2025,10:00,SF,Newcastle International Hockey Centre,4,4TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Tigers
+13/04/2025,10:00,EF,Newcastle International Hockey Centre,4,4TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association University
+13/04/2025,14:30,SF,Newcastle International Hockey Centre,4,4TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Wests Green
+13/04/2025,13:00,SF,Newcastle International Hockey Centre,4,5TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Port Stephens
+13/04/2025,17:30,EF,Newcastle International Hockey Centre,4,5TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association Tigers Black
+13/04/2025,11:30,SF,Newcastle International Hockey Centre,4,5TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Tigers Yellow
+13/04/2025,17:30,SF,Newcastle International Hockey Centre,4,5TH GRADE,Newcastle Hockey Association University Seapigs,Newcastle Hockey Association University
+13/04/2025,10:00,WF,Newcastle International Hockey Centre,4,5TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Wests
+13/04/2025,08:30,WF,Newcastle International Hockey Centre,4,6TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Souths
+13/04/2025,08:30,SF,Newcastle International Hockey Centre,4,6TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association University
+13/04/2025,16:00,SF,Newcastle International Hockey Centre,4,6TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association University Gentlemen
+13/04/2025,16:00,EF,Newcastle International Hockey Centre,4,6TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests
+13/04/2025,15:00,,Central Coast Hockey Park,4,HCPHL,Newcastle Hockey Association Gosford,Newcastle Hockey Association Maitland
+13/04/2025,16:00,WF,Newcastle International Hockey Centre,4,HCPHL,Newcastle Hockey Association Souths,Newcastle Hockey Association Tigers
+13/04/2025,14:30,EF,Newcastle International Hockey Centre,4,HCPHL,Newcastle Hockey Association Norths,Newcastle Hockey Association Wests
+13/04/2025,,,,4,2ND GRADE,Newcastle Hockey Association Maitland,BYE
+13/04/2025,,,,4,3RD GRADE,Newcastle Hockey Association Wests Red,BYE
+13/04/2025,,,,4,4TH GRADE,Newcastle Hockey Association Wests Red,BYE
+27/04/2025,13:30,EF,Newcastle International Hockey Centre,5,2ND GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests
+27/04/2025,14:00,,Maitland Park,5,2ND GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+27/04/2025,12:00,EF,Newcastle International Hockey Centre,5,3RD GRADE,Newcastle Hockey Association Wests Red,Newcastle Hockey Association Wests Green
+27/04/2025,16:30,EF,Newcastle International Hockey Centre,5,3RD GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association University
+27/04/2025,09:00,WF,Newcastle International Hockey Centre,5,3RD GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association Souths
+27/04/2025,13:30,SF,Newcastle International Hockey Centre,5,3RD GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association University Seapigs
+27/04/2025,10:30,WF,Newcastle International Hockey Centre,5,4TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Wests Green
+27/04/2025,15:00,WF,Newcastle International Hockey Centre,5,4TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Norths
+27/04/2025,10:30,SF,Newcastle International Hockey Centre,5,4TH GRADE,Newcastle Hockey Association Port Stephens,Newcastle Hockey Association Wests Red
+27/04/2025,12:30,,Maitland Park,5,4TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+27/04/2025,12:00,WF,Newcastle International Hockey Centre,5,5TH GRADE,Newcastle Hockey Association Norths,Newcastle Hockey Association University
+26/04/2025,09:00,SF,Newcastle International Hockey Centre,5,5TH GRADE,Newcastle Hockey Association Colts,Newcastle Hockey Association Port Stephens
+27/04/2025,12:00,SF,Newcastle International Hockey Centre,5,5TH GRADE,Newcastle Hockey Association Tigers Black,Newcastle Hockey Association University Seapigs
+27/04/2025,09:30,,Maitland Park,5,5TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Tigers Yellow
+27/04/2025,09:00,EF,Newcastle International Hockey Centre,5,6TH GRADE,Newcastle Hockey Association Crusaders,Newcastle Hockey Association University
+27/04/2025,10:30,EF,Newcastle International Hockey Centre,5,6TH GRADE,Newcastle Hockey Association University Gentlemen,Newcastle Hockey Association Wests
+27/04/2025,15:00,SF,Newcastle International Hockey Centre,5,6TH GRADE,Newcastle Hockey Association Tigers,Newcastle Hockey Association Colts
+27/04/2025,11:00,,Maitland Park,5,6TH GRADE,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+27/04/2025,15:00,EF,Newcastle International Hockey Centre,5,HCPHL,Newcastle Hockey Association Tigers,Newcastle Hockey Association Wests
+27/04/2025,13:30,WF,Newcastle International Hockey Centre,5,HCPHL,Newcastle Hockey Association Norths,Newcastle Hockey Association Gosford
+27/04/2025,15:30,,Maitland Park,5,HCPHL,Newcastle Hockey Association Maitland,Newcastle Hockey Association Souths
+27/04/2025,,,,5,2ND GRADE,Newcastle Hockey Association Norths,BYE
+27/04/2025,,,,5,3RD GRADE,Newcastle Hockey Association Tigers,BYE
+27/04/2025,,,,5,4TH GRADE,Newcastle Hockey Association University,BYE
+27/04/2025,,,,5,5TH GRADE,Newcastle Hockey Association Wests,BYE
+27/04/2025,,,,5,5TH GRADE,Newcastle Hockey Association Crusaders,BYE
