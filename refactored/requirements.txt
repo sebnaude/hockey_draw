@@ -1,0 +1,16 @@
+# Requirements for Hockey Draw Scheduling System
+
+# Core dependencies
+ortools>=9.7.0
+pydantic>=2.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0  # For Excel export
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Optional: for notebook support
+jupyter>=1.0.0
+ipykernel>=6.0.0
