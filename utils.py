@@ -152,7 +152,7 @@ def export_roster_to_excel(roster: Roster, data: Dict, filename: str = "schedule
                 for bye_team in weekly_draw.bye_teams:
                     df = pd.concat([
                         df,
-                        pd.DataFrame([[None, bye_team, "BYE", None, None, None, None, None, None, None, None]], columns=df.columns)
+                        pd.DataFrame([[None, bye_team, "BYE", None, None, None, None, None, None, None]], columns=df.columns)
                     ], ignore_index=True)
             df.to_excel(writer, sheet_name=f"Week {week}", index=False)
     print(f"Schedule successfully exported to {filename}")

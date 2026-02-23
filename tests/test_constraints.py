@@ -383,7 +383,7 @@ class TestFiftyFiftyHomeandAway:
         # Count home games for Maitland
         home_games = sum(
             solver.Value(v) for k, v in X.items() 
-            if k[10] == 'Maitland Park' and 'Maitland' in k[0] or 'Maitland' in k[1]
+            if k[10] == 'Maitland Park' and ('Maitland' in k[0] or 'Maitland' in k[1])
         )
         # Should be balanced (1 home, 1 away)
         assert home_games == 1
@@ -476,6 +476,7 @@ class TestClubGradeAdjacencyConstraint:
             Grade(name='4th', teams=['Tigers 4th', 'Wests 4th']),
         ]
         
+        # Two different fields, same day_slot - teams can't play at same time
         timeslots = [
             Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=basic_fields[0], round_no=1),
             Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=basic_fields[1], round_no=1),
@@ -499,7 +500,7 @@ class TestClubGradeAdjacencyConstraint:
         constraint = ClubGradeAdjacencyConstraint()
         constraint.apply(model, X, data)
         
-        # Force both games in same slot
+        # Force both games in same slot (same day_slot, different fields)
         slot1_games = [v for k, v in X.items() if k[4] == 1 and k[6] == 1]
         model.Add(sum(slot1_games) >= 2)
         
@@ -624,7 +625,7 @@ class TestMinimiseClubsOnAFieldBroadmeadow:
             for i in range(6)
         ]
         
-        # Create games between consecutive clubs
+        # Create games between consecutive clubs - 6 games involving 7 distinct clubs
         games = [(f'Club{i} 3rd', f'Club{i+1} 3rd', '3rd') for i in range(6)]
         
         model, X = create_model_and_vars(games, timeslots)
@@ -641,13 +642,15 @@ class TestMinimiseClubsOnAFieldBroadmeadow:
         constraint = MinimiseClubsOnAFieldBroadmeadow()
         constraint.apply(model, X, data)
         
-        # Force 6 games (involving 7 clubs) on same field same day
-        model.Add(sum(X.values()) >= 6)
+        # Force each unique game to be scheduled exactly once (6 distinct games involving 7 clubs)
+        for (t1, t2, grade) in games:
+            game_vars = [v for k, v in X.items() if k[0] == t1 and k[1] == t2 and k[2] == grade]
+            model.Add(sum(game_vars) == 1)
         
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
         
-        # Should be infeasible due to max 5 clubs limit
+        # Should be infeasible due to max 5 clubs limit (6 games involve 7 distinct clubs)
         assert status == cp_model.INFEASIBLE
 
 

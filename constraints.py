@@ -404,22 +404,31 @@ class TeamConflictConstraint(Constraint):
 
     def apply(self, model, X, data):
         conflicts = data['team_conflicts']
-        fields = data['fields']
         current_week = data['current_week']
+        timeslots = data['timeslots']
+        games = data['games']
+        
         for team_pairing in conflicts:
             team1 = team_pairing[0]
             team2 = team_pairing[1]
-            for t in data['timeslots']:
+            
+            # Group by (week, day_slot) - same time regardless of field
+            time_slots_vars = defaultdict(list)
+            
+            for t in timeslots:
                 if t.week <= current_week:
                     continue
-                game_vars = []
-    
-                for (t1, t2, grade) in data['games']:
+                if not t.day:
+                    continue
+                    
+                for (t1, t2, grade) in games:
                     if t1 in [team1, team2] or t2 in [team1, team2]:
-                        for field in fields:
-                            key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, field.name, field.location)
-                            if key in X and t.day: # Ensure dummy timeslots not counted
-                                game_vars.append(X[key])
+                        key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
+                        if key in X:
+                            time_slots_vars[(t.week, t.day_slot)].append(X[key])
+            
+            # Apply constraint: at most one game involving conflicting teams per time slot
+            for (week, day_slot), game_vars in time_slots_vars.items():
                 model.Add(sum(game_vars) <= 1)
 
 class MaxMaitlandHomeWeekends(Constraint):
@@ -895,7 +904,8 @@ class ClubGradeAdjacencyConstraint(Constraint):
             # we assume t1 and t2 are from same club here if we care—
             # but we only index by the club of t1 (and t2) when they are same
             for ts in timeslots:
-                slot_id = (ts.week, ts.day_slot, ts.field.name)
+                # slot_id represents "same time" - same week and day_slot, regardless of field
+                slot_id = (ts.week, ts.day_slot)
                 key = (t1, t2, grade,
                        ts.day, ts.day_slot, ts.time,
                        ts.week, ts.date, ts.round_no,
