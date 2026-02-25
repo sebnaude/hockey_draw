@@ -1,0 +1,96 @@
+2026-02-24 19:53:06 | INFO     | solver | Logging initialized. Log file: logs\solver_20260224_195306.log
+2026-02-24 19:53:06 | INFO     | solver | ============================================================
+2026-02-24 19:53:06 | INFO     | solver | HOCKEY DRAW SCHEDULER - STAGED SOLVING
+2026-02-24 19:53:06 | INFO     | solver | ============================================================
+2026-02-24 19:53:06 | INFO     | solver | ============================================================
+2026-02-24 19:53:06 | INFO     | solver | SYSTEM INFORMATION
+2026-02-24 19:53:06 | INFO     | solver | ============================================================
+2026-02-24 19:53:06 | INFO     | solver | Python version: 3.11.0 (main, Oct 24 2022, 18:26:48) [MSC v.1933 64 bit (AMD64)]
+2026-02-24 19:53:06 | INFO     | solver | Platform: win32
+2026-02-24 19:53:06 | INFO     | solver | Total memory: 15.6 GB
+2026-02-24 19:53:06 | INFO     | solver | Available memory: 1.9 GB
+2026-02-24 19:53:06 | INFO     | solver | CPU count: 20 (logical), 14 (physical)
+2026-02-24 19:53:06 | INFO     | solver | OR-Tools version: unknown
+2026-02-24 19:53:06 | INFO     | solver | ============================================================
+2026-02-24 19:53:06 | INFO     | solver | Using solver config: workers=4, linearization=0
+2026-02-24 19:53:06 | INFO     | solver | Loading data...
+2026-02-24 19:53:06 | INFO     | solver |   Teams: 47
+2026-02-24 19:53:06 | INFO     | solver |   Grades: 6
+2026-02-24 19:53:06 | INFO     | solver |   Timeslots: 696
+2026-02-24 19:53:06 | INFO     | solver | StagedScheduleSolver initialized
+2026-02-24 19:53:06 | INFO     | solver | Solver config: workers=4, linearization=0
+2026-02-24 19:53:06 | INFO     | solver | Initializing model and decision variables...
+2026-02-24 19:53:07 | INFO     | solver | Run directory: checkpoints\run_14
+2026-02-24 19:53:07 | INFO     | solver | Stages to run: ['stage1_required', 'stage2_strong', 'stage3_medium', 'stage4_soft']
+2026-02-24 19:53:07 | INFO     | solver | ============================================================
+2026-02-24 19:53:07 | INFO     | solver | STARTING STAGE: stage1_required
+2026-02-24 19:53:07 | INFO     | solver |   Name: Required Constraints
+2026-02-24 19:53:07 | INFO     | solver |   Description: Core scheduling rules that must be satisfied
+2026-02-24 19:53:07 | INFO     | solver |   Max time: 7200s
+2026-02-24 19:53:07 | INFO     | solver |   Required: True
+2026-02-24 19:53:07 | INFO     | solver | ============================================================
+2026-02-24 19:53:07 | INFO     | solver | Applying constraints...
+2026-02-24 19:53:09 | INFO     | solver |   Constraints added this stage: 2222
+2026-02-24 19:53:09 | INFO     | solver |   Model total constraints: 2222
+2026-02-24 19:53:10 | INFO     | solver | Starting solve for stage: stage1_required
+2026-02-24 19:53:10 | INFO     | solver |   Max time: 7200s (2.0h)
+2026-02-24 19:53:10 | INFO     | solver | MODEL STATISTICS
+2026-02-24 19:53:10 | INFO     | solver |   Variables: 118320
+2026-02-24 19:53:10 | INFO     | solver |   Constraints: 2222
+2026-02-24 19:53:10 | INFO     | solver |   Estimated base memory: 1.1 MB
+2026-02-24 19:53:10 | INFO     | solver | Pre-solve resource snapshot:
+2026-02-24 19:53:11 | WARNING  | solver | PRE-SOLVE | Memory: 88.1% (14117MB used, 1908MB available) | Process: 185MB | CPU: 36.0% (process: 0.0%)
+2026-02-24 19:53:11 | INFO     | solver | Solver configured: workers=4, linearization=0
+2026-02-24 19:53:11 | INFO     | solver | Started resource monitoring (interval: 30.0s)
+2026-02-24 19:53:11 | INFO     | solver | Calling solver.Solve() without callback...
+2026-02-24 19:53:11 | WARNING  | solver | MONITOR | Memory: 88.1% (14117MB used, 1907MB available) | Process: 187MB | CPU: 64.7% (process: 116.4%)
+2026-02-24 19:53:41 | WARNING  | solver | MONITOR | Memory: 85.1% (13639MB used, 2386MB available) | Process: 375MB | CPU: 72.1% (process: 86.0%)
+2026-02-24 19:54:11 | WARNING  | solver | MONITOR | Memory: 91.2% (14607MB used, 1417MB available) | Process: 944MB | CPU: 41.3% (process: 329.7%)
+2026-02-24 19:54:41 | WARNING  | solver | MONITOR | Memory: 89.9% (14402MB used, 1622MB available) | Process: 1037MB | CPU: 64.8% (process: 432.2%)
+2026-02-24 19:55:12 | WARNING  | solver | MONITOR | Memory: 86.9% (13920MB used, 2105MB available) | Process: 1054MB | CPU: 37.4% (process: 448.8%)
+2026-02-24 19:55:42 | WARNING  | solver | MONITOR | Memory: 87.4% (14006MB used, 2018MB available) | Process: 1160MB | CPU: 57.5% (process: 465.4%)
+2026-02-24 19:56:12 | WARNING  | solver | MONITOR | Memory: 88.3% (14143MB used, 1881MB available) | Process: 1219MB | CPU: 54.2% (process: 398.9%)
+2026-02-24 19:56:42 | WARNING  | solver | MONITOR | Memory: 86.2% (13808MB used, 2216MB available) | Process: 1211MB | CPU: 29.1% (process: 326.7%)
+2026-02-24 19:56:59 | INFO     | solver | solver.Solve() returned
+2026-02-24 19:57:04 | INFO     | solver | Stopped monitoring. Collected 8 snapshots
+2026-02-24 19:57:04 | INFO     | solver | Peak process memory during solve: 1219MB
+2026-02-24 19:57:04 | INFO     | solver | Solve completed: status=OPTIMAL, time=233.9s
+2026-02-24 19:57:04 | INFO     | solver | Post-solve resource snapshot:
+2026-02-24 19:57:05 | WARNING  | solver | POST-SOLVE | Memory: 82.4% (13210MB used, 2814MB available) | Process: 216MB | CPU: 15.8% (process: 0.0%)
+2026-02-24 19:57:05 | INFO     | solver | Extracting solution from solver...
+2026-02-24 19:57:05 | INFO     | solver | ============================================================
+2026-02-24 19:57:05 | INFO     | solver | SOLVE RESULT
+2026-02-24 19:57:05 | INFO     | solver | ============================================================
+2026-02-24 19:57:05 | INFO     | solver | Status: OPTIMAL
+2026-02-24 19:57:05 | INFO     | solver | Objective: 454.0
+2026-02-24 19:57:05 | INFO     | solver | Games scheduled: 454
+2026-02-24 19:57:05 | INFO     | solver | Solve time: 233.9s (3.9 min)
+2026-02-24 19:57:05 | INFO     | solver | ============================================================
+2026-02-24 19:57:05 | INFO     | solver | Saving checkpoint for stage1_required...
+2026-02-24 19:57:05 | INFO     | solver | Checkpoint saved successfully
+2026-02-24 19:57:05 | INFO     | solver | Stage stage1_required completed successfully
+2026-02-24 19:57:05 | INFO     | solver | ============================================================
+2026-02-24 19:57:05 | INFO     | solver | STARTING STAGE: stage2_strong
+2026-02-24 19:57:05 | INFO     | solver |   Name: Strong Structural Constraints
+2026-02-24 19:57:05 | INFO     | solver |   Description: Important practical constraints for schedule quality
+2026-02-24 19:57:05 | INFO     | solver |   Max time: 14400s
+2026-02-24 19:57:05 | INFO     | solver |   Required: True
+2026-02-24 19:57:05 | INFO     | solver | ============================================================
+2026-02-24 19:57:05 | INFO     | solver | Applying constraints...
+2026-02-24 19:57:09 | INFO     | solver |   Constraints added this stage: 14797
+2026-02-24 19:57:09 | INFO     | solver |   Model total constraints: 17019
+2026-02-24 19:57:10 | INFO     | solver | Starting solve for stage: stage2_strong
+2026-02-24 19:57:10 | INFO     | solver |   Max time: 14400s (4.0h)
+2026-02-24 19:57:10 | INFO     | solver | MODEL STATISTICS
+2026-02-24 19:57:10 | INFO     | solver |   Variables: 118320
+2026-02-24 19:57:10 | INFO     | solver |   Constraints: 17019
+2026-02-24 19:57:10 | INFO     | solver |   Estimated base memory: 2.5 MB
+2026-02-24 19:57:10 | INFO     | solver | Pre-solve resource snapshot:
+2026-02-24 19:57:10 | WARNING  | solver | PRE-SOLVE | Memory: 82.6% (13235MB used, 2789MB available) | Process: 235MB | CPU: 21.8% (process: 0.0%)
+2026-02-24 19:57:10 | INFO     | solver | Solver configured: workers=4, linearization=0
+2026-02-24 19:57:10 | INFO     | solver | Started resource monitoring (interval: 30.0s)
+2026-02-24 19:57:10 | INFO     | solver | Calling solver.Solve() without callback...
+2026-02-24 19:57:11 | WARNING  | solver | MONITOR | Memory: 82.6% (13236MB used, 2788MB available) | Process: 235MB | CPU: 80.0% (process: 117.6%)
+2026-02-24 19:57:12 | WARNING  | solver | MONITOR | Memory: 83.1% (13324MB used, 2700MB available) | Process: 333MB | CPU: 29.3% (process: 85.2%)
+2026-02-24 19:57:41 | WARNING  | solver | MONITOR | Memory: 83.5% (13373MB used, 2651MB available) | Process: 349MB | CPU: 48.4% (process: 117.6%)
+2026-02-24 19:57:43 | WARNING  | solver | MONITOR | Memory: 86.7% (13887MB used, 2137MB available) | Process: 886MB | CPU: 63.4% (process: 401.4%)

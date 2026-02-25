@@ -22,8 +22,11 @@ Benefits:
 """
 
 import os
+import sys
 import pickle
 import json
+import logging
+import traceback
 from datetime import datetime, timedelta, time as tm
 from collections import defaultdict
 from pathlib import Path
@@ -32,8 +35,14 @@ from ortools.sat.python import cp_model
 import pandas as pd
 
 from models import PlayingField, Club, Team, Grade, Timeslot
-from utils import convert_X_to_roster, export_roster_to_excel, get_teams_from_club
-from generate_x import generate_X
+from utils import (
+    convert_X_to_roster, export_roster_to_excel, get_teams_from_club,
+    generate_timeslots, max_games_per_grade, generate_X
+)
+from solver_diagnostics import (
+    setup_logging, ResourceMonitor, SolverConfig, get_recommended_config,
+    log_system_info, log_model_info, log_solve_result, PSUTIL_AVAILABLE
+)
 from constraints import (
     NoDoubleBookingTeamsConstraint,
     NoDoubleBookingFieldsConstraint,
@@ -56,6 +65,72 @@ from constraints import (
 )
 
 
+# ============== Solution Callback for Intermediate Saves ==============
+
+class IntermediateSolutionCallback(cp_model.CpSolverSolutionCallback):
+    """Callback to save intermediate solutions during solving."""
+    
+    def __init__(self, X: dict, checkpoint_manager, run_dir: Path, stage_name: str, 
+                 data: dict, save_interval: int = 60):
+        """
+        Args:
+            X: Decision variables dictionary
+            checkpoint_manager: CheckpointManager instance
+            run_dir: Directory for checkpoints
+            stage_name: Current stage name
+            data: Data dictionary
+            save_interval: Minimum seconds between saves (default 60)
+        """
+        super().__init__()
+        self.X = X
+        self.checkpoint_manager = checkpoint_manager
+        self.run_dir = run_dir
+        self.stage_name = stage_name
+        self.data = data
+        self.save_interval = save_interval
+        
+        self.solution_count = 0
+        self.best_objective = float('-inf')
+        self.last_save_time = None
+        self.start_time = datetime.now()
+    
+    def on_solution_callback(self):
+        """Called each time a new solution is found."""
+        self.solution_count += 1
+        current_objective = self.ObjectiveValue()
+        current_time = datetime.now()
+        elapsed = (current_time - self.start_time).total_seconds()
+        
+        print(f"  [Callback] Solution #{self.solution_count} at {elapsed:.1f}s, objective: {current_objective:.0f}")
+        
+        # Save if this is a better solution and enough time has passed
+        should_save = (
+            current_objective > self.best_objective and
+            (self.last_save_time is None or 
+             (current_time - self.last_save_time).total_seconds() >= self.save_interval)
+        )
+        
+        if should_save or self.solution_count == 1:  # Always save first solution
+            self.best_objective = current_objective
+            self.last_save_time = current_time
+            
+            # Extract solution
+            solution = {key: self.Value(var) for key, var in self.X.items()}
+            games_scheduled = sum(1 for v in solution.values() if v == 1)
+            
+            print(f"  [Callback] Saving intermediate solution (games: {games_scheduled})")
+            
+            # Save to checkpoint with intermediate marker
+            self.checkpoint_manager.save_stage(
+                self.run_dir, 
+                f"{self.stage_name}_intermediate_{self.solution_count}",
+                solution, 
+                self.data, 
+                'FEASIBLE', 
+                elapsed
+            )
+
+
 # ============== Stage Definitions ==============
 
 STAGES = {
@@ -66,48 +141,54 @@ STAGES = {
             NoDoubleBookingTeamsConstraint,
             NoDoubleBookingFieldsConstraint,
             EnsureEqualGamesAndBalanceMatchUps,
+            FiftyFiftyHomeandAway,
         ],
-        'max_time_seconds': 3600,  # 1 hour
+        'max_time_seconds': 7200,  # 2 hours
         'required': True,
+        'use_callback': False,
     },
     'stage2_strong': {
         'name': 'Strong Structural Constraints',
         'description': 'Important practical constraints for schedule quality',
         'constraints': [
-            TeamConflictConstraint,
             PHLAndSecondGradeAdjacency,
-            PHLAndSecondGradeTimes,
-            FiftyFiftyHomeandAway,
             ClubGradeAdjacencyConstraint,
+            MaxMaitlandHomeWeekends,
         ],
-        'max_time_seconds': 7200,  # 2 hours
+        'max_time_seconds': 14400,  # 4 hours
         'required': True,
+        'use_callback': False,
     },
     'stage3_medium': {
         'name': 'Venue and Scheduling Optimization',
         'description': 'Venue limits and scheduling efficiency',
         'constraints': [
-            MaxMaitlandHomeWeekends,
-            EnsureBestTimeslotChoices,
             ClubDayConstraint,
             EqualMatchUpSpacingConstraint,
         ],
-        'max_time_seconds': 7200,  # 2 hours
+        'max_time_seconds': 28800,  # 8 hours
         'required': False,
+        'use_callback': False,
     },
     'stage4_soft': {
         'name': 'Soft Preferences',
         'description': 'Quality optimizations with penalties',
         'constraints': [
+            # Hybrid constraints (have both hard and soft elements)
+            PHLAndSecondGradeTimes,
             MaitlandHomeGrouping,
             AwayAtMaitlandGrouping,
+            # Pure soft constraints
             MaximiseClubsPerTimeslotBroadmeadow,
             MinimiseClubsOnAFieldBroadmeadow,
             ClubVsClubAlignment,
             PreferredTimesConstraint,
+            EnsureBestTimeslotChoices,
+            TeamConflictConstraint,
         ],
-        'max_time_seconds': 14400,  # 4 hours
+        'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': False,
+        'use_callback': True,  # Save intermediate solutions
     },
 }
 
@@ -201,25 +282,34 @@ class CheckpointManager:
 class StagedScheduleSolver:
     """Solves the scheduling problem in stages."""
     
-    def __init__(self, data: dict, checkpoint_manager: CheckpointManager = None):
+    def __init__(self, data: dict, checkpoint_manager: CheckpointManager = None,
+                 solver_config: SolverConfig = None, logger: logging.Logger = None):
         self.data = data
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
         self.model = None
         self.X = None
         self.Y = None
         self.current_solution = None
+        
+        # Diagnostics
+        self.logger = logger or logging.getLogger("solver")
+        self.solver_config = solver_config or get_recommended_config()
+        self.resource_monitor = ResourceMonitor(logger=self.logger) if PSUTIL_AVAILABLE else None
+        
+        self.logger.info(f"StagedScheduleSolver initialized")
+        self.logger.info(f"Solver config: workers={self.solver_config.num_workers}, "
+                        f"linearization={self.solver_config.linearization_level}")
     
     def initialize_model(self, unavailability_path: str):
         """Initialize the CP model with decision variables."""
+        self.logger.info("Initializing model and decision variables...")
         print("Initializing model and decision variables...")
         
         self.model = cp_model.CpModel()
         
-        # Import generate_X from the notebook translation for full functionality
-        from main_notebook_translation import generate_X as generate_X_full
-        
-        self.X, self.Y, conflicts, unavailable_games = generate_X_full(
-            unavailability_path, self.model, self.data
+        # Generate decision variables
+        self.X, self.Y, conflicts, unavailable_games = generate_X(
+            self.model, self.data
         )
         
         # Merge X and Y
@@ -279,27 +369,96 @@ class StagedScheduleSolver:
             sum(self.X.values()) - sum(self.Y.values() if self.Y else []) - total_penalty
         )
     
-    def solve_stage(self, stage_config: dict) -> tuple:
-        """Solve a single stage."""
+    def solve_stage(self, stage_config: dict, run_dir: Path = None, stage_name: str = None) -> tuple:
+        """Solve a single stage with comprehensive logging and resource monitoring."""
+        self.logger.info(f"Starting solve for stage: {stage_name}")
+        self.logger.info(f"  Max time: {stage_config['max_time_seconds']}s ({stage_config['max_time_seconds']/3600:.1f}h)")
+        
+        # Log model info before solve
+        log_model_info(self.model, self.X, self.logger)
+        
+        # Log resource state before solve
+        if self.resource_monitor:
+            self.logger.info("Pre-solve resource snapshot:")
+            self.resource_monitor.log_snapshot(prefix="PRE-SOLVE")
+        
         solver = cp_model.CpSolver()
-        solver.parameters.log_search_progress = True
-        solver.parameters.max_time_in_seconds = stage_config['max_time_seconds']
+        
+        # Apply solver configuration (includes num_workers, memory settings)
+        stage_specific_config = SolverConfig(
+            max_time_seconds=stage_config['max_time_seconds'],
+            num_workers=self.solver_config.num_workers,
+            linearization_level=self.solver_config.linearization_level,
+            cp_model_probing_level=self.solver_config.cp_model_probing_level,
+            log_search_progress=True
+        )
+        stage_specific_config.apply_to_solver(solver)
+        
+        self.logger.info(f"Solver configured: workers={stage_specific_config.num_workers}, "
+                        f"linearization={stage_specific_config.linearization_level}")
         
         start_time = datetime.now()
-        status = solver.Solve(self.model)
+        
+        # Start resource monitoring during solve
+        if self.resource_monitor:
+            self.resource_monitor.start_monitoring(interval=30.0)
+        
+        try:
+            # Use callback for stages with soft constraints to save intermediate solutions
+            if stage_config.get('use_callback', False) and run_dir and stage_name:
+                self.logger.info("Using solution callback for intermediate saves...")
+                print("  Using solution callback for intermediate saves...")
+                callback = IntermediateSolutionCallback(
+                    X=self.X,
+                    checkpoint_manager=self.checkpoint_manager,
+                    run_dir=run_dir,
+                    stage_name=stage_name,
+                    data=self.data,
+                    save_interval=60  # Save at most every 60 seconds
+                )
+                status = solver.Solve(self.model, callback)
+                self.logger.info(f"Callback found {callback.solution_count} solutions")
+                print(f"  Callback found {callback.solution_count} solutions")
+            else:
+                self.logger.info("Calling solver.Solve() without callback...")
+                status = solver.Solve(self.model)
+                self.logger.info("solver.Solve() returned")
+        except Exception as e:
+            self.logger.error(f"Exception during solve: {e}")
+            self.logger.error(traceback.format_exc())
+            raise
+        finally:
+            # Stop resource monitoring
+            if self.resource_monitor:
+                snapshots = self.resource_monitor.stop_monitoring()
+                peak_memory = self.resource_monitor.get_peak_memory()
+                if peak_memory:
+                    self.logger.info(f"Peak process memory during solve: {peak_memory:.0f}MB")
+        
         solve_time = (datetime.now() - start_time).total_seconds()
         
-        status_name = solver.StatusName()
+        status_name = solver.status_name(status)
+        self.logger.info(f"Solve completed: status={status_name}, time={solve_time:.1f}s")
         print(f"  Status: {status_name}")
         print(f"  Solve time: {solve_time:.1f}s")
         
+        # Log post-solve resources
+        if self.resource_monitor:
+            self.logger.info("Post-solve resource snapshot:")
+            self.resource_monitor.log_snapshot(prefix="POST-SOLVE")
+        
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            self.logger.info("Extracting solution from solver...")
             solution = {key: solver.Value(var) for key, var in self.X.items()}
             objective = solver.ObjectiveValue()
+            games_scheduled = sum(1 for v in solution.values() if v == 1)
+            
+            log_solve_result(status_name, objective, solve_time, games_scheduled, self.logger)
             print(f"  Objective: {objective}")
-            print(f"  Games scheduled: {sum(1 for v in solution.values() if v == 1)}")
+            print(f"  Games scheduled: {games_scheduled}")
             return status_name, solution, solve_time
         else:
+            self.logger.warning(f"Stage {stage_name} did not find solution: {status_name}")
             return status_name, {}, solve_time
     
     def run_staged_solve(self, run_id: str = None, resume_from: str = None, 
@@ -316,25 +475,41 @@ class StagedScheduleSolver:
             Final solution dictionary
         """
         run_dir = self.checkpoint_manager.get_run_dir(run_id)
+        self.logger.info(f"Run directory: {run_dir}")
         print(f"Run directory: {run_dir}")
         
         stages_to_run = stages_to_run or list(STAGES.keys())
+        self.logger.info(f"Stages to run: {stages_to_run}")
         
         # Handle resumption
         if resume_from:
+            self.logger.info(f"Attempting to resume from stage: {resume_from}")
             last_stage = resume_from
             loaded = self.checkpoint_manager.load_stage(run_dir, resume_from)
             if loaded:
                 self.current_solution = loaded['solution']
+                self.logger.info(f"Loaded checkpoint from {resume_from}: "
+                               f"{sum(1 for v in loaded['solution'].values() if v == 1)} games")
                 print(f"Resuming from {resume_from}")
                 
                 # Skip stages before resume point
                 skip_idx = stages_to_run.index(resume_from) + 1
                 stages_to_run = stages_to_run[skip_idx:]
+                self.logger.info(f"Remaining stages after resume: {stages_to_run}")
+            else:
+                self.logger.warning(f"Could not load checkpoint for {resume_from}")
         
         # Process each stage
         for stage_name in stages_to_run:
             stage_config = STAGES[stage_name]
+            
+            self.logger.info("=" * 60)
+            self.logger.info(f"STARTING STAGE: {stage_name}")
+            self.logger.info(f"  Name: {stage_config['name']}")
+            self.logger.info(f"  Description: {stage_config['description']}")
+            self.logger.info(f"  Max time: {stage_config['max_time_seconds']}s")
+            self.logger.info(f"  Required: {stage_config.get('required', False)}")
+            self.logger.info("=" * 60)
             
             print(f"\n{'='*60}")
             print(f"STAGE: {stage_config['name']}")
@@ -346,28 +521,41 @@ class StagedScheduleSolver:
                 self.add_solution_hints(self.current_solution)
             
             # Apply constraints
+            self.logger.info("Applying constraints...")
             print("Applying constraints:")
             constraints_added = self.apply_constraints(stage_config['constraints'])
+            self.logger.info(f"  Constraints added this stage: {constraints_added}")
+            self.logger.info(f"  Model total constraints: {len(self.model.Proto().constraints)}")
             print(f"  Total: {constraints_added} constraints added")
             print(f"  Model total: {len(self.model.Proto().constraints)} constraints")
             
             # Build objective
             self.build_objective()
             
-            # Solve
+            # Solve with full exception handling
             print("Solving...")
-            status, solution, solve_time = self.solve_stage(stage_config)
+            try:
+                status, solution, solve_time = self.solve_stage(stage_config, run_dir, stage_name)
+            except Exception as e:
+                self.logger.critical(f"CRITICAL ERROR in stage {stage_name}: {e}")
+                self.logger.critical(traceback.format_exc())
+                print(f"CRITICAL ERROR: {e}")
+                raise
             
             # Save checkpoint
+            self.logger.info(f"Saving checkpoint for {stage_name}...")
             self.checkpoint_manager.save_stage(
                 run_dir, stage_name, solution, self.data, status, solve_time
             )
+            self.logger.info(f"Checkpoint saved successfully")
             
             # Handle result
             if status in ['OPTIMAL', 'FEASIBLE']:
                 self.current_solution = solution
+                self.logger.info(f"Stage {stage_name} completed successfully")
             else:
                 if stage_config.get('required', False):
+                    self.logger.error(f"Required stage {stage_name} failed with status {status}")
                     print(f"ERROR: Required stage {stage_name} failed with status {status}")
                     return None
                 else:
@@ -380,7 +568,7 @@ class StagedScheduleSolver:
 
 def load_data() -> dict:
     """Load all required data for scheduling."""
-    from main_notebook_translation import generate_timeslots, max_games_per_grade
+    # generate_timeslots and max_games_per_grade are now imported from utils at top of file
     
     # Define fields
     FIELDS = [
@@ -577,37 +765,75 @@ def load_data() -> dict:
 
 # ============== Main Entry Points ==============
 
-def main_staged(run_id: str = None, resume_from: str = None):
+def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
+                solver_config: SolverConfig = None):
     """
     Main entry point for staged solving.
     
     Args:
         run_id: Identifier for this run (auto-generated if None)
         resume_from: Stage name to resume from
+        locked_keys: Optional set of game keys that are locked (pre-scheduled).
+        solver_config: Optional solver configuration for resource management.
     """
+    # Set up logging
+    logger = setup_logging(run_id=run_id)
+    logger.info("=" * 60)
+    logger.info("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
+    logger.info("=" * 60)
+    
     print("="*60)
     print("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
     print("="*60)
     
+    # Log system info
+    log_system_info(logger)
+    
+    # Get solver config
+    if solver_config is None:
+        solver_config = get_recommended_config()
+    logger.info(f"Using solver config: workers={solver_config.num_workers}, "
+               f"linearization={solver_config.linearization_level}")
+    
     # Load data
+    logger.info("Loading data...")
     print("\nLoading data...")
     data = load_data()
+    logger.info(f"  Teams: {len(data['teams'])}")
+    logger.info(f"  Grades: {len(data['grades'])}")
+    logger.info(f"  Timeslots: {len(data['timeslots'])}")
     print(f"  {len(data['teams'])} teams")
     print(f"  {len(data['grades'])} grades")
     print(f"  {len(data['timeslots'])} timeslots")
     
-    # Initialize solver
+    # Initialize solver with config
     checkpoint_manager = CheckpointManager()
-    solver = StagedScheduleSolver(data, checkpoint_manager)
+    solver = StagedScheduleSolver(data, checkpoint_manager, solver_config=solver_config, logger=logger)
     
     # Initialize model
     unavailability_path = os.path.join('data', '2025', 'noplay')
     solver.initialize_model(unavailability_path)
     
+    # Handle locked games
+    if locked_keys:
+        logger.info(f"Locking {len(locked_keys)} games from prior weeks...")
+        print(f"  Locking {len(locked_keys)} games from prior weeks...")
+        for key in locked_keys:
+            if key in solver.X:
+                solver.model.Add(solver.X[key] == 1)
+    
     # Run staged solve
-    solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from)
+    try:
+        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from)
+    except Exception as e:
+        logger.critical(f"FATAL ERROR during solve: {e}")
+        logger.critical(traceback.format_exc())
+        print(f"\nFATAL ERROR: {e}")
+        print("Check log files for details.")
+        raise
     
     if solution:
+        logger.info("Solve completed successfully, exporting results...")
         # Convert and export
         print("\n" + "="*60)
         print("EXPORTING RESULTS")
@@ -622,6 +848,7 @@ def main_staged(run_id: str = None, resume_from: str = None):
         output_path = output_dir / f'schedule_{timestamp}.xlsx'
         
         export_roster_to_excel(roster, data, filename=str(output_path))
+        logger.info(f"Schedule exported to {output_path}")
         print(f"Schedule exported to {output_path}")
         
         # ============== NEW: Save pliable format and generate analytics ==============
@@ -632,35 +859,43 @@ def main_staged(run_id: str = None, resume_from: str = None):
         draw = DrawStorage.from_X_solution(solution, description=f"Season Draw {timestamp}")
         json_path = output_dir / f'draw_{timestamp}.json'
         draw.save(str(json_path))
+        logger.info(f"Draw saved to {json_path}")
         print(f"Draw saved to {json_path}")
         
         # Generate comprehensive analytics
         analytics = DrawAnalytics(draw, data)
         analytics_path = output_dir / f'analytics_{timestamp}.xlsx'
         analytics.export_analytics_to_excel(str(analytics_path))
+        logger.info(f"Analytics exported to {analytics_path}")
         print(f"Analytics exported to {analytics_path}")
         
         # Run violation check
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
+        logger.info(f"Violation Check: {report.summary()}")
         print(f"\nViolation Check: {report.summary()}")
         
         if report.has_violations:
             report_path = output_dir / f'violations_{timestamp}.txt'
             with open(report_path, 'w') as f:
                 f.write(report.full_report())
+            logger.warning(f"Violations found! Report saved to {report_path}")
             print(f"Violation report saved to {report_path}")
         
+        logger.info("Main staged solve completed successfully")
         return solution, data
     else:
         print("\nNo valid solution found.")
         return None, data
 
 
-def main_simple():
+def main_simple(locked_keys=None):
     """
     Simple (non-staged) main entry point for backwards compatibility.
     Uses all constraints in a single solve.
+    
+    Args:
+        locked_keys: Optional set of game keys that are locked (pre-scheduled).
     """
     print("="*60)
     print("HOCKEY DRAW SCHEDULER - SINGLE SOLVE")
@@ -674,11 +909,15 @@ def main_simple():
     model = cp_model.CpModel()
     
     # Initialize variables
-    unavailability_path = os.path.join('data', '2025', 'noplay')
-    from main_notebook_translation import generate_X as generate_X_full
-    
-    X, Y, conflicts, unavailable_games = generate_X_full(unavailability_path, model, data)
+    X, Y, conflicts, unavailable_games = generate_X(model, data)
     X.update(Y)
+    
+    # Handle locked games
+    if locked_keys:
+        print(f"  Locking {len(locked_keys)} games from prior weeks...")
+        for key in locked_keys:
+            if key in X:
+                model.Add(X[key] == 1)
     
     data['unavailable_games'] = unavailable_games
     data['team_conflicts'] = conflicts
@@ -717,7 +956,7 @@ def main_simple():
     
     status = solver.Solve(model)
     
-    print(f"\nStatus: {solver.StatusName()}")
+    print(f"\nStatus: {solver.status_name(status)}")
     
     if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
         solution = {key: solver.Value(var) for key, var in X.items()}

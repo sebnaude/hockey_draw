@@ -881,6 +881,11 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
     Enhanced version:
     - Precomputed adjacency pairs
     - Cleaner club-grade mapping
+    
+    EDGE CASES:
+    - slot_id is (week, day_slot) - ignores field, so same time on different fields still conflicts
+    - Both teams in a game may be from the same club (intra-club match)
+    - Both teams contribute to their respective club's slot
     """
     PRIORITY = "strong"
     
@@ -902,7 +907,8 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
         # Build team-to-club mapping
         team_club = {t.name: t.club.name for t in teams}
         
-        # Group vars by (week, day_slot, field_name, club, grade)
+        # Group vars by (slot, club, grade) where slot = (week, day_slot)
+        # NOTE: slot ignores field - same time on different fields still conflicts
         slot_club_grade_vars = defaultdict(list)
         
         for key, var in X.items():
@@ -910,11 +916,13 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
                 continue
             
             t1, t2, grade = key[0], key[1], key[2]
-            slot = (key[6], key[4], key[9])  # week, day_slot, field
+            slot = (key[6], key[4])  # week, day_slot - NO field!
             
+            # Add var for both teams' clubs (handles intra-club matches correctly)
             if t1 in team_club:
                 slot_club_grade_vars[(slot, team_club[t1], grade)].append(var)
-            if t2 in team_club and team_club[t2] != team_club.get(t1, ''):
+            if t2 in team_club:
+                # Always add t2's club, even if same as t1 (for intra-club games)
                 slot_club_grade_vars[(slot, team_club[t2], grade)].append(var)
         
         # Check adjacent grades for each club at each slot

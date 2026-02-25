@@ -19,10 +19,11 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, time as tm
 from models import *
-from utils import *
+from utils import (
+    convert_X_to_roster, export_roster_to_excel, get_club_from_clubname,
+    generate_timeslots, max_games_per_grade, generate_X
+)
 from constraints import *
-from generate_x import generate_X
-from utils import convert_X_to_roster, export_roster_to_excel
 import json
 
 def create_schedule(game_vars, data, constraints, model):
@@ -73,7 +74,7 @@ def create_schedule(game_vars, data, constraints, model):
     #     print("Best solution found:", callback.best_solution)
     #     print("Objective value:", callback.best_obj_value)
         
-    print(f"Solver status: {solver.StatusName()}") 
+    print(f"Solver status: {solver.status_name(status)}") 
     X_outcome = X
 
     if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
@@ -170,8 +171,7 @@ def main():
         for key in merged_dict[field]:
             merged_dict[field][key] = list(dict.fromkeys(merged_dict[field][key]))
             merged_dict[field][key].sort()
-    # Generate timeslots
-    from main_notebook_translation import generate_timeslots, max_games_per_grade, get_club_from_clubname
+    # Generate timeslots (using utils functions)
     timeslots = generate_timeslots(start, end, merged_dict, FIELDS, field_unavailabilities)
     TIMESLOTS = [Timeslot(date=t['date'], day=t['day'], time=t['time'], week=t['week'], day_slot=t['day_slot'], field=t['field'], round_no=t['round_no']) for t in timeslots]
     max_rounds = 21
@@ -207,9 +207,8 @@ def main():
     }
 
     # --- Timeslot and variable generation ---
-    from generate_x import generate_X
     model = cp_model.CpModel()
-    X, Y, conflicts, unavailable_games = generate_X(UNAVAILABILITY_PATH, model, data)
+    X, Y, conflicts, unavailable_games = generate_X(model, data)
     data['unavailable_games'] = unavailable_games
     data['team_conflicts'] = conflicts
 

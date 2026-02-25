@@ -68,6 +68,14 @@ Examples:
                             help='Path to draw with locked games')
     gen_parser.add_argument('--lock-weeks', type=int, default=0,
                             help='Lock games up to this week (use with --locked)')
+    gen_parser.add_argument('--workers', type=int, default=None,
+                            help='Number of solver workers (default: auto based on memory)')
+    gen_parser.add_argument('--low-memory', action='store_true',
+                            help='Use low-memory solver configuration (4 workers, minimal linearization)')
+    gen_parser.add_argument('--minimal-memory', action='store_true',
+                            help='Use minimal-memory solver configuration (2 workers, no probing) - very slow but stable')
+    gen_parser.add_argument('--high-performance', action='store_true',
+                            help='Use high-performance config (all cores, full linearization)')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -140,6 +148,7 @@ def run_generate(args):
     print("="*60)
     
     from main_staged import main_staged, load_data
+    from solver_diagnostics import SolverConfig, get_recommended_config
     
     # Parse resume arguments
     resume_run_id = None
@@ -151,6 +160,28 @@ def run_generate(args):
             resume_from = args.resume[1]
     
     final_run_id = args.run_id or resume_run_id
+    
+    # Configure solver based on arguments
+    solver_config = None
+    if args.minimal_memory:
+        print("\n⚙️  Using MINIMAL MEMORY configuration (2 workers, no probing)")
+        solver_config = SolverConfig.minimal_memory_config()
+    elif args.low_memory:
+        print("\n⚙️  Using LOW MEMORY configuration (4 workers)")
+        solver_config = SolverConfig.low_memory_config()
+    elif args.high_performance:
+        print("\n⚙️  Using HIGH PERFORMANCE configuration (all cores)")
+        solver_config = SolverConfig.high_performance_config()
+    elif args.workers:
+        print(f"\n⚙️  Using custom worker count: {args.workers}")
+        solver_config = SolverConfig.balanced_config()
+        solver_config.num_workers = args.workers
+    else:
+        print("\n⚙️  Using auto-detected solver configuration")
+        solver_config = get_recommended_config()
+    
+    print(f"  Workers: {solver_config.num_workers}")
+    print(f"  Linearization level: {solver_config.linearization_level}")
     
     # Handle locked games
     locked_keys = None
@@ -166,12 +197,14 @@ def run_generate(args):
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
-            locked_keys=locked_keys
+            locked_keys=locked_keys,
+            solver_config=solver_config
         )
     
     if solution:
         print("\n✅ Draw generated successfully!")
         print("  Check the 'draws/' folder for output files.")
+        print("  Check the 'logs/' folder for detailed solver logs.")
     else:
         print("\n❌ Failed to generate draw.")
         sys.exit(1)
