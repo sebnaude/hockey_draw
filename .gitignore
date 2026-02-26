@@ -3,23 +3,20 @@
 # Ignore environment
 .venv/
 
-# Data files
-*.csv
-*.xlsx
-*.xls
-*.pkl
-*.pickle
-
-# Checkpoints
+# Checkpoints (solver output - don't track)
 checkpoints/
 
-# Draws folder (keep .gitkeep)
+# Draws folder - solver output (keep .gitkeep)
 draws/**
 !draws/.gitkeep
+
+# Logs - solver output
+logs/
 
 # Backup files
 *.bak
 ~$*
+nppBackup/
 
 # Python cache
 __pycache__/
@@ -27,12 +24,25 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
-# Data folders
-data/
-
 # Legacy code (kept for reference but not tracked)
 _legacy/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 *.ipynb
+
+# Pickle files (model state)
+*.pkl
+*.pickle
+
+# Temp Excel files
+~$*
+
+# ======================
+# INPUT DATA - TRACK THIS
+# ======================
+# Team CSV files in data/ are REQUIRED input - track them
+# data/2025/teams/*.csv - team rosters
+# data/2025/noplay/*.csv - unavailability data
+# data/2025/field_availability/*.csv - field schedules
+# data/2025/documentation.txt - season documentation
