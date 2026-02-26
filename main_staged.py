@@ -883,17 +883,26 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None):
+def main_simple(locked_keys=None, solver_config=None):
     """
     Simple (non-staged) main entry point for backwards compatibility.
     Uses all constraints in a single solve.
     
     Args:
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
+        solver_config: Optional SolverConfig for solver parameters.
     """
     print("="*60)
     print("HOCKEY DRAW SCHEDULER - SINGLE SOLVE")
     print("="*60)
+    
+    # Initialize resource monitoring
+    resource_monitor = ResourceMonitor() if PSUTIL_AVAILABLE else None
+    if resource_monitor:
+        print("\n📊 Resource monitoring enabled")
+        resource_monitor.log_snapshot(prefix="STARTUP")
+    else:
+        print("\n⚠️  Resource monitoring unavailable (install psutil)")
     
     # Load data
     print("\nLoading data...")
@@ -948,7 +957,22 @@ def main_simple(locked_keys=None):
     solver.parameters.log_search_progress = True
     solver.parameters.max_time_in_seconds = 28800  # 8 hours
     
+    # Apply solver configuration if provided
+    if solver_config:
+        solver_config.apply_to_solver(solver)
+        print(f"  Solver configured: workers={solver_config.num_workers}")
+    
+    # Log pre-solve resource state
+    if resource_monitor:
+        print("\n📊 Pre-solve resource snapshot:")
+        resource_monitor.log_snapshot(prefix="PRE-SOLVE")
+    
     status = solver.Solve(model)
+    
+    # Log post-solve resource state
+    if resource_monitor:
+        print("\n📊 Post-solve resource snapshot:")
+        resource_monitor.log_snapshot(prefix="POST-SOLVE")
     
     print(f"\nStatus: {solver.status_name(status)}")
     
