@@ -103,14 +103,8 @@ class IntermediateSolutionCallback(cp_model.CpSolverSolutionCallback):
         
         print(f"  [Callback] Solution #{self.solution_count} at {elapsed:.1f}s, objective: {current_objective:.0f}")
         
-        # Save if this is a better solution and enough time has passed
-        should_save = (
-            current_objective > self.best_objective and
-            (self.last_save_time is None or 
-             (current_time - self.last_save_time).total_seconds() >= self.save_interval)
-        )
-        
-        if should_save or self.solution_count == 1:  # Always save first solution
+        # Save every improving solution (callback is only called on new solutions)
+        if current_objective > self.best_objective or self.solution_count == 1:
             self.best_objective = current_objective
             self.last_save_time = current_time
             
@@ -157,7 +151,7 @@ STAGES = {
         ],
         'max_time_seconds': 14400,  # 4 hours
         'required': True,
-        'use_callback': False,
+        'use_callback': True,  # Save intermediate solutions
     },
     'stage3_medium': {
         'name': 'Venue and Scheduling Optimization',
@@ -168,7 +162,7 @@ STAGES = {
         ],
         'max_time_seconds': 28800,  # 8 hours
         'required': False,
-        'use_callback': False,
+        'use_callback': True,  # Save intermediate solutions
     },
     'stage4_soft': {
         'name': 'Soft Preferences',
