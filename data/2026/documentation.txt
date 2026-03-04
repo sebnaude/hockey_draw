@@ -1,0 +1,38 @@
+Season 2026 Data
+================
+
+This folder contains the input data for generating the 2026 season draw.
+
+FOLDER STRUCTURE:
+-----------------
+data/2026/
+├── teams/          # Team CSV files (one per club)
+│   ├── colts.csv
+│   ├── crusaders.csv
+│   └── ... etc
+├── noplay/         # Club unavailability spreadsheets
+│   └── {club}_noplay.xlsx
+├── field_availability/
+│   └── broadmedow_2026.xlsx (or similar)
+└── documentation.txt
+
+TEAM CSV FORMAT:
+----------------
+Each team CSV should have columns:
+- Club: Club name (e.g., "Tigers")
+- Team Name: Full team name (e.g., "Tigers")
+- Grade: Grade level (e.g., "PHL", "2nd", "3rd", etc.)
+
+NOPLAY FORMAT:
+--------------
+Each noplay XLSX should contain dates/times when teams are unavailable.
+
+STATUS:
+-------
+[ ] Teams data updated for 2026 (currently contains 2025 data as template)
+[ ] Noplay data collected from clubs
+[ ] Field availability confirmed
+[ ] State Championship dates confirmed
+[ ] AGM decision on 3 vs 4 rounds
+
+See config/season_2026.py for all season configuration.
