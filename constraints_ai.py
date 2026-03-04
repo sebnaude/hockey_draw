@@ -292,8 +292,12 @@ class PHLAndSecondGradeAdjacencyAI(ConstraintAI):
                     
                     sec_time_t = datetime.strptime(sec_time, '%H:%M').time()
                     
-                    # Adjacent time, different location = conflict
+                    # Case 1: Adjacent time, different location = conflict
                     if min_time <= sec_time_t <= max_time and sec_loc != phl_loc:
+                        model.Add(sum(phl_vars) + sum(sec_vars) <= 1)
+                        constraints_added += 1
+                    # Case 2: Same location, non-adjacent time = conflict
+                    elif (sec_time_t >= max_time or sec_time_t <= min_time) and sec_loc == phl_loc:
                         model.Add(sum(phl_vars) + sum(sec_vars) <= 1)
                         constraints_added += 1
         
@@ -603,6 +607,9 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
     """
     PRIORITY = "medium"
     
+    BROADMEADOW = 'Newcastle International Hockey Centre'
+    BROADMEADOW_MAX_SLOTS = 6
+    
     def apply(self, model, X, data) -> int:
         timeslots = data['timeslots']
         games = data['games']
@@ -611,8 +618,9 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
         
         constraints_added = 0
         
-        # Group vars by (week, day, location, day_slot)
+        # Group vars by (week, day, location, day_slot) and also by (week, day, location) for total games
         slot_vars = defaultdict(list)
+        games_per_location = defaultdict(lambda: defaultdict(list))
         
         for t in timeslots:
             if t.week <= current_week or not t.day:
@@ -624,19 +632,26 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
                 if key in X:
                     slot_key = (t.week, t.day, t.field.location, t.day_slot)
                     slot_vars[slot_key].append(X[key])
+                    games_per_location[(t.week, t.day)][t.field.location].append(X[key])
         
-        # Group by (week, day, location) and create slot indicators
+        # Create slot indicators and slot number variables
         location_day_slots = defaultdict(dict)
+        slot_number_vars = defaultdict(dict)
         
         for slot_key, vars_list in slot_vars.items():
             week, day, location, day_slot = slot_key
             
             if len(vars_list) > 1:
-                indicator = model.NewBoolVar(f'slot_used_{week}_{day}_{location}_{day_slot}')
+                indicator = model.NewBoolVar(f'ai_slot_used_{week}_{day}_{location}_{day_slot}')
                 model.AddMaxEquality(indicator, vars_list)
                 location_day_slots[(week, day, location)][day_slot] = indicator
+                
+                # Track slot number for bounding
+                num_var = model.NewIntVar(0, len(slot_vars), f'ai_slot_num_{week}_{location}_{day_slot}')
+                model.Add(num_var == int(day_slot))
+                slot_number_vars[(week, day, location)][day_slot] = num_var
         
-        # No gaps constraint: if slot i is unused, slots i-1 and i+1 can't both be used
+        # Part 1: No gaps constraint
         for (week, day, location), day_slots in location_day_slots.items():
             sorted_slots = sorted(day_slots.keys())
             
@@ -646,10 +661,53 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
                 next_slot = sorted_slots[i + 1]
                 
                 if prev_slot in day_slots and curr_slot in day_slots and next_slot in day_slots:
-                    # If current is not used, prev and next can't both be used
                     model.Add(
                         day_slots[prev_slot] + day_slots[next_slot] <= 1
                     ).OnlyEnforceIf(day_slots[curr_slot].Not())
+                    constraints_added += 1
+        
+        # Part 2: Slot-number bounding — push games into earliest timeslots
+        for (week, day), locations in games_per_location.items():
+            for location, location_vars in locations.items():
+                # Count fields at this location
+                fields_at_location = [f for f in fields if f.location == location]
+                num_fields = len(fields_at_location)
+                if num_fields == 0:
+                    continue
+                
+                # Calculate needed timeslots: ceil(games / fields) = floor(games / fields) + 1
+                no_location_games = model.NewIntVar(0, len(games), f'ai_loc_games_{week}_{location}')
+                model.Add(no_location_games == sum(location_vars))
+                
+                quotient = model.NewIntVar(0, len(timeslots), f'ai_quot_{week}_{location}')
+                model.AddDivisionEquality(quotient, no_location_games, num_fields)
+                
+                no_timeslots = model.NewIntVar(0, len(timeslots), f'ai_nslots_{week}_{location}')
+                model.Add(no_timeslots == quotient + 1)
+                
+                # Apply slot number bounds
+                number_vars = slot_number_vars.get((week, day, location), {})
+                for day_slot, number_var in number_vars.items():
+                    indicator_var = location_day_slots[(week, day, location)][day_slot]
+                    
+                    if location == self.BROADMEADOW:
+                        # Broadmeadow: cap at BROADMEADOW_MAX_SLOTS
+                        equiv = model.NewIntVar(0, 200, f'ai_equiv_{week}_{location}_{day_slot}')
+                        model.Add(equiv >= self.BROADMEADOW_MAX_SLOTS)
+                        model.Add(equiv >= no_timeslots)
+                        
+                        cap_indicator = model.NewBoolVar(f'ai_cap_ind_{week}_{location}_{day_slot}')
+                        model.Add(no_timeslots <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator)
+                        model.Add(no_timeslots > self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator.Not())
+                        
+                        model.Add(equiv <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator)
+                        model.Add(equiv <= no_timeslots).OnlyEnforceIf(cap_indicator.Not())
+                        
+                        model.Add(number_var <= equiv).OnlyEnforceIf(indicator_var)
+                    else:
+                        # Other locations: slot number must be within needed timeslots
+                        model.Add(number_var <= no_timeslots).OnlyEnforceIf(indicator_var)
+                    
                     constraints_added += 1
         
         return constraints_added
@@ -797,77 +855,119 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
         
         constraints_added = 0
         
-        # Calculate expected spacing per grade
-        grade_spacing = {}
+        # Pre-compute per-grade spacing variables (same as original)
+        grade_spacing_vars = defaultdict(dict)
         for grade in grades:
             if grade.num_teams > 0:
-                grade_spacing[grade.name] = max_rounds // grade.num_teams
+                space = max_rounds // grade.num_teams
+                
+                min_spacing = space - self.SLACK
+                max_spacing = space + self.SLACK
+                
+                min_var = model.NewIntVar(min(0, min_spacing), max_spacing, f'ai_grade_spacing_min_{grade.name}')
+                model.Add(min_var == min_spacing)
+                
+                max_var = model.NewIntVar(0, max_spacing, f'ai_grade_spacing_max_{grade.name}')
+                model.Add(max_var == max_spacing)
+                
+                grade_spacing_vars[grade.name]['min'] = min_var
+                grade_spacing_vars[grade.name]['max'] = max_var
         
-        # Track meetings per (pair, grade, round)
-        pair_round_vars = defaultdict(lambda: defaultdict(list))
+        # Track meetings per (t1, t2, grade) -> round_no -> [vars]
+        meetings = defaultdict(lambda: defaultdict(list))
         
         for t in timeslots:
             if not t.day:
                 continue
-            
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time,
                        t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key in X:
-                    pair_key = (tuple(sorted((t1, t2))), grade)
-                    pair_round_vars[pair_key][t.round_no].append(X[key])
+                    meetings[(t1, t2, grade)][t.round_no].append(X[key])
         
-        # Add spacing constraints
-        for pair_key, rounds in pair_round_vars.items():
-            pair, grade = pair_key
-            spacing = grade_spacing.get(grade, 3)
+        # Build spacing constraints for each pair
+        for team_pair, rounds in meetings.items():
+            t1, t2, grade = team_pair
             
-            sorted_rounds = sorted(rounds.keys())
-            if len(sorted_rounds) < 2:
+            if grade not in grade_spacing_vars:
                 continue
             
-            # Create indicators for each round
-            round_indicators = []
-            round_values = []
+            indicator_list = []
+            week_no_list = []
             
-            for round_no in sorted_rounds:
-                vars_list = rounds[round_no]
-                if len(vars_list) > 0:
-                    indicator = model.NewBoolVar(f'meet_{pair}_{round_no}')
-                    model.AddMaxEquality(indicator, vars_list)
-                    round_indicators.append(indicator)
+            sorted_rounds = dict(sorted(rounds.items(), key=lambda x: x[0]))
+            for round_no, game_vars in sorted_rounds.items():
+                if len(game_vars) > 1:
+                    indicator = model.NewBoolVar(f'ai_meet_ind_{t1}_{t2}_{round_no}')
+                    model.AddMaxEquality(indicator, game_vars)
+                    indicator_list.append(indicator)
                     
-                    round_val = model.NewIntVar(0, max_rounds, f'rv_{pair}_{round_no}')
-                    model.Add(round_val == round_no).OnlyEnforceIf(indicator)
-                    model.Add(round_val == 0).OnlyEnforceIf(indicator.Not())
-                    round_values.append(round_val)
+                    week_var = model.NewIntVar(0, max_rounds, f'ai_wk_{t1}_{t2}_{round_no}')
+                    model.Add(week_var == round_no).OnlyEnforceIf(indicator)
+                    model.Add(week_var == 0).OnlyEnforceIf(indicator.Not())
+                    week_no_list.append(week_var)
             
-            if len(round_indicators) < 2:
+            if len(indicator_list) < 2:
                 continue
             
-            # Count total meetings
-            num_meetings = model.NewIntVar(0, len(round_indicators), f'K_{pair}')
-            model.Add(num_meetings == sum(round_indicators))
+            M = max_rounds * len(indicator_list)  # upper bound for var ranges
             
-            # Only enforce spacing when meeting 2+ times
-            meets_twice = model.NewBoolVar(f'm2_{pair}')
-            model.Add(num_meetings >= 2).OnlyEnforceIf(meets_twice)
-            model.Add(num_meetings < 2).OnlyEnforceIf(meets_twice.Not())
+            # Count meetings
+            no_meetings = model.NewIntVar(0, len(indicator_list), f'ai_K_{t1}_{t2}')
+            model.Add(no_meetings == sum(indicator_list))
             
-            # Sum of round numbers and max round
-            round_sum = model.NewIntVar(0, max_rounds * len(round_indicators), f'rs_{pair}')
-            model.Add(round_sum == sum(round_values))
+            # Only enforce when K >= 2
+            meets_twice = model.NewBoolVar(f'ai_m2_{t1}_{t2}')
+            model.Add(no_meetings >= 2).OnlyEnforceIf(meets_twice)
+            model.Add(no_meetings < 2).OnlyEnforceIf(meets_twice.Not())
             
-            max_round = model.NewIntVar(0, max_rounds, f'mr_{pair}')
-            model.AddMaxEquality(max_round, round_values)
+            # Sum of round numbers
+            round_sum = model.NewIntVar(0, M, f'ai_rs_{t1}_{t2}')
+            model.Add(round_sum == sum(week_no_list))
             
-            # Spacing bounds
-            min_spacing = max(1, spacing - self.SLACK)
-            max_spacing = spacing + self.SLACK
+            # Max round where they meet
+            max_round_meet = model.NewIntVar(0, max_rounds, f'ai_mr_{t1}_{t2}')
+            model.AddMaxEquality(max_round_meet, week_no_list)
             
-            # These constraints enforce proper spacing
-            # The sum of rounds should be close to the "ideal" distribution
-            constraints_added += 4
+            # K * max_round
+            multi_max = model.NewIntVar(0, M, f'ai_km_{t1}_{t2}')
+            model.AddMultiplicationEquality(multi_max, [max_round_meet, no_meetings])
+            
+            # K * (K-1) for upper bound coefficient
+            ub_coef = model.NewIntVar(0, M, f'ai_ubc_{t1}_{t2}')
+            model.AddMultiplicationEquality(ub_coef, [no_meetings - 1, no_meetings])
+            
+            # K*(K-1)/2
+            ub_coef_half = model.NewIntVar(0, M, f'ai_ubch_{t1}_{t2}')
+            model.AddDivisionEquality(ub_coef_half, ub_coef, 2)
+            
+            # upper_bound_subtraction = min_spacing_var * K*(K-1)/2
+            ub_sub = model.NewIntVar(-M, M, f'ai_ubs_{t1}_{t2}')
+            model.AddMultiplicationEquality(ub_sub, [grade_spacing_vars[grade]['min'], ub_coef_half])
+            
+            # K * (K-1) for lower bound coefficient (same formula, different spacing)
+            lb_coef = model.NewIntVar(0, M, f'ai_lbc_{t1}_{t2}')
+            model.AddMultiplicationEquality(lb_coef, [no_meetings, no_meetings - 1])
+            
+            lb_coef_half = model.NewIntVar(0, M, f'ai_lbch_{t1}_{t2}')
+            model.AddDivisionEquality(lb_coef_half, lb_coef, 2)
+            
+            # lower_bound_subtraction = max_spacing_var * K*(K-1)/2
+            lb_sub = model.NewIntVar(0, M, f'ai_lbs_{t1}_{t2}')
+            model.AddMultiplicationEquality(lb_sub, [grade_spacing_vars[grade]['max'], lb_coef_half])
+            
+            # upper_bound = K*max_round - min_spacing * K*(K-1)/2
+            upper_bound = model.NewIntVar(-M, M, f'ai_ub_{t1}_{t2}')
+            model.Add(upper_bound == multi_max - ub_sub)
+            
+            # lower_bound = K*max_round - max_spacing * K*(K-1)/2
+            lower_bound = model.NewIntVar(-M, M, f'ai_lb_{t1}_{t2}')
+            model.Add(lower_bound == multi_max - lb_sub)
+            
+            # Enforce: lower_bound <= round_sum <= upper_bound (when K >= 2)
+            model.Add(round_sum <= upper_bound).OnlyEnforceIf(meets_twice)
+            model.Add(round_sum >= lower_bound).OnlyEnforceIf(meets_twice)
+            constraints_added += 2
         
         return constraints_added
 
@@ -918,12 +1018,19 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
             t1, t2, grade = key[0], key[1], key[2]
             slot = (key[6], key[4])  # week, day_slot - NO field!
             
-            # Add var for both teams' clubs (handles intra-club matches correctly)
-            if t1 in team_club:
-                slot_club_grade_vars[(slot, team_club[t1], grade)].append(var)
-            if t2 in team_club:
-                # Always add t2's club, even if same as t1 (for intra-club games)
-                slot_club_grade_vars[(slot, team_club[t2], grade)].append(var)
+            t1_club = team_club.get(t1)
+            t2_club = team_club.get(t2)
+            
+            # When clubs differ, add var to both clubs' buckets
+            # When clubs same (intra-club), add var only ONCE to avoid double-counting
+            if t1_club and t2_club:
+                if t1_club != t2_club:
+                    # Different clubs: add to both
+                    slot_club_grade_vars[(slot, t1_club, grade)].append(var)
+                    slot_club_grade_vars[(slot, t2_club, grade)].append(var)
+                else:
+                    # Same club (intra-club match): add only once
+                    slot_club_grade_vars[(slot, t1_club, grade)].append(var)
         
         # Check adjacent grades for each club at each slot
         for club in [c.name for c in clubs]:
@@ -947,10 +1054,12 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
 class ClubVsClubAlignmentAI(ConstraintAI):
     """
     Align games between clubs across grades.
+    When club pair games coincide on a round, Sunday games must be on the same field.
     
     Enhanced version:
     - Cleaner grade ordering
     - Better coincidence detection
+    - Sunday field alignment (ported from original)
     """
     PRIORITY = "soft"
     
@@ -972,8 +1081,9 @@ class ClubVsClubAlignmentAI(ConstraintAI):
         # Sort grades by number of games (ascending)
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
         
-        # Group games by (grade, club_pair, round)
+        # Group games by (grade, club_pair, round) and track Sunday field usage
         grade_club_round_vars = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        fields_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
@@ -981,6 +1091,8 @@ class ClubVsClubAlignmentAI(ConstraintAI):
             
             t1, t2, grade = key[0], key[1], key[2]
             round_no = key[8]
+            day = key[3]
+            field_name = key[9]
             
             if grade in ['PHL', '2nd']:  # Skip top grades
                 continue
@@ -990,6 +1102,10 @@ class ClubVsClubAlignmentAI(ConstraintAI):
             club_pair = tuple(sorted((club1, club2)))
             
             grade_club_round_vars[grade][club_pair][round_no].append(var)
+            
+            # Track Sunday field usage for field alignment
+            if day == 'Sunday':
+                fields_dict[club_pair][round_no][field_name].append(var)
         
         # Build alignment constraints
         processed_grades = []
@@ -1016,19 +1132,33 @@ class ClubVsClubAlignmentAI(ConstraintAI):
                             continue
                         
                         # Create indicators for both grades having a game in this round
-                        ind1 = model.NewBoolVar(f"g1_{grade}_{club_pair}_{round_no}")
+                        ind1 = model.NewBoolVar(f"ai_g1_{grade}_{club_pair}_{round_no}")
                         model.AddMaxEquality(ind1, vars_list)
                         
-                        ind2 = model.NewBoolVar(f"g2_{other_grade}_{club_pair}_{round_no}")
+                        ind2 = model.NewBoolVar(f"ai_g2_{other_grade}_{club_pair}_{round_no}")
                         model.AddMaxEquality(ind2, other_rounds[round_no])
                         
                         # Coincidence indicator
-                        coincide = model.NewBoolVar(f"coin_{club_pair}_{round_no}")
+                        coincide = model.NewBoolVar(f"ai_coin_{club_pair}_{round_no}")
                         model.Add(coincide <= ind1)
                         model.Add(coincide <= ind2)
                         model.Add(coincide >= ind1 + ind2 - 1)
                         
                         coincide_vars.append(coincide)
+                        
+                        # Sunday field alignment: when coinciding, all Sunday games on same field
+                        field_round_vars = fields_dict[club_pair].get(round_no, {})
+                        if field_round_vars:
+                            field_indicators = []
+                            for field_name, game_vars in field_round_vars.items():
+                                fi = model.NewBoolVar(f"ai_fld_{club_pair}_{round_no}_{field_name}")
+                                model.AddMaxEquality(fi, game_vars)
+                                field_indicators.append(fi)
+                            
+                            # When coinciding, exactly 1 field should be used
+                            if field_indicators:
+                                model.Add(sum(field_indicators) == 1).OnlyEnforceIf(coincide)
+                                constraints_added += 1
                     
                     if coincide_vars:
                         model.Add(sum(coincide_vars) == num_games)
@@ -1210,9 +1340,12 @@ class AwayAtMaitlandGroupingAI(ConstraintAI):
 class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
     """
     Maximize club diversity within timeslots at Broadmeadow.
+    Hard minimum: at least total_games/2 clubs must be present.
     Penalty: total_teams - num_clubs
     """
     PRIORITY = "soft"
+    
+    HARD_LIMIT = 0  # Added to dynamic hard minimum calculation
     
     def apply(self, model, X, data) -> int:
         if 'penalties' not in data:
@@ -1222,7 +1355,7 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
         teams = data['teams']
         current_week = data.get('current_week', 0)
         
-        # Group by (week, day_slot) at Broadmeadow
+        # Group by (week, day_slot) at Broadmeadow on weekends
         slot_club_vars = defaultdict(lambda: defaultdict(list))
         
         for key, var in X.items():
@@ -1254,7 +1387,7 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
             all_game_vars = []
             
             for club, vars_list in club_vars.items():
-                indicator = model.NewBoolVar(f'club_{club}_{slot}')
+                indicator = model.NewBoolVar(f'ai_club_{club}_{slot}')
                 model.Add(sum(vars_list) >= 1).OnlyEnforceIf(indicator)
                 model.Add(sum(vars_list) == 0).OnlyEnforceIf(indicator.Not())
                 presence_vars.append(indicator)
@@ -1263,20 +1396,29 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
             if not presence_vars:
                 continue
             
-            # Count clubs and teams
-            num_clubs = model.NewIntVar(0, len(presence_vars), f'nclubs_{slot}')
+            # Count clubs and total games
+            num_clubs = model.NewIntVar(0, len(presence_vars), f'ai_nclubs_{slot}')
             model.Add(num_clubs == sum(presence_vars))
             
-            total_teams = model.NewIntVar(0, len(all_game_vars), f'nteams_{slot}')
+            total_teams = model.NewIntVar(0, len(all_game_vars), f'ai_nteams_{slot}')
             model.Add(total_teams == sum(all_game_vars))
             
             # Slot used indicator
-            slot_used = model.NewBoolVar(f'slot_used_{slot}')
+            slot_used = model.NewBoolVar(f'ai_slot_used_{slot}')
             model.Add(total_teams >= 1).OnlyEnforceIf(slot_used)
             model.Add(total_teams == 0).OnlyEnforceIf(slot_used.Not())
             
-            # Penalty
-            penalty = model.NewIntVar(0, len(all_game_vars), f'div_penalty_{slot}')
+            # Dynamic hard minimum: at least total_games/2 + HARD_LIMIT clubs
+            hard_min_base = model.NewIntVar(0, len(presence_vars), f'ai_hmin_base_{slot}')
+            model.AddDivisionEquality(hard_min_base, total_teams, 2)
+            
+            hard_minimum = model.NewIntVar(0, len(presence_vars), f'ai_hmin_{slot}')
+            model.Add(hard_minimum == hard_min_base + self.HARD_LIMIT)
+            
+            model.Add(num_clubs >= hard_minimum)
+            
+            # Soft penalty: total_teams - num_clubs
+            penalty = model.NewIntVar(0, len(all_game_vars), f'ai_div_penalty_{slot}')
             model.Add(penalty >= total_teams - num_clubs).OnlyEnforceIf(slot_used)
             model.Add(penalty == 0).OnlyEnforceIf(slot_used.Not())
             

@@ -76,6 +76,11 @@ Examples:
                             help='Use minimal-memory solver configuration (2 workers, no probing) - very slow but stable')
     gen_parser.add_argument('--high-performance', action='store_true',
                             help='Use high-performance config (all cores, full linearization)')
+    gen_parser.add_argument('--ai', action='store_true',
+                            help='Use AI-enhanced constraint implementations instead of originals')
+    gen_parser.add_argument('--exclude', nargs='+', metavar='CONSTRAINT',
+                            help='Exclude specific constraints from simple mode solve. '
+                                 'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -117,6 +122,8 @@ Examples:
     
     # List constraints command
     list_parser = subparsers.add_parser('list-constraints', help='List all constraints')
+    list_parser.add_argument('--ai', action='store_true',
+                            help='Show AI-enhanced constraint implementations')
     
     args = parser.parse_args()
     
@@ -138,7 +145,7 @@ Examples:
     elif args.command == 'import':
         run_import(args)
     elif args.command == 'list-constraints':
-        run_list_constraints()
+        run_list_constraints(use_ai=args.ai)
 
 
 def run_generate(args):
@@ -192,7 +199,8 @@ def run_generate(args):
     
     if args.simple:
         from main_staged import main_simple
-        solution, data = main_simple(locked_keys=locked_keys)
+        exclude = args.exclude or []
+        solution, data = main_simple(locked_keys=locked_keys, solver_config=solver_config, exclude_constraints=exclude, use_ai=args.ai)
     else:
         solution, data = main_staged(
             run_id=final_run_id, 
@@ -406,15 +414,17 @@ def run_import(args):
         print(f"\n✅ Draw saved to {output}")
 
 
-def run_list_constraints():
+def run_list_constraints(use_ai=False):
     """List all available constraints."""
+    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     print("="*60)
-    print("AVAILABLE CONSTRAINTS")
+    print(f"AVAILABLE CONSTRAINTS ({mode_label})")
     print("="*60)
     
-    from main_staged import STAGES
+    from main_staged import STAGES, STAGES_AI
+    stages = STAGES_AI if use_ai else STAGES
     
-    for stage_id, stage_info in STAGES.items():
+    for stage_id, stage_info in stages.items():
         print(f"\n{stage_info['name']} ({stage_id})")
         print("-" * 40)
         print(f"Description: {stage_info['description']}")

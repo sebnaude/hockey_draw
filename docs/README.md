@@ -226,8 +226,8 @@ preference_no_play = {
 refactored/
 ├── main.py                     # Simple single-solve entry point
 ├── main_staged.py              # Staged solving with checkpoints
-├── constraints.py              # Original constraint implementations
-├── constraints_ai.py           # AI-enhanced constraint implementations
+├── constraints.py              # Original constraint implementations (READ-ONLY — do not edit)
+├── constraints_ai.py           # AI-enhanced constraint implementations (editable)
 ├── models.py                   # Pydantic data models
 ├── utils.py                    # Utility functions
 ├── generate_x.py               # Decision variable generation
@@ -247,7 +247,14 @@ refactored/
 │       └── field_availability/ # Field availability (optional)
 ├── draws/                      # Output schedules
 ├── checkpoints/                # Solver checkpoints
-└── tests/                      # Test suite
+└── tests/                      # Test suite (216 tests)
+    ├── test_constraints.py              # Original constraint unit tests
+    ├── test_constraints_ai.py           # AI constraint unit tests
+    ├── test_constraints_comprehensive.py # 70 comprehensive AI tests
+    ├── test_constraints_equivalence.py  # AI vs original equivalence tests
+    ├── test_analytics_*.py              # Analytics module tests
+    ├── test_draw_outcomes.py            # Draw outcome tests
+    └── test_utils.py                    # Utility function tests
 ```
 
 ---
@@ -261,6 +268,12 @@ cd refactored
 
 # Generate a new draw (staged solving - recommended)
 python run.py generate --year 2025 --staged
+
+# Generate with AI constraints (opt-in alternative constraint set)
+python run.py generate --year 2025 --ai
+
+# Generate with AI constraints in simple mode, excluding problematic constraints
+python run.py generate --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --year 2025 --workers 14
 
 # Resume from a checkpoint
 python run.py generate --year 2025 --staged --resume run_1

@@ -63,6 +63,26 @@ from constraints import (
     MinimiseClubsOnAFieldBroadmeadow,
     PreferredTimesConstraint,
 )
+from constraints_ai import (
+    NoDoubleBookingTeamsConstraintAI,
+    NoDoubleBookingFieldsConstraintAI,
+    EnsureEqualGamesAndBalanceMatchUpsAI,
+    PHLAndSecondGradeAdjacencyAI,
+    PHLAndSecondGradeTimesAI,
+    FiftyFiftyHomeandAwayAI,
+    TeamConflictConstraintAI,
+    ClubGradeAdjacencyConstraintAI,
+    MaxMaitlandHomeWeekendsAI,
+    EnsureBestTimeslotChoicesAI,
+    ClubDayConstraintAI,
+    EqualMatchUpSpacingConstraintAI,
+    ClubVsClubAlignmentAI,
+    MaitlandHomeGroupingAI,
+    AwayAtMaitlandGroupingAI,
+    MaximiseClubsPerTimeslotBroadmeadowAI,
+    MinimiseClubsOnAFieldBroadmeadowAI,
+    PreferredTimesConstraintAI,
+)
 
 
 # ============== Solution Callback for Intermediate Saves ==============
@@ -183,6 +203,64 @@ STAGES = {
         'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': False,
         'use_callback': True,  # Save intermediate solutions
+    },
+}
+
+# AI-enhanced constraint stages (mirrors STAGES but uses AI implementations)
+STAGES_AI = {
+    'stage1_required': {
+        'name': 'Required Constraints (AI)',
+        'description': 'Core scheduling rules - AI implementations',
+        'constraints': [
+            NoDoubleBookingTeamsConstraintAI,
+            NoDoubleBookingFieldsConstraintAI,
+            EnsureEqualGamesAndBalanceMatchUpsAI,
+            FiftyFiftyHomeandAwayAI,
+        ],
+        'max_time_seconds': 7200,
+        'required': True,
+        'use_callback': False,
+    },
+    'stage2_strong': {
+        'name': 'Strong Structural Constraints (AI)',
+        'description': 'Important practical constraints - AI implementations',
+        'constraints': [
+            PHLAndSecondGradeAdjacencyAI,
+            ClubGradeAdjacencyConstraintAI,
+            MaxMaitlandHomeWeekendsAI,
+        ],
+        'max_time_seconds': 14400,
+        'required': True,
+        'use_callback': True,
+    },
+    'stage3_medium': {
+        'name': 'Venue and Scheduling Optimization (AI)',
+        'description': 'Venue limits and scheduling efficiency - AI implementations',
+        'constraints': [
+            ClubDayConstraintAI,
+            EqualMatchUpSpacingConstraintAI,
+        ],
+        'max_time_seconds': 28800,
+        'required': False,
+        'use_callback': True,
+    },
+    'stage4_soft': {
+        'name': 'Soft Preferences (AI)',
+        'description': 'Quality optimizations - AI implementations',
+        'constraints': [
+            PHLAndSecondGradeTimesAI,
+            MaitlandHomeGroupingAI,
+            AwayAtMaitlandGroupingAI,
+            MaximiseClubsPerTimeslotBroadmeadowAI,
+            MinimiseClubsOnAFieldBroadmeadowAI,
+            ClubVsClubAlignmentAI,
+            PreferredTimesConstraintAI,
+            EnsureBestTimeslotChoicesAI,
+            TeamConflictConstraintAI,
+        ],
+        'max_time_seconds': 259200,
+        'required': False,
+        'use_callback': True,
     },
 }
 
@@ -883,7 +961,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, solver_config=None):
+def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False):
     """
     Simple (non-staged) main entry point for backwards compatibility.
     Uses all constraints in a single solve.
@@ -891,9 +969,12 @@ def main_simple(locked_keys=None, solver_config=None):
     Args:
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         solver_config: Optional SolverConfig for solver parameters.
+        exclude_constraints: Optional list of constraint class names to exclude.
+        use_ai: If True, use AI-enhanced constraint implementations.
     """
+    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     print("="*60)
-    print("HOCKEY DRAW SCHEDULER - SINGLE SOLVE")
+    print(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
     print("="*60)
     
     # Initialize resource monitoring
@@ -931,9 +1012,26 @@ def main_simple(locked_keys=None, solver_config=None):
     # Apply all constraints
     print("\nApplying constraints...")
     
+    stages = STAGES_AI if use_ai else STAGES
+    
+    exclude_set = set(exclude_constraints or [])
+    # Normalize exclusion: accept names with or without 'AI' suffix
+    # e.g., '--exclude FooConstraint' also excludes 'FooConstraintAI' and vice versa
+    normalized_exclude = set()
+    for name in exclude_set:
+        normalized_exclude.add(name)
+        if name.endswith('AI'):
+            normalized_exclude.add(name[:-2])  # Strip 'AI'
+        else:
+            normalized_exclude.add(name + 'AI')  # Add 'AI'
+    
+    if exclude_set:
+        print(f"  Excluding constraints: {', '.join(exclude_set)}")
+    
     all_constraints = [
-        cls() for stage in STAGES.values() 
+        cls() for stage in stages.values() 
         for cls in stage['constraints']
+        if cls.__name__ not in normalized_exclude
     ]
     
     for constraint in all_constraints:

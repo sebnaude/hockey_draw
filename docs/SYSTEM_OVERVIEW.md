@@ -59,10 +59,13 @@ refactored/
 │   ├── README.md           # User guide
 │   └── claude.md           # AI assistant instructions
 │
-├── tests/                  # Test suite
+├── tests/                  # Test suite (216 tests)
+│   ├── test_ai_constraints_comprehensive.py  # 70 AI constraint tests
 │   ├── test_constraints.py
+│   ├── test_constraints_ai.py
+│   ├── test_constraints_equivalence.py
 │   ├── test_draw_outcomes.py
-│   └── test_constraints_ai.py
+│   └── test_utils.py
 │
 ├── draws/                  # Output schedules
 ├── checkpoints/            # Solver checkpoints
@@ -194,7 +197,13 @@ X_solution ──┬──▶ Excel Schedule (traditional format)
 | `WeeklyDraw` | Games for one week |
 | `Roster` | Complete season schedule |
 
-### Constraints (`core/constraints.py`)
+### Constraints (`constraints.py` / `constraints_ai.py`)
+
+The system has two parallel constraint sets:
+- **`constraints.py`** — Original human-written constraints (**read-only, source of truth**)
+- **`constraints_ai.py`** — AI-enhanced equivalents (opt-in via `--ai` flag)
+
+All 18 constraint pairs have been audited for parity. Use `--ai` to select the AI set.
 
 | Constraint | Type | Description |
 |------------|------|-------------|
@@ -300,8 +309,11 @@ python run.py --resume run_1 stage2_strong
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (216 tests, ~21s)
 pytest tests/ -v
+
+# Run comprehensive AI constraint tests (70 tests)
+pytest tests/test_ai_constraints_comprehensive.py -v
 
 # Run specific test file
 pytest tests/test_constraints.py -v
@@ -309,6 +321,19 @@ pytest tests/test_constraints.py -v
 # Run with coverage
 pytest tests/ --cov=core
 ```
+
+### Test Suite Overview
+
+| File | Tests | Purpose |
+|------|-------|---------|
+| `test_ai_constraints_comprehensive.py` | 70 | Full AI constraint coverage (feasibility, rejection, parity, combined, incremental) |
+| `test_constraints.py` | 14 | Original constraint unit tests |
+| `test_constraints_ai.py` | 8 | AI constraint unit tests |
+| `test_constraints_equivalence.py` | 18 | Original vs AI parity tests |
+| `test_constraints_comprehensive.py` | 8 | Extended constraint tests |
+| `test_analytics_*.py` | 50 | Analytics, storage, tester tests |
+| `test_draw_outcomes.py` | 4 | Outcome validation tests |
+| `test_utils.py` | 20 | Utility function tests |
 
 ---
 

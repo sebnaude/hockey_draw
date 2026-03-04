@@ -10,13 +10,19 @@ This is a **Hockey Draw/Schedule Generation System** using OR-Tools CP-SAT const
 
 ```powershell
 # Navigate to project directory
-cd c:\Users\c3205\Documents\Code\python\draw
+cd c:\Users\Amanda\Documents\hockey\hockey_draw
 
 # Activate virtual environment
 .\.venv\Scripts\activate
 
-# Generate a new draw (auto-detected resource config)
+# Generate a new draw (original constraints)
 .\.venv\Scripts\python.exe run.py generate --year 2025
+
+# Generate with AI constraints (opt-in alternative constraint set)
+.\.venv\Scripts\python.exe run.py generate --year 2025 --ai
+
+# Generate with AI constraints, simple mode, exclude problematic constraints
+.\.venv\Scripts\python.exe run.py generate --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --year 2025
 
 # Generate with low memory usage (4 workers)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --low-memory
@@ -24,8 +30,8 @@ cd c:\Users\c3205\Documents\Code\python\draw
 # Generate with high performance (all cores)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --high-performance
 
-# Generate with custom worker count
-.\.venv\Scripts\python.exe run.py generate --year 2025 --workers 8
+# Generate with custom worker count (max 14 of 16 to avoid OOM)
+.\.venv\Scripts\python.exe run.py generate --year 2025 --workers 14
 
 # Resume from checkpoint
 .\.venv\Scripts\python.exe run.py generate --year 2025 --resume run_13 stage1_required
@@ -58,11 +64,27 @@ When starting a solver run:
 | `run.py` | CLI entry point - use this to run the system |
 | `main_staged.py` | Staged solving main logic |
 | `main.py` | Simple (non-staged) solving |
-| `constraints.py` | All constraint implementations |
-| `constraints_ai.py` | AI-assisted constraint implementations |
+| `constraints.py` | All constraint implementations (READ-ONLY — never edit) |
+| `constraints_ai.py` | AI-enhanced constraint implementations (edit this one) |
 | `solver_diagnostics.py` | Logging and resource monitoring |
 | `models.py` | Data models (Team, Field, Club, etc.) |
 | `utils.py` | Utility functions |
+
+### AI Constraints
+
+The system has two parallel constraint sets:
+
+- **`constraints.py`** — Original human-written constraints. **NEVER edit this file.**
+- **`constraints_ai.py`** — AI-enhanced versions with cleaner code and equivalent behaviour.
+
+All 18 constraint pairs have been audited and the AI versions brought to full parity. Use the `--ai` flag to select the AI constraint set.
+
+**⚠️ CRITICAL**: `constraints.py` is read-only. If an AI constraint doesn't match the original, fix the AI version, never the original.
+
+#### Three constraints are excluded from initial AI runs:
+- `EnsureBestTimeslotChoices` / `EnsureBestTimeslotChoicesAI`
+- `MinimiseClubsOnAFieldBroadmeadow` / `MinimiseClubsOnAFieldBroadmeadowAI`
+- `MaximiseClubsPerTimeslotBroadmeadow` / `MaximiseClubsPerTimeslotBroadmeadowAI`
 
 ### Data Locations
 
@@ -153,15 +175,41 @@ Current 2025 season:
 ### Testing
 
 ```powershell
-# Run all tests
+# Run all tests (216 tests, ~21s)
 .\.venv\Scripts\python.exe -m pytest
 
 # Run specific test file
 .\.venv\Scripts\python.exe -m pytest tests/test_constraints.py
 
+# Run comprehensive AI constraint tests (70 tests)
+.\.venv\Scripts\python.exe -m pytest tests/test_ai_constraints_comprehensive.py -v
+
 # Run with verbose output
 .\.venv\Scripts\python.exe -m pytest -v
 ```
+
+### Test Suite Structure
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_ai_constraints_comprehensive.py` | 70 | Full AI constraint coverage: feasibility, rejection, parity, combined, incremental |
+| `test_constraints.py` | 14 | Original constraint unit tests |
+| `test_constraints_ai.py` | 8 | AI constraint unit tests + equivalence |
+| `test_constraints_comprehensive.py` | 8 | Extended constraint tests |
+| `test_constraints_equivalence.py` | 18 | Original vs AI parity tests |
+| `test_analytics_reports.py` | 14 | Analytics report tests |
+| `test_analytics_storage.py` | 18 | Draw storage tests |
+| `test_analytics_tester.py` | 18 | Draw tester tests |
+| `test_draw_outcomes.py` | 4 | Outcome validation tests |
+| `test_utils.py` | 20 | Utility function tests |
+
+### OOM Prevention in Tests
+
+The combined constraint tests limit solver resources to prevent OOM:
+- `solve()` defaults to `workers=8` (not all 16 cores)
+- 4-grade combined tests use max 6 weeks (not 10+)
+- Incremental tests use 2 grades with `workers=4`
+- Always use `--workers 14` (not all 16) for production solver runs
 
 ### Grade Hierarchy
 

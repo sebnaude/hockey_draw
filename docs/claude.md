@@ -9,24 +9,59 @@ This is a constraint programming system for generating hockey competition draws 
 ### Key Components
 
 ```
-refactored/
-├── main.py                 # Main entry point for schedule generation
+├── run.py                  # 🚀 Main CLI entry point (use this)
 ├── main_staged.py          # Staged solving with checkpoints
-├── constraints.py          # Original constraint implementations
-├── constraints_ai.py       # AI-enhanced constraint implementations
-├── models.py               # Pydantic data models
+├── main.py                 # Simple (non-staged) solving
+├── constraints.py          # Original constraint implementations (READ-ONLY)
+├── constraints_ai.py       # AI-enhanced constraint implementations (edit this)
+├── models.py               # Data models (Team, Club, Grade, etc.)
 ├── utils.py                # Utility functions
-├── generate_x.py           # Decision variable generation
-├── draw_analytics.py       # DrawStorage and DrawAnalytics classes
-├── draw_tester.py          # DrawTester for modification testing
-├── main_notebook_translation.py  # Full implementation from notebook
-├── DRAW_RULES.md           # Documentation of all scheduling rules
-├── example_draw_workflow.py # Example usage of analytics/testing tools
-├── tests/
-│   ├── test_constraints.py      # Unit tests for constraints
-│   ├── test_constraints_ai.py   # Tests comparing AI vs original constraints
-│   └── test_draw_outcomes.py    # Outcome validation tests
+├── solver_diagnostics.py   # Logging and resource monitoring
+├── analytics/              # Draw analysis and testing
+│   ├── storage.py          # DrawStorage (pliable JSON format)
+│   ├── reports.py          # ClubReport, GradeReport
+│   └── tester.py           # DrawTester (modification testing)
+├── config/                 # Season configuration
+│   ├── season_2025.py
+│   └── season_2026.py
+├── tests/                  # Test suite (216 tests)
+│   ├── test_ai_constraints_comprehensive.py  # 70 AI constraint tests
+│   ├── test_constraints.py
+│   ├── test_constraints_ai.py
+│   ├── test_constraints_equivalence.py
+│   └── ...
 └── data/                   # Team data files
+```
+
+## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
+
+**`constraints.py` is NEVER to be edited.**
+The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints_ai.py` only.
+
+- ✅ Edit `constraints_ai.py`
+- ✅ Edit `tests/test_ai_constraints_comprehensive.py`
+- ❌ **NEVER** edit `constraints.py`
+- ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
+
+## AI Constraints (`constraints_ai.py`)
+
+The AI constraint set is a parallel implementation of all 18 constraints with:
+- Cleaner, more maintainable code structure
+- Equivalent scheduling outcomes to the originals
+- Opt-in via `--ai` flag on `run.py generate`
+
+All 18 constraint pairs have been audited. 5 parity bugs were found and fixed:
+1. `EqualMatchUpSpacingConstraintAI` — was a no-op (bounds not added)
+2. `EnsureBestTimeslotChoicesAI` — missing slot bounding + Broadmeadow cap
+3. `ClubVsClubAlignmentAI` — missing Sunday field-alignment sub-constraint
+4. `MaximiseClubsPerTimeslotBroadmeadowAI` — missing dynamic hard minimum
+5. `PHLAndSecondGradeAdjacencyAI` — missing same-location/non-adjacent-time enforcement
+
+### Running with AI Constraints
+
+```powershell
+# Simple mode with AI constraints (exclude 3 problematic constraints)
+.\.venv\Scripts\python.exe run.py generate --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --year 2025 --workers 14
 ```
 
 ## Understanding the System
@@ -157,12 +192,14 @@ CP-SAT can save model state and continue with additional constraints. Staged sol
 
 ### Why Separate `constraints.py` and `constraints_ai.py`?
 
-- `constraints.py`: Original implementations, preserved for comparison
-- `constraints_ai.py`: Refactored versions with:
-  - Better code organization
-  - Reduced edge cases
-  - Priority classification
+- `constraints.py`: Original implementations, **READ-ONLY source of truth** — never edit
+- `constraints_ai.py`: AI-enhanced versions with:
+  - Full parity with originals (18/18 constraints audited, 5 bugs fixed)
+  - Better code organization and documentation
+  - Reduced edge cases through better abstractions
+  - Priority classification (required/strong/medium/soft)
   - Helper methods for common patterns
+  - Opt-in via `--ai` flag
 
 ## Data Model
 
