@@ -78,27 +78,32 @@ def test_constraints(constraint_list, data_template):
     
     # Quick solve to check feasibility (just presolve)
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 5  # Short timeout - INFEASIBLE detected in presolve
-    solver.parameters.num_workers = 2
+    solver.parameters.max_time_in_seconds = 2  # Very short - INFEASIBLE detected in presolve
+    solver.parameters.num_workers = 1
     
     status = solver.Solve(model)
     return status, solver.status_name(status), total_constraints
 
 
 def main():
+    import sys
     print("Loading data...")
+    sys.stdout.flush()
     data = load_data()
     print(f"  Teams: {len(data['teams'])}, Timeslots: {len(data['timeslots'])}")
+    sys.stdout.flush()
     
     print("\n" + "="*60)
     print("INCREMENTAL CONSTRAINT TESTING")
     print("="*60)
+    sys.stdout.flush()
     
     for i in range(1, len(CONSTRAINT_CLASSES) + 1):
         constraints_to_test = CONSTRAINT_CLASSES[:i]
         names = [c.__name__ for c in constraints_to_test]
         
         print(f"\n[{i}/{len(CONSTRAINT_CLASSES)}] Testing: +{names[-1]}")
+        sys.stdout.flush()
         
         status, status_name, count = test_constraints(constraints_to_test, data)
         
@@ -106,12 +111,15 @@ def main():
             print(f"  [FAIL] INFEASIBLE at {names[-1]} ({count} total constraints)")
             print(f"\n  CULPRIT FOUND: {names[-1]}")
             print(f"  Previous working set: {names[:-1]}")
+            sys.stdout.flush()
             return
         elif status == cp_model.MODEL_INVALID:
             print(f"  [WARN] MODEL_INVALID at {names[-1]}")
+            sys.stdout.flush()
             return
         else:
             print(f"  [OK] {status_name} ({count} constraints)")
+            sys.stdout.flush()
     
     print("\n" + "="*60)
     print("All constraints passed! No INFEASIBLE found.")

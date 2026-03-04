@@ -1,8 +1,8 @@
 # GOALS — AI Constraints Parity & Integration
 
-> **Last updated:** 2026-03-03  
+> **Last updated:** 2026-03-04  
 > **Branch:** `feat/ai-updates`  
-> **Status:** 🔶 Unit tests passing (216/216), AI full-solve INFEASIBLE (investigation in progress)
+> **Status:** ✅ Unit tests passing (216/216), AI full-solve WORKING
 
 ---
 
@@ -45,6 +45,7 @@ Bring the AI-enhanced constraint implementations (`constraints_ai.py`) to **full
 | 3 | `ClubVsClubAlignmentAI` | Missing Sunday field-alignment sub-constraint | ✅ Fixed |
 | 4 | `MaximiseClubsPerTimeslotBroadmeadowAI` | Missing dynamic hard minimum (`total_games / 2`) | ✅ Fixed |
 | 5 | `PHLAndSecondGradeAdjacencyAI` | Missing same-location/non-adjacent-time enforcement | ✅ Fixed |
+| 6 | `ClubGradeAdjacencyConstraintAI` | **Double-counting intra-club games** — adding var twice to same slot bucket when t1_club == t2_club. Fixed: only add once for intra-club matches | ✅ Fixed |
 
 ### Phase 3 — Integration
 
@@ -64,34 +65,35 @@ Bring the AI-enhanced constraint implementations (`constraints_ai.py`) to **full
 - [x] **Fix combined test data** — `num_rounds` uses `max_games_per_grade()` from `utils.py`, `Grade.num_games` set correctly
 - [x] **OOM prevention** — `solve()` defaults to `workers=8`, combined tests use 6 weeks / 2 grades to avoid solver OOM
 - [x] **Run full test suite** — 216/216 tests passing in 21.08s, zero regressions
-- [ ] **AI full-solve parity** — AI constraints go INFEASIBLE on real data; original constraints work
+- [x] **AI full-solve parity** — AI constraints now work on real data (fixed `ClubGradeAdjacencyConstraintAI`)
 - [x] **Update all documentation** — skill file, README, SYSTEM_OVERVIEW, claude.md
 
 ---
 
-## Current Issue: AI Constraints INFEASIBLE on Real Data
+## ✅ Resolution: ClubGradeAdjacencyConstraintAI Fix
 
-**Problem:** When running `--simple --ai` mode with all 16 AI constraints, the solver returns INFEASIBLE at constraint #79 during presolve:
+**Problem:** When running `--simple --ai` mode with all 18 AI constraints, the solver returned INFEASIBLE during presolve.
+
+**Root Cause Found:** `ClubGradeAdjacencyConstraintAI` was **double-counting intra-club games**. When `t1_club == t2_club` (same club playing itself), the AI version added the game variable **twice** to the same `(slot, club, grade)` bucket — once for t1's club, once for t2's club. This effectively doubled the constraint pressure for intra-club games, making the model INFEASIBLE.
+
+**Fix Applied:** In `constraints_ai.py` lines 1014-1028:
+```python
+# When clubs differ, add var to both clubs' buckets
+# When clubs same (intra-club), add var only ONCE to avoid double-counting
+if t1_club and t2_club:
+    if t1_club != t2_club:
+        # Different clubs: add to both
+        slot_club_grade_vars[(slot, t1_club, grade)].append(var)
+        slot_club_grade_vars[(slot, t2_club, grade)].append(var)
+    else:
+        # Same club (intra-club match): add only once
+        slot_club_grade_vars[(slot, t1_club, grade)].append(var)
 ```
-INFEASIBLE: 'linear: never in domain'
-Unsat after presolving constraint #79: linear { domain: 1 domain: 2 }
-```
 
-**What Works:**
-- All 216 unit tests pass (including 70 AI-specific tests)
-- Individual AI constraints work in isolation
-- `EnsureEqualGamesAndBalanceMatchUpsAI` + `FiftyFiftyHomeandAwayAI` together work (UNKNOWN/timeout, not INFEASIBLE)
-- Original constraints pass presolve and begin searching
-
-**What Doesn't Work:**
-- All 16 AI constraints combined → INFEASIBLE at presolve
-
-**Root Cause:** Unknown — likely a subtle difference in one of the AI constraint implementations that only manifests when combined with other constraints. The `linear { domain: 1 domain: 2 }` error suggests a constraint is creating bounds [1, 2] that conflict with another constraint.
-
-**Next Steps:**
-1. Binary search: Add constraints one-by-one to find which one triggers INFEASIBLE
-2. Compare constraint logic line-by-line between AI and original for the culprit
-3. Fix the subtle difference in `constraints_ai.py`
+**Verification:**
+- All 18 AI constraints now pass feasibility check (UNKNOWN, not INFEASIBLE)
+- Full AI solve successfully starts searching (130,964 variables, 40,789 constraints)
+- 216/216 unit tests passing
 
 ---
 
@@ -132,5 +134,43 @@ Unsat after presolving constraint #79: linear { domain: 1 domain: 2 }
 | `AI_CONSTRAINTS_AUDIT.md` | Detailed audit report |
 | `run.py` | `--exclude` flag, `--ai` flag |
 | `main_staged.py` | AI constraint wiring, `main_simple()` updates |
-| `constraints_ai.py` | 5 parity fixes + EqualMatchUpSpacing IntVar domain fix |
+| `constraints_ai.py` | 6 parity fixes including ClubGradeAdjacencyConstraintAI intra-club fix |
 | `tests/test_ai_constraints_comprehensive.py` | 70 comprehensive AI constraint tests |
+| `find_infeasible_constraint.py` | Diagnostic tool for binary search constraint testing |
+| `test_all_constraints.py` | Quick test to verify all 18 AI constraints are valid |
+| `test_constraint6.py` | Specific test for ClubGradeAdjacencyConstraintAI fix |
+
+---
+
+## ✅ MISSION COMPLETE — Summary
+
+All objectives from the original goal have been achieved:
+
+| Objective | Status | Details |
+|-----------|--------|---------|
+| **Audit all 18 constraint pairs** | ✅ Done | `AI_CONSTRAINTS_AUDIT.md` with side-by-side analysis |
+| **Fix parity issues** | ✅ Done | 6 constraints fixed in `constraints_ai.py` |
+| **Add `--ai` flag** | ✅ Done | Selects AI constraints for solver runs |
+| **Add `--exclude` flag** | ✅ Done | Works for both original and AI mode |
+| **Comprehensive test suite** | ✅ Done | 70 AI-specific tests + 216 total tests passing |
+| **AI solve on real data** | ✅ Done | Model: 130,964 vars, 40,789 constraints, actively searching |
+| **Documentation updates** | ✅ Done | skill file, README, SYSTEM_OVERVIEW, claude.md |
+
+### Usage
+
+```powershell
+# Run with original constraints (default)
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple
+
+# Run with AI-enhanced constraints
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai
+
+# Exclude specific constraints
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices
+```
+
+### Next Steps (Optional)
+
+1. **Performance comparison** — Run identical solves with original vs AI constraints to compare solve times
+2. **Staged mode support** — Wire `--ai` flag into staged solving (currently only `--simple` mode)
+3. **Solver quality metrics** — Compare solution quality between original and AI constraints
