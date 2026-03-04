@@ -1,73 +1,40 @@
-# GOALS# GOALS — AI Constraints Parity & Integration
+# GOALS — AI Constraints Parity & Integration
 
+> ⚠️ **DO NOT DELETE** — This is a completed goals archive. Only delete if the user specifically requests it.
 
-
-> **Last updated:** 2026-03-04  > **Last updated:** 2026-03-04  
-
-> **Branch:** `feat/ai-updates`  > **Branch:** `feat/ai-updates`  
-
-> **Status:** 🆕 Ready for new goals> **Status:** ✅ Unit tests passing (216/216), AI full-solve WORKING
-
-
-
-------
-
-
-
-## Current Objectives## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
-
-
-
-<!-- Add your goals here -->**`constraints.py` is NEVER to be edited.**  
-
-The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints_ai.py` only. The AI constraints must match the behaviour of the originals — if there's a discrepancy, the AI version is wrong.
+> **Last updated:** 2026-03-04  
+> **Branch:** `feat/ai-updates`  
+> **Status:** ✅ COMPLETE — Unit tests passing (216/216), AI full-solve WORKING
 
 ---
 
+## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
+
+**`constraints.py` is NEVER to be edited.**  
+The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints_ai.py` only. The AI constraints must match the behaviour of the originals — if there's a discrepancy, the AI version is wrong.
+
 - ✅ Edit `constraints_ai.py`
-
-## Task List- ✅ Edit `tests/test_ai_constraints_comprehensive.py`
-
+- ✅ Edit `tests/test_ai_constraints_comprehensive.py`
 - ❌ **NEVER** edit `constraints.py`
+- ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
 
-### Phase 1 — [Phase Name]- ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
+---
 
+## Overarching Goal
 
+Bring the AI-enhanced constraint implementations (`constraints_ai.py`) to **full parity** with the original human-written constraints (`constraints.py`), then wire them in as a selectable option for live solver runs. The AI versions should:
 
-- [ ] Task 1---
-
-- [ ] Task 2
-
-- [ ] Task 3## Overarching Goal
-
-
-
----Bring the AI-enhanced constraint implementations (`constraints_ai.py`) to **full parity** with the original human-written constraints (`constraints.py`), then wire them in as a selectable option for live solver runs. The AI versions should:
-
-
-
-## Notes1. Enforce **exactly the same scheduling outcomes** as the originals
-
+1. Enforce **exactly the same scheduling outcomes** as the originals
 2. Be **structurally cleaner** and easier to maintain
+3. Be **at least as efficient** (ideally faster to solve)
 
-<!-- Add any relevant notes, constraints, or context here -->3. Be **at least as efficient** (ideally faster to solve)
+---
 
+## Task List
 
+### Phase 1 — Audit & Documentation
 
-------
-
-
-
-## Completed Goal Archives## Task List
-
-
-
-| Archive File | Description | Completed |### Phase 1 — Audit & Documentation
-
-|--------------|-------------|-----------|
-
-| `AI_CONSTRAINTS_GOALS.md` | AI Constraints Parity & Integration | 2026-03-04 |- [x] **Audit report** — Side-by-side comparison of all 18 constraint pairs (`AI_CONSTRAINTS_AUDIT.md`)
-
+- [x] **Audit report** — Side-by-side comparison of all 18 constraint pairs (`AI_CONSTRAINTS_AUDIT.md`)
 - [x] **Test gap analysis** — Comprehensive test suite created
 - [x] **Update GOALS.md** — This file
 
