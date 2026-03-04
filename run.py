@@ -56,8 +56,8 @@ Examples:
     
     # Generate command
     gen_parser = subparsers.add_parser('generate', help='Generate a new draw')
-    gen_parser.add_argument('--year', type=int, default=2025,
-                            help='Season year (default: 2025)')
+    gen_parser.add_argument('--year', type=int, default=2026,
+                            help='Season year (default: 2026)')
     gen_parser.add_argument('--resume', nargs='*', metavar=('RUN_ID', 'STAGE'),
                             help='Resume from checkpoint')
     gen_parser.add_argument('--simple', action='store_true',
@@ -85,12 +85,12 @@ Examples:
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
     test_parser.add_argument('draw_file', help='Path to draw JSON file')
-    test_parser.add_argument('--year', type=int, default=2025)
+    test_parser.add_argument('--year', type=int, default=2026)
     
     # Analyze command  
     analyze_parser = subparsers.add_parser('analyze', help='Generate analytics')
     analyze_parser.add_argument('draw_file', help='Path to draw JSON file')
-    analyze_parser.add_argument('--year', type=int, default=2025)
+    analyze_parser.add_argument('--year', type=int, default=2026)
     analyze_parser.add_argument('--output', '-o', type=str, help='Output file path')
     
     # Swap command
@@ -98,7 +98,7 @@ Examples:
     swap_parser.add_argument('draw_file', help='Path to draw JSON file')
     swap_parser.add_argument('game1', help='First game ID (e.g., G00001)')
     swap_parser.add_argument('game2', help='Second game ID')
-    swap_parser.add_argument('--year', type=int, default=2025)
+    swap_parser.add_argument('--year', type=int, default=2026)
     swap_parser.add_argument('--save', type=str, help='Save modified draw to file')
     
     # Report command
@@ -111,14 +111,14 @@ Examples:
     report_parser.add_argument('--all', action='store_true', help='Generate all reports')
     report_parser.add_argument('--html', action='store_true', help='Generate HTML report')
     report_parser.add_argument('--output', '-o', type=str, default='reports', help='Output directory')
-    report_parser.add_argument('--year', type=int, default=2025)
+    report_parser.add_argument('--year', type=int, default=2026)
     
     # Import command
     import_parser = subparsers.add_parser('import', help='Import draw from Excel')
     import_parser.add_argument('excel_file', help='Path to Excel file')
     import_parser.add_argument('--lock-weeks', type=int, help='Lock games up to this week')
     import_parser.add_argument('--output', '-o', type=str, help='Output JSON file')
-    import_parser.add_argument('--year', type=int, default=2025)
+    import_parser.add_argument('--year', type=int, default=2026)
     
     # List constraints command
     list_parser = subparsers.add_parser('list-constraints', help='List all constraints')
