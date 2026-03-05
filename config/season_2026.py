@@ -36,35 +36,42 @@ DAY_TIME_MAP = {
 
 # ============== PHL-Specific Game Times ==============
 
+# ============== PHL Game Variable Generation Dictionary ==============
+# THIS DICT CONTROLS WHICH GAME VARIABLES ARE CREATED FOR PHL
+# Only timeslots matching (venue, field, day, time) tuples here will have PHL vars generated.
+# This dramatically reduces solver variables - PHL can ONLY play at these specific slots.
+#
+# Key rules:
+# - PHL cannot play on South Field (SF) at NIHC - only EF and WF
+# - Gosford: 1 slot per week max (away venue) - Friday OR Sunday, not both
+# - PHL times are restricted to specific windows (not early morning/late evening)
+#
+# Structure: { venue: { field: { day: [times] } } }
+
 PHL_GAME_TIMES = {
     'Newcastle International Hockey Centre': {
-        'Friday': [tm(19, 0)],  # Friday night games at NIHC - 7pm
-        'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]  # Standard PHL times
+        'EF': {  # East Field only (no SF for PHL)
+            'Friday': [tm(19, 0)],  # 7pm Friday night
+            'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
+        },
+        'WF': {  # West Field only (no SF for PHL)
+            'Friday': [tm(19, 0)],  # 7pm Friday night  
+            'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
+        },
+        # NOTE: SF (South Field) deliberately excluded - PHL cannot play there
     },
     'Central Coast Hockey Park': {
-        'Friday': [tm(18, 30), tm(20, 0)],  # Gosford: 6:30pm or 8:00pm (8pm confirmed at AGM)
-        'Sunday': [tm(12, 0), tm(13, 30)]   # Gosford: 12pm or 1:30pm ONLY
+        'Wyong Main Field': {
+            # Gosford: 1 game per week max (away venue)
+            # Friday 8pm (confirmed at AGM) OR Sunday 12pm/1:30pm
+            'Friday': [tm(20, 0)],  # 8pm only (AGM confirmed)
+            'Sunday': [tm(12, 0), tm(13, 30)]  # 12pm or 1:30pm ONLY
+        },
     },
     'Maitland Park': {
-        'Sunday': [tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-    }
-}
-
-# ============== PHL State Championship Weekend Slots ==============
-# SC weekends are blocked for regular games, but PHL can use "back end" (Sunday afternoon)
-# These dates override the blocked weekends for PHL grade ONLY
-# 3 slots per SC weekend: 2 on East Field, 1 on West Field (can adjust times later)
-
-PHL_SC_WEEKEND_SLOTS = {
-    # May 17, 2026 (Sunday) - NSW Masters State Championships weekend
-    datetime(2026, 5, 17): {
-        'EF': [tm(14, 30), tm(16, 0)],   # East Field - 2 PHL games (2:30pm, 4pm)
-        'WF': [tm(14, 30)],              # West Field - 1 PHL game (2:30pm)
-    },
-    # June 21, 2026 (Sunday) - Girls U16's State Championships weekend  
-    datetime(2026, 6, 21): {
-        'EF': [tm(14, 30), tm(16, 0)],   # East Field - 2 PHL games (2:30pm, 4pm)
-        'WF': [tm(14, 30)],              # West Field - 1 PHL game (2:30pm)
+        'Maitland Main Field': {
+            'Sunday': [tm(12, 0), tm(13, 0), tm(15, 0), tm(16, 30)]
+        },
     },
 }
 
@@ -254,8 +261,7 @@ SEASON_CONFIG = {
     
     # Time configurations
     'day_time_map': DAY_TIME_MAP,
-    'phl_game_times': PHL_GAME_TIMES,
-    'phl_sc_weekend_slots': PHL_SC_WEEKEND_SLOTS,  # SC weekend PHL-only slots
+    'phl_game_times': PHL_GAME_TIMES,  # Controls PHL variable generation (venue/field/day/time)
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,

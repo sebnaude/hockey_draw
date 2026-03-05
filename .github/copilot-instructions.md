@@ -13,6 +13,20 @@ This skill file contains critical information about:
 - Checkpoint/resume system
 - Common issues and solutions
 
+## Pre-Season Protocol
+
+**Before generating a new season's draw, follow the protocol in:**
+
+📁 `AI_DRAW_INIT.md`
+
+This includes:
+1. Gathering club requests from emails
+2. Entering configuration into `config/season_{year}.py`
+3. Generating technical report (`preseason` command)
+4. Updating internal tracking (`reports/{year}_club_requests.md`)
+5. Creating club confirmation summary (`reports/{year}_club_requests_summary.md`)
+6. Sending summary to clubs for confirmation before running solver
+
 ## Critical Rules
 
 ### 1. Solver Execution
@@ -43,6 +57,21 @@ If encountering crashes without Python tracebacks:
 - Output schedules: `draws/`
 - Checkpoints: `checkpoints/run_X/`
 - Solver logs: `logs/`
+- **Pre-season reports**: `reports/`
+
+### 6. PHL Game Variable Generation
+
+**CRITICAL:** `PHL_GAME_TIMES` in the season config is NOT a preference dict.
+It controls which **decision variables** are created for PHL games.
+
+- Filtering happens in `utils.py` → `generate_X()`
+- Slots not in `PHL_GAME_TIMES` = no variable = cannot schedule PHL there
+- This dramatically reduces solver variables (faster solve)
+
+**When updating PHL allowed slots:**
+1. Modify `PHL_GAME_TIMES` in `config/season_{year}.py`
+2. Structure: `{ venue: { field: { day: [times] } } }`
+3. The filtering in `generate_X()` will automatically apply
 
 ## Quick Commands Reference
 

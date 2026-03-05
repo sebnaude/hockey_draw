@@ -321,6 +321,15 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
     
+    IMPORTANT: PHL games are filtered to only valid timeslots defined in phl_game_times.
+    This dramatically reduces the variable count since PHL can only play at specific
+    venue/field/day/time combinations.
+    
+    PHL restrictions enforced here (NOT as constraints):
+    - PHL cannot play on South Field (SF) at NIHC
+    - PHL can only play at times defined in phl_game_times
+    - Gosford has limited slots (1 per week effectively)
+    
     Args:
         model: CP-SAT model
         data: Data dictionary containing teams, timeslots, etc.
@@ -334,6 +343,46 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     """
     teams = data['teams']
     timeslots = data['timeslots']
+    
+    # Get PHL game times for filtering
+    # Supports TWO structures:
+    #   - 2025 (simple): { venue: { day: [times] } }  -> any field at venue is valid
+    #   - 2026 (nested): { venue: { field: { day: [times] } } }  -> specific fields only
+    phl_game_times = data.get('phl_game_times', {})
+    
+    # Detect structure format by checking first venue's first value
+    # If it's a dict with day keys (Monday, Tuesday, etc.), it's the simple format
+    # If it's a dict with field names as keys, it's the nested format
+    is_simple_format = False
+    for venue, venue_data in phl_game_times.items():
+        if isinstance(venue_data, dict):
+            first_key = next(iter(venue_data.keys()), None)
+            # Day names in simple format, field names in nested format
+            if first_key in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'):
+                is_simple_format = True
+        break
+    
+    # Build a set of valid slots for PHL
+    # For simple format: (venue, day, time) - field is not restricted
+    # For nested format: (venue, field, day, time) - specific field required
+    phl_valid_slots = set()
+    phl_valid_venue_day_time = set()  # For simple format fallback
+    
+    if is_simple_format:
+        # 2025 format: { venue: { day: [times] } }
+        for venue, days in phl_game_times.items():
+            for day, times in days.items():
+                for t in times:
+                    time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                    phl_valid_venue_day_time.add((venue, day, time_str))
+    else:
+        # 2026 format: { venue: { field: { day: [times] } } }
+        for venue, fields in phl_game_times.items():
+            for field, days in fields.items():
+                for day, times in days.items():
+                    for t in times:
+                        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                        phl_valid_slots.add((venue, field, day, time_str))
     
     # Generate all games if not already in data
     if 'games' not in data or not data['games']:
@@ -353,19 +402,47 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     # Handle both dict and list formats for games
     game_items = games.items() if isinstance(games, dict) else [(g, g) for g in games]
     
+    phl_vars_created = 0
+    phl_vars_skipped = 0
+    other_vars_created = 0
+    
     for game_key, game_val in game_items:
         if isinstance(game_key, tuple) and len(game_key) >= 3:
             t1_name, t2_name, grade_name = game_key[0], game_key[1], game_key[2]
         else:
             continue
+        
+        is_phl = (grade_name == 'PHL')
             
         for t in timeslots:
             if not t.day:
                 continue  # skip dummy timeslots
+            
+            # For PHL games, only create variables for valid timeslots
+            if is_phl:
+                # Check using appropriate format
+                if is_simple_format:
+                    # 2025 format: check (venue, day, time) only - any field OK
+                    slot_key = (t.field.location, t.day, t.time)
+                    if slot_key not in phl_valid_venue_day_time:
+                        phl_vars_skipped += 1
+                        continue
+                else:
+                    # 2026 format: check (venue, field, day, time) - specific field required
+                    slot_key = (t.field.location, t.field.name, t.day, t.time)
+                    if slot_key not in phl_valid_slots:
+                        phl_vars_skipped += 1
+                        continue
+                phl_vars_created += 1
+            else:
+                other_vars_created += 1
+            
             key = (t1_name, t2_name, grade_name, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
             X[key] = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
     
     print(f"Created {len(X)} decision variables")
+    print(f"  - PHL: {phl_vars_created} created, {phl_vars_skipped} skipped (invalid venue/field/day/time)")
+    print(f"  - Other grades: {other_vars_created}")
     return X, Y, conflicts, unavailable_games
 
 

@@ -5,18 +5,43 @@
 
 ---
 
-## 🔑 Quick Start
+## 🔑 Pre-Season Protocol
 
+### Step 1: Gather Club Requests
+Collect emails from all clubs with their nominations and special requests.
+
+### Step 2: Enter Configuration
+Update `config/season_{year}.py` with all requests (teams, dates, constraints).
+
+### Step 3: Generate Technical Report
 ```powershell
-# Generate the pre-season report to verify all config
 .\.venv\Scripts\python.exe run.py preseason --year 2026 --output reports/2026_season_config_loaded.txt
 ```
+This outputs what the solver will actually use. Review for accuracy.
 
-This report programmatically outputs ALL loaded configuration. Review it before running the solver.
+### Step 4: Update Club Requests Tracking
+Maintain `reports/{year}_club_requests.md` - internal tracking of what's been asked vs implemented.
+
+### Step 5: Generate Club Summary for Confirmation
+Create/update `reports/{year}_club_requests_summary.md` - a clean, email-friendly summary.
+Send to clubs: *"This is what we have recorded. Please confirm or advise of any changes."*
+
+### Step 6: Run Solver
+Once clubs confirm, run the solver.
 
 ---
 
-## 📋 Pre-Season Checklist
+## 📁 Pre-Season Documents
+
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| `reports/{year}_season_config_loaded.txt` | Technical config dump | Internal (developer) |
+| `reports/{year}_club_requests.md` | Detailed tracking with implementation status | Internal (developer) |
+| `reports/{year}_club_requests_summary.md` | Clean summary for confirmation | External (clubs) |
+
+---
+
+## 📋 Configuration Checklist
 
 ### 1. Team Data Verification
 
@@ -87,48 +112,70 @@ The pre-season report validates this automatically:
 
 ---
 
-### 4. Game Time Dictionaries
+### 4. Game Variable Generation Dictionaries
+
+**⚠️ CRITICAL CONCEPT:** These dictionaries control which **decision variables** the solver creates.
+Fewer variables = faster solve. Only create variables for slots that can actually be used.
+
+The filtering happens in `utils.py` → `generate_X()` function.
 
 #### 4.1 Standard Game Times (`DAY_TIME_MAP`)
 
-| Venue | Day | Times | Notes |
-|-------|-----|-------|-------|
-| NIHC | Sunday | 08:30 - 19:00 (8 slots) | 90-min intervals |
-| Maitland | Sunday | 09:00 - 16:30 (6 slots) | 90-min intervals |
-| Gosford | Sunday | 12:00, 13:30 only | Restricted per club request |
-
-**Why This Matters:**
-- These define ALL possible game slots for ALL grades
-- More slots = more solver variables = slower solve time
-- Only add times that can actually be used
-
-#### 4.2 PHL-Specific Game Times (`PHL_GAME_TIMES`)
-
-**CRITICAL:** PHL can only play at certain times. The solver should NOT create variables for invalid PHL times.
+Controls timeslot generation for ALL grades (except PHL which has its own dict).
 
 | Venue | Day | Times | Notes |
 |-------|-----|-------|-------|
-| NIHC | Friday | 19:00 (7pm) | Friday night games |
-| NIHC | Sunday | 11:30, 13:00, 14:30, 16:00 | Middle-of-day slots only |
-| Gosford | Friday | 18:30, 20:00 | 6:30pm or 8pm (AGM confirmed 8pm) |
-| Gosford | Sunday | 12:00, 13:30 | Same as standard (only 2 slots) |
-| Maitland | Sunday | 12:00, 13:30, 15:00, 16:30 | Afternoon slots |
+| NIHC | Sunday | 08:30 - 19:00 (8 slots) | All 3 fields (SF, EF, WF) |
+| Maitland | Sunday | 09:00 - 16:30 (6 slots) | 1 field |
+| Gosford | Sunday | 12:00, 13:30 only | 1 field, restricted per request |
+
+#### 4.2 PHL Game Variable Generation Dict (`PHL_GAME_TIMES`)
+
+**⚠️ THIS IS NOT A PREFERENCE - IT CONTROLS VARIABLE GENERATION**
+
+This dict defines the ONLY slots where PHL game variables will be created.
+Slots not in this dict = no PHL variable = impossible to schedule PHL there.
+
+**Structure:** `{ venue: { field: { day: [times] } } }`
+
+**Key Restrictions Built Into This Dict:**
+- PHL **cannot play on South Field (SF)** - only EF and WF at NIHC
+- Gosford: 1 slot per week max (away venue) - limits variable explosion
+- Times restricted to specific windows (no early morning/late evening)
+
+| Venue | Field | Day | Times |
+|-------|-------|-----|-------|
+| NIHC | EF | Friday | 19:00 |
+| NIHC | EF | Sunday | 11:30, 13:00, 14:30, 16:00 |
+| NIHC | WF | Friday | 19:00 |
+| NIHC | WF | Sunday | 11:30, 13:00, 14:30, 16:00 |
+| NIHC | SF | - | **EXCLUDED** (PHL cannot play here) |
+| Gosford | Wyong Main | Friday | 20:00 (8pm only, AGM confirmed) |
+| Gosford | Wyong Main | Sunday | 12:00, 13:30 |
+| Maitland | Main | Sunday | 12:00, 13:00, 15:00, 16:30 |
 
 **Verification Questions:**
-- [ ] Are PHL times a SUBSET of standard times (for same venue/day)?
-- [ ] Do PHL Friday times match agreed times with clubs?
-- [ ] Do Gosford times match the "12pm or 1:30pm ONLY" request?
+- [ ] Is SF excluded from NIHC? (PHL cannot play South Field)
+- [ ] Does Gosford Friday only have 8pm? (AGM confirmed)
+- [ ] Are Gosford Sunday times 12pm/1:30pm only?
 
-#### 4.3 PHL State Championship Weekend Slots (`PHL_SC_WEEKEND_SLOTS`)
+#### 4.3 How Variable Filtering Works
 
-**Special Case:** PHL can play on blocked SC weekends (at "back end" = Sunday afternoon).
+In `utils.py` → `generate_X()`:
 
-| SC Weekend | Date | Fields | Times |
-|------------|------|--------|-------|
-| Masters SC | May 17, 2026 | EF: 14:30, 16:00; WF: 14:30 | 3 slots total |
-| U16 Girls SC | Jun 21, 2026 | EF: 14:30, 16:00; WF: 14:30 | 3 slots total |
+```python
+# For PHL games, only create variables for valid timeslots
+if is_phl:
+    slot_key = (t.field.location, t.field.name, t.day, t.time)
+    if slot_key not in phl_valid_slots:
+        continue  # Skip - no variable created
+```
 
-**Why 3 slots?** Minimum needed to cover PHL games while keeping variables low.
+This means:
+- **PHL games:** Only slots in `PHL_GAME_TIMES` get variables
+- **Other grades:** All slots in `DAY_TIME_MAP` get variables
+
+**Impact:** Reduces PHL variables by ~60% compared to creating all possible combinations.
 
 ---
 

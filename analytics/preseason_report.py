@@ -295,12 +295,27 @@ class PreSeasonReport:
             for day, times in days.items():
                 result[venue]['standard'][day] = [t.strftime('%H:%M') for t in times]
         
-        # PHL-specific times
-        for venue, days in phl_game_times.items():
+        # PHL-specific times (new structure: venue -> field -> day -> times)
+        for venue, fields in phl_game_times.items():
             if venue not in result:
                 result[venue] = {'standard': {}, 'phl': {}}
-            for day, times in days.items():
-                result[venue]['phl'][day] = [t.strftime('%H:%M') for t in times]
+            # Collect all PHL times by day across all fields
+            phl_by_day = {}
+            for field, days in fields.items():
+                for day, times in days.items():
+                    if day not in phl_by_day:
+                        phl_by_day[day] = {'times': set(), 'fields': []}
+                    for t in times:
+                        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                        phl_by_day[day]['times'].add(time_str)
+                    phl_by_day[day]['fields'].append(field)
+            # Format for output
+            for day, info in phl_by_day.items():
+                fields_str = ', '.join(sorted(set(info['fields'])))
+                result[venue]['phl'][day] = {
+                    'times': sorted(info['times']),
+                    'fields': fields_str
+                }
         
         return result
     
@@ -392,13 +407,19 @@ class PreSeasonReport:
         for venue, categories in venue_times.items():
             lines.append(f"\n{venue}:")
             if categories.get('standard'):
-                lines.append("  Standard times:")
+                lines.append("  Standard times (all grades):")
                 for day, times in categories['standard'].items():
                     lines.append(f"    {day}: {', '.join(times)}")
             if categories.get('phl'):
-                lines.append("  PHL-specific times:")
-                for day, times in categories['phl'].items():
-                    lines.append(f"    {day}: {', '.join(times)}")
+                lines.append("  PHL variable generation dict (controls which vars created):")
+                for day, info in categories['phl'].items():
+                    if isinstance(info, dict):
+                        times_str = ', '.join(info.get('times', []))
+                        fields_str = info.get('fields', '')
+                        lines.append(f"    {day}: {times_str} [Fields: {fields_str}]")
+                    else:
+                        # Fallback for old format
+                        lines.append(f"    {day}: {', '.join(info)}")
         lines.append("")
         
         # Field Unavailabilities
@@ -490,17 +511,12 @@ class PreSeasonReport:
         phl_prefs = self.config.get('phl_preferences', {})
         lines.append(f"  PHL/2nd back-to-back: {phl_prefs.get('phl_2nd_back_to_back', False)}")
         lines.append(f"  Gosford 2nd grade bye: {phl_prefs.get('gosford_2nd_grade_bye', False)}")
+        lines.append("")
         
-        # SC Weekend PHL Slots
-        phl_sc_slots = self.config.get('phl_sc_weekend_slots', {})
-        if phl_sc_slots:
-            lines.append("\n  STATE CHAMPIONSHIP WEEKEND PHL SLOTS:")
-            lines.append("  (PHL games allowed during otherwise blocked SC weekends)")
-            for sc_date, fields_slots in sorted(phl_sc_slots.items()):
-                lines.append(f"    {sc_date.strftime('%A %d %b %Y')}:")
-                for field_name, times in fields_slots.items():
-                    times_str = ', '.join(t.strftime('%H:%M') for t in times)
-                    lines.append(f"      {field_name}: {times_str}")
+        # Note about PHL variable generation
+        lines.append("  NOTE: PHL game variables are controlled by PHL_GAME_TIMES dict.")
+        lines.append("  See 'PHL variable generation dict' under venue times above.")
+        lines.append("  Slots not in that dict = no solver variable = cannot schedule PHL there.")
         lines.append("")
         
         # Home Field Mappings

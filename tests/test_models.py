@@ -155,10 +155,11 @@ class TestGrade:
         assert grade.num_games == 12
 
     def test_grade_invalid_comparison(self):
-        """Test that comparing Grade with non-Grade raises error."""
+        """Test that comparing Grade with non-Grade returns NotImplemented."""
         grade = Grade(name='PHL', teams=['A'])
         
-        result = grade < "not a grade"
+        # Python's __lt__ should return NotImplemented for incompatible types
+        result = grade.__lt__("not a grade")
         assert result == NotImplemented
 
     def test_grade_unknown_name_comparison(self):

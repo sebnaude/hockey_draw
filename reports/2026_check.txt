@@ -1,6 +1,6 @@
 ================================================================================
 PRE-SEASON CONFIGURATION REPORT - 2026
-Generated: 2026-03-05 20:26:19
+Generated: 2026-03-05 20:47:13
 ================================================================================
 
 ----------------------------------------
@@ -90,24 +90,24 @@ AVAILABLE GAME TIMES BY VENUE
 ----------------------------------------
 
 Newcastle International Hockey Centre:
-  Standard times:
+  Standard times (all grades):
     Sunday: 08:30, 10:00, 11:30, 13:00, 14:30, 16:00, 17:30, 19:00
-  PHL-specific times:
-    Friday: 19:00
-    Sunday: 11:30, 13:00, 14:30, 16:00
+  PHL variable generation dict (controls which vars created):
+    Friday: 19:00 [Fields: EF, WF]
+    Sunday: 11:30, 13:00, 14:30, 16:00 [Fields: EF, WF]
 
 Maitland Park:
-  Standard times:
+  Standard times (all grades):
     Sunday: 09:00, 10:30, 12:00, 13:30, 15:00, 16:30
-  PHL-specific times:
-    Sunday: 12:00, 13:30, 15:00, 16:30
+  PHL variable generation dict (controls which vars created):
+    Sunday: 12:00, 13:00, 15:00, 16:30 [Fields: Maitland Main Field]
 
 Central Coast Hockey Park:
-  Standard times:
+  Standard times (all grades):
     Sunday: 12:00, 13:30
-  PHL-specific times:
-    Friday: 18:30, 20:00
-    Sunday: 12:00, 13:30
+  PHL variable generation dict (controls which vars created):
+    Friday: 20:00 [Fields: Wyong Main Field]
+    Sunday: 12:00, 13:30 [Fields: Wyong Main Field]
 
 ----------------------------------------
 FIELD UNAVAILABILITIES (HARD CONSTRAINTS)
@@ -184,14 +184,9 @@ PHL CONFIGURATION
   PHL/2nd back-to-back: True
   Gosford 2nd grade bye: True
 
-  STATE CHAMPIONSHIP WEEKEND PHL SLOTS:
-  (PHL games allowed during otherwise blocked SC weekends)
-    Sunday 17 May 2026:
-      EF: 14:30, 16:00
-      WF: 14:30
-    Sunday 21 Jun 2026:
-      EF: 14:30, 16:00
-      WF: 14:30
+  NOTE: PHL game variables are controlled by PHL_GAME_TIMES dict.
+  See 'PHL variable generation dict' under venue times above.
+  Slots not in that dict = no solver variable = cannot schedule PHL there.
 
 ----------------------------------------
 HOME FIELD MAPPINGS
@@ -208,7 +203,7 @@ Total Teams: 48
 Total Grades: 6
 Total Clubs: 10
 Total Venues: 5
-Total Timeslots Generated: 814
+Total Timeslots Generated: 704
 Max Rounds: 20
 
 ----------------------------------------
