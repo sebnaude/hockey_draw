@@ -52,7 +52,8 @@ class PreSeasonReport:
         # Config values
         self.year = config.get('year', data.get('year'))
         self.start_date = config.get('start_date')
-        self.end_date = config.get('end_date')
+        self.last_round_date = config.get('last_round_date')  # End of regular rounds
+        self.end_date = config.get('end_date')  # Grand final date
         self.max_rounds = config.get('max_rounds')
         
     def calculate_available_weekends(self) -> Tuple[int, List[datetime]]:
@@ -62,7 +63,9 @@ class PreSeasonReport:
         Returns:
             Tuple of (count, list_of_weekend_dates)
         """
-        if not self.start_date or not self.end_date:
+        # Use last_round_date if available, otherwise fall back to end_date
+        round_end_date = self.last_round_date or self.end_date
+        if not self.start_date or not round_end_date:
             return 0, []
         
         field_unavailabilities = self.config.get('field_unavailabilities', {})
@@ -73,10 +76,10 @@ class PreSeasonReport:
         for weekend in nihc_unavail.get('weekends', []):
             blocked_weekends.add(weekend.date())
         
-        # Count Sundays between start and end
+        # Count Sundays between start and last round date
         current = self.start_date
         weekends = []
-        while current <= self.end_date:
+        while current <= round_end_date:
             if current.strftime('%A') == 'Sunday':
                 # Check if this weekend is blocked
                 # Weekend is blocked if any day Fri-Sun matches a blocked weekend
@@ -344,9 +347,11 @@ class PreSeasonReport:
         lines.append("SEASON DATES")
         lines.append("-" * 40)
         if self.start_date:
-            lines.append(f"Start Date: {self.start_date.strftime('%A, %d %B %Y')}")
+            lines.append(f"First Round:  {self.start_date.strftime('%A, %d %B %Y')}")
+        if self.last_round_date:
+            lines.append(f"Last Round:   {self.last_round_date.strftime('%A, %d %B %Y')}")
         if self.end_date:
-            lines.append(f"End Date:   {self.end_date.strftime('%A, %d %B %Y')}")
+            lines.append(f"Grand Final:  {self.end_date.strftime('%A, %d %B %Y')}")
         lines.append("")
         
         # Rounds Validation
@@ -485,6 +490,17 @@ class PreSeasonReport:
         phl_prefs = self.config.get('phl_preferences', {})
         lines.append(f"  PHL/2nd back-to-back: {phl_prefs.get('phl_2nd_back_to_back', False)}")
         lines.append(f"  Gosford 2nd grade bye: {phl_prefs.get('gosford_2nd_grade_bye', False)}")
+        
+        # SC Weekend PHL Slots
+        phl_sc_slots = self.config.get('phl_sc_weekend_slots', {})
+        if phl_sc_slots:
+            lines.append("\n  STATE CHAMPIONSHIP WEEKEND PHL SLOTS:")
+            lines.append("  (PHL games allowed during otherwise blocked SC weekends)")
+            for sc_date, fields_slots in sorted(phl_sc_slots.items()):
+                lines.append(f"    {sc_date.strftime('%A %d %b %Y')}:")
+                for field_name, times in fields_slots.items():
+                    times_str = ', '.join(t.strftime('%H:%M') for t in times)
+                    lines.append(f"      {field_name}: {times_str}")
         lines.append("")
         
         # Home Field Mappings

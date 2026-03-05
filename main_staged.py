@@ -152,53 +152,49 @@ STAGES = {
         'name': 'Required Constraints',
         'description': 'Core scheduling rules that must be satisfied',
         'constraints': [
+            # Core double-booking prevention
             NoDoubleBookingTeamsConstraint,
             NoDoubleBookingFieldsConstraint,
+            # Game balance
             EnsureEqualGamesAndBalanceMatchUps,
+            # Grade adjacency and timing
+            PHLAndSecondGradeAdjacency,
+            PHLAndSecondGradeTimes,
+            # Home/Away balance
             FiftyFiftyHomeandAway,
+            # Team conflicts
+            TeamConflictConstraint,
+            # Venue constraints
+            MaxMaitlandHomeWeekends,
+            # Club day events
+            ClubDayConstraint,
+            # Spacing
+            EqualMatchUpSpacingConstraint,
+            # Grade adjacency for clubs
+            ClubGradeAdjacencyConstraint,
+            # Club alignment
+            ClubVsClubAlignment,
+            # Maitland grouping (has hard element: no back-to-back)
+            MaitlandHomeGrouping,
+            # Away at Maitland (hard limit of 3 away clubs)
+            AwayAtMaitlandGrouping,
         ],
         'max_time_seconds': 7200,  # 2 hours
         'required': True,
-        'use_callback': False,
+        'use_callback': True,
     },
-    'stage2_strong': {
-        'name': 'Strong Structural Constraints',
-        'description': 'Important practical constraints for schedule quality',
-        'constraints': [
-            PHLAndSecondGradeAdjacency,
-            ClubGradeAdjacencyConstraint,
-            MaxMaitlandHomeWeekends,
-        ],
-        'max_time_seconds': 14400,  # 4 hours
-        'required': True,
-        'use_callback': True,  # Save intermediate solutions
-    },
-    'stage3_medium': {
-        'name': 'Venue and Scheduling Optimization',
-        'description': 'Venue limits and scheduling efficiency',
-        'constraints': [
-            ClubDayConstraint,
-            EqualMatchUpSpacingConstraint,
-        ],
-        'max_time_seconds': 28800,  # 8 hours
-        'required': False,
-        'use_callback': True,  # Save intermediate solutions
-    },
-    'stage4_soft': {
-        'name': 'Soft Preferences',
+    'stage2_soft': {
+        'name': 'Soft Preferences and Timeslot Optimization',
         'description': 'Quality optimizations with penalties',
         'constraints': [
-            # Hybrid constraints (have both hard and soft elements)
-            PHLAndSecondGradeTimes,
-            MaitlandHomeGrouping,
-            AwayAtMaitlandGrouping,
-            # Pure soft constraints
-            MaximiseClubsPerTimeslotBroadmeadow,
-            MinimiseClubsOnAFieldBroadmeadow,
-            ClubVsClubAlignment,
-            PreferredTimesConstraint,
+            # Timeslot optimization
             EnsureBestTimeslotChoices,
-            TeamConflictConstraint,
+            # Club diversity at Broadmeadow
+            MaximiseClubsPerTimeslotBroadmeadow,
+            # Field continuity at Broadmeadow
+            MinimiseClubsOnAFieldBroadmeadow,
+            # Preferred times / no-play constraints
+            PreferredTimesConstraint,
         ],
         'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': False,
@@ -212,51 +208,49 @@ STAGES_AI = {
         'name': 'Required Constraints (AI)',
         'description': 'Core scheduling rules - AI implementations',
         'constraints': [
+            # Core double-booking prevention
             NoDoubleBookingTeamsConstraintAI,
             NoDoubleBookingFieldsConstraintAI,
+            # Game balance
             EnsureEqualGamesAndBalanceMatchUpsAI,
+            # Grade adjacency and timing
+            PHLAndSecondGradeAdjacencyAI,
+            PHLAndSecondGradeTimesAI,
+            # Home/Away balance
             FiftyFiftyHomeandAwayAI,
+            # Team conflicts
+            TeamConflictConstraintAI,
+            # Venue constraints
+            MaxMaitlandHomeWeekendsAI,
+            # Club day events
+            ClubDayConstraintAI,
+            # Spacing
+            EqualMatchUpSpacingConstraintAI,
+            # Grade adjacency for clubs
+            ClubGradeAdjacencyConstraintAI,
+            # Club alignment
+            ClubVsClubAlignmentAI,
+            # Maitland grouping (has hard element: no back-to-back)
+            MaitlandHomeGroupingAI,
+            # Away at Maitland (hard limit of 3 away clubs)
+            AwayAtMaitlandGroupingAI,
         ],
         'max_time_seconds': 7200,
         'required': True,
-        'use_callback': False,
-    },
-    'stage2_strong': {
-        'name': 'Strong Structural Constraints (AI)',
-        'description': 'Important practical constraints - AI implementations',
-        'constraints': [
-            PHLAndSecondGradeAdjacencyAI,
-            ClubGradeAdjacencyConstraintAI,
-            MaxMaitlandHomeWeekendsAI,
-        ],
-        'max_time_seconds': 14400,
-        'required': True,
         'use_callback': True,
     },
-    'stage3_medium': {
-        'name': 'Venue and Scheduling Optimization (AI)',
-        'description': 'Venue limits and scheduling efficiency - AI implementations',
-        'constraints': [
-            ClubDayConstraintAI,
-            EqualMatchUpSpacingConstraintAI,
-        ],
-        'max_time_seconds': 28800,
-        'required': False,
-        'use_callback': True,
-    },
-    'stage4_soft': {
-        'name': 'Soft Preferences (AI)',
+    'stage2_soft': {
+        'name': 'Soft Preferences and Timeslot Optimization (AI)',
         'description': 'Quality optimizations - AI implementations',
         'constraints': [
-            PHLAndSecondGradeTimesAI,
-            MaitlandHomeGroupingAI,
-            AwayAtMaitlandGroupingAI,
-            MaximiseClubsPerTimeslotBroadmeadowAI,
-            MinimiseClubsOnAFieldBroadmeadowAI,
-            ClubVsClubAlignmentAI,
-            PreferredTimesConstraintAI,
+            # Timeslot optimization
             EnsureBestTimeslotChoicesAI,
-            TeamConflictConstraintAI,
+            # Club diversity at Broadmeadow
+            MaximiseClubsPerTimeslotBroadmeadowAI,
+            # Field continuity at Broadmeadow
+            MinimiseClubsOnAFieldBroadmeadowAI,
+            # Preferred times / no-play constraints
+            PreferredTimesConstraintAI,
         ],
         'max_time_seconds': 259200,
         'required': False,
@@ -927,14 +921,16 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
 if __name__ == "__main__":
     import sys
     
-    if len(sys.argv) > 1:
-        if sys.argv[1] == '--simple':
-            main_simple()
-        elif sys.argv[1] == '--resume':
-            run_id = sys.argv[2] if len(sys.argv) > 2 else None
-            resume_from = sys.argv[3] if len(sys.argv) > 3 else None
-            main_staged(run_id=run_id, resume_from=resume_from)
-        else:
-            main_staged(run_id=sys.argv[1])
-    else:
-        main_staged()
+    print("="*60)
+    print("HOCKEY DRAW SCHEDULER")
+    print("="*60)
+    print("\nUsage: python run.py generate --year YYYY [options]")
+    print("\nDirect invocation of main_staged.py is deprecated.")
+    print("Please use run.py as the entry point instead.")
+    print("\nExamples:")
+    print("  python run.py generate --year 2025")
+    print("  python run.py generate --year 2026 --simple")
+    print("  python run.py generate --year 2025 --resume run_13 stage1_required")
+    print("  python run.py test draws/schedule.json --year 2025")
+    print("  python run.py --help")
+    sys.exit(1)

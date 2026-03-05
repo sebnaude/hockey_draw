@@ -38,28 +38,37 @@ If encountering crashes without Python tracebacks:
 - Always check ortools version compatibility
 
 ### 5. File Locations
-- Team data: `data/2025/teams/*.csv`
+- Team data: `data/{year}/teams/*.csv`
+- Season config: `config/season_{year}.py`
 - Output schedules: `draws/`
 - Checkpoints: `checkpoints/run_X/`
 - Solver logs: `logs/`
 
 ## Quick Commands Reference
 
+**IMPORTANT: `--year` is REQUIRED for all commands!**
+
 ```powershell
-# Standard generate (background)
+# Standard generate (background) - ALWAYS specify --year
 .\.venv\Scripts\python.exe run.py generate --year 2025
+
+# Generate 2026 season
+.\.venv\Scripts\python.exe run.py generate --year 2026
 
 # Low memory mode
 .\.venv\Scripts\python.exe run.py generate --year 2025 --low-memory
 
+# Simple (non-staged) mode
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple
+
 # Resume from checkpoint
 .\.venv\Scripts\python.exe run.py generate --year 2025 --resume run_13 stage1_required
 
-# Test draw
-.\.venv\Scripts\python.exe run.py test draws/draw.json
+# Test draw - requires --year
+.\.venv\Scripts\python.exe run.py test draws/draw.json --year 2025
 
-# Analyze draw
-.\.venv\Scripts\python.exe run.py analyze draws/draw.json
+# Analyze draw - requires --year
+.\.venv\Scripts\python.exe run.py analyze draws/draw.json --year 2025
 ```
 
 ## When User Asks About This Project
@@ -68,6 +77,17 @@ If encountering crashes without Python tracebacks:
 2. **Then**: Understand the specific request
 3. **Check**: Recent checkpoints and logs for context
 4. **Recommend**: Appropriate memory/worker settings based on available resources
+
+## Adding a New Season
+
+To add support for a new year (e.g., 2027):
+
+1. **Copy the template**: `config/season_template.py` → `config/season_2027.py`
+2. **Update all year references** in the new file (search for `9999`)
+3. **Create team data folder**: `data/2027/teams/`
+4. **Add team CSV files** for each club
+5. **Update dates**: start_date, end_date, field unavailabilities, club days
+6. The system will **automatically detect** the new config file
 
 ## Data File Formats
 
@@ -82,6 +102,17 @@ Colts,5th,Colts Green
 - **Club**: Club name (matches filename without .csv)
 - **Grade**: One of `PHL`, `2nd`, `3rd`, `4th`, `5th`, `6th`
 - **Team Name**: Display name (can differ for multiple teams in same grade)
+
+### Season Config (`config/season_{year}.py`)
+Contains all season-specific settings:
+- `FIELDS` - Playing field definitions
+- `DAY_TIME_MAP` - Standard game times by venue/day
+- `PHL_GAME_TIMES` - PHL-specific game times
+- `FIELD_UNAVAILABILITIES` - Venue closures (HARD constraints)
+- `CLUB_DAYS` - Club day events (back-to-back games)
+- `PREFERENCE_NO_PLAY` - Soft no-play constraints
+- `SEASON_CONFIG` - Main config dict with dates, paths, etc.
+- `get_season_data()` - Function that builds the complete data dictionary
 
 ### No-Play Data
 
@@ -121,16 +152,6 @@ PREFERENCE_NO_PLAY = {
     },
 }
 ```
-
-### Season Config (`config/season_{year}.py`)
-Contains all season-specific settings:
-- `FIELDS` - Playing field definitions
-- `DAY_TIME_MAP` - Standard game times by venue/day
-- `PHL_GAME_TIMES` - PHL-specific game times
-- `FIELD_UNAVAILABILITIES` - Venue closures
-- `CLUB_DAYS` - Club day events (back-to-back games)
-- `PREFERENCE_NO_PLAY` - Soft no-play constraints
-- `SEASON_CONFIG` - Main config dict with dates, paths, etc.
 
 ### Team Naming Conventions (`config/team_naming.py`)
 When a club has multiple teams in the same grade, use these standard names:

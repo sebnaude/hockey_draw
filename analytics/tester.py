@@ -32,6 +32,49 @@ from analytics.storage import DrawStorage, StoredGame
 from models import Team, Club, Grade
 
 
+# Severity levels mapping - lower number = more severe
+# Level 1: Core constraints that must never be broken
+# Level 2: Important structural constraints (club days, team conflicts)
+# Level 3: Team preferences and spacing constraints
+# Level 4: Soft optimization constraints
+CONSTRAINT_SEVERITY_LEVELS = {
+    # Level 1 - CRITICAL (must never break)
+    'NoDoubleBookingTeams': 1,
+    'NoDoubleBookingFields': 1,
+    'EqualGames': 1,
+    'BalancedMatchups': 1,
+    'PHLAndSecondGradeAdjacency': 1,
+    'PHLAndSecondGradeTimes': 1,
+    'FiftyFiftyHomeAway': 1,
+    'MaxMaitlandHomeWeekends': 1,
+    'MaitlandHomeGrouping': 1,  # Has hard element: no back-to-back Maitland home games
+    
+    # Level 2 - HIGH (structural, club-specific)
+    'ClubDayConstraint': 2,
+    'AwayAtMaitlandGrouping': 2,
+    'TeamConflict': 2,  # Ensure teams specified as conflicting cannot play at the same time
+    
+    # Level 3 - MEDIUM (team preferences, spacing)
+    'EqualMatchUpSpacing': 3,
+    'ClubGradeAdjacency': 3,
+    'ClubVsClubAlignment': 3,
+    
+    # Level 4 - LOW (soft optimization)
+    'EnsureBestTimeslotChoices': 4,
+    'MaximiseClubsPerTimeslotBroadmeadow': 4,
+    'MinimiseClubsOnAFieldBroadmeadow': 4,
+    'PreferredTimesConstraint': 4,
+}
+
+# Mapping from severity level to label
+SEVERITY_LEVEL_LABELS = {
+    1: 'CRITICAL',
+    2: 'HIGH', 
+    3: 'MEDIUM',
+    4: 'LOW',
+}
+
+
 @dataclass
 class Violation:
     """Represents a single constraint violation."""
@@ -40,10 +83,26 @@ class Violation:
     message: str
     affected_games: List[str] = field(default_factory=list)
     week: Optional[int] = None
+    severity_level: int = 4  # 1-4, lower = worse
     
     def __str__(self) -> str:
         games_str = f" [{', '.join(self.affected_games)}]" if self.affected_games else ""
-        return f"[{self.severity}] {self.constraint}: {self.message}{games_str}"
+        return f"[L{self.severity_level}-{self.severity}] {self.constraint}: {self.message}{games_str}"
+    
+    @classmethod
+    def create(cls, constraint: str, message: str, 
+               affected_games: List[str] = None, week: Optional[int] = None) -> 'Violation':
+        """Factory method that auto-determines severity from constraint name."""
+        level = CONSTRAINT_SEVERITY_LEVELS.get(constraint, 4)
+        severity = SEVERITY_LEVEL_LABELS.get(level, 'LOW')
+        return cls(
+            constraint=constraint,
+            severity=severity,
+            message=message,
+            affected_games=affected_games or [],
+            week=week,
+            severity_level=level
+        )
 
 
 @dataclass
@@ -56,6 +115,21 @@ class ViolationReport:
     @property
     def has_violations(self) -> bool:
         return len(self.violations) > 0
+    
+    @property
+    def highest_severity_level(self) -> int:
+        """Return the highest (worst) severity level. Lower number = worse."""
+        if not self.violations:
+            return 0  # No violations
+        return min(v.severity_level for v in self.violations)
+    
+    @property
+    def highest_severity_label(self) -> str:
+        """Return the label for the highest severity level."""
+        level = self.highest_severity_level
+        if level == 0:
+            return "NONE"
+        return SEVERITY_LEVEL_LABELS.get(level, "UNKNOWN")
     
     @property
     def critical_count(self) -> int:
@@ -73,6 +147,14 @@ class ViolationReport:
     def low_count(self) -> int:
         return sum(1 for v in self.violations if v.severity == 'LOW')
     
+    def count_by_level(self, level: int) -> int:
+        """Count violations at a specific severity level."""
+        return sum(1 for v in self.violations if v.severity_level == level)
+    
+    def violations_by_level(self, level: int) -> List[Violation]:
+        """Get all violations at a specific severity level."""
+        return [v for v in self.violations if v.severity_level == level]
+    
     def summary(self) -> str:
         """Return a concise summary."""
         if not self.has_violations:
@@ -80,10 +162,11 @@ class ViolationReport:
         
         return (
             f"❌ FAIL: {len(self.violations)} violations found\n"
-            f"   CRITICAL: {self.critical_count}\n"
-            f"   HIGH: {self.high_count}\n"
-            f"   MEDIUM: {self.medium_count}\n"
-            f"   LOW: {self.low_count}"
+            f"   Highest Severity: Level {self.highest_severity_level} ({self.highest_severity_label})\n"
+            f"   Level 1 (CRITICAL): {self.count_by_level(1)}\n"
+            f"   Level 2 (HIGH): {self.count_by_level(2)}\n"
+            f"   Level 3 (MEDIUM): {self.count_by_level(3)}\n"
+            f"   Level 4 (LOW): {self.count_by_level(4)}"
         )
     
     def full_report(self) -> str:
@@ -95,19 +178,21 @@ class ViolationReport:
             f"Draw: {self.draw_description}",
             f"Total Games: {self.total_games}",
             f"Total Violations: {len(self.violations)}",
+            f"Highest Severity: Level {self.highest_severity_level} ({self.highest_severity_label})",
             "-" * 60
         ]
         
         if not self.violations:
             lines.append("✅ ALL CONSTRAINTS SATISFIED")
         else:
-            # Group by severity
-            for severity in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
-                sev_violations = [v for v in self.violations if v.severity == severity]
-                if sev_violations:
-                    lines.append(f"\n{severity} ({len(sev_violations)}):")
+            # Group by severity level (1-4)
+            for level in [1, 2, 3, 4]:
+                level_violations = self.violations_by_level(level)
+                if level_violations:
+                    label = SEVERITY_LEVEL_LABELS.get(level, 'UNKNOWN')
+                    lines.append(f"\nLevel {level} - {label} ({len(level_violations)}):")
                     lines.append("-" * 40)
-                    for v in sev_violations:
+                    for v in level_violations:
                         lines.append(f"  • {v.constraint}")
                         lines.append(f"    {v.message}")
                         if v.affected_games:
@@ -124,6 +209,44 @@ class ViolationReport:
         for v in self.violations:
             result[v.constraint].append(v)
         return dict(result)
+    
+    def compare_to(self, other: 'ViolationReport') -> Tuple[int, int, str]:
+        """
+        Compare this report to another. Used for finding best slot.
+        
+        Returns:
+            Tuple of (severity_comparison, count_comparison, explanation)
+            - severity_comparison: -1 if this is better, 0 if equal, 1 if worse
+            - count_comparison: difference in total violations (negative = better)
+            - explanation: Human readable comparison
+        """
+        # First compare by highest severity level (lower = worse, so we want higher)
+        self_level = self.highest_severity_level if self.has_violations else 5
+        other_level = other.highest_severity_level if other.has_violations else 5
+        
+        if self_level > other_level:  # Higher number = less severe = better
+            return -1, 0, f"Better severity (L{self_level} vs L{other_level})"
+        elif self_level < other_level:
+            return 1, 0, f"Worse severity (L{self_level} vs L{other_level})"
+        
+        # Same severity level - compare by count at that level
+        self_count_at_level = self.count_by_level(self_level) if self_level <= 4 else 0
+        other_count_at_level = other.count_by_level(other_level) if other_level <= 4 else 0
+        
+        count_diff = self_count_at_level - other_count_at_level
+        if count_diff < 0:
+            return -1, count_diff, f"Fewer L{self_level} violations ({self_count_at_level} vs {other_count_at_level})"
+        elif count_diff > 0:
+            return 1, count_diff, f"More L{self_level} violations ({self_count_at_level} vs {other_count_at_level})"
+        
+        # Same count at highest level - compare total violations
+        total_diff = len(self.violations) - len(other.violations)
+        if total_diff < 0:
+            return -1, total_diff, f"Fewer total violations ({len(self.violations)} vs {len(other.violations)})"
+        elif total_diff > 0:
+            return 1, total_diff, f"More total violations ({len(self.violations)} vs {len(other.violations)})"
+        
+        return 0, 0, "Equal"
 
 
 class DrawTester:
@@ -466,6 +589,282 @@ class DrawTester:
         
         print(f"\nTotal unused: {len(unused)} slots")
     
+    # ============== Find Best Slot ==============
+    
+    def find_best_slot_for_game(
+        self,
+        game_id: str,
+        weeks: Optional[List[int]] = None,
+        field_locations: Optional[List[str]] = None,
+        max_results: int = 10,
+        include_swaps: bool = True,
+        verbose: bool = True
+    ) -> List[Dict]:
+        """
+        Find the best available slots for a game, ranked by severity level and violation count.
+        
+        This method tests each potential slot (both empty slots and swaps) and ranks them
+        by:
+        1. Lowest severity level of violations (higher number = better, no violations = best)
+        2. Fewest violations at that severity level
+        3. Fewest total violations
+        
+        Args:
+            game_id: ID of the game to find a new slot for
+            weeks: Optional list of weeks to consider (default: all weeks)
+            field_locations: Optional list of field locations to consider
+            max_results: Maximum number of results to return (default: 10)
+            include_swaps: Whether to include potential game swaps (default: True)
+            verbose: Print progress updates (default: True)
+            
+        Returns:
+            List of dicts with slot info and violation report, sorted best to worst:
+            [
+                {
+                    'slot': {...slot info...},
+                    'type': 'empty' | 'swap',
+                    'swap_with': game_id (if swap),
+                    'report': ViolationReport,
+                    'severity_level': int (0 = no violations, 1-4 = worst to least severe),
+                    'violation_count': int,
+                    'rank_explanation': str
+                },
+                ...
+            ]
+        """
+        # Find the game to move
+        game_to_move = None
+        for game in self.draw.games:
+            if game.game_id == game_id:
+                game_to_move = game
+                break
+        
+        if not game_to_move:
+            raise ValueError(f"Game {game_id} not found")
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"FINDING BEST SLOT FOR GAME: {game_id}")
+            print(f"  {game_to_move.team1} vs {game_to_move.team2} ({game_to_move.grade})")
+            print(f"  Currently: Week {game_to_move.week}, Slot {game_to_move.day_slot}, {game_to_move.field_name}")
+            print(f"{'='*60}")
+        
+        # Get current violation report for comparison
+        current_report = self.run_violation_check()
+        if verbose:
+            print(f"\nCurrent violations: {len(current_report.violations)}")
+            print(f"  Highest severity: Level {current_report.highest_severity_level} ({current_report.highest_severity_label})")
+        
+        # Determine weeks to search
+        if weeks is None:
+            weeks = sorted(set(t.week for t in self.data.get('timeslots', [])))
+        
+        candidates = []
+        tested_count = 0
+        
+        # Test empty slots
+        if verbose:
+            print(f"\nSearching empty slots in weeks: {weeks[:5]}..." if len(weeks) > 5 else f"\nSearching empty slots in weeks: {weeks}")
+        
+        for week in weeks:
+            available_slots = self.find_available_slots(week, field_locations[0] if field_locations and len(field_locations) == 1 else None)
+            
+            # Filter by field location if specified
+            if field_locations:
+                available_slots = [s for s in available_slots if s['field_location'] in field_locations]
+            
+            for slot in available_slots:
+                tested_count += 1
+                
+                # Create a fresh copy and test the move
+                test_tester = DrawTester(self.draw, self.data)
+                test_tester.move_game(
+                    game_id,
+                    new_week=slot['week'],
+                    new_day=slot['day'],
+                    new_day_slot=slot['day_slot'],
+                    new_time=slot['time'],
+                    new_date=slot['date'],
+                    new_field_name=slot['field_name'],
+                    new_field_location=slot['field_location']
+                )
+                
+                report = test_tester.run_violation_check()
+                
+                candidates.append({
+                    'slot': slot,
+                    'type': 'empty',
+                    'swap_with': None,
+                    'report': report,
+                    'severity_level': report.highest_severity_level if report.has_violations else 0,
+                    'violation_count': len(report.violations),
+                    'violations_by_level': {
+                        1: report.count_by_level(1),
+                        2: report.count_by_level(2),
+                        3: report.count_by_level(3),
+                        4: report.count_by_level(4),
+                    }
+                })
+        
+        if verbose:
+            print(f"  Tested {tested_count} empty slots")
+        
+        # Test swaps with other games
+        if include_swaps:
+            swap_count = 0
+            if verbose:
+                print(f"\nSearching potential swaps...")
+            
+            for other_game in self.draw.games:
+                if other_game.game_id == game_id:
+                    continue
+                
+                # Skip if week not in search range
+                if other_game.week not in weeks:
+                    continue
+                
+                # Skip if field location not in filter
+                if field_locations and other_game.field_location not in field_locations:
+                    continue
+                
+                swap_count += 1
+                
+                # Create a fresh copy and test the swap
+                test_tester = DrawTester(self.draw, self.data)
+                test_tester.swap_games(game_id, other_game.game_id)
+                
+                report = test_tester.run_violation_check()
+                
+                slot_info = {
+                    'week': other_game.week,
+                    'day': other_game.day,
+                    'day_slot': other_game.day_slot,
+                    'time': other_game.time,
+                    'date': other_game.date,
+                    'round_no': other_game.round_no,
+                    'field_name': other_game.field_name,
+                    'field_location': other_game.field_location,
+                }
+                
+                candidates.append({
+                    'slot': slot_info,
+                    'type': 'swap',
+                    'swap_with': other_game.game_id,
+                    'swap_game_info': f"{other_game.team1} vs {other_game.team2}",
+                    'report': report,
+                    'severity_level': report.highest_severity_level if report.has_violations else 0,
+                    'violation_count': len(report.violations),
+                    'violations_by_level': {
+                        1: report.count_by_level(1),
+                        2: report.count_by_level(2),
+                        3: report.count_by_level(3),
+                        4: report.count_by_level(4),
+                    }
+                })
+            
+            if verbose:
+                print(f"  Tested {swap_count} potential swaps")
+        
+        # Sort candidates: 
+        # 1. By severity_level ascending (0 = no violations, best; then 4, 3, 2, 1)
+        # 2. By violation count at that level
+        # 3. By total violation count
+        def sort_key(c):
+            level = c['severity_level']
+            # Convert 0 to -1 so it sorts first (no violations is best)
+            sort_level = -1 if level == 0 else level
+            count_at_level = c['violations_by_level'].get(level, 0) if level > 0 else 0
+            return (sort_level, count_at_level, c['violation_count'])
+        
+        candidates.sort(key=sort_key, reverse=True)  # Reverse because higher is better for our sort_level
+        
+        # Actually we want:
+        # - severity_level 0 first (no violations)
+        # - then severity_level 4, 3, 2, 1 (higher = less severe = better)
+        # So we need to sort descending by a "goodness" score
+        def goodness_key(c):
+            level = c['severity_level']
+            # Goodness: 5 for no violations, then 4,3,2,1 based on level
+            goodness = 5 if level == 0 else (5 - level)
+            count_at_level = c['violations_by_level'].get(level, 0) if level > 0 else 0
+            # Return tuple for sorting (higher goodness = better, lower counts = better)
+            return (goodness, -count_at_level, -c['violation_count'])
+        
+        candidates.sort(key=goodness_key, reverse=True)
+        
+        # Add rank explanation
+        for i, c in enumerate(candidates):
+            level = c['severity_level']
+            if level == 0:
+                c['rank_explanation'] = "✅ No violations"
+            else:
+                label = SEVERITY_LEVEL_LABELS.get(level, 'UNKNOWN')
+                count_at_level = c['violations_by_level'].get(level, 0)
+                c['rank_explanation'] = f"Level {level} ({label}): {count_at_level} violations, {c['violation_count']} total"
+        
+        # Return top results
+        results = candidates[:max_results]
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"TOP {len(results)} RESULTS (of {len(candidates)} tested)")
+            print(f"{'='*60}")
+            
+            for i, r in enumerate(results, 1):
+                slot = r['slot']
+                print(f"\n{i}. {r['rank_explanation']}")
+                if r['type'] == 'empty':
+                    print(f"   Type: Empty slot")
+                else:
+                    print(f"   Type: Swap with {r['swap_with']} ({r.get('swap_game_info', '')})")
+                print(f"   Week {slot['week']}, Slot {slot['day_slot']}, {slot['field_name']} @ {slot['field_location']}")
+                print(f"   {slot['day']} {slot['time']}")
+                
+                if r['violation_count'] > 0:
+                    print(f"   Violations: L1={r['violations_by_level'][1]}, L2={r['violations_by_level'][2]}, "
+                          f"L3={r['violations_by_level'][3]}, L4={r['violations_by_level'][4]}")
+        
+        return results
+    
+    def print_best_slot_report(self, game_id: str, **kwargs) -> None:
+        """
+        Find and print a detailed report of best slots for a game.
+        
+        This is a convenience wrapper around find_best_slot_for_game with verbose output.
+        """
+        results = self.find_best_slot_for_game(game_id, verbose=True, **kwargs)
+        
+        if not results:
+            print("\n❌ No suitable slots found!")
+            return
+        
+        best = results[0]
+        print(f"\n{'='*60}")
+        print("RECOMMENDATION")
+        print(f"{'='*60}")
+        
+        if best['severity_level'] == 0:
+            print("✅ BEST OPTION: No constraint violations!")
+        else:
+            print(f"⚠️  BEST OPTION: {best['rank_explanation']}")
+        
+        slot = best['slot']
+        if best['type'] == 'empty':
+            print(f"\nMove game to empty slot:")
+        else:
+            print(f"\nSwap with game {best['swap_with']} ({best.get('swap_game_info', '')}):")
+        
+        print(f"  Week {slot['week']}, Slot {slot['day_slot']}")
+        print(f"  {slot['field_name']} @ {slot['field_location']}")
+        print(f"  {slot['day']} {slot['time']}")
+        
+        if best['violation_count'] > 0:
+            print(f"\nViolations that would result:")
+            for v in best['report'].violations[:5]:
+                print(f"  • [{v.severity_level}] {v.constraint}: {v.message}")
+            if len(best['report'].violations) > 5:
+                print(f"  ... and {len(best['report'].violations) - 5} more")
+    
     # ============== Constraint Checking ==============
     
     def run_violation_check(self) -> ViolationReport:
@@ -501,9 +900,8 @@ class DrawTester:
         
         for (week, team), games in team_games_per_week.items():
             if len(games) > 1:
-                violations.append(Violation(
+                violations.append(Violation.create(
                     constraint="NoDoubleBookingTeams",
-                    severity="CRITICAL",
                     message=f"Team '{team}' plays {len(games)} games in week {week}",
                     affected_games=games,
                     week=week
@@ -522,9 +920,8 @@ class DrawTester:
         
         for (week, slot, field), games in field_games.items():
             if len(games) > 1:
-                violations.append(Violation(
+                violations.append(Violation.create(
                     constraint="NoDoubleBookingFields",
-                    severity="CRITICAL",
                     message=f"Field '{field}' has {len(games)} games in week {week}, slot {slot}",
                     affected_games=games,
                     week=week
@@ -548,9 +945,8 @@ class DrawTester:
             actual = team_counts.get(team.name, 0)
             
             if expected > 0 and actual != expected:
-                violations.append(Violation(
+                violations.append(Violation.create(
                     constraint="EqualGames",
-                    severity="HIGH",
                     message=f"Team '{team.name}' has {actual} games (expected {expected})"
                 ))
         
@@ -581,15 +977,13 @@ class DrawTester:
                     continue
                 
                 if count < base:
-                    violations.append(Violation(
+                    violations.append(Violation.create(
                         constraint="BalancedMatchups",
-                        severity="MEDIUM",
                         message=f"Pair {pair} in {g} meets {count} times (min {base})"
                     ))
                 elif count > base + 1:
-                    violations.append(Violation(
+                    violations.append(Violation.create(
                         constraint="BalancedMatchups",
-                        severity="MEDIUM",
                         message=f"Pair {pair} in {g} meets {count} times (max {base+1})"
                     ))
         
@@ -620,9 +1014,8 @@ class DrawTester:
                 total = home + away
                 
                 if total > 0 and abs(home - away) > 1:
-                    violations.append(Violation(
+                    violations.append(Violation.create(
                         constraint="FiftyFiftyHomeAway",
-                        severity="HIGH",
                         message=f"Team '{team}' has {home} home, {away} away (imbalanced)"
                     ))
         
@@ -641,9 +1034,8 @@ class DrawTester:
         sorted_weeks = sorted(home_weeks)
         for i in range(1, len(sorted_weeks)):
             if sorted_weeks[i] == sorted_weeks[i-1] + 1:
-                violations.append(Violation(
+                violations.append(Violation.create(
                     constraint="MaxMaitlandHomeWeekends",
-                    severity="HIGH",
                     message=f"Back-to-back Maitland home: weeks {sorted_weeks[i-1]} and {sorted_weeks[i]}",
                     week=sorted_weeks[i]
                 ))
@@ -664,9 +1056,8 @@ class DrawTester:
         
         for week, clubs in away_clubs_per_week.items():
             if len(clubs) > 3:
-                violations.append(Violation(
+                violations.append(Violation.create(
                     constraint="AwayAtMaitlandGrouping",
-                    severity="MEDIUM",
                     message=f"Week {week}: {len(clubs)} away clubs at Maitland (max 3): {clubs}",
                     week=week
                 ))
@@ -696,9 +1087,8 @@ class DrawTester:
             for club, grades in club_grades.items():
                 for g1, g2 in adj_pairs:
                     if g1 in grades and g2 in grades:
-                        violations.append(Violation(
+                        violations.append(Violation.create(
                             constraint="ClubGradeAdjacency",
-                            severity="MEDIUM",
                             message=f"Club '{club}' has adjacent grades {g1}/{g2} at week {week}, slot {slot}"
                         ))
         
@@ -734,9 +1124,8 @@ class DrawTester:
                 )
                 
                 if not adjacent:
-                    violations.append(Violation(
+                    violations.append(Violation.create(
                         constraint="PHLAndSecondGradeAdjacency",
-                        severity="LOW",
                         message=f"Club '{club}' week {week}: PHL (slots {phl_slots}) and 2nd (slots {second_slots}) not adjacent",
                         week=week
                     ))
@@ -765,9 +1154,8 @@ class DrawTester:
                 second_max_slot = max(g.day_slot for g in grade_games['2nd'])
                 
                 if phl_min_slot > second_max_slot:
-                    violations.append(Violation(
+                    violations.append(Violation.create(
                         constraint="PHLAndSecondGradeTimes",
-                        severity="LOW",
                         message=f"Club '{club}' week {week}: PHL plays after 2nd grade",
                         week=week
                     ))
@@ -813,7 +1201,7 @@ def what_if_move_game(
     data: Dict,
     game_id: str,
     **new_slot_kwargs
-) -> ViolationReport:
+) -> Tuple[ViolationReport, List[str]]:
     """
     Test what happens if a game is moved.
     
@@ -824,7 +1212,8 @@ def what_if_move_game(
         **new_slot_kwargs: New slot parameters (new_week, new_day_slot, etc.)
     
     Returns:
-        ViolationReport showing any violations caused by the move
+        Tuple of (ViolationReport, list of constraint names broken)
+        The report shows violations caused by the move, with severity levels.
     """
     tester = DrawTester.from_file(draw_path, data)
     
@@ -832,7 +1221,84 @@ def what_if_move_game(
     if not success:
         raise ValueError(f"Game {game_id} not found in draw")
     
-    return tester.run_violation_check()
+    report = tester.run_violation_check()
+    constraints_broken = list(set(v.constraint for v in report.violations))
+    
+    return report, constraints_broken
+
+
+def what_if_swap_games(
+    draw_path: str,
+    data: Dict,
+    game_id_1: str,
+    game_id_2: str
+) -> Tuple[ViolationReport, List[str]]:
+    """
+    Test what happens if two games are swapped.
+    
+    Args:
+        draw_path: Path to draw JSON file
+        data: Data dictionary
+        game_id_1: ID of first game
+        game_id_2: ID of second game
+    
+    Returns:
+        Tuple of (ViolationReport, list of constraint names broken)
+        The report shows violations caused by the swap, with severity levels.
+    """
+    tester = DrawTester.from_file(draw_path, data)
+    
+    success = tester.swap_games(game_id_1, game_id_2)
+    if not success:
+        raise ValueError(f"One or both games not found: {game_id_1}, {game_id_2}")
+    
+    report = tester.run_violation_check()
+    constraints_broken = list(set(v.constraint for v in report.violations))
+    
+    return report, constraints_broken
+
+
+def find_best_slot(
+    draw_path: str,
+    data: Dict,
+    game_id: str,
+    weeks: Optional[List[int]] = None,
+    field_locations: Optional[List[str]] = None,
+    max_results: int = 10,
+    include_swaps: bool = True,
+    verbose: bool = True
+) -> List[Dict]:
+    """
+    Find the best available slots for a game.
+    
+    This is a convenience function that loads a draw and calls find_best_slot_for_game.
+    Results are ranked by:
+    1. Lowest severity level (0 = no violations, then 4, 3, 2, 1)
+    2. Fewest violations at that severity level
+    3. Fewest total violations
+    
+    Args:
+        draw_path: Path to draw JSON file
+        data: Data dictionary
+        game_id: ID of game to find new slot for
+        weeks: Optional list of weeks to consider
+        field_locations: Optional list of field locations to consider
+        max_results: Maximum results to return (default: 10)
+        include_swaps: Whether to include potential swaps (default: True)
+        verbose: Print progress and results (default: True)
+    
+    Returns:
+        List of slot options with violation reports, sorted best to worst
+    """
+    tester = DrawTester.from_file(draw_path, data)
+    return tester.find_best_slot_for_game(
+        game_id,
+        weeks=weeks,
+        field_locations=field_locations,
+        max_results=max_results,
+        include_swaps=include_swaps,
+        verbose=verbose
+    )
 
 
 def compare_draws(
@@ -844,3 +1310,29 @@ def compare_draws(
     report1 = test_draw(draw1_path, data)
     report2 = test_draw(draw2_path, data)
     return report1, report2
+
+
+def get_severity_level(constraint_name: str) -> int:
+    """
+    Get the severity level for a constraint name.
+    
+    Args:
+        constraint_name: Name of the constraint
+        
+    Returns:
+        Severity level (1-4, lower = more severe)
+    """
+    return CONSTRAINT_SEVERITY_LEVELS.get(constraint_name, 4)
+
+
+def get_severity_label(level: int) -> str:
+    """
+    Get the label for a severity level.
+    
+    Args:
+        level: Severity level (1-4)
+        
+    Returns:
+        Label string ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')
+    """
+    return SEVERITY_LEVEL_LABELS.get(level, 'UNKNOWN')

@@ -1,0 +1,34 @@
+2027 SEASON DATA - STATUS TRACKER
+==================================
+Last Updated: [NOT STARTED]
+
+This file tracks the status of 2027 season data configuration.
+
+FOLDER STRUCTURE:
+├── teams/              # Team CSV files - EMPTY
+├── noplay/             # No-play XLSX files - EMPTY  
+├── field_availability/ # Field availability - EMPTY
+└── documentation.txt   # This file
+
+TEAM FILE FORMAT:
+Each club needs a CSV file: {clubname}.csv
+Headers: Club,Grade,Team Name
+
+Example:
+Club,Grade,Team Name
+Maitland,PHL,Maitland
+Maitland,2nd,Maitland
+Maitland,3rd,Maitland
+
+CONFIGURATION STATUS:
+[ ] Teams CSV files created
+[ ] config/season_2027.py populated
+[ ] Field unavailabilities set
+[ ] Club days set
+[ ] Friday night config set
+[ ] Preseason report validated
+
+NOTES:
+- DO NOT copy from previous seasons without verification
+- All dates must be recalculated for 2027
+- Run: python run.py preseason --year 2027 to validate

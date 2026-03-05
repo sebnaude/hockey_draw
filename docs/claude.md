@@ -10,27 +10,28 @@ This is a constraint programming system for generating hockey competition draws 
 
 ```
 ├── run.py                  # 🚀 Main CLI entry point (use this)
-├── main_staged.py          # Staged solving with checkpoints
-├── main.py                 # Simple (non-staged) solving
+├── main_staged.py          # Staged solving + simple mode (--simple flag)
 ├── constraints.py          # Original constraint implementations (READ-ONLY)
 ├── constraints_ai.py       # AI-enhanced constraint implementations (edit this)
 ├── models.py               # Data models (Team, Club, Grade, etc.)
-├── utils.py                # Utility functions
+├── utils.py                # Utility functions + build_season_data()
 ├── solver_diagnostics.py   # Logging and resource monitoring
 ├── analytics/              # Draw analysis and testing
 │   ├── storage.py          # DrawStorage (pliable JSON format)
 │   ├── reports.py          # ClubReport, GradeReport
 │   └── tester.py           # DrawTester (modification testing)
 ├── config/                 # Season configuration
-│   ├── season_2025.py
-│   └── season_2026.py
+│   ├── season_2025.py      # 2025 season settings
+│   ├── season_2026.py      # 2026 season settings
+│   └── season_template.py  # Template for new seasons
 ├── tests/                  # Test suite (216 tests)
 │   ├── test_ai_constraints_comprehensive.py  # 70 AI constraint tests
 │   ├── test_constraints.py
 │   ├── test_constraints_ai.py
 │   ├── test_constraints_equivalence.py
 │   └── ...
-└── data/                   # Team data files
+└── data/                   # Team data files (by year)
+    └── {year}/teams/       # Team CSV files
 ```
 
 ## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
@@ -112,7 +113,7 @@ key = (team1, team2, grade, day, day_slot, time, week, date, round_no, field_nam
 2. Implement the `apply(self, model, X, data)` method
 3. Add constraint logic using `model.Add()` for hard constraints
 4. For soft constraints, create penalty variables and add to `data['penalties']`
-5. Register in `main.py`'s constraint list
+5. Register in `main_staged.py`'s STAGES or STAGES_AI dict
 
 ### Example Constraint Pattern
 
@@ -159,15 +160,22 @@ class MySoftConstraint(Constraint):
 
 ### Running the Scheduler
 
+**IMPORTANT: `--year` is required for all commands!**
+
 ```bash
-cd refactored
-python main.py
+# Generate a draw (staged solving)
+python run.py generate --year 2025
+
+# Generate with simple (non-staged) mode
+python run.py generate --year 2025 --simple
+
+# Generate with AI constraints
+python run.py generate --year 2025 --ai
 ```
 
 ### Running Tests
 
 ```bash
-cd refactored
 pytest tests/ -v
 ```
 

@@ -8,9 +8,11 @@ This is a **Hockey Draw/Schedule Generation System** using OR-Tools CP-SAT const
 
 ### Running the System
 
+**IMPORTANT: `--year` is REQUIRED for all commands!**
+
 ```powershell
 # Navigate to project directory
-cd c:\Users\Amanda\Documents\hockey\hockey_draw
+cd c:\Users\c3205\Documents\Code\python\draw
 
 # Activate virtual environment
 .\.venv\Scripts\activate
@@ -18,11 +20,17 @@ cd c:\Users\Amanda\Documents\hockey\hockey_draw
 # Generate a new draw (original constraints)
 .\.venv\Scripts\python.exe run.py generate --year 2025
 
+# Generate 2026 season
+.\.venv\Scripts\python.exe run.py generate --year 2026
+
 # Generate with AI constraints (opt-in alternative constraint set)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --ai
 
+# Generate with simple (non-staged) mode
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple
+
 # Generate with AI constraints, simple mode, exclude problematic constraints
-.\.venv\Scripts\python.exe run.py generate --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --year 2025
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow
 
 # Generate with low memory usage (4 workers)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --low-memory
@@ -36,11 +44,11 @@ cd c:\Users\Amanda\Documents\hockey\hockey_draw
 # Resume from checkpoint
 .\.venv\Scripts\python.exe run.py generate --year 2025 --resume run_13 stage1_required
 
-# Test a draw for violations
-.\.venv\Scripts\python.exe run.py test draws/draw_file.json
+# Test a draw for violations - requires --year
+.\.venv\Scripts\python.exe run.py test draws/draw_file.json --year 2025
 
-# Analyze a draw
-.\.venv\Scripts\python.exe run.py analyze draws/draw_file.json
+# Analyze a draw - requires --year
+.\.venv\Scripts\python.exe run.py analyze draws/draw_file.json --year 2025
 ```
 
 ### Important: Solver Execution
@@ -60,15 +68,16 @@ When starting a solver run:
 ### Key Files
 
 | File | Purpose |
-|------|---------|
+|------|---------||
 | `run.py` | CLI entry point - use this to run the system |
-| `main_staged.py` | Staged solving main logic |
-| `main.py` | Simple (non-staged) solving |
+| `main_staged.py` | Staged solving main logic (also has `--simple` mode) |
+| `config/season_{year}.py` | Season-specific configuration (dates, fields, times) |
+| `config/season_template.py` | Template for adding new seasons |
 | `constraints.py` | All constraint implementations (READ-ONLY — never edit) |
 | `constraints_ai.py` | AI-enhanced constraint implementations (edit this one) |
 | `solver_diagnostics.py` | Logging and resource monitoring |
 | `models.py` | Data models (Team, Field, Club, etc.) |
-| `utils.py` | Utility functions |
+| `utils.py` | Utility functions + `build_season_data()` |
 
 ### AI Constraints
 
@@ -90,12 +99,24 @@ All 18 constraint pairs have been audited and the AI versions brought to full pa
 
 | Directory | Content |
 |-----------|---------|
-| `data/2025/teams/` | Team CSV files (one per club) |
-| `data/2025/noplay/` | No-play dates configuration |
-| `data/2025/field_availability/` | Field availability |
+| `config/season_{year}.py` | Season config (dates, times, field unavailabilities) |
+| `data/{year}/teams/` | Team CSV files (one per club) |
+| `data/{year}/noplay/` | No-play dates configuration |
+| `data/{year}/field_availability/` | Field availability |
 | `checkpoints/` | Solver checkpoints for resumption |
 | `draws/` | Generated schedule outputs |
 | `logs/` | Detailed solver logs |
+
+### Adding a New Season
+
+To add support for a new year (e.g., 2027):
+
+1. **Copy the template**: `config/season_template.py` → `config/season_2027.py`
+2. **Update all year references** in the new file (search for `9999`)
+3. **Create team data folder**: `data/2027/teams/`
+4. **Add team CSV files** for each club
+5. **Update dates**: start_date, end_date, field unavailabilities, club days
+6. The system will **automatically detect** the new config file
 
 ### Solver Stages
 

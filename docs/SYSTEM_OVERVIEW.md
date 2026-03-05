@@ -72,19 +72,6 @@ refactored/
 │
 ├── requirements.txt        # Python dependencies
 └── pytest.ini             # Test configuration
-
-LEGACY (to be removed after migration):
-├── main.py                 # Old single-solve entry
-├── main_staged.py          # Old staged solver (monolithic)
-├── main_notebook_translation.py  # Original notebook export
-├── constraints.py          # Old constraints (duplicated)
-├── constraints_ai.py       # AI constraints (duplicated)
-├── models.py               # Old models (duplicated)
-├── utils.py                # Old utilities
-├── generate_x.py           # Old variable generator
-├── draw_analytics.py       # Old analytics (to move)
-├── draw_tester.py          # Old tester (to move)
-└── example_draw_workflow.py # Example script
 ```
 
 ---
@@ -348,14 +335,19 @@ pytest tests/ --cov=core
 
 ## Legacy Code
 
-The following files are legacy from the original notebook-based approach:
+The following files have been cleaned up from the original notebook-based approach:
 
 | File | Status | Notes |
 |------|--------|-------|
-| `main_notebook_translation.py` | DEPRECATED | Original 3787-line monolith |
-| `main.py` | DEPRECATED | Old single-solve entry |
-| `main_staged.py` | TO MIGRATE | Contains working staged solver |
-| `constraints.py` | TO MIGRATE | Working constraint implementations |
-| `generate_x.py` | DEPRECATED | Stub, not actually used |
+| `main_notebook_translation.py` | REMOVED | Original 3787-line monolith |
+| `main.py` | REMOVED | Simple solve functionality merged into `main_staged.py --simple` |
+| `generate_x.py` | REMOVED | Stub, not actually used |
+
+**Current active files:**
+- `main_staged.py` - Staged solver with `--simple` mode for single-solve
+- `constraints.py` - Original constraint implementations (READ-ONLY)
+- `constraints_ai.py` - AI-enhanced constraint implementations
+- `utils.py` - Utilities including `build_season_data()`
+- `config/season_{year}.py` - Season-specific configuration
 
 The refactored code in `core/` and `analytics/` should be used going forward.

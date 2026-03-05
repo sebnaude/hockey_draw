@@ -446,3 +446,294 @@ class TestExportRosterToExcel:
             # Cleanup
             if os.path.exists(filename):
                 os.remove(filename)
+
+
+# ============== generate_timeslots Tests ==============
+
+class TestGenerateTimeslots:
+    """Tests for generate_timeslots function."""
+
+    def test_generates_timeslots_for_date_range(self):
+        """Test that timeslots are generated for the date range."""
+        from utils import generate_timeslots
+        from datetime import datetime, time as tm
+        
+        fields = [
+            PlayingField(location='NIHC', name='EF'),
+        ]
+        
+        day_time_map = {
+            'NIHC': {
+                'Sunday': [tm(10, 0), tm(11, 30)],
+            }
+        }
+        
+        start_date = datetime(2025, 3, 23)  # Sunday
+        end_date = datetime(2025, 3, 30)    # Sunday
+        
+        timeslots = generate_timeslots(
+            start_date, end_date, day_time_map, fields, {}
+        )
+        
+        assert len(timeslots) > 0
+        # Should have 2 Sundays * 2 times = 4 timeslots
+        assert len(timeslots) == 4
+
+    def test_respects_field_unavailabilities(self):
+        """Test that unavailable dates/times are excluded."""
+        from utils import generate_timeslots
+        from datetime import datetime, time as tm
+        
+        fields = [
+            PlayingField(location='NIHC', name='EF'),
+        ]
+        
+        day_time_map = {
+            'NIHC': {
+                'Sunday': [tm(10, 0), tm(11, 30)],
+            }
+        }
+        
+        # Make first Sunday unavailable
+        field_unavailabilities = {
+            'NIHC': {
+                'whole_days': [datetime(2025, 3, 23)]
+            }
+        }
+        
+        start_date = datetime(2025, 3, 23)  # Sunday
+        end_date = datetime(2025, 3, 30)    # Sunday
+        
+        timeslots = generate_timeslots(
+            start_date, end_date, day_time_map, fields, field_unavailabilities
+        )
+        
+        # Only the second Sunday should have timeslots
+        assert all(t['date'] == '2025-03-30' for t in timeslots)
+
+    def test_validates_field_names(self):
+        """Test that invalid field names raise errors."""
+        from utils import generate_timeslots
+        from datetime import datetime, time as tm
+        
+        fields = [
+            PlayingField(location='NIHC', name='EF'),
+        ]
+        
+        # Use a field name that doesn't exist
+        day_time_map = {
+            'NonexistentField': {
+                'Sunday': [tm(10, 0)],
+            }
+        }
+        
+        with pytest.raises(ValueError, match="does not exist"):
+            generate_timeslots(
+                datetime(2025, 3, 23), datetime(2025, 3, 30),
+                day_time_map, fields, {}
+            )
+
+
+# ============== max_games_per_grade Tests ==============
+
+class TestMaxGamesPerGrade:
+    """Tests for max_games_per_grade function."""
+
+    def test_calculates_max_games(self):
+        """Test max games calculation for various team counts."""
+        from utils import max_games_per_grade
+        
+        grades = [
+            Grade(name='PHL', teams=['A', 'B', 'C', 'D']),  # 4 teams
+            Grade(name='2nd', teams=['A', 'B', 'C', 'D', 'E']),  # 5 teams
+        ]
+        
+        result = max_games_per_grade(grades, max_rounds=15)
+        
+        assert 'PHL' in result
+        assert '2nd' in result
+        assert result['PHL'] > 0
+        assert result['2nd'] > 0
+
+    def test_handles_single_team_grade(self):
+        """Test that single-team grade returns 0 games."""
+        from utils import max_games_per_grade
+        
+        grades = [
+            Grade(name='6th', teams=['A']),  # Only 1 team
+        ]
+        
+        result = max_games_per_grade(grades, max_rounds=15)
+        
+        assert result['6th'] == 0
+
+    def test_handles_empty_grade(self):
+        """Test handling of empty grades (no teams)."""
+        from utils import max_games_per_grade
+        
+        # Create grade with empty teams list
+        grades = [Grade(name='Empty', teams=[])]
+        
+        # This should be handled gracefully
+        result = max_games_per_grade(grades, max_rounds=15)
+        assert result['Empty'] == 0
+
+
+# ============== generate_games Tests ==============
+
+class TestGenerateGames:
+    """Tests for generate_games function."""
+
+    def test_generates_all_matchups(self, sample_clubs):
+        """Test that all possible matchups are generated."""
+        from utils import generate_games
+        
+        tigers, wests, maitland = sample_clubs
+        teams = [
+            Team(name='A PHL', club=tigers, grade='PHL'),
+            Team(name='B PHL', club=wests, grade='PHL'),
+            Team(name='C PHL', club=maitland, grade='PHL'),
+        ]
+        
+        games = generate_games(teams)
+        
+        # With 3 teams, should have 3 matchups: A-B, A-C, B-C
+        assert len(games) == 3
+
+    def test_only_same_grade_matchups(self, sample_clubs):
+        """Test that only same-grade teams are matched."""
+        from utils import generate_games
+        
+        tigers, wests, _ = sample_clubs
+        teams = [
+            Team(name='Tigers PHL', club=tigers, grade='PHL'),
+            Team(name='Tigers 2nd', club=tigers, grade='2nd'),
+            Team(name='Wests PHL', club=wests, grade='PHL'),
+        ]
+        
+        games = generate_games(teams)
+        
+        # Only PHL teams can play each other
+        assert len(games) == 1
+        key = list(games.keys())[0]
+        assert key[2] == 'PHL'
+
+    def test_game_key_format(self, sample_clubs):
+        """Test that game keys have correct format."""
+        from utils import generate_games
+        
+        tigers, wests, _ = sample_clubs
+        teams = [
+            Team(name='Tigers PHL', club=tigers, grade='PHL'),
+            Team(name='Wests PHL', club=wests, grade='PHL'),
+        ]
+        
+        games = generate_games(teams)
+        
+        key = list(games.keys())[0]
+        assert len(key) == 3  # (team1, team2, grade)
+        assert key[0] == 'Tigers PHL'
+        assert key[1] == 'Wests PHL'
+        assert key[2] == 'PHL'
+
+
+# ============== build_season_data Tests ==============
+
+class TestBuildSeasonData:
+    """Tests for build_season_data function."""
+
+    def test_builds_data_from_config(self):
+        """Test building season data from a config dict."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        assert data is not None
+        assert 'teams' in data
+        assert 'grades' in data
+        assert 'fields' in data
+        assert 'clubs' in data
+        assert 'timeslots' in data
+
+    def test_creates_team_objects(self):
+        """Test that Team objects are properly created."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        for team in data['teams']:
+            assert isinstance(team, Team)
+            assert hasattr(team, 'name')
+            assert hasattr(team, 'club')
+            assert hasattr(team, 'grade')
+
+    def test_creates_grade_objects(self):
+        """Test that Grade objects are properly created."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        for grade in data['grades']:
+            assert isinstance(grade, Grade)
+            assert grade.num_teams > 0
+
+    def test_calculates_num_rounds(self):
+        """Test that num_rounds is calculated correctly."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        assert 'num_rounds' in data
+        assert 'max' in data['num_rounds']
+        
+        for grade in data['grades']:
+            assert grade.name in data['num_rounds']
+
+    def test_raises_error_for_missing_path(self):
+        """Test that missing teams_data_path raises error."""
+        from utils import build_season_data
+        
+        config = {
+            'year': 2099,
+            'teams_data_path': '/nonexistent/path/to/teams',
+            'start_date': datetime(2099, 3, 1),
+            'end_date': datetime(2099, 8, 1),
+            'max_rounds': 15,
+            'fields': [{'location': 'Test', 'name': 'TF'}],
+            'day_time_map': {},
+            'phl_game_times': {},
+            'field_unavailabilities': {},
+        }
+        
+        with pytest.raises(FileNotFoundError):
+            build_season_data(config)
+
+    def test_preserves_year(self):
+        """Test that year is preserved in output data."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        assert data['year'] == 2025
+
+    def test_includes_preference_data(self):
+        """Test that preference data is included."""
+        from utils import build_season_data
+        from config import load_season_config
+        
+        config = load_season_config(2025)
+        data = build_season_data(config)
+        
+        assert 'day_time_map' in data
+        assert 'phl_game_times' in data
+        assert 'field_unavailabilities' in data

@@ -1,0 +1,225 @@
+================================================================================
+PRE-SEASON CONFIGURATION REPORT - 2026
+Generated: 2026-03-05 20:12:56
+================================================================================
+
+----------------------------------------
+SEASON DATES
+----------------------------------------
+First Round:  Sunday, 22 March 2026
+Last Round:   Sunday, 30 August 2026
+Grand Final:  Saturday, 19 September 2026
+
+----------------------------------------
+ROUNDS CALCULATION & VALIDATION
+----------------------------------------
+Configured Max Rounds: 20
+Available Weekends:    20
+Blocked Weekends:      4
+  Blocked dates: 2026-04-04, 2026-05-16, 2026-06-06, 2026-06-20
+✓ VALID: Sufficient weekends available for configured rounds
+
+----------------------------------------
+TEAMS BY GRADE
+----------------------------------------
+
+PHL Grade (6 teams):
+   1. Gosford PHL
+   2. Maitland PHL
+   3. Norths PHL
+   4. Souths PHL
+   5. Tigers PHL
+   6. Wests PHL
+
+2nd Grade (4 teams):
+   1. Norths 2nd
+   2. Souths 2nd
+   3. Tigers 2nd
+   4. Wests 2nd
+
+3rd Grade (8 teams):
+   1. Crusaders 3rd
+   2. Maitland 3rd
+   3. Norths 3rd
+   4. Port Stephens 3rd
+   5. Souths 3rd
+   6. Tigers 3rd
+   7. Uni 3rd
+   8. Wests 3rd
+
+4th Grade (11 teams):
+   1. Colts 4th
+   2. Crusaders 4th
+   3. Maitland 4th
+   4. Norths 4th
+   5. Port Stephens 4th
+   6. Souths 4th
+   7. Tigers 4th
+   8. Uni 4th
+   9. Uni Seapigs 4th
+  10. Wests 4th
+  11. Wests Red 4th
+
+5th Grade (9 teams):
+   1. Colts Gold 5th
+   2. Colts Green 5th
+   3. Crusaders 5th
+   4. Maitland 5th
+   5. Norths 5th
+   6. Tigers 5th
+   7. Uni 5th
+   8. Wests 5th
+   9. Wests Red 5th
+
+6th Grade (10 teams):
+   1. Colts 6th
+   2. Crusaders 6th
+   3. Maitland 6th
+   4. Port Stephens 6th
+   5. Souths 6th
+   6. Tigers 6th
+   7. Tigers Black 6th
+   8. Uni 6th
+   9. Uni Seapigs 6th
+  10. Wests 6th
+
+TOTAL TEAMS: 48
+
+----------------------------------------
+AVAILABLE GAME TIMES BY VENUE
+----------------------------------------
+
+Newcastle International Hockey Centre:
+  Standard times:
+    Sunday: 08:30, 10:00, 11:30, 13:00, 14:30, 16:00, 17:30, 19:00
+  PHL-specific times:
+    Friday: 19:00
+    Sunday: 11:30, 13:00, 14:30, 16:00
+
+Maitland Park:
+  Standard times:
+    Sunday: 09:00, 10:30, 12:00, 13:30, 15:00, 16:30
+  PHL-specific times:
+    Sunday: 12:00, 13:30, 15:00, 16:30
+
+Central Coast Hockey Park:
+  Standard times:
+    Sunday: 12:00, 13:30
+  PHL-specific times:
+    Friday: 18:30, 20:00
+    Sunday: 12:00, 13:30
+
+----------------------------------------
+FIELD UNAVAILABILITIES (HARD CONSTRAINTS)
+----------------------------------------
+
+Maitland Park:
+  - Weekend of 2026-04-04 (blocked)
+  - Weekend of 2026-05-16 (blocked)
+  - Weekend of 2026-06-06 (blocked)
+  - Weekend of 2026-06-20 (blocked)
+  - 2026-04-25 (whole day)
+
+Newcastle International Hockey Centre:
+  - Weekend of 2026-04-04 (blocked)
+  - Weekend of 2026-05-16 (blocked)
+  - Weekend of 2026-06-06 (blocked)
+  - Weekend of 2026-06-20 (blocked)
+  - 2026-04-25 (whole day)
+
+Central Coast Hockey Park:
+  - Weekend of 2026-04-04 (blocked)
+  - Weekend of 2026-05-16 (blocked)
+  - Weekend of 2026-06-06 (blocked)
+  - Weekend of 2026-06-20 (blocked)
+  - 2026-04-25 (whole day)
+
+----------------------------------------
+SPECIAL REQUESTS
+----------------------------------------
+
+CLUB DAYS:
+  - Crusaders: 2026-06-14 - All teams back-to-back on same field
+
+NO-PLAY PREFERENCES (soft constraints):
+  - Crusaders (6th): 2026-04-17, 2026-04-18, 2026-04-19
+    Reason: NSW Masters Men's at Moorebank
+  - Crusaders (6th): 2026-06-26, 2026-06-27, 2026-06-28
+    Reason: NSW Masters Men's at Tamworth
+  - Souths (PHL/2nd): 2026-05-24
+    Reason: U18's State Championships
+  - Gosford (All): 2026-06-21
+    Reason: Recovery weekend after Men's State Championships
+
+FRIDAY NIGHT PHL ALLOCATIONS:
+  Total matches requested: 8
+  Confirmed dates: 2026-03-27, 2026-04-17, 2026-04-24, 2026-05-29, 2026-06-12
+  Club allocations:
+    - Wests: 2 match(es)
+    - Souths: 2 match(es)
+    - Norths: 1 match(es)
+    - Tigers: 2 match(es)
+    - Maitland: 1 match(es)
+
+SPECIAL GAMES:
+  - taree_game: Tigers vs Souths (PHL/2nd) - TBC
+
+TEAM CONFLICTS (cannot play at same time):
+  (none configured)
+
+----------------------------------------
+SPECIAL EVENT CALENDAR
+----------------------------------------
+  2026-03-27: Friday Night PHL at Gosford [friday_night]
+  2026-04-17: Friday Night PHL at Gosford [friday_night]
+  2026-04-24: Friday Night PHL at Gosford [friday_night]
+  2026-04-26: ANZAC Sunday (playing) [special_day]
+  2026-05-29: Friday Night PHL at Gosford [friday_night]
+  2026-06-12: Friday Night PHL at Gosford [friday_night]
+  2026-06-14: Crusaders Club Day [club_day]
+
+----------------------------------------
+PHL CONFIGURATION
+----------------------------------------
+  PHL/2nd back-to-back: True
+  Gosford 2nd grade bye: True
+
+  STATE CHAMPIONSHIP WEEKEND PHL SLOTS:
+  (PHL games allowed during otherwise blocked SC weekends)
+    Sunday 17 May 2026:
+      EF: 14:30, 16:00
+      WF: 14:30
+    Sunday 21 Jun 2026:
+      EF: 14:30, 16:00
+      WF: 14:30
+
+----------------------------------------
+HOME FIELD MAPPINGS
+----------------------------------------
+  Default home field: Newcastle International Hockey Centre
+  Custom mappings:
+    - Maitland: Maitland Park
+    - Gosford: Central Coast Hockey Park
+
+================================================================================
+CONFIGURATION SUMMARY
+================================================================================
+Total Teams: 48
+Total Grades: 6
+Total Clubs: 10
+Total Venues: 5
+Total Timeslots Generated: 814
+Max Rounds: 20
+
+----------------------------------------
+PRE-START VALIDATION
+----------------------------------------
+✓ No critical errors found
+
+WARNINGS (may need attention):
+  ⚠ Grade 4th has 11 teams (odd) - will have byes each round
+  ⚠ Grade 5th has 9 teams (odd) - will have byes each round
+
+================================================================================
+END OF REPORT
+================================================================================

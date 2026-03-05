@@ -38,27 +38,47 @@ DAY_TIME_MAP = {
 
 PHL_GAME_TIMES = {
     'Newcastle International Hockey Centre': {
-        'Friday': [tm(19, 0)],  # Friday night games continue
-        'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
+        'Friday': [tm(19, 0)],  # Friday night games at NIHC - 7pm
+        'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]  # Standard PHL times
     },
     'Central Coast Hockey Park': {
-        'Friday': [tm(18, 30), tm(20, 0)],  # Updated: 6:30pm or 8:00pm per request
-        'Sunday': [tm(12, 0), tm(13, 30)]   # Updated: 12pm or 1:30pm
+        'Friday': [tm(18, 30), tm(20, 0)],  # Gosford: 6:30pm or 8:00pm (8pm confirmed at AGM)
+        'Sunday': [tm(12, 0), tm(13, 30)]   # Gosford: 12pm or 1:30pm ONLY
     },
     'Maitland Park': {
         'Sunday': [tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
     }
 }
 
+# ============== PHL State Championship Weekend Slots ==============
+# SC weekends are blocked for regular games, but PHL can use "back end" (Sunday afternoon)
+# These dates override the blocked weekends for PHL grade ONLY
+# 3 slots per SC weekend: 2 on East Field, 1 on West Field (can adjust times later)
+
+PHL_SC_WEEKEND_SLOTS = {
+    # May 17, 2026 (Sunday) - NSW Masters State Championships weekend
+    datetime(2026, 5, 17): {
+        'EF': [tm(14, 30), tm(16, 0)],   # East Field - 2 PHL games (2:30pm, 4pm)
+        'WF': [tm(14, 30)],              # West Field - 1 PHL game (2:30pm)
+    },
+    # June 21, 2026 (Sunday) - Girls U16's State Championships weekend  
+    datetime(2026, 6, 21): {
+        'EF': [tm(14, 30), tm(16, 0)],   # East Field - 2 PHL games (2:30pm, 4pm)
+        'WF': [tm(14, 30)],              # West Field - 1 PHL game (2:30pm)
+    },
+}
+
 # ============== Field Unavailabilities ==============
 # Blocked weekends/days where NO games can be scheduled (HARD constraints)
+# Email states: "20 playing weekends" from Mar 22 to Aug 30
+# 24 total Sundays - 4 blocked = 20 available
 
 FIELD_UNAVAILABILITIES = {
     'Maitland Park': {
         'weekends': [
-            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
-            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
             datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
         ],
         'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
@@ -66,9 +86,9 @@ FIELD_UNAVAILABILITIES = {
     },
     'Newcastle International Hockey Centre': {
         'weekends': [
-            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
-            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
             datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
         ],
         'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
@@ -76,9 +96,9 @@ FIELD_UNAVAILABILITIES = {
     },
     'Central Coast Hockey Park': {
         'weekends': [
-            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
-            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
             datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
         ],
         'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
@@ -213,9 +233,11 @@ SPECIAL_GAMES = {
 SEASON_CONFIG = {
     'year': 2026,
     'start_date': datetime(2026, 3, 22),   # Sunday 22nd March
+    'last_round_date': datetime(2026, 8, 30),  # Sunday 30th August (last regular round)
     'end_date': datetime(2026, 9, 19),     # Saturday 19th September (Grand Final)
     
     # CONFIRMED at AGM: 4 rounds (20 matches) - NOT reducing to 3 rounds
+    # 24 Sundays from Mar 22 to Aug 30, minus 4 blocked weekends = 20 playing weekends
     'max_rounds': 20,  # 4 rounds confirmed
     'num_dummy_timeslots': 3,
     
@@ -233,6 +255,7 @@ SEASON_CONFIG = {
     # Time configurations
     'day_time_map': DAY_TIME_MAP,
     'phl_game_times': PHL_GAME_TIMES,
+    'phl_sc_weekend_slots': PHL_SC_WEEKEND_SLOTS,  # SC weekend PHL-only slots
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
