@@ -143,3 +143,17 @@ SEASON_CONFIG = {
     # Grade order (for adjacency constraints)
     'grade_order': ['PHL', '2nd', '3rd', '4th', '5th', '6th'],
 }
+
+
+def get_season_data() -> dict:
+    """
+    Build complete data dictionary for the 2025 season.
+    
+    This loads teams from CSV files, generates timeslots, and builds
+    all data structures needed by the solver.
+    
+    Returns:
+        Complete data dict ready for solver
+    """
+    from utils import build_season_data
+    return build_season_data(SEASON_CONFIG)

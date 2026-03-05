@@ -51,40 +51,77 @@ PHL_GAME_TIMES = {
 }
 
 # ============== Field Unavailabilities ==============
-# TODO: Update with 2026 specific dates
+# Blocked weekends/days where NO games can be scheduled (HARD constraints)
 
 FIELD_UNAVAILABILITIES = {
     'Maitland Park': {
-        'weekends': [],  # TBC - add blocked weekends
-        'whole_days': [],  # TBC - add ANZAC Day if applicable
+        'weekends': [
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
+        ],
+        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
         'part_days': [],
     },
     'Newcastle International Hockey Centre': {
-        'weekends': [],  # TBC - 2 State Championship weekends (dates needed)
-        'whole_days': [],  # TBC
+        'weekends': [
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
+        ],
+        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
         'part_days': [],
-        # Note: NSW Masters Men's training August weekend - date TBC
     },
     'Central Coast Hockey Park': {
-        'weekends': [],
-        'whole_days': [],
+        'weekends': [
+            datetime(2026, 4, 4),   # Apr 3-5 (Easter)
+            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            datetime(2026, 6, 6),   # Jun 5-7 (TBC)
+            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
+        ],
+        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
         'part_days': [],
     },
 }
 
 # ============== Club Days (Special Events) ==============
-# TBC for 2026
 
 CLUB_DAYS = {
-    # 'Crusaders': datetime(2026, X, X),
-    # 'Wests': datetime(2026, X, X),
-    # etc.
+    'Crusaders': datetime(2026, 6, 14),  # All 4 teams back-to-back on same field
+    # 'Souths_Norths_Derby': TBD,  # Red & Blue Derby Day - August, date TBC
 }
 
 # ============== No-Play Preferences (Soft Constraints) ==============
 
 PREFERENCE_NO_PLAY = {
-    # TBC for 2026
+    # Crusaders 6th Grade - Masters State Championships
+    'Crusaders_6th_Masters_Moorebank': {
+        'club': 'Crusaders',
+        'grade': '6th',
+        'dates': [datetime(2026, 4, 17), datetime(2026, 4, 18), datetime(2026, 4, 19)],
+        'reason': 'NSW Masters Men\'s at Moorebank',
+    },
+    'Crusaders_6th_Masters_Tamworth': {
+        'club': 'Crusaders',
+        'grade': '6th',
+        'dates': [datetime(2026, 6, 26), datetime(2026, 6, 27), datetime(2026, 6, 28)],
+        'reason': 'NSW Masters Men\'s at Tamworth',
+    },
+    # Souths PHL/2nd - U18's State Championships
+    'Souths_U18_SC': {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'dates': [datetime(2026, 5, 24)],  # Sunday, includes Friday night before
+        'reason': 'U18\'s State Championships',
+    },
+    # Gosford - Weekend after Men's SC
+    'Gosford_Post_SC': {
+        'club': 'Gosford',
+        'dates': [datetime(2026, 6, 21)],  # Weekend after June 14 Men's SC
+        'reason': 'Recovery weekend after Men\'s State Championships',
+    },
 }
 
 # ============== PHL Preferences ==============
@@ -99,24 +136,64 @@ PHL_PREFERENCES = {
     'gosford_2nd_grade_bye': True,
 }
 
+# ============== PHL SCHEDULE SUMMARY ==============
+# 
+# FRIDAY NIGHTS AT GOSFORD (Central Coast):
+#   - Confirmed dates: Mar 27, Apr 17, Apr 24, May 29, Jun 12
+#   - Times: 8:00pm (confirmed at AGM)
+#   - Clubs agreed to play: Wests x2, Souths x2, Norths x1, Tigers x2, Maitland x1
+#   - Special: June 12 = Norths 80th Anniversary
+#
+# FRIDAY NIGHTS AT NIHC (Newcastle):
+#   - Time: 7:00pm
+#   - Aligned with Junior Boys program
+#   - Dates TBC
+#
+# SUNDAY AT GOSFORD:
+#   - Times: 12:00pm or 1:30pm ONLY
+#   - Used when Friday night not available
+#
+# SUNDAY AT NIHC/MAITLAND:
+#   - Standard PHL times apply
+#   - PHL & 2nd grade run back-to-back
+#
+# STATE CHAMPIONSHIP WEEKENDS (PHL can play at back end):
+#   - May 15-17: Masters SC (Newcastle) - can schedule PHL Sunday afternoon
+#   - Jun 19-21: U16 Girls SC (Newcastle) - can schedule PHL Sunday afternoon
+#   Note: Currently blocked entirely - need to add part_days if using back end
+#
+
 # ============== Friday Night Configuration ==============
-# Per request from Central Coast Hockey Association
+# Per request from Central Coast Hockey Association (confirmed at AGM)
 
 FRIDAY_NIGHT_CONFIG = {
-    # Gosford requested 8 home Friday night matches
+    # Gosford requested 8 home Friday night matches - CONFIRMED at AGM
     'gosford_friday_count': 8,
     
-    # Clubs confirmed for Friday nights
+    # Clubs confirmed for Friday nights at 8pm start (total = 8)
     'friday_clubs': {
-        'Wests': 2,       # 2 matches
-        'Souths': 2,      # 2 matches
-        'Norths': 1,      # 1 match
-        'Tigers': 2,      # 2 matches
-        'Maitland': 0,    # TBC
+        'Wests': 2,       # 2 matches - CONFIRMED
+        'Souths': 2,      # 2 matches - CONFIRMED
+        'Norths': 1,      # 1 match - June 12 (80th anniversary)
+        'Tigers': 2,      # 2 matches - CONFIRMED
+        'Maitland': 1,    # 1 match - CONFIRMED (happy to play both vs Gosford Friday)
     },
     
-    # Gosford Friday times
-    'gosford_friday_times': [tm(18, 30), tm(20, 0)],  # 6:30pm or 8:00pm
+    # Confirmed Friday night dates at Gosford
+    'friday_dates': [
+        datetime(2026, 3, 27),   # March 27
+        datetime(2026, 4, 17),   # April 17
+        datetime(2026, 4, 24),   # April 24
+        datetime(2026, 5, 29),   # May 29
+        datetime(2026, 6, 12),   # June 12 - Norths 80th Anniversary
+        # Need 3 more dates for 8 total
+    ],
+    
+    # Gosford Friday times - 8pm confirmed for away teams
+    'gosford_friday_times': [tm(20, 0)],  # 8:00pm confirmed at AGM
+    
+    # NIHC Friday night time
+    'nihc_friday_times': [tm(19, 0)],  # 7:00pm
 }
 
 # ============== Special Games ==============
@@ -138,8 +215,8 @@ SEASON_CONFIG = {
     'start_date': datetime(2026, 3, 22),   # Sunday 22nd March
     'end_date': datetime(2026, 9, 19),     # Saturday 19th September (Grand Final)
     
-    # TBC: 3 rounds (15 matches) or 4 rounds (20 matches) - pending AGM
-    'max_rounds': 20,  # Default to 4 rounds, change to 15 if 3 rounds approved
+    # CONFIRMED at AGM: 4 rounds (20 matches) - NOT reducing to 3 rounds
+    'max_rounds': 20,  # 4 rounds confirmed
     'num_dummy_timeslots': 3,
     
     # Confirmed: Playing ANZAC weekend Sunday
@@ -185,17 +262,39 @@ SEASON_CONFIG = {
 }
 
 
+def get_season_data() -> dict:
+    """
+    Build complete data dictionary for the 2026 season.
+    
+    This loads teams from CSV files, generates timeslots, and builds
+    all data structures needed by the solver.
+    
+    Returns:
+        Complete data dict ready for solver
+    """
+    from utils import build_season_data
+    return build_season_data(SEASON_CONFIG)
+
+
 # ============== STILL NEEDED FOR 2026 ==============
 """
-BLOCKERS (cannot generate draw without):
-1. Team CSV files for 2026 (data/2026/teams/*.csv)
-2. State Championship weekend dates (2 weekends blocked)
-3. AGM decision: 3 rounds (15 matches) or 4 rounds (20 matches)
-4. Maitland Friday night confirmation
+COMPLETED:
+✅ Team CSV files updated (except Norths - awaiting nomination)
+✅ AGM decision: 4 rounds (20 matches) confirmed
+✅ Maitland Friday night: 1 match confirmed
+✅ Friday night dates locked in
+✅ Crusaders club day: June 14
+
+BLOCKERS:
+1. Norths team nominations - MISSING
+
+STATE CHAMPIONSHIPS (PHL can play at end):
+- May 15-17: NSW Masters (Newcastle)
+- June 19-21: Girls U16's (Newcastle)
 
 CAN ADD LATER:
-5. NSW Masters Men's training weekend (August)
-6. Tigers/Souths Taree game date (May)
-7. Specific Friday night dates for Gosford
-8. Club day dates
+1. NSW Masters Men's training weekend (August) - date TBC
+2. Tigers/Souths Taree game exact date (May)
+3. Red & Blue Derby date (August) - Souths/Norths to confirm
+4. August catch-up weekend for wet weather deferrals
 """

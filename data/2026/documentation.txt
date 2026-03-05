@@ -20,19 +20,67 @@ TEAM CSV FORMAT:
 ----------------
 Each team CSV should have columns:
 - Club: Club name (e.g., "Tigers")
-- Team Name: Full team name (e.g., "Tigers")
 - Grade: Grade level (e.g., "PHL", "2nd", "3rd", etc.)
+- Team Name: Display name for the team
+
+TEAM NAMING CONVENTIONS (Multi-Team Grades):
+--------------------------------------------
+When a club has multiple teams in the same grade, use these naming conventions:
+
+| Club       | First Team    | Second Team     | Colours/Notes     |
+|------------|---------------|-----------------|-------------------|
+| Tigers     | Tigers        | Tigers Black    | Black & Yellow    |
+| Wests      | Wests         | Wests Red       | Red & Green       |
+| University | Uni           | Uni Seapigs     | Seapigs variant   |
+| Colts      | Colts Gold    | Colts Green     | Gold & Green      |
+
+Default: If no convention defined, append a number (e.g., "ClubName 2")
+
+These conventions are defined in: config/team_naming.py
 
 NOPLAY FORMAT:
 --------------
 Each noplay XLSX should contain dates/times when teams are unavailable.
+Sheets required: club_noplay, teams_noplay, team_conflicts
 
 STATUS:
 -------
-[ ] Teams data updated for 2026 (currently contains 2025 data as template)
-[ ] Noplay data collected from clubs
-[ ] Field availability confirmed
-[ ] State Championship dates confirmed
-[ ] AGM decision on 3 vs 4 rounds
+[x] Teams data updated for 2026 (48 teams across 10 clubs)
+[x] Season config created (config/season_2026.py)
+[x] Norths confirmed: PHL through 5th (no 6th grade)
+[x] Gosford confirmed: PHL only
+[x] Game times configured (including Gosford Friday/Sunday)
+[x] Friday night dates and club allocations configured
+[x] Soft constraints (PREFERENCE_NO_PLAY) configured
+[x] State Championship dates confirmed (May 15-17 Masters, June 19-21 U16 Girls)
+[x] AGM decision: 4 rounds (20 matches) CONFIRMED
+[ ] Field unavailabilities - MISSING (Maitland, NIHC, Gosford blocked dates)
+[ ] Club days - PARTIAL (only Crusaders June 14)
+[ ] Noplay XLSX files - NOT USED (using Python config instead)
+
+BLOCKING ITEMS FOR DRAW GENERATION:
+-----------------------------------
+1. Field unavailabilities (blocked weekends/days) for all 3 venues
+2. ANZAC Day handling (April 25 is Saturday - confirm Sunday play)
+
+NICE TO HAVE (can add later):
+-----------------------------
+- Red & Blue Derby date (August TBC)
+- Taree game date (May TBC)  
+- Masters training weekend (August TBC)
+- Additional club days (Wests, Uni, Tigers, Port)
+
+TEAM COUNT SUMMARY:
+-------------------
+PHL:  6 teams (Tigers, Souths, Maitland, Wests, Gosford, Norths)
+2nd:  4 teams (Tigers, Souths, Wests, Norths)
+3rd:  8 teams (Tigers, Port, Crusaders, Uni, Souths, Maitland, Wests, Norths)
+4th: 11 teams (Tigers, Port, Colts, Crusaders, Uni x2, Souths, Maitland, Wests x2, Norths)
+5th: 10 teams (Tigers, Port, Colts x2, Crusaders, Uni, Maitland, Wests x2, Norths)
+6th:  9 teams (Tigers x2, Colts, Crusaders, Uni x2, Souths, Maitland, Wests)
+TOTAL: 48 teams
+
+Note: Gosford only competes in PHL.
 
 See config/season_2026.py for all season configuration.
+See data/2026/2026_SEASON_INFO.md for full season details from emails.

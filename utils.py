@@ -5,7 +5,8 @@ Utility functions for scheduling system.
 from typing import List, Dict, Any, Tuple
 from models import Team, Club, Grade, Game, WeeklyDraw, Roster, Timeslot, PlayingField
 import re
-from datetime import datetime
+import os
+from datetime import datetime, time as tm
 import pandas as pd
 from collections import defaultdict
 from typing import Set
@@ -366,4 +367,189 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     
     print(f"Created {len(X)} decision variables")
     return X, Y, conflicts, unavailable_games
+
+
+# ============== Season Data Builder ==============
+
+def build_season_data(config: dict) -> dict:
+    """
+    Build complete data dictionary from a season configuration.
+    
+    This is the main entry point for loading season data. It takes a SEASON_CONFIG
+    dict from a season file (e.g., config/season_2025.py) and builds the complete
+    data dictionary needed by the solver.
+    
+    Args:
+        config: SEASON_CONFIG dict from a season file containing:
+            - year: int
+            - start_date: datetime
+            - end_date: datetime  
+            - max_rounds: int
+            - teams_data_path: str
+            - fields: list of field dicts
+            - day_time_map: dict
+            - phl_game_times: dict
+            - field_unavailabilities: dict
+            - club_days: dict
+            - preference_no_play: dict
+            - phl_preferences: dict
+            - home_field_map: dict
+            - grade_order: list
+            
+    Returns:
+        Complete data dict ready for solver with:
+            - teams: List[Team]
+            - grades: List[Grade]
+            - fields: List[PlayingField]
+            - clubs: List[Club]
+            - timeslots: List[Timeslot]
+            - num_rounds: dict
+            - And all other config values
+    """
+    # Extract config values
+    year = config['year']
+    teams_data_path = config['teams_data_path']
+    start_date = config['start_date']
+    end_date = config['end_date']
+    max_rounds = config['max_rounds']
+    home_field_map = config.get('home_field_map', {})
+    grade_order = config.get('grade_order', ['PHL', '2nd', '3rd', '4th', '5th', '6th'])
+    
+    # Build PlayingField objects from config dicts
+    FIELDS = [
+        PlayingField(location=f['location'], name=f['name'])
+        for f in config['fields']
+    ]
+    
+    # Load teams and clubs from CSV files
+    CLUBS = []
+    TEAMS = []
+    
+    if not os.path.exists(teams_data_path):
+        raise FileNotFoundError(f"Teams data path not found: {teams_data_path}")
+    
+    for file in os.listdir(teams_data_path):
+        if not file.endswith('.csv'):
+            continue
+        
+        df = pd.read_csv(os.path.join(teams_data_path, file))
+        club_name = df['Club'].iloc[0].strip()
+        
+        # Determine home field from config or default
+        home_field = home_field_map.get(club_name, 'Newcastle International Hockey Centre')
+        
+        club = Club(name=club_name, home_field=home_field)
+        CLUBS.append(club)
+        
+        teams = [
+            Team(
+                name=f"{row['Team Name'].strip()} {row['Grade'].strip()}", 
+                club=club, 
+                grade=row['Grade'].strip()
+            ) 
+            for _, row in df.iterrows()
+        ]
+        TEAMS.extend(teams)
+    
+    # Create grades (sorted by grade_order)
+    teams_by_grade = defaultdict(list)
+    for team in TEAMS:
+        teams_by_grade[team.grade].append(team.name)
+    
+    # Sort grades according to grade_order
+    def grade_sort_key(item):
+        grade_name = item[0]
+        try:
+            return grade_order.index(grade_name)
+        except ValueError:
+            return len(grade_order)  # Unknown grades go last
+    
+    GRADES = [
+        Grade(name=grade, teams=teams) 
+        for grade, teams in sorted(teams_by_grade.items(), key=grade_sort_key)
+    ]
+    
+    # Update club team counts
+    teams_by_club = defaultdict(list)
+    for team in TEAMS:
+        teams_by_club[team.club.name].append(team.name)
+    
+    for club in CLUBS:
+        club.num_teams = len(teams_by_club.get(club.name, []))
+    
+    for grade in GRADES:
+        grade.num_teams = len(grade.teams)
+    
+    # Get time configurations from config
+    day_time_map = config['day_time_map']
+    phl_game_times = config['phl_game_times']
+    field_unavailabilities = config['field_unavailabilities']
+    
+    # Merge day_time_map and phl_game_times for timeslot generation
+    merged_dict = defaultdict(lambda: defaultdict(list))
+    for d in (phl_game_times, day_time_map):
+        for field, days in d.items():
+            for key, times in days.items():
+                merged_dict[field][key].extend(times)
+    
+    for field in merged_dict:
+        for key in merged_dict[field]:
+            merged_dict[field][key] = list(dict.fromkeys(merged_dict[field][key]))
+            merged_dict[field][key].sort()
+    
+    # Generate timeslots
+    timeslots = generate_timeslots(start_date, end_date, merged_dict, FIELDS, field_unavailabilities)
+    TIMESLOTS = [
+        Timeslot(
+            date=t['date'], day=t['day'], time=t['time'], week=t['week'],
+            day_slot=t['day_slot'], field=t['field'], round_no=t['round_no']
+        ) 
+        for t in timeslots
+    ]
+    
+    # Calculate rounds per grade
+    num_rounds = max_games_per_grade(GRADES, max_rounds)
+    num_rounds['max'] = max_rounds
+    
+    for grade, rounds in num_rounds.items():
+        grade_obj = next((g for g in GRADES if g.name == grade), None)
+        if grade_obj:
+            grade_obj.set_games(rounds)
+    
+    # Max day slots per field
+    max_day_slot_per_field = {
+        field.location: max((t.day_slot for t in TIMESLOTS if t.field.location == field.location), default=0)
+        for field in FIELDS
+    }
+    
+    # Get preferences from config
+    club_days = config.get('club_days', {})
+    preference_no_play = config.get('preference_no_play', {})
+    phl_preferences = config.get('phl_preferences', {'preferred_dates': []})
+    num_dummy_timeslots = config.get('num_dummy_timeslots', 3)
+    
+    return {
+        'year': year,
+        'teams': TEAMS,
+        'grades': GRADES,
+        'fields': FIELDS,
+        'clubs': CLUBS,
+        'timeslots': TIMESLOTS,
+        'num_rounds': num_rounds,
+        'current_week': 0,
+        'penalties': {},
+        'day_time_map': day_time_map,
+        'phl_game_times': phl_game_times,
+        'phl_preferences': phl_preferences,
+        'max_day_slot_per_field': max_day_slot_per_field,
+        'field_unavailabilities': field_unavailabilities,
+        'club_days': club_days,
+        'preference_no_play': preference_no_play,
+        'num_dummy_timeslots': num_dummy_timeslots,
+        'grade_order': grade_order,
+        # Include any extra config values that constraints might need
+        'home_field_map': home_field_map,
+        'friday_night_config': config.get('friday_night_config', {}),
+        'special_games': config.get('special_games', {}),
+    }
 

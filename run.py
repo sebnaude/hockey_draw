@@ -17,6 +17,8 @@ Usage:
     
     python run.py import partial.xlsx 5     # Import first 5 weeks from Excel
     python run.py list-constraints          # List all constraints
+    
+    python run.py preseason --year 2026     # Generate pre-season config report
 
 See docs/README.md for full documentation.
 """
@@ -56,8 +58,8 @@ Examples:
     
     # Generate command
     gen_parser = subparsers.add_parser('generate', help='Generate a new draw')
-    gen_parser.add_argument('--year', type=int, default=2026,
-                            help='Season year (default: 2026)')
+    gen_parser.add_argument('--year', type=int, required=True,
+                            help='Season year (e.g., 2025, 2026). Required.')
     gen_parser.add_argument('--resume', nargs='*', metavar=('RUN_ID', 'STAGE'),
                             help='Resume from checkpoint')
     gen_parser.add_argument('--simple', action='store_true',
@@ -85,12 +87,14 @@ Examples:
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
     test_parser.add_argument('draw_file', help='Path to draw JSON file')
-    test_parser.add_argument('--year', type=int, default=2026)
+    test_parser.add_argument('--year', type=int, required=True,
+                            help='Season year (e.g., 2025, 2026). Required.')
     
     # Analyze command  
     analyze_parser = subparsers.add_parser('analyze', help='Generate analytics')
     analyze_parser.add_argument('draw_file', help='Path to draw JSON file')
-    analyze_parser.add_argument('--year', type=int, default=2026)
+    analyze_parser.add_argument('--year', type=int, required=True,
+                               help='Season year (e.g., 2025, 2026). Required.')
     analyze_parser.add_argument('--output', '-o', type=str, help='Output file path')
     
     # Swap command
@@ -98,7 +102,8 @@ Examples:
     swap_parser.add_argument('draw_file', help='Path to draw JSON file')
     swap_parser.add_argument('game1', help='First game ID (e.g., G00001)')
     swap_parser.add_argument('game2', help='Second game ID')
-    swap_parser.add_argument('--year', type=int, default=2026)
+    swap_parser.add_argument('--year', type=int, required=True,
+                            help='Season year (e.g., 2025, 2026). Required.')
     swap_parser.add_argument('--save', type=str, help='Save modified draw to file')
     
     # Report command
@@ -111,19 +116,28 @@ Examples:
     report_parser.add_argument('--all', action='store_true', help='Generate all reports')
     report_parser.add_argument('--html', action='store_true', help='Generate HTML report')
     report_parser.add_argument('--output', '-o', type=str, default='reports', help='Output directory')
-    report_parser.add_argument('--year', type=int, default=2026)
+    report_parser.add_argument('--year', type=int, required=True,
+                              help='Season year (e.g., 2025, 2026). Required.')
     
     # Import command
     import_parser = subparsers.add_parser('import', help='Import draw from Excel')
     import_parser.add_argument('excel_file', help='Path to Excel file')
     import_parser.add_argument('--lock-weeks', type=int, help='Lock games up to this week')
     import_parser.add_argument('--output', '-o', type=str, help='Output JSON file')
-    import_parser.add_argument('--year', type=int, default=2026)
+    import_parser.add_argument('--year', type=int, required=True,
+                              help='Season year (e.g., 2025, 2026). Required.')
     
     # List constraints command
     list_parser = subparsers.add_parser('list-constraints', help='List all constraints')
     list_parser.add_argument('--ai', action='store_true',
                             help='Show AI-enhanced constraint implementations')
+    
+    # Preseason report command
+    preseason_parser = subparsers.add_parser('preseason', help='Generate pre-season configuration report')
+    preseason_parser.add_argument('--year', type=int, required=True,
+                                  help='Season year (e.g., 2025, 2026). Required.')
+    preseason_parser.add_argument('--output', '-o', type=str,
+                                  help='Output file path (optional)')
     
     args = parser.parse_args()
     
@@ -146,6 +160,8 @@ Examples:
         run_import(args)
     elif args.command == 'list-constraints':
         run_list_constraints(use_ai=args.ai)
+    elif args.command == 'preseason':
+        run_preseason(args)
 
 
 def run_generate(args):
@@ -200,13 +216,14 @@ def run_generate(args):
     if args.simple:
         from main_staged import main_simple
         exclude = args.exclude or []
-        solution, data = main_simple(locked_keys=locked_keys, solver_config=solver_config, exclude_constraints=exclude, use_ai=args.ai)
+        solution, data = main_simple(locked_keys=locked_keys, solver_config=solver_config, exclude_constraints=exclude, use_ai=args.ai, year=args.year)
     else:
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
             locked_keys=locked_keys,
-            solver_config=solver_config
+            solver_config=solver_config,
+            year=args.year
         )
     
     if solution:
@@ -439,25 +456,37 @@ def run_list_constraints(use_ai=False):
 
 
 def load_data_for_year(year: int) -> dict:
-    """Load data for a specific season year."""
-    # Try to import season-specific config
-    try:
-        if year == 2025:
-            from config.season_2025 import get_season_data
-            return get_season_data()
-        elif year == 2026:
-            from config.season_2026 import get_season_data
-            return get_season_data()
-    except ImportError:
-        pass
+    """
+    Load data for a specific season year.
     
-    # Fallback to main_staged loader
-    try:
-        from main_staged import load_data
-        return load_data()
-    except ImportError:
-        print(f"Warning: Could not load data for year {year}")
-        return {}
+    Args:
+        year: The season year (e.g., 2025, 2026)
+        
+    Returns:
+        Complete data dict ready for solver
+        
+    Raises:
+        ValueError: If no configuration exists for the specified year
+    """
+    from config import load_season_data
+    return load_season_data(year)
+
+
+def run_preseason(args):
+    """Generate pre-season configuration report."""
+    print("="*60)
+    print(f"PRE-SEASON CONFIGURATION CHECK - {args.year}")
+    print("="*60)
+    
+    from analytics.preseason_report import run_preseason_check
+    
+    success = run_preseason_check(args.year, args.output)
+    
+    if success:
+        print("\n✅ Pre-season validation PASSED")
+    else:
+        print("\n❌ Pre-season validation FAILED - see errors above")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

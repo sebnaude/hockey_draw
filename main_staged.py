@@ -638,207 +638,30 @@ class StagedScheduleSolver:
 
 # ============== Data Loading ==============
 
-def load_data() -> dict:
-    """Load all required data for scheduling."""
-    # generate_timeslots and max_games_per_grade are now imported from utils at top of file
+def load_data(year: int) -> dict:
+    """
+    Load all required data for scheduling for a specific year.
     
-    # Define fields
-    FIELDS = [
-        PlayingField(location='Newcastle International Hockey Centre', name='SF'),
-        PlayingField(location='Newcastle International Hockey Centre', name='EF'),
-        PlayingField(location='Newcastle International Hockey Centre', name='WF'),
-        PlayingField(location='Maitland Park', name='Maitland Main Field'),
-        PlayingField(location='Central Coast Hockey Park', name='Wyong Main Field'),
-    ]
+    This is the main entry point for loading season data in the staged solver.
+    It uses the config system to load year-specific settings.
     
-    # Load teams and clubs from CSV files
-    TEAMS_DATA = os.path.join('data', '2025', 'teams')
-    CLUBS = []
-    TEAMS = []
-    
-    for file in os.listdir(TEAMS_DATA):
-        if not file.endswith('.csv'):
-            continue
+    Args:
+        year: The season year (e.g., 2025, 2026). Required.
         
-        df = pd.read_csv(os.path.join(TEAMS_DATA, file))
-        club_name = df['Club'].iloc[0].strip()
+    Returns:
+        Complete data dict ready for solver with teams, grades, timeslots, etc.
         
-        home_field = (
-            'Maitland Park' if club_name == 'Maitland' else
-            'Central Coast Hockey Park' if club_name == 'Gosford' else
-            'Newcastle International Hockey Centre'
-        )
-        
-        club = Club(name=club_name, home_field=home_field)
-        CLUBS.append(club)
-        
-        teams = [
-            Team(
-                name=f"{row['Team Name'].strip()} {row['Grade'].strip()}", 
-                club=club, 
-                grade=row['Grade'].strip()
-            ) 
-            for _, row in df.iterrows()
-        ]
-        TEAMS.extend(teams)
-    
-    # Create grades
-    teams_by_grade = defaultdict(list)
-    for team in TEAMS:
-        teams_by_grade[team.grade].append(team.name)
-    
-    GRADES = [Grade(name=grade, teams=teams) for grade, teams in sorted(teams_by_grade.items())]
-    
-    # Update club team counts
-    teams_by_club = defaultdict(list)
-    for team in TEAMS:
-        teams_by_club[team.club.name].append(team.name)
-    
-    for club in CLUBS:
-        club.num_teams = len(teams_by_club.get(club.name, []))
-    
-    for grade in GRADES:
-        grade.num_teams = len(grade.teams)
-    
-    # Time configuration
-    day_time_map = {
-        'Newcastle International Hockey Centre': {
-            'Sunday': [tm(8, 30), tm(10, 0), tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0), tm(17, 30), tm(19, 0)]
-        },
-        'Maitland Park': {
-            'Sunday': [tm(9, 0), tm(10, 30), tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-        }
-    }
-    
-    phl_game_times = {
-        'Newcastle International Hockey Centre': {
-            'Friday': [tm(19, 0)], 
-            'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
-        },
-        'Central Coast Hockey Park': {
-            'Friday': [tm(20, 0)], 
-            'Sunday': [tm(15, 0)]
-        },
-        'Maitland Park': {
-            'Sunday': [tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-        }
-    }
-    
-    # Field unavailabilities
-    field_unavailabilities = {
-        'Maitland Park': {
-            'weekends': [
-                datetime(2025, 4, 19), datetime(2025, 4, 12), datetime(2025, 5, 10),
-                datetime(2025, 5, 24), datetime(2025, 6, 28), datetime(2025, 5, 3), datetime(2025, 6, 7)
-            ],
-            'whole_days': [datetime(2025, 4, 25)],
-            'part_days': [],
-        },
-        'Newcastle International Hockey Centre': {
-            'weekends': [datetime(2025, 4, 19), datetime(2025, 5, 3), datetime(2025, 6, 7)],
-            'whole_days': [datetime(2025, 4, 25), datetime(2025, 5, 31)],
-            'part_days': [
-                datetime(2025, 6, 1, 8, 30), 
-                datetime(2025, 6, 1, 10, 0), 
-                datetime(2025, 6, 1, 11, 30)
-            ],
-        },
-        'Central Coast Hockey Park': {
-            'weekends': [datetime(2025, 4, 19), datetime(2025, 4, 5), datetime(2025, 5, 3), datetime(2025, 6, 7)],
-            'whole_days': [datetime(2025, 4, 25)],
-            'part_days': [],
-        },
-    }
-    
-    # Generate timeslots
-    start = datetime(2025, 3, 21)
-    end = datetime(2025, 9, 2)
-    
-    merged_dict = defaultdict(lambda: defaultdict(list))
-    for d in (phl_game_times, day_time_map):
-        for field, days in d.items():
-            for key, times in days.items():
-                merged_dict[field][key].extend(times)
-    
-    for field in merged_dict:
-        for key in merged_dict[field]:
-            merged_dict[field][key] = list(dict.fromkeys(merged_dict[field][key]))
-            merged_dict[field][key].sort()
-    
-    timeslots = generate_timeslots(start, end, merged_dict, FIELDS, field_unavailabilities)
-    TIMESLOTS = [
-        Timeslot(
-            date=t['date'], day=t['day'], time=t['time'], week=t['week'],
-            day_slot=t['day_slot'], field=t['field'], round_no=t['round_no']
-        ) 
-        for t in timeslots
-    ]
-    
-    # Calculate rounds per grade
-    max_rounds = 21
-    num_rounds = max_games_per_grade(GRADES, max_rounds)
-    num_rounds['max'] = max_rounds
-    
-    for grade, rounds in num_rounds.items():
-        grade_obj = next((g for g in GRADES if g.name == grade), None)
-        if grade_obj:
-            grade_obj.set_games(rounds)
-    
-    # Max day slots per field
-    max_day_slot_per_field = {
-        field.location: max(t.day_slot for t in TIMESLOTS if t.field.location == field.location)
-        for field in FIELDS
-    }
-    
-    # Club days
-    club_days = {
-        'Crusaders': datetime(2025, 6, 22),
-        'Wests': datetime(2025, 7, 13),
-        'University': datetime(2025, 7, 27),
-        'Tigers': datetime(2025, 7, 6),
-        'Port Stephens': datetime(2025, 7, 20)
-    }
-    
-    # No-play preferences
-    preference_no_play = {
-        'Maitland': [
-            {'date': '2025-07-20', 'field_location': 'Newcastle International Hockey Centre'},
-            {'date': '2025-08-24', 'field_location': 'Newcastle International Hockey Centre'}
-        ],
-        'Norths': [
-            {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '11:30'},
-            {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '13:00'},
-            {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '14:30'},
-            {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '16:00'}
-        ]
-    }
-    
-    phl_preferences = {'preferred_dates': []}
-    
-    return {
-        'teams': TEAMS,
-        'grades': GRADES,
-        'fields': FIELDS,
-        'clubs': CLUBS,
-        'timeslots': TIMESLOTS,
-        'num_rounds': num_rounds,
-        'current_week': 0,
-        'penalties': {},
-        'day_time_map': day_time_map,
-        'phl_game_times': phl_game_times,
-        'phl_preferences': phl_preferences,
-        'max_day_slot_per_field': max_day_slot_per_field,
-        'field_unavailabilities': field_unavailabilities,
-        'club_days': club_days,
-        'preference_no_play': preference_no_play,
-        'num_dummy_timeslots': 3,
-    }
+    Raises:
+        ValueError: If no configuration exists for the specified year.
+    """
+    from config import load_season_data
+    return load_season_data(year)
 
 
 # ============== Main Entry Points ==============
 
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
-                solver_config: SolverConfig = None):
+                solver_config: SolverConfig = None, year: int = None):
     """
     Main entry point for staged solving.
     
@@ -847,7 +670,13 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         resume_from: Stage name to resume from
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         solver_config: Optional solver configuration for resource management.
+        year: The season year (e.g., 2025, 2026). Required.
+        
+    Raises:
+        ValueError: If year is not provided or no configuration exists for the year.
     """
+    if year is None:
+        raise ValueError("Year is required. Use --year YYYY to specify the season.")
     # Set up logging
     logger = setup_logging(run_id=run_id)
     logger.info("=" * 60)
@@ -868,9 +697,9 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                f"linearization={solver_config.linearization_level}")
     
     # Load data
-    logger.info("Loading data...")
-    print("\nLoading data...")
-    data = load_data()
+    logger.info(f"Loading data for year {year}...")
+    print(f"\nLoading data for year {year}...")
+    data = load_data(year)
     logger.info(f"  Teams: {len(data['teams'])}")
     logger.info(f"  Grades: {len(data['grades'])}")
     logger.info(f"  Timeslots: {len(data['timeslots'])}")
@@ -883,7 +712,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     solver = StagedScheduleSolver(data, checkpoint_manager, solver_config=solver_config, logger=logger)
     
     # Initialize model
-    unavailability_path = os.path.join('data', '2025', 'noplay')
+    unavailability_path = os.path.join('data', str(year), 'noplay')
     solver.initialize_model(unavailability_path)
     
     # Handle locked games
@@ -961,9 +790,9 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False):
+def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None):
     """
-    Simple (non-staged) main entry point for backwards compatibility.
+    Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
     
     Args:
@@ -971,7 +800,13 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
         solver_config: Optional SolverConfig for solver parameters.
         exclude_constraints: Optional list of constraint class names to exclude.
         use_ai: If True, use AI-enhanced constraint implementations.
+        year: The season year (e.g., 2025, 2026). Required.
+        
+    Raises:
+        ValueError: If year is not provided or no configuration exists for the year.
     """
+    if year is None:
+        raise ValueError("Year is required. Use --year YYYY to specify the season.")
     mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     print("="*60)
     print(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
@@ -986,8 +821,8 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
         print("\n⚠️  Resource monitoring unavailable (install psutil)")
     
     # Load data
-    print("\nLoading data...")
-    data = load_data()
+    print(f"\nLoading data for year {year}...")
+    data = load_data(year)
     
     # Create model
     model = cp_model.CpModel()
