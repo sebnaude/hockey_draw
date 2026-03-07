@@ -171,17 +171,33 @@ class PreSeasonReport:
                 })
         
         # No-Play Preferences (soft constraints)
+        # Handle both formats:
+        # - 2025: { 'club': [{'date': ..., 'field_location': ...}, ...] }
+        # - 2026: { 'key': {'club': ..., 'dates': [...], 'reason': ...} }
         preference_no_play = self.config.get('preference_no_play', {})
         for key, pref in preference_no_play.items():
-            dates = pref.get('dates', [])
-            result['no_play_dates'].append({
-                'key': key,
-                'club': pref.get('club', 'Unknown'),
-                'grade': pref.get('grade', pref.get('grades', 'All')),
-                'dates': [d.strftime('%Y-%m-%d') for d in dates] if dates else [],
-                'reason': pref.get('reason', ''),
-                'type': 'soft'
-            })
+            if isinstance(pref, list):
+                # 2025 format: list of no-play entries for a club
+                for entry in pref:
+                    result['no_play_dates'].append({
+                        'key': f"{key}_{entry.get('date', 'unknown')}",
+                        'club': key,
+                        'grade': entry.get('team_name', 'All'),
+                        'dates': [entry.get('date', '')] if entry.get('date') else [],
+                        'reason': entry.get('reason', f"No play at {entry.get('field_location', 'venue')}"),
+                        'type': 'soft'
+                    })
+            elif isinstance(pref, dict):
+                # 2026 format: dict with club, dates, reason keys
+                dates = pref.get('dates', [])
+                result['no_play_dates'].append({
+                    'key': key,
+                    'club': pref.get('club', 'Unknown'),
+                    'grade': pref.get('grade', pref.get('grades', 'All')),
+                    'dates': [d.strftime('%Y-%m-%d') for d in dates] if dates else [],
+                    'reason': pref.get('reason', ''),
+                    'type': 'soft'
+                })
         
         # Field Unavailabilities (hard constraints) - these affect all teams
         field_unavailabilities = self.config.get('field_unavailabilities', {})
@@ -296,29 +312,50 @@ class PreSeasonReport:
             for day, times in days.items():
                 result[venue]['standard'][day] = [t.strftime('%H:%M') for t in times]
         
-        # PHL-specific times (new structure: venue -> field -> day -> times)
-        for venue, fields in phl_game_times.items():
+        # Detect format: simple (venue -> day -> times) vs nested (venue -> field -> day -> times)
+        # Check first venue's structure to determine format
+        is_simple_phl_format = False
+        for venue, venue_data in phl_game_times.items():
+            if isinstance(venue_data, dict):
+                first_key = next(iter(venue_data.keys()), None)
+                # Day names indicate simple format
+                if first_key in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'):
+                    is_simple_phl_format = True
+            break
+        
+        # PHL-specific times
+        for venue, venue_data in phl_game_times.items():
             if venue not in result:
                 result[venue] = {'standard': {}, 'phl': {}, 'second': {}}
-            # Collect all PHL times by day across all fields
-            phl_by_day = {}
-            for field, days in fields.items():
-                for day, times in days.items():
-                    if day not in phl_by_day:
-                        phl_by_day[day] = {'times': set(), 'fields': []}
-                    for t in times:
-                        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
-                        phl_by_day[day]['times'].add(time_str)
-                    phl_by_day[day]['fields'].append(field)
-            # Format for output
-            for day, info in phl_by_day.items():
-                fields_str = ', '.join(sorted(set(info['fields'])))
-                result[venue]['phl'][day] = {
-                    'times': sorted(info['times']),
-                    'fields': fields_str
-                }
+            
+            if is_simple_phl_format:
+                # Simple format: venue -> day -> times (2025 style)
+                for day, times in venue_data.items():
+                    time_strs = [t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t) for t in times]
+                    result[venue]['phl'][day] = {
+                        'times': sorted(time_strs),
+                        'fields': 'All'
+                    }
+            else:
+                # Nested format: venue -> field -> day -> times (2026 style)
+                phl_by_day = {}
+                for field, days in venue_data.items():
+                    for day, times in days.items():
+                        if day not in phl_by_day:
+                            phl_by_day[day] = {'times': set(), 'fields': []}
+                        for t in times:
+                            time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                            phl_by_day[day]['times'].add(time_str)
+                        phl_by_day[day]['fields'].append(field)
+                # Format for output
+                for day, info in phl_by_day.items():
+                    fields_str = ', '.join(sorted(set(info['fields'])))
+                    result[venue]['phl'][day] = {
+                        'times': sorted(info['times']),
+                        'fields': fields_str
+                    }
         
-        # 2nd grade specific times (same structure as PHL)
+        # 2nd grade specific times (always nested format - only exists in 2026+)
         for venue, fields in second_grade_times.items():
             if venue not in result:
                 result[venue] = {'standard': {}, 'phl': {}, 'second': {}}

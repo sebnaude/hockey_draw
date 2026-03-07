@@ -1,12 +1,13 @@
 """Quick test for ALL AI constraints."""
 import os
 import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add parent directory to path for imports from root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ortools.sat.python import cp_model
 from main_staged import load_data
 from utils import generate_X
-from constraints_ai import (
+from constraints.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

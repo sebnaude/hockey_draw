@@ -115,37 +115,60 @@ Each variable is a boolean: 1 = game scheduled at this slot, 0 = not scheduled.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ Stage 1: Required (MUST satisfy)                               │
-│   • NoDoubleBookingTeams                                       │
-│   • NoDoubleBookingFields                                      │
-│   • EnsureEqualGamesAndBalanceMatchUps                        │
-│   • TeamConflictConstraint                                     │
-│                         ↓ checkpoint                           │
-├────────────────────────────────────────────────────────────────┤
-│ Stage 2: Structural (Important for practicality)               │
-│   • FiftyFiftyHomeandAway                                      │
-│   • MaxMaitlandHomeWeekends                                    │
-│   • ClubDayConstraint                                          │
-│   • PHLAndSecondGradeTimes                                     │
-│   • PHLAndSecondGradeAdjacency                                │
-│   • ClubGradeAdjacencyConstraint                              │
-│                         ↓ checkpoint                           │
-├────────────────────────────────────────────────────────────────┤
-│ Stage 3: Optimization (Venue efficiency)                       │
+│ Stage 1: stage1_required (MUST satisfy) - 14 constraints       │
+│   • NoDoubleBookingTeams, NoDoubleBookingFields                │
+│   • EnsureEqualGamesAndBalanceMatchUps                         │
+│   • PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes         │
+│   • FiftyFiftyHomeandAway, TeamConflictConstraint              │
+│   • MaxMaitlandHomeWeekends, ClubDayConstraint                 │
+│   • EqualMatchUpSpacingConstraint, ClubGradeAdjacencyConstraint│
+│   • ClubVsClubAlignment, MaitlandHomeGrouping                  │
 │   • AwayAtMaitlandGrouping                                     │
-│   • MinimiseClubsOnAFieldBroadmeadow                          │
-│   • EnsureBestTimeslotChoices                                  │
-│   • MaximiseClubsPerTimeslotBroadmeadow                       │
-│   • ClubVsClubAlignment                                        │
 │                         ↓ checkpoint                           │
 ├────────────────────────────────────────────────────────────────┤
-│ Stage 4: Soft (Preferences with penalties)                     │
-│   • MaitlandHomeGrouping                                       │
-│   • EqualMatchUpSpacing                                        │
+│ Stage 2: stage2_soft (Soft preferences) - 4 constraints        │
+│   • EnsureBestTimeslotChoices                                  │
+│   • MaximiseClubsPerTimeslotBroadmeadow                        │
+│   • MinimiseClubsOnAFieldBroadmeadow                           │
 │   • PreferredTimesConstraint                                   │
 │                         ↓ final solution                       │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+### 3b. Severity-Based Relaxation (--relax flag)
+
+If the solver returns INFEASIBLE, the `--relax` flag enables automatic resolution:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Severity Levels (for relaxation purposes):                      │
+│                                                                 │
+│ Level 1 - CRITICAL (never relaxed):                            │
+│   • NoDoubleBooking, EqualGames, PHL adjacency, HomeAway       │
+│                                                                 │
+│ Level 2 - HIGH (structural):                                   │
+│   • ClubDay, MaitlandGrouping, TeamConflict                    │
+│                                                                 │
+│ Level 3 - MEDIUM (spacing/alignment):                          │
+│   • MatchUpSpacing, GradeAdjacency, ClubVsClub                 │
+│                                                                 │
+│ Level 4 - LOW (optimization):                                  │
+│   • TimeslotChoices, ClubDensity, PreferredTimes               │
+└─────────────────────────────────────────────────────────────────┘
+
+Resolution Process:
+1. Test with all constraints → INFEASIBLE
+2. Drop Level 4, test → still INFEASIBLE?
+3. Drop Level 3, test → still INFEASIBLE?
+4. Drop Level 2, test → FEASIBLE!
+   → Level 2 is the blocking group
+5. Relax ALL Level 2 constraints (slack +1)
+6. Solve with ALL constraints together
+
+Key principle: Never lock in partial solutions.
+```
+
+See `severity_relaxation.py` for implementation.
 
 ### 4. Solving Phase
 
@@ -280,15 +303,23 @@ checkpoints/
     ├── stage1_required/
     │   ├── solution.pkl
     │   └── metadata.json
-    ├── stage2_strong/
-    │   ├── solution.pkl
-    │   └── metadata.json
-    └── ...
+    └── stage2_soft/
+        ├── solution.pkl
+        └── metadata.json
 ```
 
 Resume from any stage:
 ```bash
-python run.py --resume run_1 stage2_strong
+python run.py generate --year 2025 --resume run_1 stage1_required
+```
+
+Run only specific stages:
+```bash
+# Run only stage 1
+python run.py generate --year 2025 --stages stage1_required
+
+# Run only stage 2 (requires stage1 checkpoint)
+python run.py generate --year 2025 --stages stage2_soft --resume run_1 stage1_required
 ```
 
 ---

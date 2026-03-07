@@ -29,7 +29,7 @@ from models import PlayingField, Team, Club, Grade, Timeslot
 from utils import max_games_per_grade
 
 # Import ALL AI constraints
-from constraints_ai import (
+from constraints.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

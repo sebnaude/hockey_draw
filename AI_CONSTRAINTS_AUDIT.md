@@ -68,9 +68,9 @@ This report compares each pair for **outcome equivalence** and **efficiency**.
 
 | | Original | AI |
 |---|---|---|
-| **Goal** | No concurrent PHL at Broadmeadow; no PHL+2nd same club at Broadmeadow; ≤3 Friday games; preferred date penalties | Same |
+| **Goal** | No concurrent PHL at Broadmeadow; no PHL+2nd same club at Broadmeadow; ≤3 Friday games at Broadmeadow; exactly 8 Friday games at Gosford (AGM); preferred date penalties | Same |
 | **Outcome** | Identical constraints and penalties | — |
-| **Efficiency** | AI pre-filters and uses constants (`BROADMEADOW`, `MAX_FRIDAY_GAMES`) | Cleaner |
+| **Efficiency** | AI pre-filters and uses constants (`BROADMEADOW`, `GOSFORD`, `MAX_FRIDAY_GAMES`, `GOSFORD_FRIDAY_GAMES`) | Cleaner |
 | **Verdict** | ✅ Same outcome |
 
 ---

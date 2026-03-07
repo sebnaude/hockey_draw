@@ -310,12 +310,15 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
     - No concurrent PHL games at Broadmeadow
     - No concurrent 2nd grade and PHL from same club at Broadmeadow
     - Max 3 Friday night games at Broadmeadow
+    - Exactly 8 Friday night games at Gosford (AGM decision)
     - Soft penalty for preferred dates
     """
     PRIORITY = "strong"
     
     BROADMEADOW = 'Newcastle International Hockey Centre'
+    GOSFORD = 'Central Coast Hockey Park'
     MAX_FRIDAY_GAMES = 3
+    GOSFORD_FRIDAY_GAMES = 8  # AGM confirmed
     
     def apply(self, model, X, data) -> int:
         # Initialize penalties
@@ -336,6 +339,7 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
         club_phl_vars = defaultdict(list)  # (week, day, day_slot, location, club) -> vars
         club_2nd_vars = defaultdict(list)  # Same structure
         friday_broadmeadow_vars = []
+        friday_gosford_vars = []
         preferred_date_vars = defaultdict(list)
         
         preferred_dates = set(
@@ -368,6 +372,10 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
                     if t.day == 'Friday' and t.field.location == self.BROADMEADOW:
                         friday_broadmeadow_vars.append(var)
                     
+                    # Friday at Gosford (Central Coast Hockey Park)
+                    if t.day == 'Friday' and t.field.location == self.GOSFORD:
+                        friday_gosford_vars.append(var)
+                    
                     # Preferred dates
                     if t.date in preferred_dates:
                         preferred_date_vars[t.date].append(var)
@@ -397,6 +405,11 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
         # Constraint 3: Max Friday night games at Broadmeadow
         if friday_broadmeadow_vars:
             model.Add(sum(friday_broadmeadow_vars) <= self.MAX_FRIDAY_GAMES)
+            constraints_added += 1
+        
+        # Constraint 4: Exactly 8 Friday night games at Gosford (AGM decision)
+        if friday_gosford_vars:
+            model.Add(sum(friday_gosford_vars) == self.GOSFORD_FRIDAY_GAMES)
             constraints_added += 1
         
         # Soft constraint: Preferred dates (penalty for not having exactly 1 game)

@@ -83,6 +83,14 @@ Examples:
     gen_parser.add_argument('--exclude', nargs='+', metavar='CONSTRAINT',
                             help='Exclude specific constraints from simple mode solve. '
                                  'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
+    gen_parser.add_argument('--stages', nargs='+', metavar='STAGE',
+                            help='Run only specific stages (e.g., --stages stage1_required). '
+                                 'Available: stage1_required, stage2_soft')
+    gen_parser.add_argument('--relax', action='store_true',
+                            help='Enable severity-based constraint relaxation. If infeasible, '
+                                 'automatically identifies problem severity group and relaxes slack variables.')
+    gen_parser.add_argument('--relax-timeout', type=float, default=30.0,
+                            help='Timeout per feasibility test during relaxation (default: 30 seconds)')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -234,14 +242,36 @@ def run_generate(args):
     if args.simple:
         from main_staged import main_simple
         exclude = args.exclude or []
-        solution, data = main_simple(locked_keys=locked_keys, solver_config=solver_config, exclude_constraints=exclude, use_ai=args.ai, year=args.year)
+        relax_config = None
+        if getattr(args, 'relax', False):
+            relax_config = {
+                'enabled': True,
+                'timeout': getattr(args, 'relax_timeout', 30.0),
+            }
+        solution, data = main_simple(
+            locked_keys=locked_keys, 
+            solver_config=solver_config, 
+            exclude_constraints=exclude, 
+            use_ai=args.ai, 
+            year=args.year,
+            relax_config=relax_config
+        )
     else:
+        stages = getattr(args, 'stages', None)
+        relax_config = None
+        if getattr(args, 'relax', False):
+            relax_config = {
+                'enabled': True,
+                'timeout': getattr(args, 'relax_timeout', 30.0),
+            }
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
             locked_keys=locked_keys,
             solver_config=solver_config,
-            year=args.year
+            year=args.year,
+            stages_to_run=stages,
+            relax_config=relax_config
         )
     
     if solution:
@@ -469,7 +499,7 @@ def run_list_constraints(use_ai=False):
         for constraint_cls in stage_info['constraints']:
             doc = constraint_cls.__doc__ or "No description"
             doc_line = doc.strip().split('\n')[0]
-            print(f"  • {constraint_cls.__name__}")
+            print(f"  - {constraint_cls.__name__}")
             print(f"    {doc_line}")
 
 
@@ -519,10 +549,9 @@ def run_diagnose(args):
     print("="*60)
     
     from main_staged import load_data, STAGES, STAGES_AI
-    from infeasibility_resolver import (
+    from constraints.resolver import (
         InfeasibilityResolver, 
         ConstraintSlackRegistry,
-        get_constraint_names_from_stage
     )
     
     # Load data
@@ -537,12 +566,13 @@ def run_diagnose(args):
         sys.exit(1)
     
     stage_config = stages[args.stage]
-    constraint_names = get_constraint_names_from_stage(stage_config)
+    constraint_classes = stage_config.get('constraints', [])
+    constraint_names = [cls.__name__ for cls in constraint_classes]
     
     print(f"\nStage: {args.stage} ({stage_config['name']})")
     print(f"Constraints to test: {len(constraint_names)}")
     for name in constraint_names:
-        print(f"  • {name}")
+        print(f"  - {name}")
     
     # Create resolver
     registry = ConstraintSlackRegistry()
@@ -557,7 +587,7 @@ def run_diagnose(args):
         # Attempt iterative relaxation
         print(f"\nAttempting iterative resolution (max {args.max_iterations} iterations)...")
         success, relaxed = resolver.resolve_iteratively(
-            constraint_names, 
+            constraint_classes, 
             max_iterations=args.max_iterations
         )
         
@@ -571,19 +601,19 @@ def run_diagnose(args):
             print("\n[FAILED] Could not find feasible configuration")
             sys.exit(1)
     else:
-        # Just find the blocking constraint
+        # Just find the blocking constraint(s)
         print("\nSearching for blocking constraint...")
-        blocking = resolver.find_blocking_constraint(constraint_names)
+        blocking = resolver.find_blocking_constraints(constraint_classes)
         
         if blocking:
-            print(f"\n[FOUND] Blocking constraint: {blocking}")
-            state = registry.get_state(blocking)
-            if state and state.can_relax():
-                print(f"  This constraint can be relaxed (Level {state.severity_level})")
-                print(f"  Use --resolve to attempt automatic relaxation")
-            else:
-                print(f"  This is a Level 1 constraint - cannot be relaxed")
-                print(f"  Check your data/config for conflicts")
+            print(f"\n[FOUND] Blocking constraint(s): {blocking}")
+            for name in blocking:
+                state = registry.get_state(name)
+                if state and state.can_relax():
+                    print(f"  {name}: Can be relaxed (Level {state.severity_level})")
+                else:
+                    print(f"  {name}: Level 1 constraint - cannot be relaxed")
+            print(f"\n  Use --resolve to attempt automatic relaxation")
             sys.exit(1)
         else:
             print("\n[OK] All constraints are feasible together!")

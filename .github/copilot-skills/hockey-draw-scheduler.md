@@ -23,6 +23,9 @@ cd c:\Users\c3205\Documents\Code\python\draw
 # Generate 2026 season
 .\.venv\Scripts\python.exe run.py generate --year 2026
 
+# Generate with automatic constraint relaxation (if infeasible)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --relax
+
 # Generate with AI constraints (opt-in alternative constraint set)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --ai
 
@@ -54,10 +57,8 @@ cd c:\Users\c3205\Documents\Code\python\draw
 ### Important: Solver Execution
 
 **CRITICAL**: Solver runs can take a LONG time:
-- Stage 1: Up to 2 hours (usually 5-10 minutes)
-- Stage 2: Up to 4 hours
-- Stage 3: Up to 8 hours
-- Stage 4: Up to 72 hours (3 days)
+- Stage 1 (stage1_required): Up to 2 hours (usually 5-30 minutes)
+- Stage 2 (stage2_soft): Up to 72 hours (3 days)
 
 When starting a solver run:
 1. **Always run in background** (`isBackground: true`) for terminal commands
@@ -120,27 +121,86 @@ To add support for a new year (e.g., 2027):
 
 ### Solver Stages
 
-The staged solver runs 4 stages:
+The staged solver runs **2 stages**:
 
-1. **Stage 1 - Required Constraints** (max 2h): Core rules
-   - No double-booking teams
-   - No double-booking fields
-   - Equal games per team
-   - 50/50 home and away
+1. **stage1_required - Required Constraints** (max 2h): 14 core + structural constraints
+   - No double-booking teams/fields
+   - Equal games per team, 50/50 home/away
+   - PHL and 2nds adjacency + times
+   - Team conflicts, Max Maitland home weekends
+   - Club day events, Equal matchup spacing
+   - Club grade adjacency, Club vs Club alignment
+   - Maitland home grouping, Away at Maitland grouping
 
-2. **Stage 2 - Strong Structural** (max 4h): Practical quality
-   - PHL and 2nds adjacency
-   - Club grade adjacency
-   - Maitland home weekends
+2. **stage2_soft - Soft Preferences** (max 72h): 4 optimization constraints
+   - Ensure best timeslot choices
+   - Maximise clubs per timeslot at Broadmeadow
+   - Minimise clubs on a field at Broadmeadow
+   - Preferred times / no-play constraints
 
-3. **Stage 3 - Medium Constraints** (max 8h): Venue optimization
-   - Club day constraints
-   - Equal matchup spacing
+### Running Specific Stages
 
-4. **Stage 4 - Soft Preferences** (max 72h): Quality optimization
-   - Preferred times
-   - Club alignment
-   - Timeslot optimization
+```powershell
+# Run both stages (default)
+.\.\.venv\Scripts\python.exe run.py generate --year 2025
+
+# Run ONLY stage 1
+.\.\.venv\Scripts\python.exe run.py generate --year 2025 --stages stage1_required
+
+# Run ONLY stage 2 (must have checkpoint from stage 1)
+.\.\.venv\Scripts\python.exe run.py generate --year 2025 --stages stage2_soft --resume run_X stage1_required
+```
+
+### Diagnose Command (Infeasibility Resolution)
+
+Find which constraint causes infeasibility and optionally auto-relax:
+
+```powershell
+# Find blocking constraint
+.\.\.venv\Scripts\python.exe run.py diagnose --year 2025
+
+# Auto-relax constraints iteratively until feasible
+.\.\.venv\Scripts\python.exe run.py diagnose --year 2025 --resolve
+
+# Options
+--stage stage1_required  # Which stage to analyze (default)
+--timeout 5.0            # Seconds per feasibility test
+--max-iterations 10      # Max relaxation iterations
+--ai                     # Use AI constraint implementations
+```
+
+### --relax Flag (Severity-Based Relaxation)
+
+The `--relax` flag provides automatic infeasibility resolution during generation:
+
+```powershell
+# Generate with automatic constraint relaxation
+.\.venv\Scripts\python.exe run.py generate --year 2026 --relax
+
+# Works with other flags
+.\.venv\Scripts\python.exe run.py generate --year 2026 --relax --simple
+.\.venv\Scripts\python.exe run.py generate --year 2026 --relax --ai
+```
+
+**How it works:**
+1. Tests with all constraints → if INFEASIBLE, starts severity group testing
+2. Drops severity level 4 (LOW) constraints and retests
+3. If still INFEASIBLE, drops level 3 (MEDIUM), then level 2 (HIGH)
+4. Identifies the blocking severity group
+5. Relaxes ALL constraints in that group (slack +1)
+6. Solves with ALL constraints together (never locks partial solutions)
+
+**Severity Levels:**
+| Level | Name | Constraints | Can Relax? |
+|-------|------|-------------|------------|
+| 1 | CRITICAL | NoDoubleBooking, EqualGames, PHL adjacency, HomeAway | Never |
+| 2 | HIGH | ClubDay, MaitlandGrouping, TeamConflict | Yes |
+| 3 | MEDIUM | MatchUpSpacing, GradeAdjacency, ClubVsClub | Yes |
+| 4 | LOW | TimeslotChoices, ClubDensity, PreferredTimes | Yes |
+
+**Key principle**: Never lock in partial solutions. Always solve with all constraints together.
+
+See `severity_relaxation.py` for implementation details.
 
 ### Checkpoint/Resume System
 

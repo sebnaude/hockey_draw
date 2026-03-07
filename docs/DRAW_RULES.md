@@ -80,10 +80,11 @@ These fundamental rules ensure the draw is valid and playable.
 - PHL games cannot occur simultaneously at Newcastle International Hockey Centre (Broadmeadow)
 - 2nd grade and PHL from the same club cannot occur at the same timeslot at Broadmeadow
 - Maximum 3 Friday night PHL games at Broadmeadow
+- Exactly 8 Friday night PHL games at Gosford (Central Coast Hockey Park) - AGM decision 2026
 
 **Enforcement:** Uses timeslot indicators and sum constraints per location/club combination.
 
-**Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots.
+**Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots. The Gosford Friday requirement was confirmed at the 2026 AGM.
 
 ---
 
@@ -316,12 +317,16 @@ These rules arise from the combination of constraints or data filtering.
 ---
 
 ### Implied Rule 5: Friday Night Restrictions
-**Source:** Decision variable generation
+**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint
 
 **Description:**
-- No Friday games at Maitland
-- Only specific team combinations can play Friday at Wyong
-- Limited Friday slots at Broadmeadow
+- Friday games are PHL-only (only PHL grade plays on Fridays)
+- No Friday games at Maitland (PHL-only venue)
+- Maximum 3 Friday games at Broadmeadow (Newcastle International Hockey Centre)
+- Exactly 8 Friday games at Gosford (Central Coast Hockey Park) - AGM decision 2026
+- 8pm start time at Gosford confirmed at AGM
+
+**Note:** Lower grades (3rd-6th) are automatically excluded from Friday variables during decision variable generation.
 
 ---
 

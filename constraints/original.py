@@ -282,6 +282,7 @@ class PHLAndSecondGradeTimes(Constraint):
         team_games = defaultdict(lambda: defaultdict(list))
         club_games = defaultdict(lambda: defaultdict(list))
         friday_games = defaultdict(list)
+        friday_games_gosford = defaultdict(list)
         preferred_dates = defaultdict(list)
 
         for t in timeslots:
@@ -312,6 +313,10 @@ class PHLAndSecondGradeTimes(Constraint):
                         if t.date in [d.date().strftime('%Y-%m-%d') for d in phl_preferences['preferred_dates']]:
                             preferred_dates[t.date].append(X[key])
 
+                        # Enforce Gosford Home game number on a Friday Night
+                        if t.day == 'Friday' and t.field.location == 'Central Coast Hockey Park':
+                            friday_games_gosford['Friday'].append(X[key])                     
+
                     else:
                         club = get_club(t1, data['teams'])
                         club_games[(t.week, t.day, t.field.location)][(t.day_slot, club, t1)].append(X[key])
@@ -337,6 +342,9 @@ class PHLAndSecondGradeTimes(Constraint):
 
         for day, game_vars in friday_games.items(): # Ensure that only 3 Broadmedow games on a Friday are held
             model.Add(sum(game_vars) <= 3)
+
+        for day, game_vars in friday_games_gosford.items(): # Ensure that there are exactly 8 games at Gosford home as per AGM decision
+            model.Add(sum(game_vars) == 8)
 
         for date, game_vars in preferred_dates.items():
             week_no = get_nearest_week_by_date(date, data['timeslots'])

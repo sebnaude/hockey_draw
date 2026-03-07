@@ -321,7 +321,7 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
     
-    IMPORTANT: PHL and 2nd grade games are filtered to valid timeslots.
+    IMPORTANT: PHL, 2nd grade, and lower grades are filtered to valid timeslots.
     This dramatically reduces the variable count.
     
     PHL restrictions enforced here (NOT as constraints):
@@ -333,6 +333,10 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     - 2nd grade cannot play on South Field (SF) at NIHC - only EF and WF
     - 2nd grade CANNOT play at Gosford (PHL-only venue)
     - 2nd grade plays at PHL times PLUS one slot before/after (where available)
+    
+    Lower grades (3rd-6th) restrictions enforced here (NOT as constraints):
+    - Cannot play at Gosford (Central Coast Hockey Park) - PHL-only venue
+    - Cannot play on Fridays - PHL-only timeslot
     
     NOTE: Cannot create NEW timeslots - only existing DAY_TIME_MAP slots are valid.
     
@@ -425,6 +429,12 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     second_vars_created = 0
     second_vars_skipped = 0
     other_vars_created = 0
+    other_vars_skipped = 0  # Track skipped vars for lower grades
+    
+    # Build set of PHL-only venues (Gosford) and days (Friday)
+    # These should be excluded from non-PHL grades
+    phl_only_venues = {'Central Coast Hockey Park'}  # Gosford is PHL-only
+    phl_only_days = {'Friday'}  # Friday nights are PHL-only
     
     for game_key, game_val in game_items:
         if isinstance(game_key, tuple) and len(game_key) >= 3:
@@ -463,6 +473,15 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                     continue
                 second_vars_created += 1
             else:
+                # Lower grades (3rd-6th): Exclude PHL-only venues and days
+                # - Gosford (Central Coast) is PHL-only
+                # - Friday nights are PHL-only
+                if t.field.location in phl_only_venues:
+                    other_vars_skipped += 1
+                    continue
+                if t.day in phl_only_days:
+                    other_vars_skipped += 1
+                    continue
                 other_vars_created += 1
             
             key = (t1_name, t2_name, grade_name, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
@@ -472,7 +491,7 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     print(f"  - PHL: {phl_vars_created} created, {phl_vars_skipped} skipped (invalid venue/field/day/time)")
     if second_valid_slots:
         print(f"  - 2nd: {second_vars_created} created, {second_vars_skipped} skipped (invalid venue/field/day/time)")
-    print(f"  - Other grades: {other_vars_created}")
+    print(f"  - Other grades: {other_vars_created} created, {other_vars_skipped} skipped (PHL-only venues/days)")
     return X, Y, conflicts, unavailable_games
 
 
@@ -677,6 +696,7 @@ def build_season_data(config: dict) -> dict:
         'penalties': {},
         'day_time_map': day_time_map,
         'phl_game_times': phl_game_times,
+        'second_grade_times': config.get('second_grade_times', {}),
         'phl_preferences': phl_preferences,
         'max_day_slot_per_field': max_day_slot_per_field,
         'field_unavailabilities': field_unavailabilities,

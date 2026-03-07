@@ -289,3 +289,116 @@ class TestSolverConfigSelection:
         config = SolverConfig.balanced_config()
         config.num_workers = 6
         assert config.num_workers == 6
+
+
+# ============== Diagnose Command Tests ==============
+
+class TestDiagnoseCommand:
+    """Tests for diagnose command."""
+
+    def test_diagnose_requires_year(self):
+        """Test that diagnose command requires --year."""
+        with pytest.raises(SystemExit):
+            with patch('sys.argv', ['run.py', 'diagnose']):
+                run.main()
+
+    def test_diagnose_loads_data_correctly(self):
+        """Test diagnose command loads data for the year."""
+        from main_staged import load_data, STAGES
+        
+        data = load_data(2025)
+        assert data is not None
+        assert 'teams' in data
+        assert len(data['teams']) > 0
+
+    def test_diagnose_gets_stage_config(self):
+        """Test diagnose command accesses stage configuration."""
+        from main_staged import STAGES, STAGES_AI
+        
+        # Test standard stages
+        assert 'stage1_required' in STAGES
+        assert 'constraints' in STAGES['stage1_required']
+        
+        # Test AI stages
+        assert 'stage1_required' in STAGES_AI
+        assert 'constraints' in STAGES_AI['stage1_required']
+
+    def test_diagnose_args_namespace(self):
+        """Test diagnose argument namespace structure."""
+        args = argparse.Namespace(
+            year=2025,
+            ai=False,
+            stage='stage1_required',
+            resolve=False,
+            timeout=5,
+            max_iterations=5
+        )
+        
+        assert args.year == 2025
+        assert args.stage == 'stage1_required'
+        assert args.resolve is False
+
+    def test_diagnose_creates_resolver(self):
+        """Test diagnose command creates InfeasibilityResolver."""
+        from constraints.resolver import InfeasibilityResolver, ConstraintSlackRegistry
+        from main_staged import load_data
+        
+        data = load_data(2025)
+        registry = ConstraintSlackRegistry()
+        resolver = InfeasibilityResolver(
+            data, 
+            registry, 
+            timeout_per_test=5,
+            verbose=False
+        )
+        
+        assert resolver is not None
+        assert resolver.timeout == 5
+
+
+# ============== Preseason Command Tests ==============
+
+class TestPreseasonCommand:
+    """Tests for preseason command."""
+
+    def test_preseason_requires_year(self):
+        """Test that preseason command requires --year."""
+        with pytest.raises(SystemExit):
+            with patch('sys.argv', ['run.py', 'preseason']):
+                run.main()
+
+    def test_preseason_loads_config(self):
+        """Test preseason command can load configuration."""
+        # Just test that config loading works
+        from config import season_2025, season_2026
+        
+        assert hasattr(season_2025, 'SEASON_CONFIG')
+        assert hasattr(season_2026, 'SEASON_CONFIG')
+
+    def test_preseason_report_creation(self):
+        """Test PreSeasonReport can be instantiated."""
+        from analytics.preseason_report import PreSeasonReport
+        from run import load_data_for_year
+        from config.season_2025 import SEASON_CONFIG
+        
+        data = load_data_for_year(2025)
+        
+        report = PreSeasonReport(data, SEASON_CONFIG)
+        
+        assert report is not None
+        assert report.year == 2025
+
+    def test_preseason_report_generates_output(self):
+        """Test PreSeasonReport generates string output."""
+        from analytics.preseason_report import PreSeasonReport
+        from run import load_data_for_year
+        from config.season_2025 import SEASON_CONFIG
+        
+        data = load_data_for_year(2025)
+        report = PreSeasonReport(data, SEASON_CONFIG)
+        
+        output = report.generate_text_report()
+        
+        assert isinstance(output, str)
+        assert len(output) > 0
+        assert 'PRE-SEASON' in output or 'PRESEASON' in output or 'Season' in output

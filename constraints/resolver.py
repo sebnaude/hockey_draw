@@ -14,7 +14,7 @@ The solver stages (stage1, stage2) remain unchanged. This is a diagnostic/resolu
 tool that works alongside the solver.
 
 Usage:
-    from infeasibility_resolver import InfeasibilityResolver, ConstraintSlackRegistry
+    from constraints.resolver import InfeasibilityResolver, ConstraintSlackRegistry
     
     # Create resolver
     registry = ConstraintSlackRegistry()
@@ -45,6 +45,22 @@ from ortools.sat.python import cp_model
 # Local imports
 from utils import generate_X
 from analytics.tester import CONSTRAINT_SEVERITY_LEVELS, SEVERITY_LEVEL_LABELS
+
+
+# ============== Helper Functions ==============
+
+def get_constraint_names_from_stage(stage_config: dict) -> List[str]:
+    """
+    Extract constraint class names from a stage configuration.
+    
+    Args:
+        stage_config: Dict with 'constraints' key containing list of constraint classes
+        
+    Returns:
+        List of constraint class names (strings)
+    """
+    constraints = stage_config.get('constraints', [])
+    return [cls.__name__ for cls in constraints]
 
 
 # ============== Constraint Slack Registry ==============
@@ -168,7 +184,7 @@ class ConstraintSlackRegistry:
     def _get_soft_constraint(self, name: str, slack_level: int):
         """Get a soft constraint instance with specified slack."""
         try:
-            from constraints_soft import (
+            from constraints.soft import (
                 ClubDayConstraintSoft,
                 AwayAtMaitlandGroupingSoft,
                 TeamConflictConstraintSoft,

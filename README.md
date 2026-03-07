@@ -13,29 +13,33 @@ python run.py generate --year 2025
 ## Usage
 
 ```bash
-# Generate new draw (default: 2025)
+# Generate new draw (staged solving - 2 stages)
 python run.py generate --year 2025
 
-# Generate with staged solving (recommended)
-python run.py generate --year 2025 --staged
+# Generate with automatic constraint relaxation (if infeasible)
+python run.py generate --year 2025 --relax
+
+# Generate with simple mode (all constraints at once)
+python run.py generate --year 2025 --simple
+
+# Run only stage 1 (required constraints)
+python run.py generate --year 2025 --stages stage1_required
 
 # Resume from checkpoint
-python run.py generate --year 2025 --staged --resume run_1
+python run.py generate --year 2025 --resume run_1 stage1_required
+
+# Diagnose infeasibility
+python run.py diagnose --year 2025
+python run.py diagnose --year 2025 --resolve  # Auto-relax constraints
 
 # Test existing draw for violations
-python run.py test draws/draw_2025.json
+python run.py test draws/draw_2025.json --year 2025
 
 # Generate full analytics report
-python run.py analyze draws/draw_2025.json
+python run.py analyze draws/draw_2025.json --year 2025
 
-# Generate stakeholder report (Excel)
-python run.py report draws/draw_2025.json --output analytics.xlsx
-
-# Generate club-specific report
-python run.py club-report draws/draw_2025.json Maitland --output reports/
-
-# Generate compliance certificate
-python run.py cert draws/draw_2025.json --output compliance.xlsx
+# Generate pre-season configuration report
+python run.py preseason --year 2026
 
 # Get help
 python run.py --help

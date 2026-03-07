@@ -1101,28 +1101,44 @@ def get_soft_constraint(constraint_name: str, slack_level: int = 1, **kwargs):
     Factory function to get the soft version of a constraint.
     
     Args:
-        constraint_name: Name of the original constraint class
-        slack_level: 0=tight, 1=normal, 2=relaxed
+        constraint_name: Name of the original constraint class (with or without AI suffix)
+        slack_level: 0=tight, 1=normal, 2=relaxed, 3+=very relaxed
         **kwargs: Additional arguments for the specific constraint
     
     Returns:
-        Instance of the soft constraint class
+        Instance of the soft constraint class, or None if no soft version available
     """
     SOFT_CONSTRAINTS = {
+        # Level 2 - HIGH
         'ClubDayConstraint': ClubDayConstraintSoft,
+        'ClubDayConstraintAI': ClubDayConstraintSoft,
         'AwayAtMaitlandGrouping': AwayAtMaitlandGroupingSoft,
+        'AwayAtMaitlandGroupingAI': AwayAtMaitlandGroupingSoft,
         'TeamConflictConstraint': TeamConflictConstraintSoft,
+        'TeamConflictConstraintAI': TeamConflictConstraintSoft,
+        
+        # Level 3 - MEDIUM
         'EqualMatchUpSpacingConstraint': EqualMatchUpSpacingConstraintSoft,
+        'EqualMatchUpSpacingConstraintAI': EqualMatchUpSpacingConstraintSoft,
         'ClubGradeAdjacencyConstraint': ClubGradeAdjacencyConstraintSoft,
+        'ClubGradeAdjacencyConstraintAI': ClubGradeAdjacencyConstraintSoft,
         'ClubVsClubAlignment': ClubVsClubAlignmentSoft,
+        'ClubVsClubAlignmentAI': ClubVsClubAlignmentSoft,
+        
+        # Level 4 - LOW
         'EnsureBestTimeslotChoices': EnsureBestTimeslotChoicesSoft,
+        'EnsureBestTimeslotChoicesAI': EnsureBestTimeslotChoicesSoft,
         'MaximiseClubsPerTimeslotBroadmeadow': MaximiseClubsPerTimeslotBroadmeadowSoft,
+        'MaximiseClubsPerTimeslotBroadmeadowAI': MaximiseClubsPerTimeslotBroadmeadowSoft,
         'MinimiseClubsOnAFieldBroadmeadow': MinimiseClubsOnAFieldBroadmeadowSoft,
+        'MinimiseClubsOnAFieldBroadmeadowAI': MinimiseClubsOnAFieldBroadmeadowSoft,
         'PreferredTimesConstraint': PreferredTimesConstraintSoft,
+        'PreferredTimesConstraintAI': PreferredTimesConstraintSoft,
     }
     
     if constraint_name not in SOFT_CONSTRAINTS:
-        raise ValueError(f"No soft version available for {constraint_name}")
+        # No soft version available (Level 1 constraints, etc.)
+        return None
     
     return SOFT_CONSTRAINTS[constraint_name](slack_level=slack_level, **kwargs)
 

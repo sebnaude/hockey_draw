@@ -463,12 +463,15 @@ class MatchupSpacingValidator(DrawOutcomeValidator):
 class PHLTimingValidator(DrawOutcomeValidator):
     """Validate PHL-specific timing rules."""
     
+    GOSFORD_FRIDAY_TARGET = 8  # AGM decision
+    
     def validate(self) -> List[str]:
         self.violations = []
         
         # Track PHL games per (week, day, day_slot) at Broadmeadow
         phl_per_slot = defaultdict(list)
         friday_broadmeadow_count = 0
+        friday_gosford_count = 0
         
         for game in self.scheduled_games:
             if game[2] == 'PHL':
@@ -482,6 +485,10 @@ class PHLTimingValidator(DrawOutcomeValidator):
                     
                     if day == 'Friday':
                         friday_broadmeadow_count += 1
+                
+                # Track Gosford Friday games
+                if location == 'Central Coast Hockey Park' and day == 'Friday':
+                    friday_gosford_count += 1
         
         # Check no concurrent PHL at Broadmeadow
         for (week, day, day_slot), games in phl_per_slot.items():
@@ -491,10 +498,16 @@ class PHLTimingValidator(DrawOutcomeValidator):
                     f"{[f'{g[0]} vs {g[1]}' for g in games]}"
                 )
         
-        # Check max Friday night games
+        # Check max Friday night games at Broadmeadow
         if friday_broadmeadow_count > 3:
             self.violations.append(
                 f"Too many Friday PHL games at Broadmeadow: {friday_broadmeadow_count} (max 3)"
+            )
+        
+        # Check exactly 8 Friday night games at Gosford (AGM decision)
+        if friday_gosford_count != self.GOSFORD_FRIDAY_TARGET:
+            self.violations.append(
+                f"Gosford Friday PHL games: {friday_gosford_count} (expected exactly {self.GOSFORD_FRIDAY_TARGET} - AGM decision)"
             )
         
         return self.violations

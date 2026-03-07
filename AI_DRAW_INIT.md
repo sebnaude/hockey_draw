@@ -223,9 +223,37 @@ elif is_second and second_valid_slots:
 This means:
 - **PHL games:** Only slots in `PHL_GAME_TIMES` get variables
 - **2nd grade games:** Only slots in `SECOND_GRADE_TIMES` get variables (if defined)
-- **Other grades:** All slots in `DAY_TIME_MAP` get variables
+- **Other grades (3rd-6th):** Most slots in `DAY_TIME_MAP` get variables, **except PHL-only venues/days**
 
-**Impact:** Reduces PHL variables by ~60%, 2nd grade by ~50% compared to all possible combinations.
+**Impact:** Reduces PHL variables by ~60%, 2nd grade by ~50%, lower grades by ~15% compared to all possible combinations.
+
+#### 4.5 Lower Grades Exclusion (3rd-6th)
+
+**HARDCODED in `generate_X()` - these are automatic exclusions:**
+
+| Exclusion | Reason | Impact |
+|-----------|--------|--------|
+| **Gosford (Central Coast Hockey Park)** | PHL-only venue - only Gosford PHL plays there | ~10,000+ vars saved |
+| **Friday nights** | PHL-only timeslot - all lower grades play Sunday only | ~14,000+ vars saved |
+
+Lower grades (3rd-6th) **cannot** and **should not** play at:
+- Gosford (Central Coast Hockey Park) - this is an away venue for PHL only
+- Any Friday timeslot - Friday nights are PHL-exclusive
+
+These exclusions are enforced in `utils.py` → `generate_X()`:
+```python
+# Build set of PHL-only venues and days
+phl_only_venues = {'Central Coast Hockey Park'}  # Gosford is PHL-only
+phl_only_days = {'Friday'}  # Friday nights are PHL-only
+
+# Lower grades (3rd-6th): Exclude PHL-only venues and days
+if t.field.location in phl_only_venues:
+    continue  # Skip - no variable created
+if t.day in phl_only_days:
+    continue  # Skip - no variable created
+```
+
+**DO NOT configure Gosford or Friday slots for non-PHL grades** - they will be ignored anyway.
 
 ---
 
@@ -326,18 +354,27 @@ These rules are implemented via variable filtering (no 2nd grade at Gosford) and
 The `PHLAndSecondGradeTimes` constraint enforces:
 - No concurrent PHL games at Broadmeadow (same timeslot)
 - No concurrent PHL + 2nd grade from same club at Broadmeadow
-- Max 3 Friday night games at Broadmeadow
+- **Max 3 Friday night games at Broadmeadow** (NIHC)
+- **Exactly 8 Friday night games at Gosford** (CCHP) - AGM decision 2026
 
 **Verify:** PHL times in config match what the constraint expects.
+
+**Testing:** The `PHLTimingValidator` in `tests/test_draw_outcomes.py` validates both Friday limits.
 
 #### 8.2 Gosford Constraint
 
 Gosford has special rules:
 - Only 1 game per week at Gosford (it's an away venue)
-- Friday nights or Sunday 12pm/1:30pm only
-- 8 Friday night games total per season
+- Friday nights (8pm) or Sunday 12pm/1:30pm only
+- **Exactly 8 Friday night games total per season** (AGM decision 2026)
+- Only PHL plays at Gosford (Central Coast Hockey Park)
 
 **Verify:** `DAY_TIME_MAP` and `PHL_GAME_TIMES` for Gosford match these rules.
+
+**Config:** See `FRIDAY_NIGHT_CONFIG` in `config/season_{year}.py` for:
+- `gosford_friday_count`: 8 (exact count enforced by constraint)
+- `friday_clubs`: Which clubs play at Gosford on Friday
+- `gosford_friday_times`: [20:00] (8pm confirmed at AGM)
 
 ---
 

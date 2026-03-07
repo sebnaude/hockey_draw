@@ -28,6 +28,7 @@ import json
 import logging
 import traceback
 from datetime import datetime, timedelta, time as tm
+from typing import Optional, List, Dict, Any, Tuple
 from collections import defaultdict
 from pathlib import Path
 
@@ -63,7 +64,7 @@ from constraints import (
     MinimiseClubsOnAFieldBroadmeadow,
     PreferredTimesConstraint,
 )
-from constraints_ai import (
+from constraints.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,
@@ -349,7 +350,8 @@ class StagedScheduleSolver:
     """Solves the scheduling problem in stages."""
     
     def __init__(self, data: dict, checkpoint_manager: CheckpointManager = None,
-                 solver_config: SolverConfig = None, logger: logging.Logger = None):
+                 solver_config: SolverConfig = None, logger: logging.Logger = None,
+                 relax_config: dict = None):
         self.data = data
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
         self.model = None
@@ -362,9 +364,15 @@ class StagedScheduleSolver:
         self.solver_config = solver_config or get_recommended_config()
         self.resource_monitor = ResourceMonitor(logger=self.logger) if PSUTIL_AVAILABLE else None
         
+        # Relaxation config
+        self.relax_config = relax_config or {}
+        self.relaxed_groups = {}  # Dict[int, int] mapping severity level -> slack level
+        
         self.logger.info(f"StagedScheduleSolver initialized")
         self.logger.info(f"Solver config: workers={self.solver_config.num_workers}, "
                         f"linearization={self.solver_config.linearization_level}")
+        if self.relax_config.get('enabled'):
+            self.logger.info(f"Relaxation enabled: timeout={self.relax_config.get('timeout', 30)}s")
     
     def initialize_model(self, unavailability_path: str):
         """Initialize the CP model with decision variables."""
@@ -403,11 +411,32 @@ class StagedScheduleSolver:
         print(f"  Added {hints_added} solution hints from previous stage")
     
     def apply_constraints(self, constraint_classes: list) -> int:
-        """Apply a list of constraints to the model."""
+        """Apply a list of constraints to the model, respecting relaxation settings."""
         total_constraints = 0
         prior_count = len(self.model.Proto().constraints)
         
         for constraint_class in constraint_classes:
+            # Check if this constraint's severity group is relaxed
+            if self.relaxed_groups and self.relax_config.get('enabled'):
+                from constraints.severity import get_severity_level
+                level = get_severity_level(constraint_class)
+                
+                if level in self.relaxed_groups:
+                    # Use soft version with specified slack
+                    slack = self.relaxed_groups[level]
+                    from constraints.soft import get_soft_constraint
+                    soft_instance = get_soft_constraint(constraint_class.__name__, slack)
+                    
+                    if soft_instance:
+                        soft_instance.apply(self.model, self.X, self.data)
+                        current_count = len(self.model.Proto().constraints)
+                        added = current_count - prior_count
+                        print(f"    {constraint_class.__name__} (SOFT slack={slack}): {added} constraints")
+                        total_constraints += added
+                        prior_count = current_count
+                        continue
+            
+            # Use hard constraint
             constraint = constraint_class()
             constraint.apply(self.model, self.X, self.data)
             
@@ -418,6 +447,62 @@ class StagedScheduleSolver:
             prior_count = current_count
         
         return total_constraints
+    
+    def find_and_relax_problem_group(self, constraint_classes: list) -> Optional[int]:
+        """
+        Find which severity group causes infeasibility and relax it.
+        
+        This performs quick feasibility tests by dropping severity groups
+        (4, then 3, then 2) to identify the problem group. Once found,
+        sets self.relaxed_groups to use soft constraints for that group.
+        
+        Returns:
+            Problem severity level, or None if all feasible
+        """
+        from constraints.severity import (
+            SeverityGroupResolver, 
+            create_relaxation_test_func,
+            group_constraints_by_severity
+        )
+        
+        timeout = self.relax_config.get('timeout', 30.0)
+        
+        print("\n" + "="*60)
+        print("SEVERITY-BASED RELAXATION")
+        print("="*60)
+        self.logger.info("Starting severity-based relaxation analysis...")
+        
+        # Create resolver
+        resolver = SeverityGroupResolver(constraint_classes, verbose=True)
+        
+        # Create test function
+        test_func = create_relaxation_test_func(
+            self.data, 
+            generate_X,
+            timeout=timeout
+        )
+        
+        # Find problem group
+        problem_level = resolver.find_problem_severity_group(test_func, timeout)
+        
+        if problem_level is None:
+            print("\n[OK] All constraints are feasible!")
+            self.logger.info("All constraints feasible, no relaxation needed")
+            return None
+        
+        if problem_level == 1:
+            print("\n[FATAL] Level 1 constraints are infeasible - cannot relax")
+            self.logger.error("Level 1 constraints infeasible - check data/config")
+            return 1
+        
+        # Relax the problem group
+        print(f"\n[RELAX] Setting slack=1 for severity level {problem_level}")
+        self.relaxed_groups[problem_level] = 1
+        self.logger.info(f"Relaxed severity group {problem_level} with slack=1")
+        
+        print(resolver.get_state_summary())
+        
+        return problem_level
     
     def build_objective(self):
         """Build the optimization objective."""
@@ -586,7 +671,16 @@ class StagedScheduleSolver:
             if self.current_solution:
                 self.add_solution_hints(self.current_solution)
             
-            # Apply constraints
+            # If relaxation is enabled, check feasibility first and relax if needed
+            if self.relax_config.get('enabled'):
+                problem_level = self.find_and_relax_problem_group(stage_config['constraints'])
+                if problem_level == 1:
+                    # Level 1 infeasibility - cannot proceed
+                    self.logger.error("Level 1 constraints infeasible - aborting")
+                    print("\n[FATAL] Level 1 constraints are infeasible. Check data/config.")
+                    return None
+            
+            # Apply constraints (uses soft versions for relaxed groups)
             self.logger.info("Applying constraints...")
             print("Applying constraints:")
             constraints_added = self.apply_constraints(stage_config['constraints'])
@@ -655,7 +749,8 @@ def load_data(year: int) -> dict:
 # ============== Main Entry Points ==============
 
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
-                solver_config: SolverConfig = None, year: int = None):
+                solver_config: SolverConfig = None, year: int = None,
+                stages_to_run: list = None, relax_config: dict = None):
     """
     Main entry point for staged solving.
     
@@ -665,6 +760,8 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         solver_config: Optional solver configuration for resource management.
         year: The season year (e.g., 2025, 2026). Required.
+        stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft
+        relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -703,7 +800,13 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     
     # Initialize solver with config
     checkpoint_manager = CheckpointManager()
-    solver = StagedScheduleSolver(data, checkpoint_manager, solver_config=solver_config, logger=logger)
+    solver = StagedScheduleSolver(
+        data, 
+        checkpoint_manager, 
+        solver_config=solver_config, 
+        logger=logger,
+        relax_config=relax_config
+    )
     
     # Initialize model
     unavailability_path = os.path.join('data', str(year), 'noplay')
@@ -719,7 +822,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     
     # Run staged solve
     try:
-        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from)
+        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run)
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")
         logger.critical(traceback.format_exc())
@@ -784,7 +887,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None):
+def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None):
     """
     Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
@@ -795,6 +898,7 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
         exclude_constraints: Optional list of constraint class names to exclude.
         use_ai: If True, use AI-enhanced constraint implementations.
         year: The season year (e.g., 2025, 2026). Required.
+        relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -838,9 +942,7 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
     
     print(f"  {len(X)} decision variables")
     
-    # Apply all constraints
-    print("\nApplying constraints...")
-    
+    # Get constraint classes (not instances yet)
     stages = STAGES_AI if use_ai else STAGES
     
     exclude_set = set(exclude_constraints or [])
@@ -857,15 +959,65 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
     if exclude_set:
         print(f"  Excluding constraints: {', '.join(exclude_set)}")
     
-    all_constraints = [
-        cls() for stage in stages.values() 
+    all_constraint_classes = [
+        cls for stage in stages.values() 
         for cls in stage['constraints']
         if cls.__name__ not in normalized_exclude
     ]
     
-    for constraint in all_constraints:
+    # Relaxation: find problem severity group if enabled
+    relaxed_groups = {}  # Dict[int, int] mapping severity level -> slack level
+    
+    if relax_config and relax_config.get('enabled'):
+        from constraints.severity import (
+            SeverityGroupResolver,
+            create_relaxation_test_func,
+            get_severity_level
+        )
+        
+        timeout = relax_config.get('timeout', 30.0)
+        
+        print("\n" + "="*60)
+        print("SEVERITY-BASED RELAXATION")
+        print("="*60)
+        
+        resolver = SeverityGroupResolver(all_constraint_classes, verbose=True)
+        test_func = create_relaxation_test_func(data, generate_X, timeout=timeout)
+        
+        problem_level = resolver.find_problem_severity_group(test_func, timeout)
+        
+        if problem_level == 1:
+            print("\n[FATAL] Level 1 constraints are infeasible. Check data/config.")
+            return None, data
+        elif problem_level is not None:
+            print(f"\n[RELAX] Setting slack=1 for severity level {problem_level}")
+            relaxed_groups[problem_level] = 1
+            print(resolver.get_state_summary())
+    
+    # Apply all constraints (using soft versions for relaxed groups)
+    print("\nApplying constraints...")
+    
+    for cls in all_constraint_classes:
+        # Check if this constraint's severity group is relaxed
+        if relaxed_groups:
+            from constraints.severity import get_severity_level
+            level = get_severity_level(cls)
+            
+            if level in relaxed_groups:
+                # Use soft version with specified slack
+                slack = relaxed_groups[level]
+                from constraints.soft import get_soft_constraint
+                soft_instance = get_soft_constraint(cls.__name__, slack)
+                
+                if soft_instance:
+                    soft_instance.apply(model, X, data)
+                    print(f"  {cls.__name__} (SOFT slack={slack})")
+                    continue
+        
+        # Use hard constraint
+        constraint = cls()
         constraint.apply(model, X, data)
-        print(f"  {constraint.__class__.__name__}")
+        print(f"  {cls.__name__}")
     
     print(f"  Total: {len(model.Proto().constraints)} constraints")
     

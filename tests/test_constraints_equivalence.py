@@ -29,7 +29,7 @@ from constraints import (
     MinimiseClubsOnAFieldBroadmeadow,
 )
 
-from constraints_ai import (
+from constraints.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

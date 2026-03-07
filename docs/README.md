@@ -266,45 +266,43 @@ refactored/
 ```powershell
 cd refactored
 
-# Generate a new draw (staged solving - recommended)
-python run.py generate --year 2025 --staged
+# Generate a new draw (staged solving: stage1_required → stage2_soft)
+python run.py generate --year 2025
+
+# Generate with simple mode (all constraints at once)
+python run.py generate --year 2025 --simple
+
+# Run only stage 1 (required constraints)
+python run.py generate --year 2025 --stages stage1_required
 
 # Generate with AI constraints (opt-in alternative constraint set)
 python run.py generate --year 2025 --ai
 
 # Generate with AI constraints in simple mode, excluding problematic constraints
-python run.py generate --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --year 2025 --workers 14
+python run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --workers 14
 
 # Resume from a checkpoint
-python run.py generate --year 2025 --staged --resume run_1
+python run.py generate --year 2025 --resume run_1 stage1_required
+
+# Diagnose infeasibility (find blocking constraint)
+python run.py diagnose --year 2025
+
+# Diagnose with auto-relaxation
+python run.py diagnose --year 2025 --resolve
 
 # Test an existing draw for violations
-python run.py test draws/draw_2025.json
+python run.py test draws/draw_2025.json --year 2025
 
 # Generate full analytics report
-python run.py analyze draws/draw_2025.json
+python run.py analyze draws/draw_2025.json --year 2025
 
-# Generate stakeholder Excel report
-python run.py report draws/draw_2025.json --output analytics.xlsx
-
-# Generate club-specific report
-python run.py club-report draws/draw_2025.json Maitland --output reports/
-
-# Generate compliance certificate
-python run.py cert draws/draw_2025.json --output compliance.xlsx
+# Generate pre-season configuration report
+python run.py preseason --year 2026
 
 # Get help
 python run.py --help
-```
-
-### Legacy Commands
-
-```powershell
-# Direct staged solver
-python main_staged.py
-
-# Resume from checkpoint (legacy)
-python main_staged.py --resume run_1 stage2_strong
+python run.py generate --help
+python run.py diagnose --help
 ```
 
 ---

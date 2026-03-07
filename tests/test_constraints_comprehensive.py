@@ -206,6 +206,79 @@ class TestPHLAndSecondGradeTimes:
         friday_game_count = sum(1 for k, v in X.items() if solver.Value(v) == 1)
         assert friday_game_count <= 3
 
+    def test_gosford_friday_games_exactly_8(self):
+        """Test that exactly 8 PHL games are scheduled at Gosford on Friday (AGM decision)."""
+        # Create Gosford field
+        gosford_field = PlayingField(location='Central Coast Hockey Park', name='Wyong Main')
+        
+        # Create clubs and teams
+        gosford_club = Club(name='Gosford', home_field='Central Coast Hockey Park')
+        tigers_club = Club(name='Tigers', home_field='Newcastle International Hockey Centre')
+        wests_club = Club(name='Wests', home_field='Newcastle International Hockey Centre')
+        maitland_club = Club(name='Maitland', home_field='Maitland Park')
+        
+        clubs = [gosford_club, tigers_club, wests_club, maitland_club]
+        
+        teams = [
+            Team(name='Gosford PHL', club=gosford_club, grade='PHL'),
+            Team(name='Tigers PHL', club=tigers_club, grade='PHL'),
+            Team(name='Wests PHL', club=wests_club, grade='PHL'),
+            Team(name='Maitland PHL', club=maitland_club, grade='PHL'),
+        ]
+        
+        # Generate games (Gosford vs all others = 3 home games per round * 2 rounds = 6)
+        # But we need exactly 8, so include full round robin
+        games = [
+            ('Gosford PHL', 'Tigers PHL', 'PHL'),
+            ('Gosford PHL', 'Wests PHL', 'PHL'),
+            ('Gosford PHL', 'Maitland PHL', 'PHL'),
+            ('Tigers PHL', 'Wests PHL', 'PHL'),
+            ('Tigers PHL', 'Maitland PHL', 'PHL'),
+            ('Wests PHL', 'Maitland PHL', 'PHL'),
+        ]
+        
+        # Create 10 Friday night slots at Gosford (need more than 8 to test constraint)
+        friday_slots = []
+        for week in range(1, 11):
+            date = datetime(2025, 3, 21) + timedelta(weeks=week-1)
+            friday_slots.append(Timeslot(
+                date=date.strftime('%Y-%m-%d'),
+                day='Friday',
+                time='20:00',
+                week=week,
+                day_slot=1,
+                field=gosford_field,
+                round_no=week
+            ))
+        
+        model, X = create_model_and_vars(games, friday_slots)
+        
+        data = {
+            'games': games,
+            'timeslots': friday_slots,
+            'teams': teams,
+            'clubs': clubs,
+            'fields': [gosford_field],
+            'current_week': 0,
+            'phl_preferences': {'preferred_dates': []},
+        }
+        
+        constraint = PHLAndSecondGradeTimes()
+        constraint.apply(model, X, data)
+        
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        
+        # Should be feasible
+        assert status in [cp_model.OPTIMAL, cp_model.FEASIBLE], f"Solver status: {solver.status_name(status)}"
+        
+        # Count Friday games at Gosford - should be exactly 8
+        gosford_friday_count = sum(
+            1 for k, v in X.items() 
+            if solver.Value(v) == 1 and k[10] == 'Central Coast Hockey Park'
+        )
+        assert gosford_friday_count == 8, f"Expected 8 Gosford Friday games, got {gosford_friday_count}"
+
 
 # ============== MaxMaitlandHomeWeekends Tests ==============
 
