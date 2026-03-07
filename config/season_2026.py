@@ -75,6 +75,39 @@ PHL_GAME_TIMES = {
     },
 }
 
+# ============== 2nd Grade Game Variable Generation Dictionary ==============
+# THIS DICT CONTROLS WHICH GAME VARIABLES ARE CREATED FOR 2ND GRADE
+# Only venues listed here will have 2nd grade variables created.
+#
+# Key rules:
+# - Cannot play on South Field (SF) at NIHC - only EF and WF listed
+# - Gosford not listed (PHL-only venue)
+# - Times: PHL slots PLUS one slot before/after (where available in DAY_TIME_MAP)
+#
+# IMPORTANT: Cannot create NEW timeslots - only existing DAY_TIME_MAP slots.
+#
+# Structure: { venue: { field: { day: [times] } } }
+
+SECOND_GRADE_TIMES = {
+    'Newcastle International Hockey Centre': {
+        'EF': {  # East Field (no SF)
+            # PHL times + 10:00 (before) + 17:30 (after)
+            'Sunday': [tm(10, 0), tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0), tm(17, 30)]
+        },
+        'WF': {  # West Field (no SF)
+            'Sunday': [tm(10, 0), tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0), tm(17, 30)]
+        },
+    },
+    # Gosford not listed - PHL-only venue
+    'Maitland Park': {
+        'Maitland Main Field': {
+            # PHL: 12:00, 13:00, 15:00, 16:30
+            # +10:30 (before 12:00), no slot after 16:30 exists in DAY_TIME_MAP
+            'Sunday': [tm(10, 30), tm(12, 0), tm(13, 0), tm(15, 0), tm(16, 30)]
+        },
+    },
+}
+
 # ============== Field Unavailabilities ==============
 # Blocked weekends/days where NO games can be scheduled (HARD constraints)
 # Email states: "20 playing weekends" from Mar 22 to Aug 30
@@ -152,15 +185,15 @@ PREFERENCE_NO_PLAY = {
 }
 
 # ============== PHL Preferences ==============
+# Note: PHL_PREFERENCES only supports 'preferred_dates' key for the constraint system.
+# Other settings are documented in comments below.
+#
+# Additional PHL Rules (enforced via constraints, not this dict):
+#   - PHL/2nd back-to-back: CONFIRMED for 2026
+#   - Teams playing Gosford have 2nd grade bye: CONFIRMED
 
 PHL_PREFERENCES = {
-    'preferred_dates': [],
-    
-    # PHL/2nd back-to-back confirmed for 2026
-    'phl_2nd_back_to_back': True,
-    
-    # Teams playing Gosford have 2nd grade bye (confirmed)
-    'gosford_2nd_grade_bye': True,
+    'preferred_dates': [],  # Add specific date preferences here if needed
 }
 
 # ============== PHL SCHEDULE SUMMARY ==============
@@ -262,6 +295,7 @@ SEASON_CONFIG = {
     # Time configurations
     'day_time_map': DAY_TIME_MAP,
     'phl_game_times': PHL_GAME_TIMES,  # Controls PHL variable generation (venue/field/day/time)
+    'second_grade_times': SECOND_GRADE_TIMES,  # Controls 2nd grade variable generation
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,

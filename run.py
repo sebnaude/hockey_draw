@@ -139,6 +139,22 @@ Examples:
     preseason_parser.add_argument('--output', '-o', type=str,
                                   help='Output file path (optional)')
     
+    # Diagnose command - find infeasibility and resolve
+    diagnose_parser = subparsers.add_parser('diagnose', 
+        help='Find blocking constraints and resolve infeasibility')
+    diagnose_parser.add_argument('--year', type=int, required=True,
+                                 help='Season year (e.g., 2025, 2026). Required.')
+    diagnose_parser.add_argument('--stage', type=str, default='stage1_required',
+                                 help='Stage to analyze (default: stage1_required)')
+    diagnose_parser.add_argument('--timeout', type=float, default=5.0,
+                                 help='Timeout per feasibility test in seconds (default: 5)')
+    diagnose_parser.add_argument('--resolve', action='store_true',
+                                 help='Attempt iterative relaxation to find feasible solution')
+    diagnose_parser.add_argument('--max-iterations', type=int, default=10,
+                                 help='Max relaxation iterations (default: 10)')
+    diagnose_parser.add_argument('--ai', action='store_true',
+                                 help='Use AI constraint implementations')
+    
     args = parser.parse_args()
     
     if args.command is None:
@@ -162,6 +178,8 @@ Examples:
         run_list_constraints(use_ai=args.ai)
     elif args.command == 'preseason':
         run_preseason(args)
+    elif args.command == 'diagnose':
+        run_diagnose(args)
 
 
 def run_generate(args):
@@ -187,20 +205,20 @@ def run_generate(args):
     # Configure solver based on arguments
     solver_config = None
     if args.minimal_memory:
-        print("\n⚙️  Using MINIMAL MEMORY configuration (2 workers, no probing)")
+        print("\n[*] Using MINIMAL MEMORY configuration (2 workers, no probing)")
         solver_config = SolverConfig.minimal_memory_config()
     elif args.low_memory:
-        print("\n⚙️  Using LOW MEMORY configuration (4 workers)")
+        print("\n[*] Using LOW MEMORY configuration (4 workers)")
         solver_config = SolverConfig.low_memory_config()
     elif args.high_performance:
-        print("\n⚙️  Using HIGH PERFORMANCE configuration (all cores)")
+        print("\n[*] Using HIGH PERFORMANCE configuration (all cores)")
         solver_config = SolverConfig.high_performance_config()
     elif args.workers:
-        print(f"\n⚙️  Using custom worker count: {args.workers}")
+        print(f"\n[*] Using custom worker count: {args.workers}")
         solver_config = SolverConfig.balanced_config()
         solver_config.num_workers = args.workers
     else:
-        print("\n⚙️  Using auto-detected solver configuration")
+        print("\n[*] Using auto-detected solver configuration")
         solver_config = get_recommended_config()
     
     print(f"  Workers: {solver_config.num_workers}")
@@ -483,10 +501,93 @@ def run_preseason(args):
     success = run_preseason_check(args.year, args.output)
     
     if success:
-        print("\n✅ Pre-season validation PASSED")
+        print("\n[OK] Pre-season validation PASSED")
     else:
-        print("\n❌ Pre-season validation FAILED - see errors above")
+        print("\n[FAILED] Pre-season validation FAILED - see errors above")
         sys.exit(1)
+
+
+def run_diagnose(args):
+    """
+    Find blocking constraints and resolve infeasibility.
+    
+    This command helps identify which constraint(s) are causing
+    infeasibility and can automatically relax them to find a solution.
+    """
+    print("="*60)
+    print(f"INFEASIBILITY DIAGNOSIS - {args.year} SEASON")
+    print("="*60)
+    
+    from main_staged import load_data, STAGES, STAGES_AI
+    from infeasibility_resolver import (
+        InfeasibilityResolver, 
+        ConstraintSlackRegistry,
+        get_constraint_names_from_stage
+    )
+    
+    # Load data
+    print(f"\nLoading {args.year} season data...")
+    data = load_data(args.year)
+    
+    # Get stage configuration
+    stages = STAGES_AI if args.ai else STAGES
+    if args.stage not in stages:
+        print(f"[ERROR] Unknown stage: {args.stage}")
+        print(f"Available stages: {list(stages.keys())}")
+        sys.exit(1)
+    
+    stage_config = stages[args.stage]
+    constraint_names = get_constraint_names_from_stage(stage_config)
+    
+    print(f"\nStage: {args.stage} ({stage_config['name']})")
+    print(f"Constraints to test: {len(constraint_names)}")
+    for name in constraint_names:
+        print(f"  • {name}")
+    
+    # Create resolver
+    registry = ConstraintSlackRegistry()
+    resolver = InfeasibilityResolver(
+        data, 
+        registry, 
+        timeout_per_test=args.timeout,
+        verbose=True
+    )
+    
+    if args.resolve:
+        # Attempt iterative relaxation
+        print(f"\nAttempting iterative resolution (max {args.max_iterations} iterations)...")
+        success, relaxed = resolver.resolve_iteratively(
+            constraint_names, 
+            max_iterations=args.max_iterations
+        )
+        
+        print("\n" + resolver.get_resolution_report())
+        
+        if success:
+            print("\n[SUCCESS] Found feasible configuration!")
+            print(f"Relaxed constraints: {relaxed}")
+            sys.exit(0)
+        else:
+            print("\n[FAILED] Could not find feasible configuration")
+            sys.exit(1)
+    else:
+        # Just find the blocking constraint
+        print("\nSearching for blocking constraint...")
+        blocking = resolver.find_blocking_constraint(constraint_names)
+        
+        if blocking:
+            print(f"\n[FOUND] Blocking constraint: {blocking}")
+            state = registry.get_state(blocking)
+            if state and state.can_relax():
+                print(f"  This constraint can be relaxed (Level {state.severity_level})")
+                print(f"  Use --resolve to attempt automatic relaxation")
+            else:
+                print(f"  This is a Level 1 constraint - cannot be relaxed")
+                print(f"  Check your data/config for conflicts")
+            sys.exit(1)
+        else:
+            print("\n[OK] All constraints are feasible together!")
+            sys.exit(0)
 
 
 if __name__ == "__main__":

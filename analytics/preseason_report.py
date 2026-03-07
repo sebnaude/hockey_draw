@@ -285,20 +285,21 @@ class PreSeasonReport:
         """
         day_time_map = self.config.get('day_time_map', {})
         phl_game_times = self.config.get('phl_game_times', {})
+        second_grade_times = self.config.get('second_grade_times', {})
         
         result = {}
         
         # Standard game times
         for venue, days in day_time_map.items():
             if venue not in result:
-                result[venue] = {'standard': {}, 'phl': {}}
+                result[venue] = {'standard': {}, 'phl': {}, 'second': {}}
             for day, times in days.items():
                 result[venue]['standard'][day] = [t.strftime('%H:%M') for t in times]
         
         # PHL-specific times (new structure: venue -> field -> day -> times)
         for venue, fields in phl_game_times.items():
             if venue not in result:
-                result[venue] = {'standard': {}, 'phl': {}}
+                result[venue] = {'standard': {}, 'phl': {}, 'second': {}}
             # Collect all PHL times by day across all fields
             phl_by_day = {}
             for field, days in fields.items():
@@ -313,6 +314,28 @@ class PreSeasonReport:
             for day, info in phl_by_day.items():
                 fields_str = ', '.join(sorted(set(info['fields'])))
                 result[venue]['phl'][day] = {
+                    'times': sorted(info['times']),
+                    'fields': fields_str
+                }
+        
+        # 2nd grade specific times (same structure as PHL)
+        for venue, fields in second_grade_times.items():
+            if venue not in result:
+                result[venue] = {'standard': {}, 'phl': {}, 'second': {}}
+            # Collect all 2nd times by day across all fields
+            second_by_day = {}
+            for field, days in fields.items():
+                for day, times in days.items():
+                    if day not in second_by_day:
+                        second_by_day[day] = {'times': set(), 'fields': []}
+                    for t in times:
+                        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                        second_by_day[day]['times'].add(time_str)
+                    second_by_day[day]['fields'].append(field)
+            # Format for output
+            for day, info in second_by_day.items():
+                fields_str = ', '.join(sorted(set(info['fields'])))
+                result[venue]['second'][day] = {
                     'times': sorted(info['times']),
                     'fields': fields_str
                 }
@@ -340,6 +363,50 @@ class PreSeasonReport:
             result[field] = dates
         
         return result
+    
+    def get_slot_capacity_analysis(self, total_matchups: int) -> Dict[str, Any]:
+        """
+        Analyze slot capacity vs game requirements.
+        
+        Args:
+            total_matchups: Total number of unique matchups to schedule
+            
+        Returns:
+            Dict with capacity analysis including slots by venue, min required, etc.
+        """
+        # Get available weekends
+        weekends_count, _ = self.calculate_available_weekends()
+        
+        # Calculate minimum slots needed per weekend
+        # Each matchup needs 1 slot, games spread across weekends
+        min_slots_per_weekend = (total_matchups + weekends_count - 1) // weekends_count if weekends_count > 0 else total_matchups
+        
+        # Count slots by venue/day from day_time_map
+        day_time_map = self.config.get('day_time_map', {})
+        slots_by_venue = {}
+        total_slots_per_weekend = 0
+        
+        for venue, days in day_time_map.items():
+            slots_by_venue[venue] = {}
+            for day, times in days.items():
+                # Count fields at this venue
+                venue_fields = [f for f in self.fields if f.location == venue]
+                num_fields = len(venue_fields) if venue_fields else 1
+                slot_count = len(times) * num_fields
+                slots_by_venue[venue][day] = slot_count
+                total_slots_per_weekend += slot_count
+        
+        # Calculate capacity ratio
+        capacity_ratio = total_slots_per_weekend / min_slots_per_weekend if min_slots_per_weekend > 0 else 0
+        
+        return {
+            'total_matchups': total_matchups,
+            'weekends': weekends_count,
+            'min_slots_per_weekend': min_slots_per_weekend,
+            'slots_by_venue': slots_by_venue,
+            'total_slots_per_weekend': total_slots_per_weekend,
+            'capacity_ratio': capacity_ratio,
+        }
     
     def generate_text_report(self) -> str:
         """
@@ -380,9 +447,9 @@ class PreSeasonReport:
         if validation['blocked_dates']:
             lines.append(f"  Blocked dates: {', '.join(validation['blocked_dates'])}")
         if validation['valid']:
-            lines.append("✓ VALID: Sufficient weekends available for configured rounds")
+            lines.append("[OK] VALID: Sufficient weekends available for configured rounds")
         else:
-            lines.append(f"✗ {validation['warning']}")
+            lines.append(f"[ERROR] {validation['warning']}")
         lines.append("")
         
         # Teams by Grade
@@ -399,6 +466,54 @@ class PreSeasonReport:
         lines.append(f"\nTOTAL TEAMS: {total_teams}")
         lines.append("")
         
+        # Games per Grade
+        lines.append("-" * 40)
+        lines.append("GAMES PER GRADE")
+        lines.append("-" * 40)
+        lines.append("(Unique matchups and total games each team plays)")
+        lines.append("")
+        num_rounds = self.data.get('num_rounds', {})
+        total_matchups = 0
+        lines.append(f"{'Grade':<8} {'Teams':>6} {'Matchups':>10} {'Games/Team':>12} {'Total Games':>12}")
+        lines.append("-" * 50)
+        for grade in sorted(self.grades, key=lambda g: ['PHL', '2nd', '3rd', '4th', '5th', '6th'].index(g.name) if g.name in ['PHL', '2nd', '3rd', '4th', '5th', '6th'] else 99):
+            n_teams = len(grade.teams)
+            matchups = n_teams * (n_teams - 1) // 2  # Unique matchups
+            games_per_team = num_rounds.get(grade.name, 0)  # Games each team plays
+            total_games = matchups * 2 if games_per_team >= n_teams - 1 else matchups  # Approximate
+            total_matchups += matchups
+            lines.append(f"{grade.name:<8} {n_teams:>6} {matchups:>10} {games_per_team:>12} {total_games:>12}")
+        lines.append("-" * 50)
+        lines.append(f"{'TOTAL':<8} {total_teams:>6} {total_matchups:>10}")
+        lines.append("")
+        
+        # Slot Capacity Analysis
+        lines.append("-" * 40)
+        lines.append("SLOT CAPACITY ANALYSIS")
+        lines.append("-" * 40)
+        capacity_analysis = self.get_slot_capacity_analysis(total_matchups)
+        lines.append("")
+        lines.append(f"Total matchups to schedule: {capacity_analysis['total_matchups']}")
+        lines.append(f"Available weekends: {capacity_analysis['weekends']}")
+        lines.append(f"Min slots needed per weekend: {capacity_analysis['min_slots_per_weekend']}")
+        lines.append("")
+        lines.append("Slots per venue/day:")
+        for venue, days in capacity_analysis['slots_by_venue'].items():
+            lines.append(f"  {venue}:")
+            for day, count in days.items():
+                lines.append(f"    {day}: {count} slots")
+        lines.append("")
+        lines.append(f"Total slots per weekend: {capacity_analysis['total_slots_per_weekend']}")
+        lines.append(f"Capacity ratio: {capacity_analysis['capacity_ratio']:.1%}")
+        lines.append("")
+        if capacity_analysis['capacity_ratio'] < 1.0:
+            lines.append("[FAIL] INSUFFICIENT CAPACITY - More slots needed!")
+        elif capacity_analysis['capacity_ratio'] < 1.2:
+            lines.append("[!] Tight capacity - minimal buffer for constraints")
+        else:
+            lines.append("[OK] Adequate slot capacity")
+        lines.append("")
+        
         # Venue Times
         lines.append("-" * 40)
         lines.append("AVAILABLE GAME TIMES BY VENUE")
@@ -411,7 +526,7 @@ class PreSeasonReport:
                 for day, times in categories['standard'].items():
                     lines.append(f"    {day}: {', '.join(times)}")
             if categories.get('phl'):
-                lines.append("  PHL variable generation dict (controls which vars created):")
+                lines.append("  PHL variable filter (only these slots get vars):")
                 for day, info in categories['phl'].items():
                     if isinstance(info, dict):
                         times_str = ', '.join(info.get('times', []))
@@ -420,6 +535,17 @@ class PreSeasonReport:
                     else:
                         # Fallback for old format
                         lines.append(f"    {day}: {', '.join(info)}")
+            if categories.get('second'):
+                lines.append("  2nd grade variable filter:")
+                for day, info in categories['second'].items():
+                    if isinstance(info, dict):
+                        times_str = ', '.join(info.get('times', []))
+                        fields_str = info.get('fields', '')
+                        lines.append(f"    {day}: {times_str} [Fields: {fields_str}]")
+                    else:
+                        lines.append(f"    {day}: {', '.join(info)}")
+            elif venue == 'Central Coast Hockey Park':
+                lines.append("  2nd grade: (not listed - PHL-only venue)")
         lines.append("")
         
         # Field Unavailabilities
@@ -506,17 +632,22 @@ class PreSeasonReport:
         
         # PHL Configuration Summary
         lines.append("-" * 40)
-        lines.append("PHL CONFIGURATION")
+        lines.append("PHL & 2ND GRADE CONFIGURATION")
         lines.append("-" * 40)
-        phl_prefs = self.config.get('phl_preferences', {})
-        lines.append(f"  PHL/2nd back-to-back: {phl_prefs.get('phl_2nd_back_to_back', False)}")
-        lines.append(f"  Gosford 2nd grade bye: {phl_prefs.get('gosford_2nd_grade_bye', False)}")
-        lines.append("")
         
-        # Note about PHL variable generation
-        lines.append("  NOTE: PHL game variables are controlled by PHL_GAME_TIMES dict.")
-        lines.append("  See 'PHL variable generation dict' under venue times above.")
-        lines.append("  Slots not in that dict = no solver variable = cannot schedule PHL there.")
+        # Check if second_grade_times exists
+        second_grade_times = self.config.get('second_grade_times', {})
+        has_2nd_filtering = bool(second_grade_times)
+        gosford_in_2nd = 'Central Coast Hockey Park' in second_grade_times
+        
+        lines.append("  Variable filtering (enforced at variable generation):")
+        lines.append(f"    PHL filter active: True (via PHL_GAME_TIMES)")
+        lines.append(f"    2nd grade filter active: {has_2nd_filtering} (via SECOND_GRADE_TIMES)")
+        if has_2nd_filtering and not gosford_in_2nd:
+            lines.append(f"    Gosford: PHL-only (2nd grade not listed)")
+        lines.append("")
+        lines.append("  NOTE: Only listed venues/fields/times get variables created.")
+        lines.append("  See venue times section above for detailed slot listings.")
         lines.append("")
         
         # Home Field Mappings
@@ -572,14 +703,14 @@ class PreSeasonReport:
         if errors:
             lines.append("ERRORS (must fix before running solver):")
             for err in errors:
-                lines.append(f"  ✗ {err}")
+                lines.append(f"  [X] {err}")
         else:
-            lines.append("✓ No critical errors found")
+            lines.append("[OK] No critical errors found")
         
         if warnings:
             lines.append("\nWARNINGS (may need attention):")
             for warn in warnings:
-                lines.append(f"  ⚠ {warn}")
+                lines.append(f"  [!] {warn}")
         
         lines.append("")
         lines.append("=" * 80)

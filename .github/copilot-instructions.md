@@ -59,19 +59,38 @@ If encountering crashes without Python tracebacks:
 - Solver logs: `logs/`
 - **Pre-season reports**: `reports/`
 
-### 6. PHL Game Variable Generation
+### 6. PHL & 2nd Grade Variable Filtering
 
-**CRITICAL:** `PHL_GAME_TIMES` in the season config is NOT a preference dict.
-It controls which **decision variables** are created for PHL games.
+**CRITICAL:** These dicts control which **decision variables** are created.
+Only venues/fields/times listed will have variables created.
 
 - Filtering happens in `utils.py` → `generate_X()`
-- Slots not in `PHL_GAME_TIMES` = no variable = cannot schedule PHL there
-- This dramatically reduces solver variables (faster solve)
+- Dramatically reduces solver variables (faster solve)
 
-**When updating PHL allowed slots:**
-1. Modify `PHL_GAME_TIMES` in `config/season_{year}.py`
-2. Structure: `{ venue: { field: { day: [times] } } }`
-3. The filtering in `generate_X()` will automatically apply
+#### PHL Rules (`PHL_GAME_TIMES`):
+- Only EF and WF listed at NIHC (SF not listed)
+- Gosford: limited slots (away venue)
+- Restricted time windows
+
+#### 2nd Grade Rules (`SECOND_GRADE_TIMES`):
+- Only EF and WF listed at NIHC (SF not listed)
+- Gosford not listed (PHL-only venue)
+- PHL times PLUS one slot before/after (where available)
+
+**IMPORTANT:** Cannot create NEW timeslots - only existing `DAY_TIME_MAP` slots.
+
+**When updating allowed slots:**
+1. Modify `PHL_GAME_TIMES` or `SECOND_GRADE_TIMES` in `config/season_{year}.py`
+2. Two formats supported:
+   - **2025 (simple)**: `{ venue: { day: [times] } }` - any field at venue valid
+   - **2026+ (nested)**: `{ venue: { field: { day: [times] } } }` - specific fields only
+3. The filtering in `generate_X()` auto-detects the format
+
+### 7. PHL_PREFERENCES Dict
+
+**CRITICAL:** The `PHL_PREFERENCES` dict only supports the `preferred_dates` key.
+Do NOT add other keys (like `phl_2nd_back_to_back`) - they will cause constraint errors.
+Document additional PHL rules as comments instead.
 
 ## Quick Commands Reference
 

@@ -154,12 +154,55 @@ Slots not in this dict = no PHL variable = impossible to schedule PHL there.
 | Gosford | Wyong Main | Sunday | 12:00, 13:30 |
 | Maitland | Main | Sunday | 12:00, 13:00, 15:00, 16:30 |
 
-**Verification Questions:**
-- [ ] Is SF excluded from NIHC? (PHL cannot play South Field)
-- [ ] Does Gosford Friday only have 8pm? (AGM confirmed)
-- [ ] Are Gosford Sunday times 12pm/1:30pm only?
+**MANDATORY PHL SLOT VERIFICATION:**
 
-#### 4.3 How Variable Filtering Works
+Before running the solver, verify `PHL_GAME_TIMES` includes slots that meet the season's requirements:
+
+1. **Friday Night Games** - Verify slots exist at required venues:
+   - [ ] NIHC (Broadmeadow): Friday time configured? (typically 19:00)
+   - [ ] Gosford: Friday time configured? (check AGM-confirmed time)
+   
+2. **Sunday Games** - Verify all PHL venues have Sunday slots:
+   - [ ] NIHC: Sunday times include required windows?
+   - [ ] Gosford: Sunday times match club agreement?
+   - [ ] Maitland: Sunday times configured?
+
+3. **Field Restrictions** - Verify field exclusions:
+   - [ ] Are any fields excluded for PHL? (e.g., SF at NIHC)
+   - [ ] Do excluded fields match the season's requirements?
+
+4. **Slot Sufficiency** - Run this verification:
+   ```powershell
+   .\.venv\Scripts\python.exe -c "from config import load_season_data; d=load_season_data({year}); phl=[t for t in d['teams'] if t.grade=='PHL']; print(f'PHL teams: {len(phl)}'); print(f'PHL games per team: {len(phl)-1}'); print(f'Total PHL matchups: {len(phl)*(len(phl)-1)//2}')"
+   ```
+   Then verify enough PHL slots exist across all weekends.
+
+**Note:** These requirements change year-on-year based on club agreements. 
+Review AGM minutes and club emails to determine current season's PHL slot requirements.
+
+#### 4.3 2nd Grade Game Variable Generation Dict (`SECOND_GRADE_TIMES`)
+
+**NEW IN 2026:** 2nd grade also has restricted variable generation.
+
+**Key Rules:**
+- Only venues/fields listed get 2nd grade variables
+- SF not listed at NIHC (only EF and WF)
+- Gosford not listed (PHL-only venue)
+- Times: PHL slots PLUS one slot before/after (where available in `DAY_TIME_MAP`)
+
+**IMPORTANT:** Cannot create NEW timeslots - only existing `DAY_TIME_MAP` slots.
+
+**Structure:** `{ venue: { field: { day: [times] } } }`
+
+| Venue | Field | Day | Times | Notes |
+|-------|-------|-----|-------|-------|
+| NIHC | EF | Sunday | 10:00, 11:30, 13:00, 14:30, 16:00, 17:30 | PHL + adjacent |
+| NIHC | WF | Sunday | 10:00, 11:30, 13:00, 14:30, 16:00, 17:30 | PHL + adjacent |
+| Maitland | Main | Sunday | 10:30, 12:00, 13:00, 15:00, 16:30 | PHL + 10:30 before |
+
+*SF and Gosford not listed = no 2nd grade variables created there.*
+
+#### 4.4 How Variable Filtering Works
 
 In `utils.py` → `generate_X()`:
 
@@ -169,13 +212,20 @@ if is_phl:
     slot_key = (t.field.location, t.field.name, t.day, t.time)
     if slot_key not in phl_valid_slots:
         continue  # Skip - no variable created
+
+# For 2nd grade games, filter if second_grade_times is defined
+elif is_second and second_valid_slots:
+    slot_key = (t.field.location, t.field.name, t.day, t.time)
+    if slot_key not in second_valid_slots:
+        continue  # Skip - no variable created
 ```
 
 This means:
 - **PHL games:** Only slots in `PHL_GAME_TIMES` get variables
+- **2nd grade games:** Only slots in `SECOND_GRADE_TIMES` get variables (if defined)
 - **Other grades:** All slots in `DAY_TIME_MAP` get variables
 
-**Impact:** Reduces PHL variables by ~60% compared to creating all possible combinations.
+**Impact:** Reduces PHL variables by ~60%, 2nd grade by ~50% compared to all possible combinations.
 
 ---
 
@@ -234,12 +284,28 @@ TEAM_CONFLICTS = [
 
 ---
 
-### 6. PHL-Specific Configuration
+### 6. PHL & 2nd Grade Configuration
 
-| Setting | Value | What It Does |
-|---------|-------|--------------|
-| `phl_2nd_back_to_back` | True | PHL and 2nd grade from same club play consecutively |
-| `gosford_2nd_grade_bye` | True | 2nd grade teams get bye when their PHL plays at Gosford |
+**Variable filtering** (enforced in `generate_X()`, not as constraints):
+
+| Grade | Rule | Implementation |
+|-------|------|----------------|
+| PHL | Cannot play on SF at NIHC | Excluded from `PHL_GAME_TIMES` |
+| PHL | Restricted time windows | Only slots in `PHL_GAME_TIMES` |
+| 2nd | Cannot play on SF at NIHC | Excluded from `SECOND_GRADE_TIMES` |
+| 2nd | Cannot play at Gosford | Gosford excluded from `SECOND_GRADE_TIMES` |
+| 2nd | Adjacent to PHL times | PHL slots + 1 before + 1 after |
+
+**Constraint behaviors** (enforced by `PHLAndSecondGradeTimes` constraint):
+
+| Rule | Description |
+|------|-------------|
+| No concurrent PHL at NIHC | Only 1 PHL game per timeslot at Broadmeadow |
+| No PHL + 2nd overlap (same club) | Club's 2nd grade not at same time as club's PHL |
+| Max 3 Friday night PHL | Maximum 3 PHL games on Fridays at Broadmeadow |
+
+**Note:** The old config keys `phl_2nd_back_to_back` and `gosford_2nd_grade_bye` are NOT supported in `PHL_PREFERENCES`. 
+These rules are implemented via variable filtering (no 2nd grade at Gosford) and constraints (back-to-back scheduling).
 
 ---
 

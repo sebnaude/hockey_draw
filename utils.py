@@ -321,14 +321,20 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
     
-    IMPORTANT: PHL games are filtered to only valid timeslots defined in phl_game_times.
-    This dramatically reduces the variable count since PHL can only play at specific
-    venue/field/day/time combinations.
+    IMPORTANT: PHL and 2nd grade games are filtered to valid timeslots.
+    This dramatically reduces the variable count.
     
     PHL restrictions enforced here (NOT as constraints):
-    - PHL cannot play on South Field (SF) at NIHC
+    - PHL cannot play on South Field (SF) at NIHC - only EF and WF
     - PHL can only play at times defined in phl_game_times
     - Gosford has limited slots (1 per week effectively)
+    
+    2nd grade restrictions enforced here (NOT as constraints):
+    - 2nd grade cannot play on South Field (SF) at NIHC - only EF and WF
+    - 2nd grade CANNOT play at Gosford (PHL-only venue)
+    - 2nd grade plays at PHL times PLUS one slot before/after (where available)
+    
+    NOTE: Cannot create NEW timeslots - only existing DAY_TIME_MAP slots are valid.
     
     Args:
         model: CP-SAT model
@@ -344,11 +350,12 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     teams = data['teams']
     timeslots = data['timeslots']
     
-    # Get PHL game times for filtering
+    # Get PHL and 2nd grade game times for filtering
     # Supports TWO structures:
     #   - 2025 (simple): { venue: { day: [times] } }  -> any field at venue is valid
     #   - 2026 (nested): { venue: { field: { day: [times] } } }  -> specific fields only
     phl_game_times = data.get('phl_game_times', {})
+    second_grade_times = data.get('second_grade_times', {})
     
     # Detect structure format by checking first venue's first value
     # If it's a dict with day keys (Monday, Tuesday, etc.), it's the simple format
@@ -384,6 +391,17 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                         time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
                         phl_valid_slots.add((venue, field, day, time_str))
     
+    # Build a set of valid slots for 2nd grade (2026+ nested format only)
+    # If no second_grade_times defined, 2nd grade uses all slots (backward compat)
+    second_valid_slots = set()
+    if second_grade_times:
+        for venue, fields in second_grade_times.items():
+            for field, days in fields.items():
+                for day, times in days.items():
+                    for t in times:
+                        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+                        second_valid_slots.add((venue, field, day, time_str))
+    
     # Generate all games if not already in data
     if 'games' not in data or not data['games']:
         games = generate_games(teams)
@@ -404,6 +422,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     
     phl_vars_created = 0
     phl_vars_skipped = 0
+    second_vars_created = 0
+    second_vars_skipped = 0
     other_vars_created = 0
     
     for game_key, game_val in game_items:
@@ -413,6 +433,7 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
             continue
         
         is_phl = (grade_name == 'PHL')
+        is_second = (grade_name == '2nd')
             
         for t in timeslots:
             if not t.day:
@@ -434,6 +455,13 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                         phl_vars_skipped += 1
                         continue
                 phl_vars_created += 1
+            # For 2nd grade games, filter if second_grade_times is defined
+            elif is_second and second_valid_slots:
+                slot_key = (t.field.location, t.field.name, t.day, t.time)
+                if slot_key not in second_valid_slots:
+                    second_vars_skipped += 1
+                    continue
+                second_vars_created += 1
             else:
                 other_vars_created += 1
             
@@ -442,6 +470,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     
     print(f"Created {len(X)} decision variables")
     print(f"  - PHL: {phl_vars_created} created, {phl_vars_skipped} skipped (invalid venue/field/day/time)")
+    if second_valid_slots:
+        print(f"  - 2nd: {second_vars_created} created, {second_vars_skipped} skipped (invalid venue/field/day/time)")
     print(f"  - Other grades: {other_vars_created}")
     return X, Y, conflicts, unavailable_games
 
@@ -562,9 +592,39 @@ def build_season_data(config: dict) -> dict:
     phl_game_times = config['phl_game_times']
     field_unavailabilities = config['field_unavailabilities']
     
+    # Detect if phl_game_times uses nested format (2026+) or simple format (2025)
+    # Nested: {venue: {field: {day: [times]}}}
+    # Simple: {venue: {day: [times]}}
+    def is_nested_format(pgt):
+        for venue, venue_data in pgt.items():
+            if isinstance(venue_data, dict):
+                first_key = next(iter(venue_data.keys()), None)
+                # Day names in simple format, field names in nested format
+                if first_key not in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'):
+                    return True
+        return False
+    
+    # Flatten nested phl_game_times to simple format for timeslot merge
+    # We merge to {venue: {day: [times]}} for generate_timeslots
+    def flatten_phl_times(pgt):
+        if not is_nested_format(pgt):
+            return pgt
+        flat = defaultdict(lambda: defaultdict(list))
+        for venue, fields in pgt.items():
+            for field, days in fields.items():
+                for day, times in days.items():
+                    flat[venue][day].extend(times)
+        # Dedupe and sort
+        for venue in flat:
+            for day in flat[venue]:
+                flat[venue][day] = sorted(list(set(flat[venue][day])))
+        return dict(flat)
+    
+    phl_times_flat = flatten_phl_times(phl_game_times)
+    
     # Merge day_time_map and phl_game_times for timeslot generation
     merged_dict = defaultdict(lambda: defaultdict(list))
-    for d in (phl_game_times, day_time_map):
+    for d in (phl_times_flat, day_time_map):
         for field, days in d.items():
             for key, times in days.items():
                 merged_dict[field][key].extend(times)
