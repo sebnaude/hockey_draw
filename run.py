@@ -91,6 +91,10 @@ Examples:
                                  'automatically identifies problem severity group and relaxes slack variables.')
     gen_parser.add_argument('--relax-timeout', type=float, default=30.0,
                             help='Timeout per feasibility test during relaxation (default: 30 seconds)')
+    gen_parser.add_argument('--fix-round-1', action='store_true',
+                            help='Apply Round 1 symmetry breaking. Fixes which team pairings play '
+                                 'in Round 1 using the circle method. This dramatically reduces '
+                                 'search space by eliminating equivalent schedule orderings.')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -239,6 +243,11 @@ def run_generate(args):
         print(f"\nLoading locked games from {args.locked} (weeks 1-{args.lock_weeks})...")
         _, locked_keys = DrawStorage.load_and_lock(args.locked, args.lock_weeks)
     
+    # Check for Round 1 symmetry breaking
+    fix_round_1 = getattr(args, 'fix_round_1', False)
+    if fix_round_1:
+        print("\n[*] Round 1 symmetry breaking ENABLED")
+    
     if args.simple:
         from main_staged import main_simple
         exclude = args.exclude or []
@@ -254,7 +263,8 @@ def run_generate(args):
             exclude_constraints=exclude, 
             use_ai=args.ai, 
             year=args.year,
-            relax_config=relax_config
+            relax_config=relax_config,
+            fix_round_1=fix_round_1
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -271,7 +281,8 @@ def run_generate(args):
             solver_config=solver_config,
             year=args.year,
             stages_to_run=stages,
-            relax_config=relax_config
+            relax_config=relax_config,
+            fix_round_1=fix_round_1
         )
     
     if solution:

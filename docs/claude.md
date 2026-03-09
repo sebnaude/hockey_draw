@@ -11,11 +11,15 @@ This is a constraint programming system for generating hockey competition draws 
 ```
 ├── run.py                  # 🚀 Main CLI entry point (use this)
 ├── main_staged.py          # Staged solving + simple mode (--simple flag)
-├── constraints.py          # Original constraint implementations (READ-ONLY)
-├── constraints_ai.py       # AI-enhanced constraint implementations (edit this)
 ├── models.py               # Data models (Team, Club, Grade, etc.)
 ├── utils.py                # Utility functions + build_season_data()
 ├── solver_diagnostics.py   # Logging and resource monitoring
+├── constraints/            # Constraint modules
+│   ├── original.py         # Original constraints (READ-ONLY)
+│   ├── ai.py               # AI-enhanced constraints (edit this)
+│   ├── soft.py             # Soft constraint variants
+│   ├── severity.py         # Severity-based relaxation
+│   └── resolver.py         # Infeasibility resolver
 ├── analytics/              # Draw analysis and testing
 │   ├── storage.py          # DrawStorage (pliable JSON format)
 │   ├── reports.py          # ClubReport, GradeReport
@@ -24,7 +28,7 @@ This is a constraint programming system for generating hockey competition draws 
 │   ├── season_2025.py      # 2025 season settings
 │   ├── season_2026.py      # 2026 season settings
 │   └── season_template.py  # Template for new seasons
-├── tests/                  # Test suite (216 tests)
+├── tests/                  # Test suite (420+ tests)
 │   ├── test_ai_constraints_comprehensive.py  # 70 AI constraint tests
 │   ├── test_constraints.py
 │   ├── test_constraints_ai.py
@@ -36,15 +40,15 @@ This is a constraint programming system for generating hockey competition draws 
 
 ## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
 
-**`constraints.py` is NEVER to be edited.**
-The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints_ai.py` only.
+**`constraints/original.py` is NEVER to be edited.**
+The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints/ai.py` only.
 
-- ✅ Edit `constraints_ai.py`
+- ✅ Edit `constraints/ai.py`
 - ✅ Edit `tests/test_ai_constraints_comprehensive.py`
-- ❌ **NEVER** edit `constraints.py`
+- ❌ **NEVER** edit `constraints/original.py`
 - ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
 
-## AI Constraints (`constraints_ai.py`)
+## AI Constraints (`constraints/ai.py`)
 
 The AI constraint set is a parallel implementation of all 18 constraints with:
 - Cleaner, more maintainable code structure
@@ -198,16 +202,22 @@ CP-SAT can save model state and continue with additional constraints. Staged sol
 3. Allows resumption if a stage hangs
 4. Provides intermediate solutions
 
-### Why Separate `constraints.py` and `constraints_ai.py`?
+### Why Separate `constraints/original.py` and `constraints/ai.py`?
 
-- `constraints.py`: Original implementations, **READ-ONLY source of truth** — never edit
-- `constraints_ai.py`: AI-enhanced versions with:
+- `constraints/original.py`: Original implementations, **READ-ONLY source of truth** — never edit
+- `constraints/ai.py`: AI-enhanced versions with:
   - Full parity with originals (18/18 constraints audited, 5 bugs fixed)
   - Better code organization and documentation
   - Reduced edge cases through better abstractions
   - Priority classification (required/strong/medium/soft)
   - Helper methods for common patterns
   - Opt-in via `--ai` flag
+
+### Additional Constraint Modules
+
+- `constraints/soft.py`: Soft constraint variants with configurable slack and penalties
+- `constraints/severity.py`: Severity-based relaxation system (levels 1-4)
+- `constraints/resolver.py`: Automatic infeasibility resolution via `--relax` flag
 
 ## Data Model
 

@@ -1,15 +1,37 @@
 # Copilot Instructions for Hockey Draw Scheduler
 
-## Quick Reference: Where to Find Information
+## ⚠️ IMPERATIVE: Read Before Acting
 
-| Topic | Document |
+**Before making ANY changes to configuration or constraints:**
+1. Read the relevant AI documentation in `docs/ai/`
+2. When you learn something new, **UPDATE** the relevant AI doc so you know next time
+
+---
+
+## AI Documentation Index
+
+| Document | Purpose | Read When |
+|----------|---------|-----------|
+| `docs/ai/README.md` | Documentation index | First time |
+| `docs/ai/SEASON_SETUP.md` | Pre-season configuration checklist | Starting new season |
+| `docs/ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing any config |
+| `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |
+| `docs/ai/GAME_TIME_DICTIONARIES.md` | PHL/2nd grade variable filtering | Modifying game times |
+| `docs/ai/SYSTEM_OPERATION.md` | Running the solver | Generating draws |
+
+---
+
+## Quick Reference: File Locations
+
+| Topic | Location |
 |-------|----------|
-| **How to run solver** | `.github/copilot-skills/hockey-draw-scheduler.md` |
-| **Pre-season setup protocol** | `AI_DRAW_INIT.md` |
-| **Constraint documentation** | `AI_CONSTRAINTS_AUDIT.md` |
-| **System architecture** | `docs/SYSTEM_OVERVIEW.md` |
-| **Draw rules & business logic** | `docs/DRAW_RULES.md` |
-| **Season configuration** | `config/season_{year}.py` |
+| **Season config** | `config/season_{year}.py` |
+| **AI Documentation** | `docs/ai/` |
+| **System Documentation** | `docs/system/` |
+| **Season Reports** | `seasons/{year}/` |
+| **Draw Rules** | `seasons/RULES.md` |
+| **Constraint Code** | `constraints/` |
+| **Team Data** | `data/{year}/teams/*.csv` |
 
 ---
 
@@ -23,11 +45,20 @@
 ### 2. File Locations
 ```
 config/season_{year}.py    # Season configuration
+constraints/               # All constraint modules
+  ├── original.py          # Original human-written constraints
+  ├── ai.py                # AI-enhanced constraints
+  ├── soft.py              # Soft/relaxed constraint versions
+  ├── severity.py          # Severity-based relaxation system
+  └── resolver.py          # Infeasibility resolver
+docs/ai/                   # AI assistant documentation
+docs/system/               # Human operator documentation
+seasons/{year}/            # Season-specific reports
 data/{year}/teams/*.csv    # Team data
-draws/                     # Output schedules
+draws/{year}/              # Output schedules (versioned)
 checkpoints/run_X/         # Solver checkpoints
 logs/                      # Solver logs
-reports/                   # Pre-season reports
+scripts/                   # Utility scripts
 ```
 
 ### 3. OR-Tools API
@@ -47,6 +78,8 @@ Two dicts control which **decision variables** are created:
 - Filtering in `utils.py` → `generate_X()`
 - **Cannot create NEW timeslots** - only existing `DAY_TIME_MAP` slots
 - Format: `{ venue: { field: { day: [times] } } }` (2026+)
+
+**Full details:** See `docs/ai/GAME_TIME_DICTIONARIES.md`
 
 ### PHL-Only Restrictions (Lower Grades Excluded)
 

@@ -258,10 +258,16 @@ def generate_timeslots(start_date, end_date, day_time_map, fields, field_unavail
     return timeslots
 
 
-def max_games_per_grade(grades: List, max_rounds: int) -> Dict[str, int]:
+def max_games_per_grade(
+    grades: List, 
+    max_rounds: int,
+    max_weekends_per_grade: Dict[str, int] = None,
+    grade_rounds_override: Dict[str, int] = None
+) -> Dict[str, int]:
     """
-    Given a list of Grade objects (each with num_teams) and the maximum
-    number of rounds, returns a dict mapping grade.name → max games per team.
+    Given a list of Grade objects (each with num_teams), the default maximum
+    number of rounds, and optional per-grade configurations, returns a dict 
+    mapping grade.name → max games per team.
 
     In each round you can have floor(T/2) matches, so over R rounds:
       total_matches ≤ R * floor(T/2)
@@ -269,26 +275,44 @@ def max_games_per_grade(grades: List, max_rounds: int) -> Dict[str, int]:
     
     Args:
         grades: List of Grade objects with num_teams attribute
-        max_rounds: Maximum number of rounds in the season
+        max_rounds: Default maximum number of rounds in the season
+        max_weekends_per_grade: Optional dict of grade name → max weekends for that grade
+                               (overrides max_rounds for specific grades)
+        grade_rounds_override: Optional dict of grade name → exact rounds to play
+                              (completely overrides the calculation)
         
     Returns:
         Dict mapping grade name to max games per team
     """
     games_per_grade: Dict[str, int] = {}
+    
+    # Ensure defaults
+    if max_weekends_per_grade is None:
+        max_weekends_per_grade = {}
+    if grade_rounds_override is None:
+        grade_rounds_override = {}
 
     for grade in grades:
         T = grade.num_teams
         if T < 2:
             games_per_grade[grade.name] = 0
             continue
+        
+        # Check for exact override first
+        if grade.name in grade_rounds_override:
+            games_per_grade[grade.name] = grade_rounds_override[grade.name]
+            continue
+        
+        # Get max weekends for this grade (or use default)
+        grade_max_rounds = max_weekends_per_grade.get(grade.name, max_rounds)
 
         # maximum matches across all rounds
-        max_matches = max_rounds * (T // 2)
+        max_matches = grade_max_rounds * (T // 2)
 
         # g0 = floor( 2 * max_matches / T )
         g0 = (2 * max_matches) // T
         # can't exceed one game per round
-        g0 = min(g0, max_rounds)
+        g0 = min(g0, grade_max_rounds)
 
         # ensure g0*T is even → if T odd, force g0 even
         if T % 2 == 1 and (g0 % 2) == 1:
@@ -297,6 +321,67 @@ def max_games_per_grade(grades: List, max_rounds: int) -> Dict[str, int]:
         games_per_grade[grade.name] = g0
 
     return games_per_grade
+
+
+def circle_method_round_1_pairings(teams_by_grade: Dict[str, List[str]]) -> Dict[str, List[Tuple[str, str]]]:
+    """
+    Generate Round 1 pairings using the circle method for each grade.
+    
+    The circle method produces a canonical round-robin schedule. By fixing
+    Round 1 pairings, we eliminate symmetry from equivalent schedules that
+    differ only in which games appear in which round.
+    
+    For odd team counts, a "ghost" team is used at position 0. Pairings with
+    the ghost represent byes and are excluded from the output.
+    
+    Args:
+        teams_by_grade: Dict mapping grade name to list of team names
+        
+    Returns:
+        Dict mapping grade name to list of (team1, team2) pairs for Round 1
+        
+    Example:
+        >>> teams = {'PHL': ['A', 'B', 'C', 'D']}
+        >>> circle_method_round_1_pairings(teams)
+        {'PHL': [('A', 'B'), ('D', 'C')]}
+    """
+    result = {}
+    
+    for grade, team_names in teams_by_grade.items():
+        n = len(team_names)
+        if n < 2:
+            result[grade] = []
+            continue
+        
+        # For circle method, we need even number of positions
+        # Position 0 is fixed, positions 1 to n-1 rotate
+        # For odd teams, position 0 is a "ghost" (bye)
+        if n % 2 == 1:
+            # Add ghost at position 0, teams at positions 1 to n
+            positions = [None] + list(team_names)  # None = ghost/bye
+        else:
+            # First team fixed at position 0, rest rotate
+            positions = list(team_names)
+        
+        num_positions = len(positions)
+        
+        # Round 1 pairings: position i plays position (n-1-i) for i < n/2
+        # In circle method, position 0 plays position n-1, 1 plays n-2, etc.
+        pairings = []
+        for i in range(num_positions // 2):
+            j = num_positions - 1 - i
+            team_a = positions[i]
+            team_b = positions[j]
+            
+            # Skip if either is ghost (bye)
+            if team_a is not None and team_b is not None:
+                # Use consistent ordering (sorted) to match generate_games
+                pair = tuple(sorted((team_a, team_b)))
+                pairings.append(pair)
+        
+        result[grade] = pairings
+    
+    return result
 
 
 def generate_games(teams: List[Team]) -> Dict[Tuple[str, str, str], Tuple]:
@@ -663,9 +748,21 @@ def build_season_data(config: dict) -> dict:
         for t in timeslots
     ]
     
-    # Calculate rounds per grade
-    num_rounds = max_games_per_grade(GRADES, max_rounds)
+    # Get grade-specific round configuration
+    max_weekends_per_grade = config.get('max_weekends_per_grade', {})
+    grade_rounds_override = config.get('grade_rounds_override', {})
+    
+    # Calculate rounds per grade (with overrides)
+    num_rounds = max_games_per_grade(
+        GRADES, 
+        max_rounds,
+        max_weekends_per_grade=max_weekends_per_grade,
+        grade_rounds_override=grade_rounds_override
+    )
     num_rounds['max'] = max_rounds
+    # Also store per-grade max weekends for reference
+    num_rounds['max_weekends_per_grade'] = max_weekends_per_grade
+    num_rounds['grade_rounds_override'] = grade_rounds_override
     
     for grade, rounds in num_rounds.items():
         grade_obj = next((g for g in GRADES if g.name == grade), None)

@@ -750,7 +750,8 @@ def load_data(year: int) -> dict:
 
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
                 solver_config: SolverConfig = None, year: int = None,
-                stages_to_run: list = None, relax_config: dict = None):
+                stages_to_run: list = None, relax_config: dict = None,
+                fix_round_1: bool = False):
     """
     Main entry point for staged solving.
     
@@ -762,6 +763,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         year: The season year (e.g., 2025, 2026). Required.
         stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
+        fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -811,6 +813,15 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     # Initialize model
     unavailability_path = os.path.join('data', str(year), 'noplay')
     solver.initialize_model(unavailability_path)
+    
+    # Apply Round 1 symmetry breaking if requested
+    if fix_round_1:
+        logger.info("Applying Round 1 symmetry breaking constraints...")
+        print("\nApplying Round 1 symmetry breaking...")
+        from constraints.symmetry import FixRound1SymmetryBreaking
+        symmetry_constraint = FixRound1SymmetryBreaking()
+        num_constraints = symmetry_constraint.apply(solver.model, solver.X, data)
+        logger.info(f"  Added {num_constraints} symmetry breaking constraints")
     
     # Handle locked games
     if locked_keys:
@@ -887,7 +898,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None):
+def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False):
     """
     Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
@@ -899,6 +910,7 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
         use_ai: If True, use AI-enhanced constraint implementations.
         year: The season year (e.g., 2025, 2026). Required.
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
+        fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -941,6 +953,14 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']
     
     print(f"  {len(X)} decision variables")
+    
+    # Apply Round 1 symmetry breaking if requested
+    if fix_round_1:
+        print("\nApplying Round 1 symmetry breaking...")
+        from constraints.symmetry import FixRound1SymmetryBreaking
+        symmetry_constraint = FixRound1SymmetryBreaking()
+        num_constraints = symmetry_constraint.apply(model, X, data)
+        print(f"  Added {num_constraints} symmetry breaking constraints")
     
     # Get constraint classes (not instances yet)
     stages = STAGES_AI if use_ai else STAGES

@@ -268,6 +268,34 @@ SPECIAL_GAMES = {
     },
 }
 
+# ============== Maximum Available Weekends Per Grade ==============
+# These are the AVAILABLE weekends for each grade to play (not actual rounds played).
+# PHL has extra weekends due to Friday nights at Gosford (8) and NIHC.
+# Actual rounds played is calculated from team count, capped by this number.
+
+MAX_WEEKENDS_PER_GRADE = {
+    'PHL': 22,   # 20 Sundays + Friday nights (Gosford 8 + NIHC)
+    '2nd': 20,   # 20 Sundays only
+    '3rd': 20,   # 20 Sundays only
+    '4th': 20,   # 20 Sundays only
+    '5th': 20,   # 20 Sundays only
+    '6th': 20,   # 20 Sundays only
+}
+
+# ============== Grade Rounds Override ==============
+# Set EXACT number of rounds for specific grades.
+# This overrides the calculated value from max_games_per_grade().
+# Use when a grade needs a specific number of rounds (e.g., per AGM decision).
+#
+# 2nd Grade 2026: 4 teams → play each opponent multiple times
+# With 4 teams and 20 weekends, formula would give ~20 games.
+# ACTUAL: Set to X rounds per AGM decision (TBC - update when confirmed)
+
+GRADE_ROUNDS_OVERRIDE = {
+    # '2nd': 18,  # Example: if 2nd grade plays exactly 18 rounds (uncomment when confirmed)
+    # Note: Uncomment and set value once AGM confirms 2nd grade round count
+}
+
 # ============== Season Configuration ==============
 
 SEASON_CONFIG = {
@@ -276,9 +304,9 @@ SEASON_CONFIG = {
     'last_round_date': datetime(2026, 8, 30),  # Sunday 30th August (last regular round)
     'end_date': datetime(2026, 9, 19),     # Saturday 19th September (Grand Final)
     
-    # CONFIRMED at AGM: 4 rounds (20 matches) - NOT reducing to 3 rounds
-    # 24 Sundays from Mar 22 to Aug 30, minus 4 blocked weekends = 20 playing weekends
-    'max_rounds': 20,  # 4 rounds confirmed
+    # Default max rounds (used as fallback if grade not in MAX_WEEKENDS_PER_GRADE)
+    # This is the default MAXIMUM weekends any grade can play
+    'max_rounds': 20,
     'num_dummy_timeslots': 3,
     
     # Confirmed: Playing ANZAC weekend Sunday
@@ -296,6 +324,10 @@ SEASON_CONFIG = {
     'day_time_map': DAY_TIME_MAP,
     'phl_game_times': PHL_GAME_TIMES,  # Controls PHL variable generation (venue/field/day/time)
     'second_grade_times': SECOND_GRADE_TIMES,  # Controls 2nd grade variable generation
+    
+    # Grade-specific round configuration
+    'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,  # Max available weekends per grade
+    'grade_rounds_override': GRADE_ROUNDS_OVERRIDE,     # Exact round counts (overrides formula)
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,

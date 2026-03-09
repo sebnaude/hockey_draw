@@ -9,6 +9,7 @@ Provides:
 - ClubReport: Per-club stakeholder reports
 - ComplianceCertificate: Formal constraint compliance verification
 - SlotAnalyzer: Unused slot analysis
+- DrawVersionManager: Semantic versioning with CHANGELOG
 - Rev format export for external system integration
 """
 
@@ -33,6 +34,7 @@ from .reports import (
     generate_compliance_certificate,
     generate_all_reports,
 )
+from .versioning import DrawVersionManager, DrawVersion, VersionDiff
 
 __all__ = [
     # Storage
@@ -44,6 +46,11 @@ __all__ = [
     'export_draw_to_revformat',
     'SlotAnalyzer',
     'get_slot_analyzer',
+    
+    # Versioning
+    'DrawVersionManager',
+    'DrawVersion',
+    'VersionDiff',
     
     # Testing
     'DrawTester',

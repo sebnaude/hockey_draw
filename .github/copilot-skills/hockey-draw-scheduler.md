@@ -69,13 +69,16 @@ When starting a solver run:
 ### Key Files
 
 | File | Purpose |
-|------|---------||
+|------|---------|
 | `run.py` | CLI entry point - use this to run the system |
 | `main_staged.py` | Staged solving main logic (also has `--simple` mode) |
 | `config/season_{year}.py` | Season-specific configuration (dates, fields, times) |
 | `config/season_template.py` | Template for adding new seasons |
-| `constraints.py` | All constraint implementations (READ-ONLY — never edit) |
-| `constraints_ai.py` | AI-enhanced constraint implementations (edit this one) |
+| `constraints/original.py` | All constraint implementations (READ-ONLY — never edit) |
+| `constraints/ai.py` | AI-enhanced constraint implementations (edit this one) |
+| `constraints/soft.py` | Soft constraint variants with slack/penalties |
+| `constraints/severity.py` | Severity-based relaxation system |
+| `constraints/resolver.py` | Infeasibility resolver |
 | `solver_diagnostics.py` | Logging and resource monitoring |
 | `models.py` | Data models (Team, Field, Club, etc.) |
 | `utils.py` | Utility functions + `build_season_data()` |
@@ -84,12 +87,12 @@ When starting a solver run:
 
 The system has two parallel constraint sets:
 
-- **`constraints.py`** — Original human-written constraints. **NEVER edit this file.**
-- **`constraints_ai.py`** — AI-enhanced versions with cleaner code and equivalent behaviour.
+- **`constraints/original.py`** — Original human-written constraints. **NEVER edit this file.**
+- **`constraints/ai.py`** — AI-enhanced versions with cleaner code and equivalent behaviour.
 
 All 18 constraint pairs have been audited and the AI versions brought to full parity. Use the `--ai` flag to select the AI constraint set.
 
-**⚠️ CRITICAL**: `constraints.py` is read-only. If an AI constraint doesn't match the original, fix the AI version, never the original.
+**⚠️ CRITICAL**: `constraints/original.py` is read-only. If an AI constraint doesn't match the original, fix the AI version, never the original.
 
 #### Three constraints are excluded from initial AI runs:
 - `EnsureBestTimeslotChoices` / `EnsureBestTimeslotChoicesAI`
