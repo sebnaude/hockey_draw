@@ -262,15 +262,26 @@ def max_games_per_grade(
     grades: List, 
     max_rounds: int,
     max_weekends_per_grade: Dict[str, int] = None,
-    grade_rounds_override: Dict[str, int] = None
+    grade_rounds_override: Dict[str, int] = None,
+    grade_formula_selection: Dict[str, int] = None
 ) -> Dict[str, int]:
     """
     Given a list of Grade objects (each with num_teams) and the maximum
     number of rounds, returns a dict mapping grade.name → max games per team.
 
-    In each round you can have floor(T/2) matches, so over R rounds:
-      total_matches ≤ R * floor(T/2)
-    and since each team plays g games, total_matches = g * T / 2 must be integer.
+    Supports two formulas per grade:
+    
+    Formula 1 (Strict Equal Matchups):
+      - Every matchup occurs exactly the same number of times
+      - May result in bye weekends where teams don't play
+      - Formula: floor(W/(T-1)) × (T-1) games per team
+      - Example: 20 weekends, 8 teams → floor(20/7)×7 = 2×7 = 14 games
+    
+    Formula 2 (Fill All Weekends):
+      - Play every available weekend (no byes)
+      - Matchups slightly uneven: each pair meets base or base+1 times
+      - Formula: floor(2 × W × floor(T/2) / T) games per team
+      - Example: 20 weekends, 8 teams → floor(2×20×4/8) = 20 games
     
     Args:
         grades: List of Grade objects with num_teams attribute
@@ -279,6 +290,8 @@ def max_games_per_grade(
                                (overrides max_rounds for specific grades)
         grade_rounds_override: Optional dict of grade name → exact rounds to play
                               (completely overrides the calculation)
+        grade_formula_selection: Optional dict of grade name → formula (1 or 2)
+                                Default is 2 (Fill All Weekends) if not specified
         
     Returns:
         Dict mapping grade name to max games per team
@@ -290,6 +303,8 @@ def max_games_per_grade(
         max_weekends_per_grade = {}
     if grade_rounds_override is None:
         grade_rounds_override = {}
+    if grade_formula_selection is None:
+        grade_formula_selection = {}
 
     for grade in grades:
         T = grade.num_teams
@@ -303,19 +318,36 @@ def max_games_per_grade(
             continue
         
         # Get max weekends for this grade (or use default)
-        grade_max_rounds = max_weekends_per_grade.get(grade.name, max_rounds)
+        W = max_weekends_per_grade.get(grade.name, max_rounds)
         
-        # Maximum matches across all rounds
-        max_matches = grade_max_rounds * (T // 2)
-
-        # g0 = floor( 2 * max_matches / T )
-        g0 = (2 * max_matches) // T
-        # Can't exceed one game per round
-        g0 = min(g0, grade_max_rounds)
-
-        # Ensure g0*T is even → if T odd, force g0 even
-        if T % 2 == 1 and (g0 % 2) == 1:
-            g0 -= 1
+        # Get formula for this grade (default to Formula 2)
+        formula = grade_formula_selection.get(grade.name, 2)
+        
+        if formula == 1:
+            # Formula 1: Strict Equal Matchups
+            # Every team plays every other team the same number of times.
+            # 
+            # For EVEN teams: A complete cycle takes (T-1) rounds, each team plays (T-1) games
+            # For ODD teams: A complete cycle takes T rounds (one bye per round), each team plays (T-1) games
+            #
+            # Rounds per cycle depends on parity:
+            rounds_per_cycle = T if (T % 2 == 1) else (T - 1)
+            games_per_cycle = T - 1  # Each team plays every other team once
+            
+            # Number of complete cycles that fit in W weekends
+            complete_cycles = W // rounds_per_cycle
+            g0 = complete_cycles * games_per_cycle
+        else:
+            # Formula 2: Fill All Weekends (default)
+            # Maximum matches across all rounds
+            max_matches = W * (T // 2)
+            # g0 = floor(2 * max_matches / T)
+            g0 = (2 * max_matches) // T
+            # Can't exceed one game per round
+            g0 = min(g0, W)
+            # Ensure g0*T is even → if T odd, force g0 even
+            if T % 2 == 1 and (g0 % 2) == 1:
+                g0 -= 1
 
         games_per_grade[grade.name] = g0
 
@@ -825,18 +857,21 @@ def build_season_data(config: dict) -> dict:
     # Get grade-specific round configuration
     max_weekends_per_grade = config.get('max_weekends_per_grade', {})
     grade_rounds_override = config.get('grade_rounds_override', {})
+    grade_formula_selection = config.get('grade_formula_selection', {})
     
     # Calculate rounds per grade (with overrides)
     num_rounds = max_games_per_grade(
         GRADES, 
         max_rounds,
         max_weekends_per_grade=max_weekends_per_grade,
-        grade_rounds_override=grade_rounds_override
+        grade_rounds_override=grade_rounds_override,
+        grade_formula_selection=grade_formula_selection
     )
     num_rounds['max'] = max_rounds
     # Store per-grade configuration for reference
     num_rounds['max_weekends_per_grade'] = max_weekends_per_grade
     num_rounds['grade_rounds_override'] = grade_rounds_override
+    num_rounds['grade_formula_selection'] = grade_formula_selection
     
     for grade, rounds in num_rounds.items():
         grade_obj = next((g for g in GRADES if g.name == grade), None)

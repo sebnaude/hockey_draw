@@ -354,28 +354,37 @@ SPECIAL_GAMES = {
 MAX_WEEKENDS_PER_GRADE = {
     'PHL': 22,   # 20 Sundays + 2 rescued via Friday (State Champ weekends)
     '2nd': 20,   # 20 Sundays only
-    '3rd': 20,   # 20 Sundays only
+    '3rd': 18,   # Capped at 18 rounds
     '4th': 20,   # 20 Sundays only
     '5th': 20,   # 20 Sundays only
     '6th': 20,   # 20 Sundays only
 }
 
-# ============== Fill All Weekends (Formula Selection) ==============
+# ============== Formula Selection Per Grade ==============
 # Determines how actual played rounds are calculated from max weekends.
 #
-# False = Formula 1 (Strict Equal Matchups):
+# Formula 1 (Strict Equal Matchups):
 #   - Every matchup occurs exactly the same number of times
 #   - May result in "no-play" weekends where teams have byes
-#   - Formula: floor(weekends/(T-1)) × (T-1) games per team
+#   - Formula: floor(W/(T-1)) × (T-1) games per team
+#   - Example: 20 weekends, 8 teams → floor(20/7)×7 = 14 games (6 bye weekends)
 #
-# True = Formula 2 (Fill All Weekends):
+# Formula 2 (Fill All Weekends):
 #   - Play every available weekend (no byes)
 #   - Matchups slightly uneven: each pair meets base or base+1 times
-#   - Solver distributes the +1 matchups optimally
+#   - Formula: floor(2 × W × floor(T/2) / T) games per team
+#   - Example: 20 weekends, 8 teams → floor(2×20×4/8) = 20 games
 #
-# Example with 18 weekends, 6 teams:
-#   - 6 teams (even): can play all 18 weekends
-#   - Formula: g0 = floor(2 * 18 * 3 / 6) = 18 games per team
+# Set per grade: 1 = Strict Equal, 2 = Fill All Weekends
+
+GRADE_FORMULA_SELECTION = {
+    'PHL': 1,   # Strict Equal Matchups
+    '2nd': 1,   # Strict Equal Matchups
+    '3rd': 2,   # Fill All Weekends
+    '4th': 2,   # Fill All Weekends
+    '5th': 2,   # Fill All Weekends
+    '6th': 1,   # Strict Equal Matchups
+}
 
 # ============== Grade Rounds Override ==============
 # Set EXACT number of rounds for specific grades.
@@ -421,6 +430,7 @@ SEASON_CONFIG = {
     # Grade-specific round configuration
     'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,  # Max available weekends per grade
     'grade_rounds_override': GRADE_ROUNDS_OVERRIDE,     # Exact round counts (overrides formula)
+    'grade_formula_selection': GRADE_FORMULA_SELECTION, # Formula 1 or 2 per grade
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
