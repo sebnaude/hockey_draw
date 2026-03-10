@@ -180,7 +180,7 @@ STAGES = {
             # Away at Maitland (hard limit of 3 away clubs)
             AwayAtMaitlandGrouping,
         ],
-        'max_time_seconds': 7200,  # 2 hours
+        'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': True,
         'use_callback': True,
     },
@@ -236,7 +236,7 @@ STAGES_AI = {
             # Away at Maitland (hard limit of 3 away clubs)
             AwayAtMaitlandGroupingAI,
         ],
-        'max_time_seconds': 7200,
+        'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': True,
         'use_callback': True,
     },

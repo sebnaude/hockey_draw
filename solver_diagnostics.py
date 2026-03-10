@@ -65,9 +65,9 @@ def setup_logging(log_dir: str = "logs", run_id: str = None, level: int = loggin
     file_handler.setFormatter(file_format)
     logger.addHandler(file_handler)
     
-    # Console handler - info and above
+    # Console handler - debug and above (shows memory stats)
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_format = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%H:%M:%S')
     console_handler.setFormatter(console_format)
     logger.addHandler(console_handler)
