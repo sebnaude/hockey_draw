@@ -41,25 +41,71 @@ SEASON_CONFIG = {
     'preference_no_play': PREFERENCE_NO_PLAY,
     'friday_night_config': FRIDAY_NIGHT_CONFIG,
     'special_games': SPECIAL_GAMES,
+    'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,
+    'grade_rounds_override': GRADE_ROUNDS_OVERRIDE,
 }
 ```
 
-### max_rounds Parameter
+---
 
-**What it does:**
-- Sets the maximum number of games any team can play in the season
-- Used by `max_games_per_grade()` to calculate actual games per grade
-- Acts as a cap: `actual_games = min(calculated, max_rounds)`
+## Rounds Configuration (CRITICAL)
 
-**How to set it:**
-- Count available playing weekends (total Sundays minus blocked)
-- Set max_rounds to this number
-- Example: 24 Sundays - 2 blocked = 22 available → `max_rounds: 22`
+> ⚠️ **See `SEASON_SETUP.md` for full explanation of Available vs Played rounds.**
 
-**Grade interaction:**
-- Lower grades with fewer teams may play fewer games naturally
-- PHL with 5 teams: 4 matchups × 5 rounds = 20 games (capped by math, not max_rounds)
-- 4th grade with 11 teams: Each pair meets 2× = 20 games per team
+### max_rounds (Default Fallback)
+
+```python
+'max_rounds': 20,  # Default max weekends if grade not in MAX_WEEKENDS_PER_GRADE
+```
+
+### MAX_WEEKENDS_PER_GRADE (Per-Grade Maximum)
+
+Sets the **maximum available weekends** (hard cap) for each grade:
+
+```python
+MAX_WEEKENDS_PER_GRADE = {
+    'PHL': 22,   # 20 Sundays + 2 rescued via Friday (NOT 20+8!)
+    '2nd': 20,   # 20 Sundays only
+    '3rd': 20,
+    '4th': 20,
+    '5th': 20,
+    '6th': 20,
+}
+```
+
+**⚠️ FRIDAY NIGHTS:**
+- Friday games are **part of the weekend**, NOT additional weekends
+- Friday at Gosford "rescues" weekends blocked for Sunday (e.g., State Championships)
+- PHL gets 22 weekends = 20 normal + 2 rescued (NOT 20 + 8 Friday nights!)
+
+### Games Per Team Calculation
+
+The system automatically calculates the maximum feasible games per team using:
+
+```python
+# Formula (in utils.py max_games_per_grade):
+max_matches = W * floor(T/2)     # Total possible games across all weekends
+g0 = floor(2 * max_matches / T)  # Games per team
+g0 = min(g0, W)                  # Can't exceed weekends
+if T is odd and g0 is odd:
+    g0 -= 1                      # Force even for odd team counts
+```
+
+**Key insight:** For odd team counts, one team must sit out each weekend, so maximum games < available weekends.
+
+**The `EnsureEqualGamesAndBalanceMatchUps` constraint then enforces:**
+- Each team plays exactly `g0` games
+- Each pair meets `base` or `base+1` times (where `base = g0 // T` for odd teams)
+
+### GRADE_ROUNDS_OVERRIDE (Hard Override)
+
+Force exact round count, bypassing all formulas:
+
+```python
+GRADE_ROUNDS_OVERRIDE = {
+    # '2nd': 18,  # Force exactly 18 rounds
+}
+```
 
 ---
 
@@ -206,11 +252,33 @@ FRIDAY_NIGHT_CONFIG = {
         'Tigers': 2,
         'Maitland': 1,
     },
-    'friday_dates': [...],           # Confirmed Friday dates
+    'friday_dates': [...],           # Confirmed Friday dates at Gosford
     'gosford_friday_times': [tm(20, 0)],  # 8pm
     'nihc_friday_times': [tm(19, 0)],     # 7pm
+    
+    # NIHC (Broadmeadow) Friday night matchup restrictions (2026+)
+    'nihc_friday_games': {
+        '2026-05-08': [('Maitland', 'Souths')],  # Only Souths vs Maitland
+        '2026-06-19': [('Tigers', 'Wests')],     # Only Tigers vs Wests
+        '2026-07-24': 'norths_only',              # Any matchup with Norths
+    },
 }
 ```
+
+### nihc_friday_games (NIHC Matchup Filtering)
+
+This dict controls which PHL matchups are allowed at NIHC/Broadmeadow on Friday nights:
+
+| Date Key | Value | Effect |
+|----------|-------|--------|
+| `'YYYY-MM-DD'` | `[('Club1', 'Club2')]` | Only listed matchups get variables |
+| `'YYYY-MM-DD'` | `'norths_only'` | Any matchup including Norths allowed |
+| Date NOT in dict | - | NO games allowed at NIHC that Friday |
+
+**Rules:**
+- Club names must be alphabetically sorted in tuples: `('Maitland', 'Souths')` not `('Souths', 'Maitland')`
+- Filtering happens in `generate_X()` - only listed matchups create decision variables
+- Only dates in the dict can have Friday games at NIHC; all other Fridays are blocked
 
 ---
 

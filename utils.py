@@ -265,9 +265,8 @@ def max_games_per_grade(
     grade_rounds_override: Dict[str, int] = None
 ) -> Dict[str, int]:
     """
-    Given a list of Grade objects (each with num_teams), the default maximum
-    number of rounds, and optional per-grade configurations, returns a dict 
-    mapping grade.name → max games per team.
+    Given a list of Grade objects (each with num_teams) and the maximum
+    number of rounds, returns a dict mapping grade.name → max games per team.
 
     In each round you can have floor(T/2) matches, so over R rounds:
       total_matches ≤ R * floor(T/2)
@@ -298,23 +297,23 @@ def max_games_per_grade(
             games_per_grade[grade.name] = 0
             continue
         
-        # Check for exact override first
+        # Check for exact override first (highest priority)
         if grade.name in grade_rounds_override:
             games_per_grade[grade.name] = grade_rounds_override[grade.name]
             continue
         
         # Get max weekends for this grade (or use default)
         grade_max_rounds = max_weekends_per_grade.get(grade.name, max_rounds)
-
-        # maximum matches across all rounds
+        
+        # Maximum matches across all rounds
         max_matches = grade_max_rounds * (T // 2)
 
         # g0 = floor( 2 * max_matches / T )
         g0 = (2 * max_matches) // T
-        # can't exceed one game per round
+        # Can't exceed one game per round
         g0 = min(g0, grade_max_rounds)
 
-        # ensure g0*T is even → if T odd, force g0 even
+        # Ensure g0*T is even → if T odd, force g0 even
         if T % 2 == 1 and (g0 % 2) == 1:
             g0 -= 1
 
@@ -521,6 +520,24 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     phl_only_venues = {'Central Coast Hockey Park'}  # Gosford is PHL-only
     phl_only_days = {'Friday'}  # Friday nights are PHL-only
     
+    # PHL-only afternoon dates (state championship weekends)
+    # On these dates, Sunday afternoon (12pm+) at NIHC is PHL-only
+    phl_only_afternoon_dates = set(data.get('phl_only_afternoon_dates', []))
+    afternoon_cutoff = datetime.strptime('12:00', '%H:%M').time()  # 12pm
+    
+    # NIHC Friday night specific games (PHL only)
+    # Only specific matchups are allowed on specific dates
+    friday_night_config = data.get('friday_night_config', {})
+    nihc_friday_games = friday_night_config.get('nihc_friday_games', {})
+    
+    # Helper to extract club name from team name (e.g., "Souths PHL" -> "Souths")
+    def get_club_from_team_name(team_name: str) -> str:
+        """Extract club name from team name by removing the grade suffix."""
+        parts = team_name.rsplit(' ', 1)
+        if len(parts) == 2 and parts[1] in ('PHL', '2nd', '3rd', '4th', '5th', '6th'):
+            return parts[0]
+        return team_name  # Fallback to full name
+    
     for game_key, game_val in game_items:
         if isinstance(game_key, tuple) and len(game_key) >= 3:
             t1_name, t2_name, grade_name = game_key[0], game_key[1], game_key[2]
@@ -549,6 +566,37 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                     if slot_key not in phl_valid_slots:
                         phl_vars_skipped += 1
                         continue
+                
+                # NIHC Friday night specific game filtering
+                # Only specific matchups allowed on specific Friday nights at NIHC
+                if (nihc_friday_games and 
+                    t.day == 'Friday' and 
+                    t.field.location == 'Newcastle International Hockey Centre'):
+                    
+                    date_key = t.date  # Already in 'YYYY-MM-DD' format
+                    
+                    if date_key in nihc_friday_games:
+                        allowed = nihc_friday_games[date_key]
+                        club1 = get_club_from_team_name(t1_name)
+                        club2 = get_club_from_team_name(t2_name)
+                        # Sort clubs alphabetically for consistent comparison
+                        matchup = tuple(sorted([club1, club2]))
+                        
+                        if allowed == 'norths_only':
+                            # Only matchups including Norths are allowed
+                            if 'Norths' not in (club1, club2):
+                                phl_vars_skipped += 1
+                                continue
+                        elif isinstance(allowed, list):
+                            # Specific matchups only
+                            if matchup not in allowed:
+                                phl_vars_skipped += 1
+                                continue
+                    else:
+                        # Date not in nihc_friday_games means NO games allowed on this Friday
+                        phl_vars_skipped += 1
+                        continue
+                
                 phl_vars_created += 1
             # For 2nd grade games, filter if second_grade_times is defined
             elif is_second and second_valid_slots:
@@ -556,6 +604,19 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 if slot_key not in second_valid_slots:
                     second_vars_skipped += 1
                     continue
+                # Also check PHL-only afternoon dates (state championship weekends)
+                # 2nd grade cannot play Sunday afternoon at NIHC on these dates
+                if phl_only_afternoon_dates:
+                    try:
+                        slot_date = datetime.strptime(t.date, '%Y-%m-%d').date()
+                        slot_time = datetime.strptime(t.time, '%H:%M').time()
+                        if (slot_date in phl_only_afternoon_dates and 
+                            t.day == 'Sunday' and 
+                            slot_time >= afternoon_cutoff):
+                            second_vars_skipped += 1
+                            continue
+                    except (ValueError, AttributeError):
+                        pass  # If date parsing fails, allow the slot
                 second_vars_created += 1
             else:
                 # Lower grades (3rd-6th): Exclude PHL-only venues and days
@@ -567,6 +628,19 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 if t.day in phl_only_days:
                     other_vars_skipped += 1
                     continue
+                # Also check PHL-only afternoon dates (state championship weekends)
+                # Lower grades cannot play Sunday afternoon at NIHC on these dates
+                if phl_only_afternoon_dates:
+                    try:
+                        slot_date = datetime.strptime(t.date, '%Y-%m-%d').date()
+                        slot_time = datetime.strptime(t.time, '%H:%M').time()
+                        if (slot_date in phl_only_afternoon_dates and 
+                            t.day == 'Sunday' and 
+                            slot_time >= afternoon_cutoff):
+                            other_vars_skipped += 1
+                            continue
+                    except (ValueError, AttributeError):
+                        pass  # If date parsing fails, allow the slot
                 other_vars_created += 1
             
             key = (t1_name, t2_name, grade_name, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
@@ -760,7 +834,7 @@ def build_season_data(config: dict) -> dict:
         grade_rounds_override=grade_rounds_override
     )
     num_rounds['max'] = max_rounds
-    # Also store per-grade max weekends for reference
+    # Store per-grade configuration for reference
     num_rounds['max_weekends_per_grade'] = max_weekends_per_grade
     num_rounds['grade_rounds_override'] = grade_rounds_override
     

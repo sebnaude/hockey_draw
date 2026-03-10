@@ -81,10 +81,14 @@ These fundamental rules ensure the draw is valid and playable.
 - 2nd grade and PHL from the same club cannot occur at the same timeslot at Broadmeadow
 - Maximum 3 Friday night PHL games at Broadmeadow
 - Exactly 8 Friday night PHL games at Gosford (Central Coast Hockey Park) - AGM decision 2026
+- NIHC Friday matchups limited to specific dates/teams via `nihc_friday_games` config:
+  - May 8: Souths vs Maitland
+  - June 19: Tigers vs Wests
+  - July 24: Norths vs TBC (any opponent)
 
-**Enforcement:** Uses timeslot indicators and sum constraints per location/club combination.
+**Enforcement:** Uses timeslot indicators and sum constraints per location/club combination. NIHC Friday matchups are filtered at variable generation time using `FRIDAY_NIGHT_CONFIG['nihc_friday_games']`.
 
-**Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots. The Gosford Friday requirement was confirmed at the 2026 AGM.
+**Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots. The Gosford Friday requirement was confirmed at the 2026 AGM. NIHC Friday matchups are pre-scheduled to align with Junior Boys program and special events.
 
 ---
 
@@ -317,7 +321,7 @@ These rules arise from the combination of constraints or data filtering.
 ---
 
 ### Implied Rule 5: Friday Night Restrictions
-**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint
+**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint + `FRIDAY_NIGHT_CONFIG['nihc_friday_games']`
 
 **Description:**
 - Friday games are PHL-only (only PHL grade plays on Fridays)
@@ -325,6 +329,12 @@ These rules arise from the combination of constraints or data filtering.
 - Maximum 3 Friday games at Broadmeadow (Newcastle International Hockey Centre)
 - Exactly 8 Friday games at Gosford (Central Coast Hockey Park) - AGM decision 2026
 - 8pm start time at Gosford confirmed at AGM
+- **NIHC Friday matchups restricted to specific dates** (2026+):
+  - May 8: Souths vs Maitland only
+  - June 19: Tigers vs Wests only
+  - July 24: Norths vs any opponent
+
+**Implementation:** NIHC Friday matchup filtering is done via `nihc_friday_games` dict in `FRIDAY_NIGHT_CONFIG`. Only listed dates/matchups generate decision variables - other Friday nights at NIHC are blocked.
 
 **Note:** Lower grades (3rd-6th) are automatically excluded from Friday variables during decision variable generation.
 

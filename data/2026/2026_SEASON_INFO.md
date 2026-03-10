@@ -130,11 +130,22 @@ The following clubs have agreed to play Friday night matches at Gosford (8pm sta
 - **Norths:** 1 match
 - **Maitland:** 1 match (confirmed happy to play both Gosford games Friday nights at Wyong)
 
-**Confirmed Friday Night Dates:**
+**Confirmed Friday Night Dates (Gosford):**
 - March 27
 - April 17
 - April 24
 - May 29
+
+### Friday Night Matches (NIHC/Broadmeadow)
+
+**Locked Matchups (7pm start):**
+| Date | Matchup | Notes |
+|------|---------|-------|
+| May 8, 2026 | Souths vs Maitland | |
+| June 19, 2026 | Tigers vs Wests | State Champ weekend - evening available |
+| July 24, 2026 | Norths vs TBC | Any opponent, Norths must be involved |
+
+**Implementation:** Only these 3 matchups are allowed at NIHC on Friday nights. All other Fridays blocked via `nihc_friday_games` config.
 
 ### Central Coast (Gosford) Requirements
 
@@ -236,6 +247,7 @@ Note: Gosford only competes in PHL.
 | Friday Night Dates | Mar 27, Apr 17, Apr 24, May 29, Jun 12 | ✅ In FRIDAY_NIGHT_CONFIG |
 | Friday Night Clubs | Wests x2, Souths x2, Norths x1, Tigers x2, Maitland x1 | ✅ In FRIDAY_NIGHT_CONFIG |
 | Norths 80th Anniversary | June 12 Friday night match | ✅ In friday_dates |
+| **NIHC Friday Matchups** | May 8: Souths/Maitland, Jun 19: Tigers/Wests, Jul 24: Norths/TBC | ✅ In nihc_friday_games |
 
 ### ✅ CONFIGURED - Game Times
 

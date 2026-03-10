@@ -111,40 +111,98 @@ SECOND_GRADE_TIMES = {
 # ============== Field Unavailabilities ==============
 # Blocked weekends/days where NO games can be scheduled (HARD constraints)
 # Email states: "20 playing weekends" from Mar 22 to Aug 30
-# 24 total Sundays - 4 blocked = 20 available
+# 24 total Sundays - 4 blocked = 20 available (BUT PHL has 22 - see below)
+#
+# IMPORTANT: State Championship weekends (May 15-17, Jun 19-21) are special:
+# - Friday night at Gosford is available for PHL (rescues the weekend)
+# - Sunday afternoon (12pm+) at NIHC is available for PHL ONLY
+# - All other grades are fully blocked for these weekends
+# - This gives PHL 22 available weekends (20 regular + 2 rescued)
 
 FIELD_UNAVAILABILITIES = {
     'Maitland Park': {
         'weekends': [
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
-            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            datetime(2026, 4, 11),  # Apr 10-12 (U14 State Champs at Maitland)
+            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle) - fully blocked
+            datetime(2026, 5, 23),  # May 22-24 (U18 State Champs at Maitland)
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
-            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
+            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle) - fully blocked
+            datetime(2026, 7, 18),  # Jul 17-19 (U16 State Champs at Maitland)
         ],
-        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
+        'whole_days': [
+            datetime(2026, 4, 25),  # ANZAC Day (Saturday)
+            datetime(2026, 4, 19),  # Steamfest Maitland (Sunday)
+            datetime(2026, 6, 7),   # Maitland Running Festival (Sunday)
+        ],
         'part_days': [],
     },
     'Newcastle International Hockey Centre': {
         'weekends': [
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
-            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            # NOTE: State championship weekends NOT listed here - handled via part_days
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
-            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
         ],
-        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
-        'part_days': [],
+        'whole_days': [
+            datetime(2026, 4, 25),  # ANZAC Day (Saturday)
+            # State championship Fridays - daytime blocked but evening available for PHL
+            # (5/15 and 6/19 evenings can host PHL games - handled via part_days)
+            datetime(2026, 5, 16),  # Masters SC Saturday
+            datetime(2026, 6, 20),  # U16 Girls SC Saturday
+        ],
+        'part_days': [
+            # State Championship Fridays - block daytime only (allow 7pm PHL game)
+            datetime(2026, 5, 15, 8, 30),   # Masters SC Friday morning
+            datetime(2026, 5, 15, 10, 0),
+            datetime(2026, 5, 15, 11, 30),
+            datetime(2026, 5, 15, 13, 0),
+            datetime(2026, 5, 15, 14, 30),
+            datetime(2026, 5, 15, 16, 0),
+            datetime(2026, 5, 15, 17, 30),  # Block up to 5:30pm, allow 7pm
+            datetime(2026, 6, 19, 8, 30),   # U16 Girls SC Friday morning
+            datetime(2026, 6, 19, 10, 0),
+            datetime(2026, 6, 19, 11, 30),
+            datetime(2026, 6, 19, 13, 0),
+            datetime(2026, 6, 19, 14, 30),
+            datetime(2026, 6, 19, 16, 0),
+            datetime(2026, 6, 19, 17, 30),  # Block up to 5:30pm, allow 7pm
+            # State Championship Sundays - block MORNING slots only (allow afternoon for PHL)
+            # May 17 (Masters SC Sunday morning)
+            datetime(2026, 5, 17, 8, 30),
+            datetime(2026, 5, 17, 10, 0),
+            datetime(2026, 5, 17, 11, 30),
+            # Jun 21 (U16 Girls SC Sunday morning)
+            datetime(2026, 6, 21, 8, 30),
+            datetime(2026, 6, 21, 10, 0),
+            datetime(2026, 6, 21, 11, 30),
+        ],
     },
     'Central Coast Hockey Park': {
         'weekends': [
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
-            datetime(2026, 5, 16),  # May 15-17 (Masters SC Newcastle)
+            # NOTE: State championship weekends - Friday is available for PHL
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
-            datetime(2026, 6, 20),  # Jun 19-21 (U16 Girls SC Newcastle)
         ],
-        'whole_days': [datetime(2026, 4, 25)],  # ANZAC Day (Saturday)
+        'whole_days': [
+            datetime(2026, 4, 25),  # ANZAC Day (Saturday)
+            # State championship Saturdays and Sundays (but NOT Fridays - PHL plays there)
+            datetime(2026, 5, 16),  # Masters SC Saturday
+            datetime(2026, 5, 17),  # Masters SC Sunday
+            datetime(2026, 6, 20),  # U16 Girls SC Saturday
+            datetime(2026, 6, 21),  # U16 Girls SC Sunday
+        ],
         'part_days': [],
     },
 }
+
+# ============== PHL-Only Afternoon Dates ==============
+# Dates where Sunday afternoon (12pm+) is available for PHL ONLY at NIHC
+# Other grades are blocked from these timeslots via generate_X() filtering
+# These are the "rescued" state championship weekends
+PHL_ONLY_AFTERNOON_DATES = [
+    datetime(2026, 5, 17).date(),  # Masters SC Sunday - PHL can play PM at NIHC
+    datetime(2026, 6, 21).date(),  # U16 Girls SC Sunday - PHL can play PM at NIHC
+]
 
 # ============== Club Days (Special Events) ==============
 
@@ -254,6 +312,16 @@ FRIDAY_NIGHT_CONFIG = {
     
     # NIHC Friday night time
     'nihc_friday_times': [tm(19, 0)],  # 7:00pm
+    
+    # NIHC (Broadmeadow) Friday night games - SPECIFIC matchups only
+    # Only these exact matchups are allowed on Friday nights at NIHC
+    # Date format: 'YYYY-MM-DD' -> list of allowed club pairs (alphabetical order)
+    # For dates with 'Norths', only matchups INCLUDING Norths are allowed
+    'nihc_friday_games': {
+        '2026-05-08': [('Maitland', 'Souths')],       # Souths vs Maitland
+        '2026-06-19': [('Tigers', 'Wests')],          # Tigers vs Wests
+        '2026-07-24': 'norths_only',                   # Norths vs TBC (any opponent)
+    },
 }
 
 # ============== Special Games ==============
@@ -269,12 +337,22 @@ SPECIAL_GAMES = {
 }
 
 # ============== Maximum Available Weekends Per Grade ==============
-# These are the AVAILABLE weekends for each grade to play (not actual rounds played).
-# PHL has extra weekends due to Friday nights at Gosford (8) and NIHC.
-# Actual rounds played is calculated from team count, capped by this number.
+# These are the MAXIMUM AVAILABLE WEEKENDS a grade can play (hard ceiling).
+# This is NOT the same as actual rounds played - that's calculated from team count.
+#
+# ⚠️ CRITICAL: Friday nights are NOT additional weekends!
+# Friday games at Gosford are PART OF that weekend (team plays Friday OR Sunday, not both).
+# PHL gets extra weekends because Friday at Gosford can "rescue" weekends that are 
+# otherwise blocked for Sunday play (e.g., State Championships on Saturday/Sunday).
+# 
+# Calculation for 2026:
+# - 24 total Sundays (Mar 22 - Aug 30)
+# - 4 blocked weekends (Easter, 2x State Championships, 1x blocked)
+# - = 20 available Sundays
+# - PHL: 2 additional weekends rescued via Friday at Gosford = 22 total
 
 MAX_WEEKENDS_PER_GRADE = {
-    'PHL': 22,   # 20 Sundays + Friday nights (Gosford 8 + NIHC)
+    'PHL': 22,   # 20 Sundays + 2 rescued via Friday (State Champ weekends)
     '2nd': 20,   # 20 Sundays only
     '3rd': 20,   # 20 Sundays only
     '4th': 20,   # 20 Sundays only
@@ -282,18 +360,33 @@ MAX_WEEKENDS_PER_GRADE = {
     '6th': 20,   # 20 Sundays only
 }
 
+# ============== Fill All Weekends (Formula Selection) ==============
+# Determines how actual played rounds are calculated from max weekends.
+#
+# False = Formula 1 (Strict Equal Matchups):
+#   - Every matchup occurs exactly the same number of times
+#   - May result in "no-play" weekends where teams have byes
+#   - Formula: floor(weekends/(T-1)) × (T-1) games per team
+#
+# True = Formula 2 (Fill All Weekends):
+#   - Play every available weekend (no byes)
+#   - Matchups slightly uneven: each pair meets base or base+1 times
+#   - Solver distributes the +1 matchups optimally
+#
+# Example with 18 weekends, 6 teams:
+#   - 6 teams (even): can play all 18 weekends
+#   - Formula: g0 = floor(2 * 18 * 3 / 6) = 18 games per team
+
 # ============== Grade Rounds Override ==============
 # Set EXACT number of rounds for specific grades.
-# This overrides the calculated value from max_games_per_grade().
+# This OVERRIDES both the formula calculation AND max_weekends.
 # Use when a grade needs a specific number of rounds (e.g., per AGM decision).
 #
-# 2nd Grade 2026: 4 teams → play each opponent multiple times
-# With 4 teams and 20 weekends, formula would give ~20 games.
-# ACTUAL: Set to X rounds per AGM decision (TBC - update when confirmed)
+# 2nd Grade 2026: 4 teams → formula gives 20 games (each opponent 6-7×)
+# ACTUAL: TBC - update when confirmed
 
 GRADE_ROUNDS_OVERRIDE = {
-    # '2nd': 18,  # Example: if 2nd grade plays exactly 18 rounds (uncomment when confirmed)
-    # Note: Uncomment and set value once AGM confirms 2nd grade round count
+    # '2nd': 18,  # Example: force exactly 18 rounds (uncomment when confirmed)
 }
 
 # ============== Season Configuration ==============
@@ -331,6 +424,10 @@ SEASON_CONFIG = {
     
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
+    
+    # PHL-only afternoon dates (state championship weekends)
+    # On these dates, Sunday afternoon (12pm+) at NIHC is PHL-only
+    'phl_only_afternoon_dates': PHL_ONLY_AFTERNOON_DATES,
     
     # Club events
     'club_days': CLUB_DAYS,
