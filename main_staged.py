@@ -751,7 +751,7 @@ def load_data(year: int) -> dict:
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
                 solver_config: SolverConfig = None, year: int = None,
                 stages_to_run: list = None, relax_config: dict = None,
-                fix_round_1: bool = False):
+                fix_round_1: bool = False, constraint_slack: dict = None):
     """
     Main entry point for staged solving.
     
@@ -764,6 +764,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
+        constraint_slack: Optional dict mapping constraint names to slack values.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -793,6 +794,13 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     logger.info(f"Loading data for year {year}...")
     print(f"\nLoading data for year {year}...")
     data = load_data(year)
+    
+    # Apply constraint slack overrides
+    if constraint_slack:
+        data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
+        logger.info(f"  Constraint slack overrides: {constraint_slack}")
+        print(f"  Constraint slack overrides: {constraint_slack}")
+    
     logger.info(f"  Teams: {len(data['teams'])}")
     logger.info(f"  Grades: {len(data['grades'])}")
     logger.info(f"  Timeslots: {len(data['timeslots'])}")
@@ -898,7 +906,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False):
+def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False, constraint_slack: dict = None):
     """
     Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
@@ -911,6 +919,7 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
         year: The season year (e.g., 2025, 2026). Required.
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
+        constraint_slack: Optional dict mapping constraint names to slack values.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -933,6 +942,11 @@ def main_simple(locked_keys=None, solver_config=None, exclude_constraints=None, 
     # Load data
     print(f"\nLoading data for year {year}...")
     data = load_data(year)
+    
+    # Apply constraint slack overrides
+    if constraint_slack:
+        data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
+        print(f"  Constraint slack overrides: {constraint_slack}")
     
     # Create model
     model = cp_model.CpModel()

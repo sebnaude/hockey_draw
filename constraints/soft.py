@@ -37,6 +37,7 @@ from utils import (
     get_club, get_duplicated_graded_teams, get_teams_from_club, 
     get_club_from_clubname, get_nearest_week_by_date
 )
+from constraints.original import _normalize_preference_no_play
 
 
 # ============== Base Classes ==============
@@ -1032,8 +1033,9 @@ class PreferredTimesConstraintSoft(SoftConstraint):
     """
     Soft version of PreferredTimesConstraint.
     
-    This constraint is already soft in the original - just with configurable weight.
-    This version allows tiered weights for different types of restrictions.
+    Supports two PREFERENCE_NO_PLAY formats:
+    - 2025 format: {'ClubName': [{'date': '...', ...}]}
+    - 2026 format: {'EntryName': {'club': '...', 'dates': [...], 'grade': '...'}}
     """
     
     def __init__(self, slack_level: int = 1, penalty_weight: Optional[int] = None,
@@ -1060,38 +1062,47 @@ class PreferredTimesConstraintSoft(SoftConstraint):
         
         teams = data['teams']
         clubs = data['clubs']
-        noplay = data['preference_no_play']
+        noplay = data.get('preference_no_play', {})
         current_week = data['current_week']
         
+        if not noplay:
+            return  # No preferences to apply
+        
+        # Keys used to match game tuples to restriction dicts
         allowed_keys = ['team_name', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         allowed_keys2 = ['team1', 'team_name', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         
-        for club_name, restrictions in noplay.items():
-            club_teams = get_teams_from_club(club_name, teams)
-            if club_name.lower() not in [c.name.lower() for c in clubs]:
-                continue  # Skip invalid clubs instead of raising error
+        # Normalize both formats to consistent structure
+        try:
+            normalized = _normalize_preference_no_play(noplay, teams, clubs)
+        except ValueError as e:
+            print(f"Warning: {e} - skipping PreferredTimesConstraintSoft")
+            return
+        
+        # Enforce no-play times with penalties
+        for entry_key, club_name, club_teams, constraint in normalized:
+            if 'date' not in constraint:
+                continue
             
-            for index, constraint in enumerate(restrictions):
-                if not all(key in allowed_keys for key in constraint.keys()):
+            if get_nearest_week_by_date(constraint['date'], data['timeslots']) <= current_week:
+                continue
+
+            for i, game_key in enumerate(X):
+                # Check if any club team is in this game
+                if game_key[0] not in club_teams and game_key[1] not in club_teams:
                     continue
-                if 'date' not in constraint:
-                    continue
-                
-                if get_nearest_week_by_date(constraint['date'], data['timeslots']) <= current_week:
-                    continue
-                
-                for i, game_key in enumerate(X):
-                    game_dict = dict(zip(allowed_keys, game_key))
-                    if all(game_dict.get(k) == v for k, v in constraint.items()) and (game_key[0] in club_teams or game_key[1] in club_teams):
-                        penalty_var = model.NewIntVar(0, 1, f"penalty_{club_name}_{index}_soft")
-                        model.Add(penalty_var == X[game_key])
-                        data['penalties']['PreferredTimesConstraintSoft']['penalties'].append(penalty_var)
                     
-                    game_dict = dict(zip(allowed_keys2, game_key))
-                    if all(game_dict.get(k) == v for k, v in constraint.items()) and (game_key[0] in club_teams or game_key[1] in club_teams):
-                        penalty_var = model.NewIntVar(0, 1, f"penalty_{club_name}_{index}_{i}_soft")
-                        model.Add(penalty_var == X[game_key])
-                        data['penalties']['PreferredTimesConstraintSoft']['penalties'].append(penalty_var)
+                # Try matching with both key orderings
+                game_dict = dict(zip(allowed_keys, game_key))
+                game_dict2 = dict(zip(allowed_keys2, game_key))
+                
+                matches = all(game_dict.get(k) == v for k, v in constraint.items())
+                matches2 = all(game_dict2.get(k) == v for k, v in constraint.items())
+                
+                if matches or matches2:
+                    penalty_var = model.NewIntVar(0, 1, f"penalty_{entry_key}_{i}_soft")
+                    model.Add(penalty_var == X[game_key])
+                    data['penalties']['PreferredTimesConstraintSoft']['penalties'].append(penalty_var)
 
 
 # ============== Constraint Factory ==============

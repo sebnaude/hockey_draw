@@ -95,6 +95,11 @@ Examples:
                             help='Apply Round 1 symmetry breaking. Fixes which team pairings play '
                                  'in Round 1 using the circle method. This dramatically reduces '
                                  'search space by eliminating equivalent schedule orderings.')
+    gen_parser.add_argument('--slack', type=int, default=None, metavar='N',
+                            help='Relax constraints by adding N to their limits. '
+                                 'EqualMatchUpSpacing: ±(1+N) rounds. '
+                                 'AwayAtMaitlandGrouping: max (3+N) away clubs. '
+                                 'MaitlandHomeGrouping: allows (N) back-to-back home weekends.')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -248,6 +253,21 @@ def run_generate(args):
     if fix_round_1:
         print("\n[*] Round 1 symmetry breaking ENABLED")
     
+    # Build constraint slack overrides from --slack argument
+    constraint_slack = None
+    slack_value = getattr(args, 'slack', None)
+    if slack_value is not None:
+        # Apply slack to all slack-aware constraints
+        constraint_slack = {
+            'EqualMatchUpSpacingConstraint': slack_value,  # Base=1 + slack
+            'AwayAtMaitlandGrouping': slack_value,         # Base=3 + slack (max away clubs at Maitland)
+            'MaitlandHomeGrouping': slack_value,           # Base=1 + slack (back-to-back limit)
+        }
+        print(f"\n[*] Constraint slack override: +{slack_value}")
+        print(f"    EqualMatchUpSpacing: SLACK = 1 + {slack_value} = {1 + slack_value}")
+        print(f"    AwayAtMaitlandGrouping: max away clubs = 3 + {slack_value} = {3 + slack_value}")
+        print(f"    MaitlandHomeGrouping: back-to-back limit = 1 + {slack_value} = {1 + slack_value}")
+    
     if args.simple:
         from main_staged import main_simple
         exclude = args.exclude or []
@@ -264,7 +284,8 @@ def run_generate(args):
             use_ai=args.ai, 
             year=args.year,
             relax_config=relax_config,
-            fix_round_1=fix_round_1
+            fix_round_1=fix_round_1,
+            constraint_slack=constraint_slack
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -282,7 +303,8 @@ def run_generate(args):
             year=args.year,
             stages_to_run=stages,
             relax_config=relax_config,
-            fix_round_1=fix_round_1
+            fix_round_1=fix_round_1,
+            constraint_slack=constraint_slack
         )
     
     if solution:

@@ -914,5 +914,8 @@ def build_season_data(config: dict) -> dict:
         'home_field_map': home_field_map,
         'friday_night_config': config.get('friday_night_config', {}),
         'special_games': config.get('special_games', {}),
+        # Constraint slack overrides - allows relaxing specific constraints
+        # Format: {'EqualMatchUpSpacingConstraint': 2, ...}
+        'constraint_slack': config.get('constraint_slack', {}),
     }
 

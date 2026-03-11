@@ -682,7 +682,8 @@ class EqualMatchUpSpacingConstraint(Constraint):
         
     def apply(self, model, X, data):
 
-        SLACK = 1
+        # Allow slack override from config (default=1)
+        SLACK = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 1)
 
         games = data['games']
         timeslots = data['timeslots']
@@ -1098,12 +1099,17 @@ class MaitlandHomeGrouping(Constraint):
 
             home_week_indicators.append(week_indicator)
 
+        # Allow slack override from config (default=1 means no back-to-back, slack+1 allows consecutive)
+        slack = data.get('constraint_slack', {}).get('MaitlandHomeGrouping', 0)
+        back_to_back_limit = 1 + slack  # Base=1 (no consecutive), +1 allows 2 consecutive, etc.
+
         for i in range(1, len(home_week_indicators)):
             prior_week = home_week_indicators[i - 1]
             current_week = home_week_indicators[i]
 
             # If the current week has a home game, then the previous week must not have a home game
-            model.Add(prior_week + current_week <= 1)
+            # With slack=0: limit=1 (no back-to-back), slack=1: limit=2 (allows 1 back-to-back pair)
+            model.Add(prior_week + current_week <= back_to_back_limit)
 
 # Has Hard Element
 class AwayAtMaitlandGrouping(Constraint):
@@ -1111,7 +1117,9 @@ class AwayAtMaitlandGrouping(Constraint):
 
     def apply(self, model, X, data):
 
-        HARD_LIMIT = 3
+        # Allow slack override from config (default base=3, increase with slack)
+        slack = data.get('constraint_slack', {}).get('AwayAtMaitlandGrouping', 0)
+        HARD_LIMIT = 3 + slack
         if 'penalties' not in data:
             data['penalties'] = {'AwayAtMaitlandGrouping': {'weight': 100000, 'penalties': []}}
         else:
@@ -1285,9 +1293,89 @@ class MinimiseClubsOnAFieldBroadmeadow(Constraint):
             data['penalties']['MinimiseClubsOnAFieldBroadmeadow']['penalties'].append(penalty_var)
 
 
+def _normalize_preference_no_play(noplay: dict, teams: list, clubs: list) -> list:
+    """
+    Normalize PREFERENCE_NO_PLAY to a consistent format.
+    
+    Supports two input formats:
+    
+    2025 format (legacy):
+        {'Maitland': [{'date': '2025-07-20', 'field_location': '...'}]}
+        - Key = club name
+        - Value = list of restriction dicts
+    
+    2026 format (structured):
+        {'Crusaders_6th_Masters': {
+            'club': 'Crusaders',
+            'grade': '6th',           # Optional: single grade
+            'grades': ['PHL', '2nd'], # Optional: multiple grades  
+            'dates': [datetime(...)],
+            'reason': '...',          # Optional: for documentation
+        }}
+        - Key = descriptive identifier
+        - Value = structured dict with club, dates, optional grade filter
+    
+    Returns:
+        List of (club_name, team_names, restriction_dicts) tuples
+    """
+    from datetime import datetime
+    
+    normalized = []
+    club_names_lower = [c.name.lower() for c in clubs]
+    
+    for key, value in noplay.items():
+        # Detect format: new format has 'club' key, old format is a list
+        if isinstance(value, dict) and 'club' in value:
+            # 2026 structured format
+            club_name = value['club']
+            if club_name.lower() not in club_names_lower:
+                raise ValueError(f"Invalid club '{club_name}' in PREFERENCE_NO_PLAY entry '{key}'")
+            
+            # Get dates - can be 'dates' list or single 'date'
+            dates = value.get('dates', [])
+            if 'date' in value:
+                dates = [value['date']]
+            
+            # Filter teams by grade if specified
+            club_teams = get_teams_from_club(club_name, teams)
+            if 'grade' in value:
+                grade = value['grade']
+                club_teams = [t for t in club_teams if grade.lower() in t.lower()]
+            elif 'grades' in value:
+                grades = [g.lower() for g in value['grades']]
+                club_teams = [t for t in club_teams if any(g in t.lower() for g in grades)]
+            
+            # Convert dates to restriction dicts
+            for date in dates:
+                if isinstance(date, datetime):
+                    date_str = date.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(date)
+                normalized.append((key, club_name, club_teams, {'date': date_str}))
+                
+        elif isinstance(value, list):
+            # 2025 legacy format - key is the club name
+            club_name = key
+            if club_name.lower() not in club_names_lower:
+                raise ValueError(f"Invalid club name '{club_name}' in PREFERENCE_NO_PLAY")
+            
+            club_teams = get_teams_from_club(club_name, teams)
+            for restriction in value:
+                normalized.append((key, club_name, club_teams, restriction))
+        else:
+            raise ValueError(f"Invalid PREFERENCE_NO_PLAY format for key '{key}': expected dict with 'club' key or list")
+    
+    return normalized
+
+
 # Soft or User set constraints
 class PreferredTimesConstraint(Constraint):
-    """Ensure teams play at preferred times."""
+    """Ensure teams play at preferred times.
+    
+    Supports two PREFERENCE_NO_PLAY formats:
+    - 2025 format: {'ClubName': [{'date': '...', ...}]}
+    - 2026 format: {'EntryName': {'club': '...', 'dates': [...], 'grade': '...'}}
+    """
     
     def apply(self, model, X, data):
 
@@ -1298,40 +1386,43 @@ class PreferredTimesConstraint(Constraint):
 
         teams = data['teams']
         clubs = data['clubs']
-        noplay = data['preference_no_play']
+        noplay = data.get('preference_no_play', {})
         current_week = data['current_week']
-
-        allowed_keys = ['team_name', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         
+        if not noplay:
+            return  # No preferences to apply
+
+        # Keys used to match game tuples to restriction dicts
+        allowed_keys = ['team_name', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         allowed_keys2 = ['team1', 'team_name', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
 
+        # Normalize both formats to consistent structure
+        normalized = _normalize_preference_no_play(noplay, teams, clubs)
+        
         # Enforce no-play times with penalties
-        for club_name, restrictions in noplay.items():
-            club_teams = get_teams_from_club(club_name, teams)
-            if club_name.lower() not in [c.name.lower() for c in clubs]:
-                raise ValueError(f'Invalid team name {club_name} in PreferredTimeConstraint')
-
+        for entry_key, club_name, club_teams, constraint in normalized:
+            if 'date' not in constraint:
+                print(f"Warning: Skipping constraint '{entry_key}' - no date specified")
+                continue
             
-            for index, constraint in enumerate(restrictions):
-                if not all(key in allowed_keys for key in constraint.keys()):
-                    raise ValueError(f"Invalid key in noplay constraint for {club_name}: {constraint.keys()}")
-                if 'date' not in constraint:
-                    raise ValueError(f"Missing date in noplay constraint for {club_name}: {constraint}")
-                
-                if get_nearest_week_by_date(constraint['date'], data['timeslots']) <= current_week:
-                    print(f"Skipping noplay constraint for {club_name} as it is in the past.")
+            if get_nearest_week_by_date(constraint['date'], data['timeslots']) <= current_week:
+                print(f"Skipping noplay constraint for {entry_key} as it is in the past.")
+                continue
+
+            for i, game_key in enumerate(X):
+                # Check if any club team is in this game
+                if game_key[0] not in club_teams and game_key[1] not in club_teams:
                     continue
-
-                for i, game_key in enumerate(X):
-                    game_dict = dict(zip(allowed_keys, game_key))
-                    if all(game_dict.get(k) == v for k, v in constraint.items()) and (game_key[0] in club_teams or game_key[1] in club_teams):
-                        penalty_var = model.NewIntVar(0, 1, f"penalty_{club_name}_{index}")
-                        model.Add(penalty_var == X[game_key])
-                        data['penalties']['PreferredTimesConstraint']['penalties'].append(penalty_var)
-
-                    game_dict = dict(zip(allowed_keys2, game_key))
-                    if all(game_dict.get(k) == v for k, v in constraint.items()) and (game_key[0] in club_teams or game_key[1] in club_teams):
-                        penalty_var = model.NewIntVar(0, 1, f"penalty_{club_name}_{index}_{i}")
-                        model.Add(penalty_var == X[game_key])
-                        data['penalties']['PreferredTimesConstraint']['penalties'].append(penalty_var)
+                    
+                # Try matching with both key orderings
+                game_dict = dict(zip(allowed_keys, game_key))
+                game_dict2 = dict(zip(allowed_keys2, game_key))
+                
+                matches = all(game_dict.get(k) == v for k, v in constraint.items())
+                matches2 = all(game_dict2.get(k) == v for k, v in constraint.items())
+                
+                if matches or matches2:
+                    penalty_var = model.NewIntVar(0, 1, f"penalty_{entry_key}_{i}")
+                    model.Add(penalty_var == X[game_key])
+                    data['penalties']['PreferredTimesConstraint']['penalties'].append(penalty_var)
 

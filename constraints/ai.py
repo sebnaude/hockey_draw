@@ -858,9 +858,12 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
     """
     PRIORITY = "medium"
     
-    SLACK = 1
+    BASE_SLACK = 1  # Default slack, can be increased via constraint_slack config
     
     def apply(self, model, X, data) -> int:
+        # Allow slack override from config
+        slack_override = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 0)
+        effective_slack = self.BASE_SLACK + slack_override
         timeslots = data['timeslots']
         games = data['games']
         grades = data['grades']
@@ -874,8 +877,8 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
             if grade.num_teams > 0:
                 space = max_rounds // grade.num_teams
                 
-                min_spacing = space - self.SLACK
-                max_spacing = space + self.SLACK
+                min_spacing = space - effective_slack
+                max_spacing = space + effective_slack
                 
                 min_var = model.NewIntVar(min(0, min_spacing), max_spacing, f'ai_grade_spacing_min_{grade.name}')
                 model.Add(min_var == min_spacing)
@@ -1259,13 +1262,17 @@ class MaitlandHomeGroupingAI(ConstraintAI):
                 model.Add(home_ind == 0)
             home_indicators[week] = home_ind
         
-        # Hard constraint: No back-to-back home weekends
+        # Hard constraint: No back-to-back home weekends (configurable via slack)
+        # slack=0: limit=1 (no consecutive), slack=1: limit=2 (allows 1 back-to-back pair)
+        slack = data.get('constraint_slack', {}).get('MaitlandHomeGrouping', 0)
+        back_to_back_limit = 1 + slack
+        
         sorted_weeks = sorted(home_indicators.keys())
         for i in range(1, len(sorted_weeks)):
             prev_week = sorted_weeks[i - 1]
             curr_week = sorted_weeks[i]
             
-            model.Add(home_indicators[prev_week] + home_indicators[curr_week] <= 1)
+            model.Add(home_indicators[prev_week] + home_indicators[curr_week] <= back_to_back_limit)
             constraints_added += 1
         
         return constraints_added
@@ -1274,14 +1281,17 @@ class MaitlandHomeGroupingAI(ConstraintAI):
 class AwayAtMaitlandGroupingAI(ConstraintAI):
     """
     Limit away clubs visiting Maitland per weekend.
-    Hard limit: Max 3 away clubs per weekend.
+    Hard limit: Max 3 away clubs per weekend (configurable via constraint_slack).
     Soft penalty: Encourage fewer clubs.
     """
     PRIORITY = "soft"
     
-    HARD_LIMIT = 3
+    BASE_HARD_LIMIT = 3  # Default limit, can be increased via slack
     
     def apply(self, model, X, data) -> int:
+        # Allow slack override from config
+        slack = data.get('constraint_slack', {}).get('AwayAtMaitlandGrouping', 0)
+        hard_limit = self.BASE_HARD_LIMIT + slack
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['AwayAtMaitlandGrouping'] = {'weight': 100000, 'penalties': []}
