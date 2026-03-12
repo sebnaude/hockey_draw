@@ -123,7 +123,24 @@ Generates comprehensive analytics Excel file.
 
 ## Staged Solving
 
-The solver uses two stages:
+The solver uses two stages for better performance and checkpoint support.
+
+### How Staged Solving Works (IMPORTANT)
+
+**Critical concept:** OR-Tools CP-SAT does NOT support "locking in" a partial solution and adding constraints. Instead, we use a **HINT-based approach**:
+
+1. **Stage N completes:** Solution is saved as a checkpoint
+2. **Stage N+1 starts:** 
+   - A fresh model is created with ALL constraints (Stage 1 + Stage 2 + ... + Stage N+1)
+   - The Stage N solution is provided as a **HINT** to guide the solver
+   - The solver uses the hint as a starting point but may deviate if the combined constraints require it
+
+**When resuming from a checkpoint:**
+- The checkpoint solution becomes the HINT
+- ALL constraints from all stages up to and including the current stage are applied
+- The solver finds the best solution that satisfies all combined constraints
+
+This is NOT the same as "locking in" the prior solution - it's providing guidance.
 
 ### Stage 1: Required Constraints (stage1_required)
 
@@ -134,19 +151,38 @@ The solver uses two stages:
 - PHLAndSecondGradeAdjacency
 - PHLAndSecondGradeTimes
 - FiftyFiftyHomeandAway
-
-**Typical time:** 5-30 minutes
-
-### Stage 2: Soft Constraints (stage2_soft)
-
-**Constraints added:**
+- TeamConflictConstraint
+- MaxMaitlandHomeWeekends
 - ClubDayConstraint
 - EqualMatchUpSpacingConstraint
 - ClubGradeAdjacencyConstraint
 - ClubVsClubAlignment
-- All penalty-based constraints
+- MaitlandHomeGrouping
+- AwayAtMaitlandGrouping
+
+**Typical time:** 5-30 minutes to several hours
+
+### Stage 2: Soft Constraints (stage2_soft)
+
+**Constraints added (cumulative with Stage 1):**
+- EnsureBestTimeslotChoices
+- MaximiseClubsPerTimeslotBroadmeadow
+- MinimiseClubsOnAFieldBroadmeadow
+- PreferredTimesConstraint
 
 **Typical time:** Up to 72 hours
+
+### Resuming from Checkpoint
+
+```powershell
+# Resume after stage1_required completed
+.\.venv\Scripts\python.exe run.py generate --year 2026 --resume run_13 stage1_required
+```
+
+This will:
+1. Load the stage1_required solution as a HINT
+2. Apply ALL constraints (stage1 + stage2)
+3. Run stage2_soft with the hint guiding the search
 
 ---
 

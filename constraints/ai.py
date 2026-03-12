@@ -1342,8 +1342,8 @@ class AwayAtMaitlandGroupingAI(ConstraintAI):
             num_clubs = model.NewIntVar(0, len(club_indicators), f'num_away_{week}')
             model.Add(num_clubs == sum(club_indicators))
             
-            # Hard limit
-            model.Add(num_clubs <= self.HARD_LIMIT)
+            # Hard limit (uses local hard_limit variable that includes slack)
+            model.Add(num_clubs <= hard_limit)
             constraints_added += 1
             
             # Soft penalty

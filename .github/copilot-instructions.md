@@ -77,6 +77,22 @@ scripts/                   # Utility scripts
 
 ---
 
+## ⚠️ CRITICAL: Staged Solving Uses HINTS, Not Locks
+
+**OR-Tools CP-SAT does NOT support "locking in" a partial solution.**
+
+When resuming from a checkpoint or moving between stages:
+1. The prior solution is loaded as a **HINT** (not a lock)
+2. A NEW model is built with **ALL constraints** (prior stages + current stage)
+3. The solver uses the hint to guide search toward the prior solution
+4. The solver MAY deviate if the combined constraints require it
+
+**This is correct behavior.** Hints tell the solver "try values close to this" but don't force them.
+
+See `docs/ai/SYSTEM_OPERATION.md` for full details on staged solving.
+
+---
+
 ## ⚠️ CRITICAL: Rounds Concepts (Do NOT Confuse!)
 
 ### Max Available Weekends vs Played Rounds

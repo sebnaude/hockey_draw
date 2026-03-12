@@ -304,7 +304,8 @@ def run_generate(args):
             stages_to_run=stages,
             relax_config=relax_config,
             fix_round_1=fix_round_1,
-            constraint_slack=constraint_slack
+            constraint_slack=constraint_slack,
+            use_ai=args.ai
         )
     
     if solution:

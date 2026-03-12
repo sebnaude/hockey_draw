@@ -613,14 +613,25 @@ class StagedScheduleSolver:
             return status_name, {}, solve_time
     
     def run_staged_solve(self, run_id: str = None, resume_from: str = None, 
-                         stages_to_run: list = None) -> dict:
+                         stages_to_run: list = None, use_ai: bool = False) -> dict:
         """
         Run the staged solving process.
         
+        IMPORTANT: OR-Tools CP-SAT does not allow "locking in" a partial solution
+        and adding more constraints. Instead, we use a HINT-based approach:
+        
+        1. When resuming from a checkpoint, we load the prior solution as a HINT
+        2. We build a NEW model with ALL constraints (prior stages + current stage)
+        3. The solver uses the hint to guide its search toward the prior solution
+        4. The solver is free to deviate if the combined constraints require it
+        
+        This is the correct way to do staged solving with OR-Tools.
+        
         Args:
             run_id: Identifier for this run (for checkpointing)
-            resume_from: Stage name to resume from
+            resume_from: Stage name to resume from (solution used as hint)
             stages_to_run: List of stage names to run (default: all)
+            use_ai: Whether to use AI-enhanced constraint implementations
         
         Returns:
             Final solution dictionary
@@ -629,30 +640,44 @@ class StagedScheduleSolver:
         self.logger.info(f"Run directory: {run_dir}")
         print(f"Run directory: {run_dir}")
         
-        stages_to_run = stages_to_run or list(STAGES.keys())
+        # Get the stage definitions to use
+        stage_defs = STAGES_AI if use_ai else STAGES
+        all_stage_names = list(stage_defs.keys())
+        stages_to_run = stages_to_run or all_stage_names
         self.logger.info(f"Stages to run: {stages_to_run}")
         
-        # Handle resumption
+        # Track which stages have been applied (for cumulative constraint application)
+        applied_stages = set()
+        
+        # Handle resumption - load prior solution as HINT
         if resume_from:
             self.logger.info(f"Attempting to resume from stage: {resume_from}")
-            last_stage = resume_from
             loaded = self.checkpoint_manager.load_stage(run_dir, resume_from)
             if loaded:
                 self.current_solution = loaded['solution']
-                self.logger.info(f"Loaded checkpoint from {resume_from}: "
-                               f"{sum(1 for v in loaded['solution'].values() if v == 1)} games")
-                print(f"Resuming from {resume_from}")
+                games_in_hint = sum(1 for v in loaded['solution'].values() if v == 1)
+                self.logger.info(f"Loaded checkpoint from {resume_from}: {games_in_hint} games as HINT")
+                print(f"Resuming from {resume_from} (loaded {games_in_hint} games as hint)")
                 
-                # Skip stages before resume point
-                skip_idx = stages_to_run.index(resume_from) + 1
-                stages_to_run = stages_to_run[skip_idx:]
-                self.logger.info(f"Remaining stages after resume: {stages_to_run}")
+                # Mark that we have a hint but need to apply ALL constraints
+                # Find the resume stage index to determine which stages to run
+                try:
+                    resume_idx = all_stage_names.index(resume_from)
+                    # We run from the NEXT stage after resume_from
+                    stages_to_run = all_stage_names[resume_idx + 1:]
+                    self.logger.info(f"Will run remaining stages: {stages_to_run}")
+                    print(f"Will run remaining stages: {stages_to_run}")
+                    
+                    # BUT we need to apply constraints from ALL prior stages (including resume_from)
+                    # This happens in the stage loop below
+                except ValueError:
+                    self.logger.warning(f"Stage {resume_from} not found in {all_stage_names}")
             else:
                 self.logger.warning(f"Could not load checkpoint for {resume_from}")
         
         # Process each stage
         for stage_name in stages_to_run:
-            stage_config = STAGES[stage_name]
+            stage_config = stage_defs[stage_name]
             
             self.logger.info("=" * 60)
             self.logger.info(f"STARTING STAGE: {stage_name}")
@@ -667,13 +692,32 @@ class StagedScheduleSolver:
             print(f"Description: {stage_config['description']}")
             print(f"{'='*60}")
             
-            # Add hints from previous solution
+            # Add hints from previous solution BEFORE applying any constraints
+            # This guides the solver toward a known feasible solution
             if self.current_solution:
                 self.add_solution_hints(self.current_solution)
             
+            # Determine which constraints to apply for this stage
+            # We need ALL constraints from prior stages + current stage (cumulative)
+            constraints_to_apply = []
+            
+            # Find stages up to and including current one that haven't been applied yet
+            for s_name in all_stage_names:
+                if s_name not in applied_stages:
+                    s_config = stage_defs[s_name]
+                    constraints_to_apply.extend(s_config['constraints'])
+                    applied_stages.add(s_name)
+                    
+                    # Stop when we reach the current stage
+                    if s_name == stage_name:
+                        break
+            
+            self.logger.info(f"  Constraints to apply: {len(constraints_to_apply)} from stages: {applied_stages}")
+            print(f"  Applying {len(constraints_to_apply)} constraints from stages: {list(applied_stages)}")
+            
             # If relaxation is enabled, check feasibility first and relax if needed
             if self.relax_config.get('enabled'):
-                problem_level = self.find_and_relax_problem_group(stage_config['constraints'])
+                problem_level = self.find_and_relax_problem_group(constraints_to_apply)
                 if problem_level == 1:
                     # Level 1 infeasibility - cannot proceed
                     self.logger.error("Level 1 constraints infeasible - aborting")
@@ -683,7 +727,7 @@ class StagedScheduleSolver:
             # Apply constraints (uses soft versions for relaxed groups)
             self.logger.info("Applying constraints...")
             print("Applying constraints:")
-            constraints_added = self.apply_constraints(stage_config['constraints'])
+            constraints_added = self.apply_constraints(constraints_to_apply)
             self.logger.info(f"  Constraints added this stage: {constraints_added}")
             self.logger.info(f"  Model total constraints: {len(self.model.Proto().constraints)}")
             print(f"  Total: {constraints_added} constraints added")
@@ -751,13 +795,14 @@ def load_data(year: int) -> dict:
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
                 solver_config: SolverConfig = None, year: int = None,
                 stages_to_run: list = None, relax_config: dict = None,
-                fix_round_1: bool = False, constraint_slack: dict = None):
+                fix_round_1: bool = False, constraint_slack: dict = None,
+                use_ai: bool = False):
     """
     Main entry point for staged solving.
     
     Args:
         run_id: Identifier for this run (auto-generated if None)
-        resume_from: Stage name to resume from
+        resume_from: Stage name to resume from (solution is used as HINT)
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         solver_config: Optional solver configuration for resource management.
         year: The season year (e.g., 2025, 2026). Required.
@@ -765,6 +810,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         constraint_slack: Optional dict mapping constraint names to slack values.
+        use_ai: If True, use AI-enhanced constraint implementations.
+        
+    Note:
+        When resuming, the prior solution is used as a HINT to guide the solver,
+        but ALL constraints (from prior stages + current stage) are applied.
+        The solver may deviate from the hint if required by the combined constraints.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -841,7 +892,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     
     # Run staged solve
     try:
-        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run)
+        solution = solver.run_staged_solve(
+            run_id=run_id, 
+            resume_from=resume_from, 
+            stages_to_run=stages_to_run,
+            use_ai=use_ai
+        )
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")
         logger.critical(traceback.format_exc())
