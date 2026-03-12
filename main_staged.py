@@ -260,6 +260,148 @@ STAGES_AI = {
 }
 
 
+# ============== Severity-Based Stages ==============
+# 
+# These stages organize constraints by severity level (1-4).
+# Each stage adds constraints cumulatively:
+#   - severity_1: Level 1 only (CRITICAL)
+#   - severity_2: Level 1 + Level 2 (add HIGH)  
+#   - severity_3: Level 1 + Level 2 + Level 3 (add MEDIUM)
+#   - severity_4: All levels (add LOW)
+#
+# Between stages, the previous solution is used as a HINT.
+
+STAGES_SEVERITY = {
+    'severity_1': {
+        'name': 'Level 1 - CRITICAL',
+        'description': 'Core constraints that must never be broken',
+        'constraints': [
+            # Double-booking prevention
+            NoDoubleBookingTeamsConstraint,
+            NoDoubleBookingFieldsConstraint,
+            # Game balance
+            EnsureEqualGamesAndBalanceMatchUps,
+            # Grade adjacency and timing
+            PHLAndSecondGradeAdjacency,
+            PHLAndSecondGradeTimes,
+            # Home/Away balance
+            FiftyFiftyHomeandAway,
+            # Venue constraints
+            MaxMaitlandHomeWeekends,
+            # Maitland grouping (hard element: no back-to-back)
+            MaitlandHomeGrouping,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_2': {
+        'name': 'Level 2 - HIGH',
+        'description': 'Structural, club-specific constraints',
+        'constraints': [
+            # Club day events
+            ClubDayConstraint,
+            # Away at Maitland (hard limit)
+            AwayAtMaitlandGrouping,
+            # Team conflicts
+            TeamConflictConstraint,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_3': {
+        'name': 'Level 3 - MEDIUM',
+        'description': 'Spacing and alignment constraints',
+        'constraints': [
+            # Spacing
+            EqualMatchUpSpacingConstraint,
+            # Grade adjacency for clubs
+            ClubGradeAdjacencyConstraint,
+            # Club alignment
+            ClubVsClubAlignment,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_4': {
+        'name': 'Level 4 - LOW',
+        'description': 'Soft optimization constraints',
+        'constraints': [
+            # Timeslot optimization
+            EnsureBestTimeslotChoices,
+            # Club diversity at Broadmeadow
+            MaximiseClubsPerTimeslotBroadmeadow,
+            # Field continuity at Broadmeadow
+            MinimiseClubsOnAFieldBroadmeadow,
+            # Preferred times / no-play constraints
+            PreferredTimesConstraint,
+        ],
+        'max_time_seconds': 259200,
+        'required': False,
+        'use_callback': True,
+    },
+}
+
+STAGES_SEVERITY_AI = {
+    'severity_1': {
+        'name': 'Level 1 - CRITICAL (AI)',
+        'description': 'Core constraints - AI implementations',
+        'constraints': [
+            NoDoubleBookingTeamsConstraintAI,
+            NoDoubleBookingFieldsConstraintAI,
+            EnsureEqualGamesAndBalanceMatchUpsAI,
+            PHLAndSecondGradeAdjacencyAI,
+            PHLAndSecondGradeTimesAI,
+            FiftyFiftyHomeandAwayAI,
+            MaxMaitlandHomeWeekendsAI,
+            MaitlandHomeGroupingAI,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_2': {
+        'name': 'Level 2 - HIGH (AI)',
+        'description': 'Structural constraints - AI implementations',
+        'constraints': [
+            ClubDayConstraintAI,
+            AwayAtMaitlandGroupingAI,
+            TeamConflictConstraintAI,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_3': {
+        'name': 'Level 3 - MEDIUM (AI)',
+        'description': 'Spacing constraints - AI implementations',
+        'constraints': [
+            EqualMatchUpSpacingConstraintAI,
+            ClubGradeAdjacencyConstraintAI,
+            ClubVsClubAlignmentAI,
+        ],
+        'max_time_seconds': 259200,
+        'required': True,
+        'use_callback': True,
+    },
+    'severity_4': {
+        'name': 'Level 4 - LOW (AI)',
+        'description': 'Soft optimization - AI implementations',
+        'constraints': [
+            EnsureBestTimeslotChoicesAI,
+            MaximiseClubsPerTimeslotBroadmeadowAI,
+            MinimiseClubsOnAFieldBroadmeadowAI,
+            PreferredTimesConstraintAI,
+        ],
+        'max_time_seconds': 259200,
+        'required': False,
+        'use_callback': True,
+    },
+}
+
+
 # ============== Checkpoint Management ==============
 
 class CheckpointManager:
@@ -613,7 +755,8 @@ class StagedScheduleSolver:
             return status_name, {}, solve_time
     
     def run_staged_solve(self, run_id: str = None, resume_from: str = None, 
-                         stages_to_run: list = None, use_ai: bool = False) -> dict:
+                         stages_to_run: list = None, use_ai: bool = False,
+                         severity_staged: bool = False) -> dict:
         """
         Run the staged solving process.
         
@@ -632,6 +775,7 @@ class StagedScheduleSolver:
             resume_from: Stage name to resume from (solution used as hint)
             stages_to_run: List of stage names to run (default: all)
             use_ai: Whether to use AI-enhanced constraint implementations
+            severity_staged: If True, use severity-based stages (4 levels) instead of default stages
         
         Returns:
             Final solution dictionary
@@ -640,8 +784,15 @@ class StagedScheduleSolver:
         self.logger.info(f"Run directory: {run_dir}")
         print(f"Run directory: {run_dir}")
         
-        # Get the stage definitions to use
-        stage_defs = STAGES_AI if use_ai else STAGES
+        # Get the stage definitions to use based on mode
+        if severity_staged:
+            stage_defs = STAGES_SEVERITY_AI if use_ai else STAGES_SEVERITY
+            self.logger.info("Using SEVERITY-BASED stages (4 levels)")
+            print("Mode: SEVERITY-BASED stages (Level 1 → 2 → 3 → 4)")
+        else:
+            stage_defs = STAGES_AI if use_ai else STAGES
+            self.logger.info("Using DEFAULT stages (required + soft)")
+        
         all_stage_names = list(stage_defs.keys())
         stages_to_run = stages_to_run or all_stage_names
         self.logger.info(f"Stages to run: {stages_to_run}")
@@ -796,7 +947,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 solver_config: SolverConfig = None, year: int = None,
                 stages_to_run: list = None, relax_config: dict = None,
                 fix_round_1: bool = False, constraint_slack: dict = None,
-                use_ai: bool = False):
+                use_ai: bool = False, severity_staged: bool = False):
     """
     Main entry point for staged solving.
     
@@ -806,11 +957,14 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         solver_config: Optional solver configuration for resource management.
         year: The season year (e.g., 2025, 2026). Required.
-        stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft
+        stages_to_run: List of stage names to run (default: all).
+            Default mode: stage1_required, stage2_soft
+            Severity mode (--staged): severity_1, severity_2, severity_3, severity_4
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         constraint_slack: Optional dict mapping constraint names to slack values.
         use_ai: If True, use AI-enhanced constraint implementations.
+        severity_staged: If True, use severity-based staging (4 levels by severity).
         
     Note:
         When resuming, the prior solution is used as a HINT to guide the solver,
@@ -896,7 +1050,8 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
             run_id=run_id, 
             resume_from=resume_from, 
             stages_to_run=stages_to_run,
-            use_ai=use_ai
+            use_ai=use_ai,
+            severity_staged=severity_staged
         )
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")

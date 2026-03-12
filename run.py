@@ -85,7 +85,13 @@ Examples:
                                  'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
     gen_parser.add_argument('--stages', nargs='+', metavar='STAGE',
                             help='Run only specific stages (e.g., --stages stage1_required). '
-                                 'Available: stage1_required, stage2_soft')
+                                 'Default: stage1_required, stage2_soft. '
+                                 'With --staged: severity_1, severity_2, severity_3, severity_4')
+    gen_parser.add_argument('--staged', action='store_true',
+                            help='Use severity-based staging instead of default. '
+                                 'Runs 4 stages by severity level: '
+                                 'Level 1 (CRITICAL) → Level 2 (HIGH) → Level 3 (MEDIUM) → Level 4 (LOW). '
+                                 'Each stage uses the prior solution as a HINT.')
     gen_parser.add_argument('--relax', action='store_true',
                             help='Enable severity-based constraint relaxation. If infeasible, '
                                  'automatically identifies problem severity group and relaxes slack variables.')
@@ -295,6 +301,7 @@ def run_generate(args):
                 'enabled': True,
                 'timeout': getattr(args, 'relax_timeout', 30.0),
             }
+        severity_staged = getattr(args, 'staged', False)
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
@@ -305,7 +312,8 @@ def run_generate(args):
             relax_config=relax_config,
             fix_round_1=fix_round_1,
             constraint_slack=constraint_slack,
-            use_ai=args.ai
+            use_ai=args.ai,
+            severity_staged=severity_staged
         )
     
     if solution:
