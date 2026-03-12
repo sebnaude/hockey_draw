@@ -184,6 +184,9 @@ FRIDAY_NIGHT_CONFIG = {
 # Generate with automatic constraint relaxation (if infeasible)
 .\.venv\Scripts\python.exe run.py generate --year 2026 --relax
 
+# Generate with relaxed constraint limits (+N to specific limits)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 1
+
 # Pre-season report
 .\.venv\Scripts\python.exe run.py preseason --year 2026
 
@@ -193,6 +196,24 @@ FRIDAY_NIGHT_CONFIG = {
 # Diagnose infeasibility
 .\.venv\Scripts\python.exe run.py diagnose --year 2026 --timeout 60
 ```
+
+---
+
+## --slack Flag (Constraint Limit Relaxation)
+
+When solver returns INFEASIBLE and `--relax` doesn't help, try `--slack N` to loosen specific constraints:
+
+```powershell
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 1
+```
+
+**Affected Constraints:**
+
+| Constraint | Base | +1 Slack | +2 Slack |
+|------------|------|----------|----------|
+| `EqualMatchUpSpacing` | ±1 round | ±2 rounds | ±3 rounds |
+| `AwayAtMaitlandGrouping` | Max 3 | Max 4 | Max 5 |
+| `MaitlandHomeGrouping` | No back-to-back | 1 allowed | 2 allowed |
 
 ---
 

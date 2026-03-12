@@ -57,7 +57,22 @@ Every command requires `--year`:
 
 # Custom worker count
 .\.venv\Scripts\python.exe run.py generate --year 2026 --workers 14
+
+# Relax specific constraints (add slack to limits)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 1
 ```
+
+### --slack Flag (Constraint Relaxation)
+
+The `--slack N` flag adds N to constraint limits for three configurable constraints:
+
+| Constraint | Base Limit | With --slack 1 | With --slack 2 |
+|------------|------------|----------------|----------------|
+| `EqualMatchUpSpacingConstraint` | ±1 round | ±2 rounds | ±3 rounds |
+| `AwayAtMaitlandGrouping` | Max 3 away clubs | Max 4 | Max 5 |
+| `MaitlandHomeGrouping` | No back-to-back | 1 allowed | 2 allowed |
+
+**When to use:** If solver returns INFEASIBLE and `--relax` doesn't help, try `--slack 1`.
 
 ### Pre-Season Report
 

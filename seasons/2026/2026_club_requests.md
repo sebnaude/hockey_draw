@@ -72,8 +72,8 @@ This document tracks all requests received from clubs, their implementation stat
 
 | Request | Club | Implementation Method | Implementation Location | Notes |
 |---------|------|----------------------|------------------------|-------|
-| Crusaders 6th - NSW Masters Moorebank (Apr 17-19) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_Masters_1']` | Penalty weight 10,000 |
-| Crusaders 6th - NSW Masters Tamworth (Jun 26-28) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_Masters_2']` | Penalty weight 10,000 |
+| Crusaders 6th - NSW Masters Moorebank (Apr 17-19) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_6th_Masters_Moorebank']` | 2026 format: `{'club': 'Crusaders', 'grade': '6th', 'dates': [...]}` |
+| Crusaders 6th - NSW Masters Tamworth (Jun 26-28) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_6th_Masters_Tamworth']` | 2026 format: `{'club': 'Crusaders', 'grade': '6th', 'dates': [...]}` |
 
 ---
 
@@ -170,3 +170,46 @@ The following clubs have not submitted direct requests. Team nominations taken f
 > We also have some going to the world cup, so avoiding doubling up during August for 5th Gold and 6th grade will also lessen the impact of those players being away.
 > We would be keen for a club day any time you can string all our games together.
 > We would prefer not to have our 2 5th grades at the same time except when playing each other, and avoid overlapping 4th and 5th or 5th and 6th, but overlapping 4th and 6th would be excellent.
+
+---
+
+## 🔧 TECHNICAL IMPLEMENTATION CHANGES
+
+### 2026-03-11: Runtime Constraint Slack (--slack N)
+
+**Purpose:** Allow runtime relaxation of specific constraint limits when solver returns INFEASIBLE.
+
+**What Changed:**
+- Added `--slack N` CLI argument to `run.py`
+- Three constraints now support configurable limits:
+
+| Constraint | Base Limit | With --slack N |
+|------------|------------|----------------|
+| `EqualMatchUpSpacingConstraint` | ±1 round | ±(1+N) rounds |
+| `AwayAtMaitlandGrouping` | Max 3 away clubs per Maitland weekend | Max 3+N |
+| `MaitlandHomeGrouping` | No back-to-back home weekends | N back-to-back pairs allowed |
+
+**Files Modified:**
+- `run.py` - Added CLI argument and constraint_slack dict builder
+- `utils.py` - Pass constraint_slack through build_season_data()
+- `main_staged.py` - Accept constraint_slack parameter
+- `constraints/original.py` - All 3 constraints read from data['constraint_slack']
+- `constraints/ai.py` - AI versions also read from constraint_slack
+
+**Usage:**
+```powershell
+# Standard run (base limits)
+.\\.venv\\Scripts\\python.exe run.py generate --year 2026
+
+# With relaxed constraints (+1 to all limits)
+.\\.venv\\Scripts\\python.exe run.py generate --year 2026 --slack 1
+```
+
+**When to Use:**
+- If solver returns INFEASIBLE and `--relax` doesn't help
+- For one-off relaxation when constraints are overconstrained
+
+**Documentation Updated:**
+- `docs/ai/CONFIGURATION_REFERENCE.md` - New section on constraint_slack
+- `docs/ai/CONSTRAINT_APPLICATION.md` - New section on runtime relaxation
+- `docs/ai/SYSTEM_OPERATION.md` - Added --slack to command list

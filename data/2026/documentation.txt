@@ -40,8 +40,28 @@ These conventions are defined in: config/team_naming.py
 
 NOPLAY FORMAT:
 --------------
-Each noplay XLSX should contain dates/times when teams are unavailable.
-Sheets required: club_noplay, teams_noplay, team_conflicts
+TWO OPTIONS for specifying team unavailabilities:
+
+OPTION 1: Python Config (Recommended for 2026+)
+Add to PREFERENCE_NO_PLAY in config/season_{year}.py:
+```python
+PREFERENCE_NO_PLAY = {
+    'Crusaders_6th_Masters': {       # Descriptive key
+        'club': 'Crusaders',          # REQUIRED
+        'grade': '6th',               # OPTIONAL: filter to grade
+        'dates': [datetime(2026, 4, 17), ...],  # REQUIRED
+        'reason': 'Masters SC',       # OPTIONAL: documentation
+    },
+}
+```
+This is a SOFT constraint - solver tries to avoid but can override.
+
+OPTION 2: Excel Files (Legacy - still supported)
+Create data/{year}/noplay/{club}_noplay.xlsx with 3 sheets:
+- club_noplay: whole_weekend, whole_day, timeslot (blocks all club teams)
+- teams_noplay: team, whole_weekend, whole_day, timeslot (blocks specific team)
+- team_conflicts: team1, team2 (teams can't play at same time)
+This is a HARD constraint - games are excluded entirely.
 
 STATUS:
 -------

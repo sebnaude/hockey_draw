@@ -29,33 +29,55 @@ When someone says "Team X can't play on Date Y", you have **two options**:
 
 ```python
 PREFERENCE_NO_PLAY = {
-    'Crusaders_6th_Masters': {
-        'club': 'Crusaders',
-        'grade': '6th',
+    'Crusaders_6th_Masters': {       # Descriptive key (unique identifier)
+        'club': 'Crusaders',          # REQUIRED: Club name
+        'grade': '6th',               # OPTIONAL: Filter to specific grade
         'dates': [datetime(2026, 4, 17), datetime(2026, 4, 18), datetime(2026, 4, 19)],
-        'reason': 'Masters State Championships',
+        'reason': 'Masters State Championships',  # OPTIONAL: Documentation
     },
 }
 ```
 
-2. This adds a penalty (10,000 weight) via `PreferredTimesConstraint` (severity 4).
+**Format Options:**
+- `'grade': '6th'` - affects only that grade
+- `'grades': ['PHL', '2nd']` - affects multiple grades
+- No grade field - affects ALL club teams
+
+2. This adds a penalty (10,000,000 weight) via `PreferredTimesConstraint` (severity 4).
 
 **Behavior:** Solver will try to avoid these dates, but may use them if necessary.
 
-### Option 2: Hard Constraint (Variable Removal)
+### Option 2: Hard Constraint (XLSX Variable Removal)
 
 **Use when:** Absolutely cannot play - venue closed, team doesn't exist that day, etc.
 
 **How to apply:**
 
-1. Create/update `data/{year}/noplay/{club}_noplay.xlsx`:
+1. Create/update `data/{year}/noplay/{club}_noplay.xlsx` with THREE sheets:
 
-| Team | Date | Reason |
-|------|------|--------|
-| Crusaders 6th | 2026-04-17 | Masters SC |
-| Crusaders 6th | 2026-04-18 | Masters SC |
+**Sheet: `club_noplay`** (blocks ALL club teams)
+| whole_weekend | whole_day | timeslot |
+|---------------|-----------|----------|
+| 15/06/2026 | | |
+| | 14/06/2026 | |
 
-2. The system reads this in `utils.py` → `load_noplay_dates()` and **excludes those variables entirely**.
+**Sheet: `teams_noplay`** (blocks specific teams)
+| team | whole_weekend | whole_day | timeslot |
+|------|---------------|-----------|----------|
+| Crusaders 6th | 14/06/2026 | | |
+| Crusaders PHL | | 15/06/2026 | |
+
+**Sheet: `team_conflicts`** (teams that can't play at same time)
+| team1 | team2 |
+|-------|-------|
+| Crusaders 5th | Crusaders 6th |
+
+**Column meanings:**
+- `whole_weekend`: Blocks entire weekend (by week number) - format `DD/MM/YYYY`
+- `whole_day`: Blocks specific calendar day - format `DD/MM/YYYY`
+- `timeslot`: Blocks specific slot - format `DD/MM/YYYY HH:MM`
+
+2. The system reads this at variable creation time and **excludes those games entirely**.
 
 **Behavior:** No game variables are created for that team on those dates.
 
@@ -209,6 +231,46 @@ Automatic via `ClubGradeAdjacencyConstraint`:
 | 4 | LOW | Timeslot choices, PreferredTimes | First to relax |
 
 Use `--relax` flag to automatically relax constraints if solver returns INFEASIBLE.
+
+---
+
+## Runtime Constraint Relaxation (--slack)
+
+For specific constraints where hardcoded limits may be too restrictive, use the `--slack N` CLI flag:
+
+```powershell
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 1
+```
+
+### Supported Constraints
+
+| Constraint | Base Limit | Effect of --slack N |
+|------------|------------|---------------------|
+| `EqualMatchUpSpacingConstraint` | ±1 round from ideal | Allow ±(1+N) rounds |
+| `AwayAtMaitlandGrouping` | Max 3 away clubs per Maitland weekend | Max 3+N away clubs |
+| `MaitlandHomeGrouping` | No back-to-back home weekends | Allow N back-to-back pairs |
+
+### How It Works
+
+1. CLI parses `--slack N` and builds a `constraint_slack` dict
+2. The dict is passed through `build_season_data()` → `data['constraint_slack']`
+3. Each constraint reads from `data.get('constraint_slack', {})`
+4. Constraints apply: `actual_limit = base_limit + constraint_slack.get('ConstraintName', 0)`
+
+### Implementation Location
+
+- **CLI parsing:** `run.py` lines 99-101, 256-267
+- **Data passing:** `utils.py` → `build_season_data()` adds `'constraint_slack'` to data dict
+- **Constraint code:** Both `constraints/original.py` and `constraints/ai.py` read from `data.get('constraint_slack', {})`
+
+### When to Use
+
+| Situation | Recommended Flag |
+|-----------|------------------|
+| Solver INFEASIBLE, need quick fix | `--slack 1` |
+| Still INFEASIBLE after --slack 1 | `--slack 2` then investigate config |
+| One-off relaxation for specific season | `--slack 1` acceptable |
+| Permanent relaxation | Update base limit in constraint code |
 
 ---
 
