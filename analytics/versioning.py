@@ -7,24 +7,41 @@ This module provides:
 2. Automatic CHANGELOG generation with diffs
 3. Version history tracking
 4. Safe storage with version collision prevention
+5. Unified output saving for all solver modes
 
 Version Scheme:
 - Major (X.0): Complete regeneration or structural changes
 - Minor (X.Y): Incremental updates (game modifications, swaps, fixes)
 
+Directory Structure:
+    draws/{year}/
+    ├── current.json              # Always the latest draw (auto-updated)
+    ├── current.xlsx              # Always the latest schedule Excel
+    ├── current_analytics.xlsx    # Always the latest analytics
+    ├── CHANGELOG.md              # Auto-generated version history
+    └── versions/                 # All versioned draws
+        ├── draw_v1.0.json
+        ├── draw_v1.0.xlsx
+        ├── draw_v2.0.json
+        └── draw_v2.0.xlsx
+
 Usage:
     from analytics.versioning import DrawVersionManager
     
-    manager = DrawVersionManager("draws/2026")
+    manager = DrawVersionManager("draws", year=2026)
     
     # Save a new major version (fresh generation)
     version = manager.save_new_draw(draw, "Initial generation")
     
     # Save a minor update (modification to existing)
     version = manager.save_modified_draw(draw, old_draw, "Fixed Maitland clash")
+    
+    # Save full solver output (draw + Excel + analytics)
+    version = manager.save_solver_output(solution, data, "Staged solve")
 """
 
 import re
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -79,12 +96,16 @@ class DrawVersionManager:
     Manages versioned draw storage with automatic CHANGELOG.
     
     Directory structure:
-        draws/2026/
-        ├── CHANGELOG.md         # Auto-generated version history
-        ├── draw_v1.0.json       # Major version 1
-        ├── draw_v1.1.json       # Minor update
-        ├── draw_v2.0.json       # New major version
-        └── current.json         # Symlink/copy to latest
+        draws/{year}/
+        ├── current.json              # Always the latest draw
+        ├── current.xlsx              # Always the latest schedule Excel
+        ├── current_analytics.xlsx    # Always the latest analytics
+        ├── CHANGELOG.md              # Auto-generated version history
+        └── versions/                 # All versioned draws
+            ├── draw_v1.0.json
+            ├── draw_v1.0.xlsx
+            ├── draw_v2.0.json
+            └── draw_v2.0.xlsx
     """
     
     VERSION_PATTERN = re.compile(r"draw_v(\d+)\.(\d+)\.json")
@@ -94,35 +115,48 @@ class DrawVersionManager:
         Initialize version manager.
         
         Args:
-            base_dir: Base directory for versioned draws
-            year: Optional year (will be appended to base_dir if provided)
+            base_dir: Base directory for draws (e.g., "draws")
+            year: Optional year (creates draws/{year}/ structure)
         """
         if year:
             self.base_path = Path(base_dir) / str(year)
         else:
             self.base_path = Path(base_dir)
         self.base_path.mkdir(parents=True, exist_ok=True)
+        
+        # Versions subfolder for all versioned draws
+        self.versions_path = self.base_path / "versions"
+        self.versions_path.mkdir(parents=True, exist_ok=True)
+        
         self.changelog_path = self.base_path / "CHANGELOG.md"
     
     def get_versions(self) -> List[DrawVersion]:
-        """Get all existing versions, sorted by version number."""
+        """Get all existing versions, sorted by version number.
+        
+        Looks in both versions/ subfolder and base path for backward compatibility.
+        """
         versions = []
-        for path in self.base_path.glob("draw_v*.json"):
-            match = self.VERSION_PATTERN.match(path.name)
-            if match:
-                major, minor = int(match.group(1)), int(match.group(2))
-                try:
-                    draw = DrawStorage.load(str(path))
-                    versions.append(DrawVersion(
-                        major=major,
-                        minor=minor,
-                        created_at=draw.created_at,
-                        description=draw.description,
-                        filename=path.name,
-                        game_count=draw.num_games
-                    ))
-                except Exception as e:
-                    print(f"Warning: Could not load {path}: {e}")
+        seen = set()
+        
+        # Check versions/ subfolder first (new location)
+        for search_path in [self.versions_path, self.base_path]:
+            for path in search_path.glob("draw_v*.json"):
+                match = self.VERSION_PATTERN.match(path.name)
+                if match and path.name not in seen:
+                    seen.add(path.name)
+                    major, minor = int(match.group(1)), int(match.group(2))
+                    try:
+                        draw = DrawStorage.load(str(path))
+                        versions.append(DrawVersion(
+                            major=major,
+                            minor=minor,
+                            created_at=draw.created_at,
+                            description=draw.description,
+                            filename=path.name,
+                            game_count=draw.num_games
+                        ))
+                    except Exception as e:
+                        print(f"Warning: Could not load {path}: {e}")
         
         return sorted(versions, key=lambda v: (v.major, v.minor))
     
@@ -313,18 +347,29 @@ class DrawVersionManager:
         
         self.changelog_path.write_text(content, encoding="utf-8")
     
-    def _update_current(self, version_path: Path):
-        """Update the 'current.json' to point to the latest version."""
-        current_path = self.base_path / "current.json"
-        # On Windows, just copy the file; on Unix we could use symlink
-        import shutil
-        shutil.copy(version_path, current_path)
+    def _update_current(self, version_path: Path, xlsx_path: Path = None, analytics_path: Path = None):
+        """Update the 'current' files to point to the latest version."""
+        # Copy draw JSON
+        current_json = self.base_path / "current.json"
+        shutil.copy(version_path, current_json)
+        
+        # Copy schedule Excel if provided
+        if xlsx_path and xlsx_path.exists():
+            current_xlsx = self.base_path / "current.xlsx"
+            shutil.copy(xlsx_path, current_xlsx)
+        
+        # Copy analytics Excel if provided
+        if analytics_path and analytics_path.exists():
+            current_analytics = self.base_path / "current_analytics.xlsx"
+            shutil.copy(analytics_path, current_analytics)
     
     def save_new_draw(
         self,
         draw: DrawStorage,
         description: str,
-        is_major: bool = True
+        is_major: bool = True,
+        xlsx_path: Path = None,
+        analytics_path: Path = None
     ) -> DrawVersion:
         """
         Save a new draw version.
@@ -333,6 +378,8 @@ class DrawVersionManager:
             draw: The draw to save
             description: Human-readable description of this version
             is_major: If True, increments major version; else increments minor
+            xlsx_path: Optional path to schedule Excel to copy into versions/
+            analytics_path: Optional path to analytics Excel to copy into versions/
             
         Returns:
             DrawVersion object for the saved version
@@ -348,10 +395,20 @@ class DrawVersionManager:
         draw.metadata["version"] = f"v{major}.{minor}"
         draw.metadata["version_type"] = "major" if is_major else "minor"
         
-        # Save the draw
+        # Save the draw to versions/ subfolder
         filename = self._version_filename(major, minor)
-        filepath = self.base_path / filename
+        filepath = self.versions_path / filename
         draw.save(str(filepath))
+        
+        # Copy xlsx and analytics into versions/ if provided
+        versioned_xlsx = None
+        versioned_analytics = None
+        if xlsx_path and Path(xlsx_path).exists():
+            versioned_xlsx = self.versions_path / f"draw_v{major}.{minor}.xlsx"
+            shutil.copy(xlsx_path, versioned_xlsx)
+        if analytics_path and Path(analytics_path).exists():
+            versioned_analytics = self.versions_path / f"draw_v{major}.{minor}_analytics.xlsx"
+            shutil.copy(analytics_path, versioned_analytics)
         
         # Create version record
         version = DrawVersion(
@@ -366,17 +423,24 @@ class DrawVersionManager:
         # Update changelog
         self._update_changelog(version, description, is_major=is_major)
         
-        # Update current pointer
-        self._update_current(filepath)
+        # Update current pointer files
+        self._update_current(
+            filepath,
+            xlsx_path=versioned_xlsx or (Path(xlsx_path) if xlsx_path else None),
+            analytics_path=versioned_analytics or (Path(analytics_path) if analytics_path else None)
+        )
         
         print(f"Saved {version} to {filepath}")
+        print(f"Updated current.json in {self.base_path}")
         return version
     
     def save_modified_draw(
         self,
         new_draw: DrawStorage,
         old_draw: DrawStorage,
-        description: str
+        description: str,
+        xlsx_path: Path = None,
+        analytics_path: Path = None
     ) -> DrawVersion:
         """
         Save a modified draw as a minor version with diff tracking.
@@ -385,6 +449,8 @@ class DrawVersionManager:
             new_draw: The modified draw to save
             old_draw: The previous draw for comparison
             description: Description of changes
+            xlsx_path: Optional path to schedule Excel to copy into versions/
+            analytics_path: Optional path to analytics Excel to copy into versions/
             
         Returns:
             DrawVersion object for the saved version
@@ -405,10 +471,20 @@ class DrawVersionManager:
             "modified": len(diff.modified_games)
         }
         
-        # Save the draw
+        # Save the draw to versions/
         filename = self._version_filename(major, minor)
-        filepath = self.base_path / filename
+        filepath = self.versions_path / filename
         new_draw.save(str(filepath))
+        
+        # Copy xlsx and analytics into versions/ if provided
+        versioned_xlsx = None
+        versioned_analytics = None
+        if xlsx_path and Path(xlsx_path).exists():
+            versioned_xlsx = self.versions_path / f"draw_v{major}.{minor}.xlsx"
+            shutil.copy(xlsx_path, versioned_xlsx)
+        if analytics_path and Path(analytics_path).exists():
+            versioned_analytics = self.versions_path / f"draw_v{major}.{minor}_analytics.xlsx"
+            shutil.copy(analytics_path, versioned_analytics)
         
         # Create version record
         version = DrawVersion(
@@ -423,16 +499,26 @@ class DrawVersionManager:
         # Update changelog with diff
         self._update_changelog(version, description, diff=diff, is_major=False)
         
-        # Update current pointer
-        self._update_current(filepath)
+        # Update current pointer files
+        self._update_current(
+            filepath,
+            xlsx_path=versioned_xlsx or (Path(xlsx_path) if xlsx_path else None),
+            analytics_path=versioned_analytics or (Path(analytics_path) if analytics_path else None)
+        )
         
         print(f"Saved {version} to {filepath}")
         print(f"Changes: {diff.summary}")
+        print(f"Updated current.json in {self.base_path}")
         return version
     
     def load_version(self, major: int, minor: int) -> Optional[DrawStorage]:
-        """Load a specific version."""
+        """Load a specific version. Checks versions/ subfolder first, then base path."""
         filename = self._version_filename(major, minor)
+        # Check versions/ subfolder first (new location)
+        filepath = self.versions_path / filename
+        if filepath.exists():
+            return DrawStorage.load(str(filepath))
+        # Fallback to base path (legacy location)
         filepath = self.base_path / filename
         if filepath.exists():
             return DrawStorage.load(str(filepath))
@@ -460,3 +546,156 @@ class DrawVersionManager:
         for v in versions:
             lines.append(f"  {v.version_string:8} | {v.created_at[:10]} | {v.game_count:4} games | {v.description[:40]}")
         return "\n".join(lines)
+    
+    def save_solver_output(
+        self,
+        solution: dict,
+        data: dict,
+        description: str,
+        mode: str = "staged",
+        is_major: bool = True,
+    ) -> DrawVersion:
+        """
+        Unified output saving for all solver modes.
+        
+        Saves:
+        1. Versioned draw JSON in versions/
+        2. Versioned schedule Excel in versions/
+        3. Versioned analytics Excel in versions/
+        4. current.json, current.xlsx, current_analytics.xlsx in year root
+        5. CHANGELOG.md update
+        6. Violation report if any
+        
+        Args:
+            solution: The X solution dictionary from the solver
+            data: The data dictionary
+            description: Description of this solve (e.g., "Staged solve - severity 1-3")
+            mode: Solve mode label ("staged", "simple", "resume", etc.)
+            is_major: Whether this is a major version (True) or minor update (False)
+            
+        Returns:
+            DrawVersion object
+        """
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from utils import convert_X_to_roster, export_roster_to_excel
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        full_description = f"{description} ({mode} mode, {timestamp})"
+        
+        # 1. Create DrawStorage from solution
+        draw = DrawStorage.from_X_solution(solution, description=full_description)
+        
+        # 2. Export schedule Excel to a temp location, then version it
+        roster = convert_X_to_roster(solution, data)
+        temp_xlsx = self.base_path / f"_temp_schedule_{timestamp}.xlsx"
+        export_roster_to_excel(roster, data, filename=str(temp_xlsx))
+        
+        # 3. Generate analytics Excel
+        temp_analytics = None
+        try:
+            from .storage import DrawAnalytics
+            analytics = DrawAnalytics(draw, data)
+            temp_analytics = self.base_path / f"_temp_analytics_{timestamp}.xlsx"
+            analytics.export_analytics_to_excel(str(temp_analytics))
+        except Exception as e:
+            print(f"Warning: Could not generate analytics: {e}")
+        
+        # 4. Save as versioned draw (handles versioning, current, changelog)
+        if is_major:
+            version = self.save_new_draw(
+                draw, full_description, is_major=True,
+                xlsx_path=temp_xlsx,
+                analytics_path=temp_analytics
+            )
+        else:
+            # Load previous draw for diff
+            old_draw = self.load_latest()
+            if old_draw:
+                version = self.save_modified_draw(
+                    draw, old_draw, full_description,
+                    xlsx_path=temp_xlsx,
+                    analytics_path=temp_analytics
+                )
+            else:
+                version = self.save_new_draw(
+                    draw, full_description, is_major=True,
+                    xlsx_path=temp_xlsx,
+                    analytics_path=temp_analytics
+                )
+        
+        # 5. Run violation check and save if violations found
+        try:
+            from .tester import DrawTester
+            tester = DrawTester(draw, data)
+            report = tester.run_violation_check()
+            print(f"Violation Check: {report.summary()}")
+            
+            if report.has_violations:
+                violations_path = self.versions_path / f"violations_{version.version_string}.txt"
+                with open(violations_path, 'w') as f:
+                    f.write(report.full_report())
+                # Also save as current violations
+                current_violations = self.base_path / "current_violations.txt"
+                shutil.copy(violations_path, current_violations)
+                print(f"Violation report saved to {violations_path}")
+            else:
+                # Remove stale current violations file if exists
+                current_violations = self.base_path / "current_violations.txt"
+                if current_violations.exists():
+                    current_violations.unlink()
+        except Exception as e:
+            print(f"Warning: Could not run violation check: {e}")
+        
+        # 6. Clean up temp files
+        if temp_xlsx.exists():
+            temp_xlsx.unlink()
+        if temp_analytics and temp_analytics.exists():
+            temp_analytics.unlink()
+        
+        print(f"\n{'='*60}")
+        print(f"OUTPUT SUMMARY ({version.version_string})")
+        print(f"{'='*60}")
+        print(f"  Version:    {version.version_string}")
+        print(f"  Games:      {version.game_count}")
+        print(f"  Mode:       {mode}")
+        print(f"  Draw JSON:  {self.base_path / 'current.json'}")
+        print(f"  Schedule:   {self.base_path / 'current.xlsx'}")
+        print(f"  Analytics:  {self.base_path / 'current_analytics.xlsx'}")
+        print(f"  Versioned:  {self.versions_path / version.filename}")
+        print(f"  Changelog:  {self.changelog_path}")
+        
+        return version
+    
+    def migrate_legacy_draws(self):
+        """
+        Migrate draw_v*.json files from base path into versions/ subfolder.
+        
+        Call this once to move existing versioned draws into the new structure.
+        """
+        moved = 0
+        for path in self.base_path.glob("draw_v*.json"):
+            dest = self.versions_path / path.name
+            if not dest.exists():
+                shutil.move(str(path), str(dest))
+                print(f"  Migrated {path.name} -> versions/")
+                moved += 1
+        
+        # Also move any matching xlsx files
+        for path in self.base_path.glob("draw_v*.xlsx"):
+            dest = self.versions_path / path.name
+            if not dest.exists():
+                shutil.move(str(path), str(dest))
+                print(f"  Migrated {path.name} -> versions/")
+                moved += 1
+        
+        if moved:
+            print(f"Migrated {moved} files to versions/")
+            # Update current.json to point to latest
+            latest = self.get_latest_version()
+            if latest:
+                latest_path = self.versions_path / latest.filename
+                self._update_current(latest_path)
+                print(f"Updated current.json -> {latest.version_string}")
+        else:
+            print("No legacy draws to migrate.")

@@ -58,6 +58,7 @@ from constraints.ai import (
     MaximiseClubsPerTimeslotBroadmeadowAI,
     MinimiseClubsOnAFieldBroadmeadowAI,
     PreferredTimesConstraintAI,
+    ClubGameSpreadAI,
 )
 
 # Soft constraints

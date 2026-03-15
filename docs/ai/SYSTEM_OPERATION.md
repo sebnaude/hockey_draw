@@ -57,22 +57,7 @@ Every command requires `--year`:
 
 # Custom worker count
 .\.venv\Scripts\python.exe run.py generate --year 2026 --workers 14
-
-# Relax specific constraints (add slack to limits)
-.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 1
 ```
-
-### --slack Flag (Constraint Relaxation)
-
-The `--slack N` flag adds N to constraint limits for three configurable constraints:
-
-| Constraint | Base Limit | With --slack 1 | With --slack 2 |
-|------------|------------|----------------|----------------|
-| `EqualMatchUpSpacingConstraint` | ±1 round | ±2 rounds | ±3 rounds |
-| `AwayAtMaitlandGrouping` | Max 3 away clubs | Max 4 | Max 5 |
-| `MaitlandHomeGrouping` | No back-to-back | 1 allowed | 2 allowed |
-
-**When to use:** If solver returns INFEASIBLE and `--relax` doesn't help, try `--slack 1`.
 
 ### Pre-Season Report
 
@@ -123,24 +108,7 @@ Generates comprehensive analytics Excel file.
 
 ## Staged Solving
 
-The solver uses two stages for better performance and checkpoint support.
-
-### How Staged Solving Works (IMPORTANT)
-
-**Critical concept:** OR-Tools CP-SAT does NOT support "locking in" a partial solution and adding constraints. Instead, we use a **HINT-based approach**:
-
-1. **Stage N completes:** Solution is saved as a checkpoint
-2. **Stage N+1 starts:** 
-   - A fresh model is created with ALL constraints (Stage 1 + Stage 2 + ... + Stage N+1)
-   - The Stage N solution is provided as a **HINT** to guide the solver
-   - The solver uses the hint as a starting point but may deviate if the combined constraints require it
-
-**When resuming from a checkpoint:**
-- The checkpoint solution becomes the HINT
-- ALL constraints from all stages up to and including the current stage are applied
-- The solver finds the best solution that satisfies all combined constraints
-
-This is NOT the same as "locking in" the prior solution - it's providing guidance.
+The solver uses two stages:
 
 ### Stage 1: Required Constraints (stage1_required)
 
@@ -151,38 +119,20 @@ This is NOT the same as "locking in" the prior solution - it's providing guidanc
 - PHLAndSecondGradeAdjacency
 - PHLAndSecondGradeTimes
 - FiftyFiftyHomeandAway
-- TeamConflictConstraint
-- MaxMaitlandHomeWeekends
+
+**Typical time:** 5-30 minutes
+
+### Stage 2: Soft Constraints (stage2_soft)
+
+**Constraints added:**
 - ClubDayConstraint
 - EqualMatchUpSpacingConstraint
 - ClubGradeAdjacencyConstraint
 - ClubVsClubAlignment
-- MaitlandHomeGrouping
-- AwayAtMaitlandGrouping
-
-**Typical time:** 5-30 minutes to several hours
-
-### Stage 2: Soft Constraints (stage2_soft)
-
-**Constraints added (cumulative with Stage 1):**
-- EnsureBestTimeslotChoices
-- MaximiseClubsPerTimeslotBroadmeadow
-- MinimiseClubsOnAFieldBroadmeadow
-- PreferredTimesConstraint
+- ClubGameSpread
+- All penalty-based constraints
 
 **Typical time:** Up to 72 hours
-
-### Resuming from Checkpoint
-
-```powershell
-# Resume after stage1_required completed
-.\.venv\Scripts\python.exe run.py generate --year 2026 --resume run_13 stage1_required
-```
-
-This will:
-1. Load the stage1_required solution as a HINT
-2. Apply ALL constraints (stage1 + stage2)
-3. Run stage2_soft with the hint guiding the search
 
 ---
 
@@ -220,14 +170,61 @@ Get-ChildItem "checkpoints\run_*" -Directory | Sort-Object LastWriteTime -Descen
 
 ## Solver Output Files
 
-After successful solve:
+After a successful solve, ALL output is automatically saved to the versioned directory structure. Both staged and simple modes use the same unified output system.
+
+### Draw Output (draws/{year}/)
 
 | File | Location | Content |
 |------|----------|---------|
-| Solution JSON | `checkpoints/run_X/stage_Y/solution.json` | Raw solution data |
-| Metadata | `checkpoints/run_X/stage_Y/metadata.json` | Solve statistics |
-| Penalties | `checkpoints/run_X/stage_Y/penalties.json` | Penalty breakdown |
-| Log | `logs/solver_YYYYMMDD_HHMMSS.log` | Full solve log |
+| **Latest draw JSON** | `draws/{year}/current.json` | **Always the latest draw — use this for AI operations** |
+| **Latest schedule** | `draws/{year}/current.xlsx` | Latest schedule Excel (weekly sheets) |
+| **Latest analytics** | `draws/{year}/current_analytics.xlsx` | Latest analytics multi-sheet Excel |
+| **Violations** | `draws/{year}/current_violations.txt` | Latest violation report (if any) |
+| **Changelog** | `draws/{year}/CHANGELOG.md` | Auto-generated version history |
+| **Versioned draws** | `draws/{year}/versions/draw_v{X}.{Y}.json` | All versioned draw files |
+| **Versioned Excel** | `draws/{year}/versions/draw_v{X}.{Y}.xlsx` | All versioned schedules |
+
+### Checkpoint Output (checkpoints/)
+
+| File | Location | Content |
+|------|----------|---------|
+| **Latest checkpoint** | `checkpoints/latest/solution.pkl` | **Latest successful solver state** |
+| **Latest metadata** | `checkpoints/latest/metadata.json` | Latest solve statistics |
+| **Latest pointer** | `checkpoints/latest/pointer.json` | Which run/stage this came from |
+| **Run checkpoints** | `checkpoints/run_X/stage_Y/solution.pkl` | Per-run, per-stage checkpoints |
+| **Run metadata** | `checkpoints/run_X/stage_Y/metadata.json` | Per-stage solve statistics |
+
+### Logs
+
+| File | Location | Content |
+|------|----------|---------|
+| Solver log | `logs/solver_YYYYMMDD_HHMMSS.log` | Full solve log |
+
+### Finding the Latest Output
+
+**For AI assistants:** Always use these paths to find the latest state:
+- **Latest draw:** `draws/{year}/current.json`
+- **Latest checkpoint:** `checkpoints/latest/`
+- **Version history:** `draws/{year}/CHANGELOG.md`
+
+**For version-specific access:**
+- Use `draws/{year}/versions/draw_v{X}.{Y}.json`
+- Or use the `run.py test v2.0 --year 2026` shorthand
+
+### Path Aliases in Commands
+
+The `run.py` commands support special aliases for draw paths:
+
+```powershell
+# "current" or "latest" resolves to draws/{year}/current.json
+.\.venv\Scripts\python.exe run.py test current --year 2026
+
+# Version strings resolve to draws/{year}/versions/draw_vX.Y.json  
+.\.venv\Scripts\python.exe run.py test v2.0 --year 2026
+
+# Direct paths still work
+.\.venv\Scripts\python.exe run.py test draws/2026/versions/draw_v1.0.json --year 2026
+```
 
 ---
 
@@ -295,63 +292,96 @@ If you get OOM errors:
 
 ## Output Locations
 
-| Type | Location |
-|------|----------|
-| Checkpoints | `checkpoints/run_X/` |
-| Logs | `logs/` |
-| Draws | `draws/{year}/` |
-| Reports | `seasons/{year}/` |
-| Pre-season | `reports/` |
+| Type | Location | Notes |
+|------|----------|-------|
+| **Latest draw** | `draws/{year}/current.json` | **Always check here first** |
+| **Latest schedule** | `draws/{year}/current.xlsx` | Auto-updated on every solve |
+| **Latest analytics** | `draws/{year}/current_analytics.xlsx` | Auto-updated on every solve |
+| **Versioned draws** | `draws/{year}/versions/` | All historical versions |
+| **Changelog** | `draws/{year}/CHANGELOG.md` | Auto-generated history |
+| **Latest checkpoint** | `checkpoints/latest/` | Latest solver state (pkl) |
+| **Run checkpoints** | `checkpoints/run_X/` | Per-run checkpoint history |
+| **Logs** | `logs/` | Solver log files |
+| **Reports** | `reports/` | Pre-season and stakeholder reports |
 
 ---
 
 ## Draw Versioning System
 
-The system uses semantic versioning for draws with automatic CHANGELOG generation.
+The system uses semantic versioning with automatic CHANGELOG generation. **All solver modes (staged, simple, resume) use the same unified output system.**
+
+### How It Works
+
+1. **Every successful solve** creates a new versioned draw in `draws/{year}/versions/`
+2. **current.json** is automatically updated to always point to the latest
+3. **current.xlsx** and **current_analytics.xlsx** are also auto-updated
+4. **CHANGELOG.md** records every version with timestamps and descriptions
+5. **Game swaps** via `run.py swap --save` create minor versions with diffs
 
 ### Version Scheme
 
-- **Major (X.0):** Complete regeneration or structural changes
-- **Minor (X.Y):** Incremental updates (game modifications, swaps, fixes)
-
-### Usage
-
-```python
-from analytics.versioning import DrawVersionManager
-
-# Initialize for a year
-manager = DrawVersionManager("draws", year=2026)
-
-# Save a new major version (fresh generation)
-version = manager.save_new_draw(draw, "Initial 2026 season draw")
-# Creates: draws/2026/draw_v1.0.json
-
-# Save a minor update (after modifications)
-version = manager.save_modified_draw(new_draw, old_draw, "Fixed Maitland clash")
-# Creates: draws/2026/draw_v1.1.json
-
-# Load the latest version
-draw = manager.load_latest()
-
-# List all versions
-print(manager.list_versions())
-```
+- **Major (X.0):** Complete regeneration (from `generate` command)
+- **Minor (X.Y):** Incremental updates (game swaps, manual fixes)
 
 ### Directory Structure
 
 ```
 draws/2026/
-├── CHANGELOG.md         # Auto-generated version history
-├── draw_v1.0.json       # Major version 1
-├── draw_v1.1.json       # Minor update
-├── draw_v2.0.json       # New major version
-└── current.json         # Copy of latest version
+├── current.json              # ← ALWAYS the latest draw (AI: look here first!)
+├── current.xlsx              # ← Latest schedule Excel
+├── current_analytics.xlsx    # ← Latest analytics
+├── current_violations.txt    # ← Latest violations (if any, deleted when clean)
+├── CHANGELOG.md              # Auto-generated version history
+└── versions/                 # All versioned draws
+    ├── draw_v1.0.json        # Major version 1
+    ├── draw_v1.0.xlsx        # Schedule for v1.0
+    ├── draw_v1.1.json        # Minor update (e.g., game swap)
+    ├── draw_v2.0.json        # Major version 2 (new generation)
+    ├── draw_v2.0.xlsx
+    └── violations_v2.0.txt   # Violation report for v2.0
 ```
 
-### CHANGELOG Format
+### Checkpoint Structure
 
-The CHANGELOG is automatically updated with:
-- Version number and timestamp
-- Description
-- Game count
-- For minor versions: diff showing added/removed/modified games
+```
+checkpoints/
+├── latest/                    # ← ALWAYS the latest solver state
+│   ├── solution.pkl           # Solution dictionary
+│   ├── metadata.json          # Solve stats (status, time, games)
+│   ├── penalties.json         # Penalty breakdown
+│   └── pointer.json           # Which run/stage this came from
+├── run_1/
+│   ├── stage1_required/
+│   └── stage2_soft/
+└── run_N/
+```
+
+### Usage in Python
+
+```python
+from analytics.versioning import DrawVersionManager
+
+manager = DrawVersionManager("draws", year=2026)
+
+# Load latest draw (always available after first solve)
+draw = manager.load_latest()
+
+# Load specific version
+draw = manager.load_version(1, 0)  # v1.0
+
+# Save a modification as minor version
+version = manager.save_modified_draw(new_draw, old_draw, "Fixed Maitland clash")
+
+# List all versions
+print(manager.list_versions())
+```
+
+### Migration from Legacy Structure
+
+If draws exist as `draws/{year}/draw_v*.json` (old flat structure), run:
+
+```powershell
+.\.venv\Scripts\python.exe run.py migrate --year 2026
+```
+
+This moves all versioned draws into `draws/{year}/versions/` and creates `current.json`.

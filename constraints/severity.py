@@ -76,6 +76,8 @@ CONSTRAINT_TO_SEVERITY = {
     'ClubVsClubAlignmentAI': 3,
     
     # Level 4 - LOW (soft optimization)
+    'ClubGameSpread': 4,
+    'ClubGameSpreadAI': 4,
     'EnsureBestTimeslotChoices': 4,
     'EnsureBestTimeslotChoicesAI': 4,
     'MaximiseClubsPerTimeslotBroadmeadow': 4,

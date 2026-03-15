@@ -238,6 +238,7 @@ def mini_season_data(mini_season_games, mini_season_timeslots, mini_season_teams
         'clubs': mini_season_clubs,
         'fields': mini_season_fields,
         'current_week': 0,
+        'locked_weeks': set(),
         'num_rounds': {'3rd': 4, '4th': 4},
         'num_dummy_timeslots': 0,
     }

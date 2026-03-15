@@ -1,5 +1,9 @@
 # Hockey Draw Scheduling System
 
+> **DOCUMENT CLASS:** Human Operator Documentation  
+> **Audience:** Human operators running the system  
+> **Purpose:** How to install, configure, and run the system
+
 A constraint programming system for generating hockey competition draws (schedules) using Google OR-Tools' CP-SAT solver. The system handles complex scheduling requirements including team availability, field constraints, home/away balance, and club preferences.
 
 ## Table of Contents

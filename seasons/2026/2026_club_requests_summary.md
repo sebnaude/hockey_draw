@@ -1,5 +1,9 @@
 # 2026 Season Draw - Requests Summary
 
+> **DOCUMENT CLASS:** Season Report (Club Distribution)  
+> **Audience:** Club representatives  
+> **Purpose:** Share confirmed requests for review - NO implementation details
+
 **Prepared for:** Club Representatives  
 **Date:** March 5, 2026  
 **Purpose:** Please review and confirm we have captured your requests correctly.

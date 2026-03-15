@@ -132,7 +132,7 @@ class ClubDayConstraintSoft(SoftConstraint):
         club_days = data['club_days']
         teams = data['teams']
         clubs = data['clubs']
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         allowed_keys = ['team1', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         
@@ -143,7 +143,7 @@ class ClubDayConstraintSoft(SoftConstraint):
             desired_date = club_days[club_name]
             closest_week = get_nearest_week_by_date(desired_date.strftime("%Y-%m-%d"), data['timeslots'])
             
-            if closest_week <= current_week:
+            if closest_week in locked_weeks:
                 continue
             
             club = get_club_from_clubname(club_name, data['clubs'])
@@ -301,7 +301,7 @@ class AwayAtMaitlandGroupingSoft(SoftConstraint):
         self._init_penalties(data, 'AwayAtMaitlandGroupingSoft')
         
         away_clubs_per_week = defaultdict(lambda: defaultdict(list))
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         for t in data['timeslots']:
             for (t1, t2, grade) in data['games']:
@@ -313,7 +313,7 @@ class AwayAtMaitlandGroupingSoft(SoftConstraint):
                         away_clubs_per_week[t.week][away_club].append(X[key])
         
         for week, club_games in away_clubs_per_week.items():
-            if week <= current_week:
+            if week in locked_weeks:
                 continue
             
             club_scheduled_vars = {}
@@ -362,7 +362,7 @@ class TeamConflictConstraintSoft(SoftConstraint):
         self._init_penalties(data, 'TeamConflictConstraintSoft')
         
         conflicts = data['team_conflicts']
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         timeslots = data['timeslots']
         games = data['games']
         
@@ -376,7 +376,7 @@ class TeamConflictConstraintSoft(SoftConstraint):
             time_slots_vars = defaultdict(list)
             
             for t in timeslots:
-                if t.week <= current_week:
+                if t.week in locked_weeks:
                     continue
                 if not t.day:
                     continue
@@ -441,7 +441,8 @@ class EqualMatchUpSpacingConstraintSoft(SoftConstraint):
         grade_spacing_vars = defaultdict(lambda: defaultdict(int))
         
         for grade in data['grades']:
-            space = max_rounds // grade.num_teams
+            # Ideal spacing = T - 1 (see all other opponents before rematch)
+            space = grade.num_teams - 1
             
             min_grade_spacing_var = model.NewIntVar(0, space + self.SLACK, f'grade_spacing_{grade.name}_soft')
             model.Add(min_grade_spacing_var == max(0, space - self.SLACK))
@@ -522,9 +523,8 @@ class EqualMatchUpSpacingConstraintSoft(SoftConstraint):
             model.Add(lower_bound == multi_max - lower_bound_subtraction)
             
             if self.enforce_bounds:
-                # Keep as hard constraints but with increased slack
+                # Hard constraint for minimum gap only (no maximum gap)
                 model.Add(round_sum <= upper_bound).OnlyEnforceIf(meets_twice)
-                model.Add(round_sum >= lower_bound).OnlyEnforceIf(meets_twice)
             else:
                 # Soft: penalize bound violations
                 upper_violation = model.NewIntVar(0, max_rounds * len(indicator_list), f'upper_violation_{team_pair[0]}_{team_pair[1]}_soft')
@@ -770,7 +770,7 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
         games = data['games']
         timeslots = data['timeslots']
         fields = data['fields']
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         timeslots_weekly = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         games_per_location = defaultdict(lambda: defaultdict(list))
@@ -786,7 +786,7 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
         timeslot_numbers = defaultdict(lambda: defaultdict(lambda: defaultdict()))
         
         for (week, day), locations in timeslots_weekly.items():
-            if week <= current_week:
+            if week in locked_weeks:
                 continue
             
             for location, day_slots in locations.items():
@@ -823,7 +823,7 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
         
         # Timeslot efficiency
         for (week, day), locations in games_per_location.items():
-            if week <= current_week:
+            if week in locked_weeks:
                 continue
             
             for location in locations:
@@ -900,7 +900,7 @@ class MaximiseClubsPerTimeslotBroadmeadowSoft(SoftConstraint):
         
         games = data['games']
         timeslots = data['timeslots']
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         game_dict = defaultdict(lambda: defaultdict(list))
         
@@ -916,7 +916,7 @@ class MaximiseClubsPerTimeslotBroadmeadowSoft(SoftConstraint):
                     game_dict[(t.week, t.day, t.day_slot)][club2].append(X[key])
         
         for (week, day, timeslot), club_games in game_dict.items():
-            if week <= current_week:
+            if week in locked_weeks:
                 continue
             
             club_presence_vars = {}
@@ -985,7 +985,7 @@ class MinimiseClubsOnAFieldBroadmeadowSoft(SoftConstraint):
         
         games = data['games']
         timeslots = data['timeslots']
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         game_dict = defaultdict(lambda: defaultdict(list))
         
@@ -1001,7 +1001,7 @@ class MinimiseClubsOnAFieldBroadmeadowSoft(SoftConstraint):
                     game_dict[(t.week, t.date, t.field.name)][club2].append(X[key])
         
         for (week, day, field_name), club_games in game_dict.items():
-            if week <= current_week:
+            if week in locked_weeks:
                 continue
             
             club_presence_vars = {}
@@ -1063,7 +1063,7 @@ class PreferredTimesConstraintSoft(SoftConstraint):
         teams = data['teams']
         clubs = data['clubs']
         noplay = data.get('preference_no_play', {})
-        current_week = data['current_week']
+        locked_weeks = data.get('locked_weeks', set())
         
         if not noplay:
             return  # No preferences to apply
@@ -1084,7 +1084,7 @@ class PreferredTimesConstraintSoft(SoftConstraint):
             if 'date' not in constraint:
                 continue
             
-            if get_nearest_week_by_date(constraint['date'], data['timeslots']) <= current_week:
+            if get_nearest_week_by_date(constraint['date'], data['timeslots']) in locked_weeks:
                 continue
 
             for i, game_key in enumerate(X):

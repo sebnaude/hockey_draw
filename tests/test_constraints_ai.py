@@ -24,6 +24,7 @@ from constraints.ai import (
     ClubGradeAdjacencyConstraintAI,
     MaitlandHomeGroupingAI,
     AwayAtMaitlandGroupingAI,
+    ClubGameSpreadAI,
     get_all_ai_constraints,
     get_constraints_by_priority,
     get_staged_constraints,
@@ -121,7 +122,7 @@ class TestNoDoubleBookingTeamsConstraintAI:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingTeamsConstraintAI()
@@ -151,7 +152,7 @@ class TestNoDoubleBookingTeamsConstraintAI:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingTeamsConstraintAI()
@@ -185,7 +186,7 @@ class TestNoDoubleBookingFieldsConstraintAI:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingFieldsConstraintAI()
@@ -271,7 +272,7 @@ class TestMaitlandHomeGroupingAI:
             'timeslots': timeslots,
             'teams': teams,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = MaitlandHomeGroupingAI()
@@ -318,7 +319,7 @@ class TestAwayAtMaitlandGroupingAI:
             'teams': teams,
             'clubs': clubs,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = AwayAtMaitlandGroupingAI()
@@ -334,6 +335,320 @@ class TestAwayAtMaitlandGroupingAI:
         
         # Should be infeasible due to max 3 away clubs limit
         assert status == cp_model.INFEASIBLE
+
+
+# ============== ClubGameSpreadAI Tests ==============
+
+class TestClubGameSpreadAI:
+    """Tests for ClubGameSpreadAI constraint — gap-based club game clustering."""
+
+    def _make_field(self):
+        return PlayingField(location='Newcastle International Hockey Centre', name='EF')
+
+    def _make_clubs_and_teams(self):
+        """Create 2 clubs with 3 teams each (across 3 grades)."""
+        club_a = Club(name='Tigers', home_field='Newcastle International Hockey Centre')
+        club_b = Club(name='Wests', home_field='Newcastle International Hockey Centre')
+        teams = [
+            Team(name='Tigers 3rd', club=club_a, grade='3rd'),
+            Team(name='Tigers 4th', club=club_a, grade='4th'),
+            Team(name='Tigers 5th', club=club_a, grade='5th'),
+            Team(name='Wests 3rd', club=club_b, grade='3rd'),
+            Team(name='Wests 4th', club=club_b, grade='4th'),
+            Team(name='Wests 5th', club=club_b, grade='5th'),
+        ]
+        return [club_a, club_b], teams
+
+    def _make_timeslots(self, field, day_slots, week=1):
+        """Create timeslots on a single field for given day_slot numbers."""
+        return [
+            Timeslot(
+                date=f'2025-03-{23 + (week - 1) * 7:02d}',
+                day='Sunday',
+                time=f'{9 + s}:00',
+                week=week,
+                day_slot=s,
+                field=field,
+                round_no=week,
+            )
+            for s in day_slots
+        ]
+
+    def _solve_with_constraint(self, games, timeslots, teams, locked_weeks=None, slack=0, extra_constraints=None):
+        """Build model, apply constraint, optionally add extra constraints, solve."""
+        model, X = create_model_and_vars(games, timeslots)
+        data = {
+            'games': games,
+            'timeslots': timeslots,
+            'teams': teams,
+            'penalties': {},
+            'current_week': 0,
+            'locked_weeks': locked_weeks or set(),
+            'constraint_slack': {'ClubGameSpread': slack} if slack else {},
+        }
+        constraint = ClubGameSpreadAI()
+        constraints_added = constraint.apply(model, X, data)
+
+        if extra_constraints:
+            extra_constraints(model, X)
+
+        # Minimize penalties so solver produces true gap values
+        # (penalty vars are >= gaps, not ==, so without objective they're unconstrained)
+        pen_list = data['penalties'].get('ClubGameSpread', {}).get('penalties', [])
+        if pen_list:
+            model.Minimize(sum(pen_list))
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        return status, solver, X, data, constraints_added
+
+    # ---------- Core gap calculation ----------
+
+    def test_consecutive_slots_zero_gaps(self):
+        """Club playing slots 1,2,3 → 0 gaps → FEASIBLE, penalty=0."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 2, 3])
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+            ('Tigers 5th', 'Wests 5th', '5th'),
+        ]
+
+        def force_all(model, X):
+            for key, var in X.items():
+                if key[0].startswith('Tigers') or key[1].startswith('Tigers'):
+                    pass  # allowed
+            # Force exactly 3 games, one per slot
+            for s in [1, 2, 3]:
+                slot_vars = [v for k, v in X.items() if k[4] == s]
+                model.Add(sum(slot_vars) == 1)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_all
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        # Check penalty is 0 for Tigers (consecutive slots → no gaps)
+        penalties = data['penalties']['ClubGameSpread']['penalties']
+        total_penalty = sum(solver.Value(p) for p in penalties)
+        assert total_penalty == 0
+
+    def test_gap_of_two_feasible(self):
+        """Club at slots 1 and 4 → gaps = (4-1+1)-2 = 2 → at HARD_LIMIT → FEASIBLE."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 2, 3, 4])
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_end_slots(model, X):
+            # Force Tigers to play at slot 1 and slot 4
+            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
+            s4_vars = [v for k, v in X.items() if k[4] == 4 and k[2] == '4th']
+            model.Add(sum(s1_vars) == 1)
+            model.Add(sum(s4_vars) == 1)
+            # No other games
+            other_vars = [v for k, v in X.items() if k[4] not in (1, 4)]
+            model.Add(sum(other_vars) == 0)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_end_slots
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        # Penalty should be 2 for Tigers (2 gaps)
+        penalties = data['penalties']['ClubGameSpread']['penalties']
+        tigers_penalty = sum(solver.Value(p) for p in penalties)
+        assert tigers_penalty >= 2
+
+    def test_gap_exceeds_hard_limit_infeasible(self):
+        """Club at slots 1 and 6 → gaps = (6-1+1)-2 = 4 > 2 → INFEASIBLE."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 2, 3, 4, 5, 6])
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_extreme_slots(model, X):
+            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
+            s6_vars = [v for k, v in X.items() if k[4] == 6 and k[2] == '4th']
+            model.Add(sum(s1_vars) == 1)
+            model.Add(sum(s6_vars) == 1)
+            other = [v for k, v in X.items() if k[4] not in (1, 6)]
+            model.Add(sum(other) == 0)
+
+        status, *_ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_extreme_slots
+        )
+        assert status == cp_model.INFEASIBLE
+
+    # ---------- Same-slot deduplication ----------
+
+    def test_same_slot_two_teams_counts_as_one(self):
+        """Two teams at slot 2, one at slot 4 → timeslots_used=2, gaps = (4-2+1)-2 = 1."""
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        clubs, teams = self._make_clubs_and_teams()
+        # Slot 2 on two fields + slot 4 on one field
+        timeslots = [
+            Timeslot(date='2025-03-23', day='Sunday', time='11:00', week=1, day_slot=2, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='11:00', week=1, day_slot=2, field=wf, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='13:00', week=1, day_slot=4, field=field, round_no=1),
+        ]
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+            ('Tigers 5th', 'Wests 5th', '5th'),
+        ]
+
+        def force_layout(model, X):
+            # 3rd grade at slot 2 on EF
+            for k, v in X.items():
+                if k[2] == '3rd' and k[4] == 2 and k[9] == 'EF':
+                    model.Add(v == 1)
+                elif k[2] == '4th' and k[4] == 2 and k[9] == 'WF':
+                    model.Add(v == 1)
+                elif k[2] == '5th' and k[4] == 4:
+                    model.Add(v == 1)
+                else:
+                    model.Add(v == 0)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_layout
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        # Both clubs span slots 2-4: range=3, used=2, gap=1 each → total=2
+        penalties = data['penalties']['ClubGameSpread']['penalties']
+        total_pen = sum(solver.Value(p) for p in penalties)
+        assert total_pen == 2
+
+    # ---------- Slack ----------
+
+    def test_slack_relaxes_hard_limit(self):
+        """With slack=2, gaps=4 (normally > limit 2) becomes feasible: 4 <= 2+2."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 2, 3, 4, 5, 6])
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_extreme_slots(model, X):
+            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
+            s6_vars = [v for k, v in X.items() if k[4] == 6 and k[2] == '4th']
+            model.Add(sum(s1_vars) == 1)
+            model.Add(sum(s6_vars) == 1)
+            other = [v for k, v in X.items() if k[4] not in (1, 6)]
+            model.Add(sum(other) == 0)
+
+        status, *_ = self._solve_with_constraint(
+            games, timeslots, teams, slack=2, extra_constraints=force_extreme_slots
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    # ---------- Locked weeks ----------
+
+    def test_locked_weeks_skipped(self):
+        """Games in locked weeks should not produce constraints — always FEASIBLE."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 6], week=1)
+
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_extreme(model, X):
+            s1_vars = [v for k, v in X.items() if k[4] == 1]
+            s6_vars = [v for k, v in X.items() if k[4] == 6]
+            model.Add(sum(s1_vars) == 1)
+            model.Add(sum(s6_vars) == 1)
+
+        status, solver, X, data, constraints_added = self._solve_with_constraint(
+            games, timeslots, teams, locked_weeks={1},
+            extra_constraints=force_extreme
+        )
+        # No constraints should be added for locked weeks
+        assert constraints_added == 0
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    # ---------- Edge case: single slot ----------
+
+    def test_single_slot_no_gaps(self):
+        """Club with only 1 timeslot → 0 gaps, no penalty."""
+        field = self._make_field()
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [3])
+
+        games = [('Tigers 3rd', 'Wests 3rd', '3rd')]
+
+        def force_one(model, X):
+            model.Add(sum(X.values()) == 1)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_one
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        penalties = data['penalties']['ClubGameSpread']['penalties']
+        total_penalty = sum(solver.Value(p) for p in penalties)
+        assert total_penalty == 0
+
+    # ---------- Multi-club independence ----------
+
+    def test_two_clubs_independent_gaps(self):
+        """Each club's gaps are computed independently."""
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = self._make_timeslots(field, [1, 2, 3]) + self._make_timeslots(wf, [1, 2, 3])
+
+        # Tigers 3rd vs Wests 3rd, Tigers 4th vs Wests 4th
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_separate(model, X):
+            # Tigers: 3rd at slot 1, 4th at slot 3 → gap=1
+            # Wests: same games, but as away team → their own gap calc
+            for k, v in X.items():
+                if k[2] == '3rd' and k[4] == 1 and k[9] == 'EF':
+                    model.Add(v == 1)
+                elif k[2] == '4th' and k[4] == 3 and k[9] == 'EF':
+                    model.Add(v == 1)
+                else:
+                    model.Add(v == 0)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_separate
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        # Both clubs have gap=1 (slot 1 and 3, range=3, used=2, gap=1)
+        penalties = data['penalties']['ClubGameSpread']['penalties']
+        total_penalty = sum(solver.Value(p) for p in penalties)
+        # Tigers gap=1, Wests gap=1 → total=2
+        assert total_penalty == 2
+
+    # ---------- Constraint registration ----------
+
+    def test_in_all_ai_constraints(self):
+        """ClubGameSpreadAI appears in get_all_ai_constraints()."""
+        all_constraints = get_all_ai_constraints()
+        types = [type(c).__name__ for c in all_constraints]
+        assert 'ClubGameSpreadAI' in types
 
 
 # ============== Equivalence Tests ==============
@@ -354,7 +669,7 @@ class TestAIConstraintEquivalence:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         # Test with original constraint

@@ -211,7 +211,7 @@ def make_standard_data(clubs=None, grade_names=None, num_weeks=4,
         'grades': grades,
         'clubs': clubs,
         'fields': fields,
-        'current_week': 0,
+        'current_week': 0, 'locked_weeks': set(),
         'num_rounds': num_rounds,
         'num_dummy_timeslots': 0,
         'penalties': {},
@@ -338,7 +338,7 @@ class TestAIConstraintsRejectViolations:
         games = [('A 3rd', 'B 3rd', '3rd'), ('A 3rd', 'C 3rd', '3rd')]
 
         model, X = create_model_and_vars(games, timeslots)
-        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0}
+        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0, 'locked_weeks': set()}
 
         NoDoubleBookingTeamsConstraintAI().apply(model, X, data)
         # Force A 3rd to play both games in week 1
@@ -362,7 +362,7 @@ class TestAIConstraintsRejectViolations:
         games = [('A 3rd', 'B 3rd', '3rd'), ('C 4th', 'D 4th', '4th')]
 
         model, X = create_model_and_vars(games, timeslots)
-        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0}
+        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0, 'locked_weeks': set()}
 
         NoDoubleBookingFieldsConstraintAI().apply(model, X, data)
         model.Add(sum(X.values()) >= 2)
@@ -447,7 +447,7 @@ class TestAIConstraintsRejectViolations:
         data = {
             'games': games, 'timeslots': timeslots, 'teams': teams,
             'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
 
         TeamConflictConstraintAI().apply(model, X, data)
@@ -459,7 +459,7 @@ class TestAIConstraintsRejectViolations:
         assert status == cp_model.INFEASIBLE
 
     def test_club_grade_adjacency_rejects(self):
-        """Force adjacent-grade same-club teams to same slot — INFEASIBLE."""
+        """Force adjacent-grade same-club teams to same slot — now SOFT (allows with penalty)."""
         clubs = [Club(name='Tigers', home_field=BROADMEADOW),
                  Club(name='Wests', home_field=BROADMEADOW)]
         teams = [
@@ -487,7 +487,9 @@ class TestAIConstraintsRejectViolations:
         model.Add(sum(slot1) >= 2)
 
         status, _ = solve(model)
-        assert status == cp_model.INFEASIBLE
+        # Constraint is now SOFT - allows overlaps but penalizes them
+        assert status == cp_model.OPTIMAL
+        assert 'ClubGradeAdjacencyConstraint' in data['penalties']
 
     def test_maitland_home_grouping_rejects_back_to_back(self):
         """Force Maitland home games in consecutive weeks — INFEASIBLE."""
@@ -506,7 +508,7 @@ class TestAIConstraintsRejectViolations:
 
         model, X = create_model_and_vars(games, timeslots)
         data = {'games': games, 'timeslots': timeslots, 'teams': teams,
-                'penalties': {}, 'current_week': 0}
+                'penalties': {}, 'current_week': 0, 'locked_weeks': set()}
 
         MaitlandHomeGroupingAI().apply(model, X, data)
         model.Add(sum(X.values()) >= 2)
@@ -532,7 +534,7 @@ class TestAIConstraintsRejectViolations:
 
         model, X = create_model_and_vars(games, timeslots)
         data = {'games': games, 'timeslots': timeslots, 'teams': teams,
-                'clubs': all_clubs, 'penalties': {}, 'current_week': 0}
+                'clubs': all_clubs, 'penalties': {}, 'current_week': 0, 'locked_weeks': set()}
 
         AwayAtMaitlandGroupingAI().apply(model, X, data)
         for i in range(4):
@@ -557,7 +559,7 @@ class TestAIConstraintsRejectViolations:
 
         model, X = create_model_and_vars(games, timeslots)
         data = {'games': games, 'timeslots': timeslots, 'teams': teams,
-                'penalties': {}, 'current_week': 0}
+                'penalties': {}, 'current_week': 0, 'locked_weeks': set()}
 
         MinimiseClubsOnAFieldBroadmeadowAI().apply(model, X, data)
         # Force each game scheduled exactly once (all on same field/day)
@@ -591,7 +593,7 @@ class TestAIConstraintsRejectViolations:
         ]
 
         model, X = create_model_and_vars(games, timeslots)
-        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0}
+        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0, 'locked_weeks': set()}
 
         PHLAndSecondGradeAdjacencyAI().apply(model, X, data)
         # Force PHL at slot 1 and 2nd at slot 2
@@ -617,7 +619,7 @@ class TestAIConstraintsRejectViolations:
 
         model, X = create_model_and_vars(games, timeslots)
         data = {'games': games, 'timeslots': timeslots, 'teams': teams,
-                'current_week': 0, 'penalties': {}, 'phl_preferences': {'preferred_dates': []}}
+                'current_week': 0, 'locked_weeks': set(), 'penalties': {}, 'phl_preferences': {'preferred_dates': []}}
 
         PHLAndSecondGradeTimesAI().apply(model, X, data)
         # Force both PHL games in same slot
@@ -771,7 +773,7 @@ class TestClubVsClubAlignmentAI:
         data = {
             'games': games, 'timeslots': timeslots, 'teams': teams,
             'grades': grades, 'clubs': clubs_5, 'fields': fields,
-            'current_week': 0, 'num_rounds': num_rounds,
+            'current_week': 0, 'locked_weeks': set(), 'num_rounds': num_rounds,
             'num_dummy_timeslots': 0, 'penalties': {},
         }
         model, X = create_model_and_vars(data['games'], data['timeslots'])
@@ -825,7 +827,7 @@ class TestMaximiseClubsPerTimeslotBroadmeadowAI:
 
         model, X = create_model_and_vars(games, timeslots)
         data = {'games': games, 'timeslots': timeslots, 'teams': teams,
-                'penalties': {}, 'current_week': 0}
+                'penalties': {}, 'current_week': 0, 'locked_weeks': set()}
 
         MaximiseClubsPerTimeslotBroadmeadowAI().apply(model, X, data)
         model.Add(sum(X.values()) == 1)
@@ -884,7 +886,7 @@ class TestPHLAndSecondGradeAdjacencyAI:
         games = [('Tigers PHL', 'Wests PHL', 'PHL'), ('Tigers 2nd', 'Wests 2nd', '2nd')]
 
         model, X = create_model_and_vars(games, timeslots)
-        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0}
+        data = {'games': games, 'timeslots': timeslots, 'teams': teams, 'current_week': 0, 'locked_weeks': set()}
 
         PHLAndSecondGradeAdjacencyAI().apply(model, X, data)
         # Force PHL at slot 1 and 2nd at slot 2 — same location, adjacent = OK
@@ -1094,8 +1096,8 @@ class TestAllAIConstraintsCombined:
         """All ORIGINAL constraints on same data — baseline check."""
         data = make_standard_data(
             grade_names=['PHL', '2nd', '3rd', '4th'],
-            num_weeks=6,
-            slots_per_field=5,
+            num_weeks=10,
+            slots_per_field=8,
             extra_data={
                 'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
                 'phl_preferences': {'preferred_dates': []},

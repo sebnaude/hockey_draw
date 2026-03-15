@@ -196,7 +196,7 @@ class TestNoDoubleBookingTeamsEquivalence:
             'games': games,
             'timeslots': sample_timeslots,
             'teams': sample_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -226,7 +226,7 @@ class TestNoDoubleBookingTeamsEquivalence:
             'games': games,
             'timeslots': sample_timeslots,
             'teams': sample_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -244,7 +244,7 @@ class TestNoDoubleBookingTeamsEquivalence:
         NoDoubleBookingTeamsConstraintAI,
     ])
     def test_current_week_filtering(self, constraint_class, sample_teams, sample_timeslots, sample_clubs, sample_grades):
-        """Test that past weeks are not constrained."""
+        """Test that locked weeks are not constrained."""
         games = [
             ('Tigers 3rd', 'Wests 3rd', '3rd'),
             ('Tigers 3rd', 'Maitland 3rd', '3rd'),
@@ -252,12 +252,13 @@ class TestNoDoubleBookingTeamsEquivalence:
         
         model, X = create_model_and_vars(games, sample_timeslots)
         
-        # Set current_week=1, so week 1 should not be constrained
+        # Set locked_weeks={1}, so week 1 should not be constrained
         data = {
             'games': games,
             'timeslots': sample_timeslots,
             'teams': sample_teams,
             'current_week': 1,
+            'locked_weeks': {1},
         }
         
         constraint = constraint_class()
@@ -299,7 +300,7 @@ class TestNoDoubleBookingFieldsEquivalence:
             'games': games,
             'timeslots': sample_timeslots,
             'teams': sample_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -333,7 +334,7 @@ class TestNoDoubleBookingFieldsEquivalence:
             'games': games,
             'timeslots': sample_timeslots,
             'teams': sample_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -375,7 +376,7 @@ class TestTeamConflictEquivalence:
             'timeslots': sample_timeslots,
             'teams': sample_teams,
             'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -411,7 +412,7 @@ class TestTeamConflictEquivalence:
             'timeslots': sample_timeslots,
             'teams': sample_teams,
             'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -495,7 +496,10 @@ class TestClubGradeAdjacencyEquivalence:
         ClubGradeAdjacencyConstraintAI,
     ])
     def test_prevents_adjacent_grades_same_slot(self, constraint_class, sample_fields):
-        """Test that adjacent grades from same club can't play at same time."""
+        """Test that adjacent grades from same club are penalized when playing at same time.
+        
+        ClubGradeAdjacencyConstraint is now SOFT - it allows overlaps but penalizes them.
+        """
         ef = sample_fields[0]
         wf = sample_fields[1]
         
@@ -545,8 +549,11 @@ class TestClubGradeAdjacencyEquivalence:
         model.Add(sum(slot1_week1) >= 2)
         
         status = solve_and_get_status(model)
-        # Should be infeasible - Tigers has adjacent grades playing same time
-        assert status == cp_model.INFEASIBLE
+        # Constraint is now SOFT - should be OPTIMAL with penalties applied
+        assert status == cp_model.OPTIMAL
+        # Verify penalty was tracked
+        assert 'ClubGradeAdjacencyConstraint' in data['penalties']
+        assert len(data['penalties']['ClubGradeAdjacencyConstraint']['penalties']) > 0
 
 
 # ============== MaitlandHomeGrouping Tests ==============
@@ -589,7 +596,7 @@ class TestMaitlandHomeGroupingEquivalence:
             'timeslots': timeslots,
             'teams': teams,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -641,7 +648,7 @@ class TestAwayAtMaitlandGroupingEquivalence:
             'teams': teams,
             'clubs': clubs,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()
@@ -706,7 +713,7 @@ class TestMinimiseClubsOnAFieldEquivalence:
             'timeslots': timeslots,
             'teams': teams,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = constraint_class()

@@ -66,8 +66,7 @@ PHL_GAME_TIMES = {
             'Friday': [tm(19, 0)],  # 7pm Friday (Junior Boys alignment)
             'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]  # Mid-day slots
         },
-        'WF': {  # West Field (same as EF)
-            'Friday': [tm(19, 0)],
+        'WF': {  # West Field - Friday excluded (EF-only for Friday at Broadmeadow)
             'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
         },
         # SF (South Field) NOT LISTED - PHL excluded from SF
@@ -146,80 +145,6 @@ def generate_X(...):
             for slot in valid_slots:
                 for matchup in matchups:
                     X[key] = model.NewBoolVar(...)
-```
-
----
-
-## NIHC Friday Night Specific Games
-
-For 2026+, specific Friday night games at Broadmeadow (NIHC) can be restricted to 
-specific matchups on specific dates using `nihc_friday_games` in `FRIDAY_NIGHT_CONFIG`.
-
-### Configuration
-
-In `config/season_2026.py`:
-
-```python
-FRIDAY_NIGHT_CONFIG = {
-    # ... other settings ...
-    
-    # NIHC (Broadmeadow) Friday night games - SPECIFIC matchups only
-    # Date format: 'YYYY-MM-DD' -> list of allowed club pairs (alphabetical order)
-    # For dates with 'norths_only', only matchups INCLUDING Norths are allowed
-    'nihc_friday_games': {
-        '2026-05-08': [('Maitland', 'Souths')],       # Only Souths vs Maitland allowed
-        '2026-06-19': [('Tigers', 'Wests')],          # Only Tigers vs Wests allowed
-        '2026-07-24': 'norths_only',                  # Norths vs ANY opponent allowed
-    },
-}
-```
-
-### How It Works
-
-In `generate_X()`:
-1. When processing PHL Friday games at NIHC
-2. Checks if the date is in `nihc_friday_games`
-3. If date exists:
-   - If value is a list of tuples: only those exact matchups get variables
-   - If value is `'norths_only'`: only matchups including Norths get variables
-4. If date NOT in `nihc_friday_games`: NO games allowed on that Friday at NIHC
-
-### Key Points
-
-- Club names in tuples must be alphabetically sorted: `('Maitland', 'Souths')` not `('Souths', 'Maitland')`
-- `'norths_only'` special value allows Norths vs any opponent
-- Dates not listed = no games allowed
-- This is IN ADDITION to `PHL_GAME_TIMES` filtering (slot must exist there too)
-
-### Verification
-
-Run this command to check what Friday games are allowed:
-
-```powershell
-.\.venv\Scripts\python.exe -c "
-from config.season_2026 import get_season_data
-from utils import generate_X
-from ortools.sat.python import cp_model
-from collections import defaultdict
-
-data = get_season_data()
-model = cp_model.CpModel()
-X, _, _, _ = generate_X(model, data)
-
-phl_friday_nihc = [k for k in X.keys() 
-                   if k[2] == 'PHL' and k[3] == 'Friday' and k[10] == 'Newcastle International Hockey Centre']
-
-by_date = defaultdict(set)
-for k in phl_friday_nihc:
-    t1, t2, grade, day, day_slot, time, week, date, round_no, field, venue = k
-    club1 = t1.rsplit(' ', 1)[0]
-    club2 = t2.rsplit(' ', 1)[0]
-    by_date[date].add(tuple(sorted([club1, club2])))
-
-print('PHL Friday NIHC games allowed:')
-for date in sorted(by_date.keys()):
-    print(f'  {date}: {list(by_date[date])}')
-"
 ```
 
 ---

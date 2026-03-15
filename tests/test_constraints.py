@@ -131,7 +131,7 @@ class TestNoDoubleBookingTeamsConstraint:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingTeamsConstraint()
@@ -167,7 +167,7 @@ class TestNoDoubleBookingTeamsConstraint:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingTeamsConstraint()
@@ -200,7 +200,7 @@ class TestNoDoubleBookingFieldsConstraint:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingFieldsConstraint()
@@ -224,7 +224,7 @@ class TestNoDoubleBookingFieldsConstraint:
             'games': games,
             'timeslots': basic_timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingFieldsConstraint()
@@ -409,7 +409,7 @@ class TestTeamConflictConstraint:
             'teams': basic_teams,
             'fields': basic_fields,
             'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],  # Tigers teams can't play same time
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = TeamConflictConstraint()
@@ -442,7 +442,7 @@ class TestTeamConflictConstraint:
             'teams': basic_teams,
             'fields': basic_fields,
             'team_conflicts': [],  # No conflicts
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = TeamConflictConstraint()
@@ -460,7 +460,10 @@ class TestClubGradeAdjacencyConstraint:
     """Tests for ClubGradeAdjacencyConstraint."""
 
     def test_prevents_adjacent_grades_same_slot(self, basic_fields):
-        """Test that adjacent grades from same club can't play at same time."""
+        """Test that adjacent grades from same club incur penalty when playing at same time.
+        
+        ClubGradeAdjacencyConstraint is now SOFT - it allows overlaps but penalizes them.
+        """
         clubs = [
             Club(name='Tigers', home_field='Newcastle International Hockey Centre'),
             Club(name='Wests', home_field='Newcastle International Hockey Centre'),
@@ -507,8 +510,11 @@ class TestClubGradeAdjacencyConstraint:
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
         
-        # Should be infeasible because Tigers 3rd and 4th would both play at same time
-        assert status == cp_model.INFEASIBLE
+        # Constraint is now SOFT - should be OPTIMAL with penalties applied
+        assert status == cp_model.OPTIMAL
+        # Verify penalty was tracked for adjacent grade overlap
+        assert 'ClubGradeAdjacencyConstraint' in data['penalties']
+        assert len(data['penalties']['ClubGradeAdjacencyConstraint']['penalties']) > 0
 
 
 # ============== MaitlandHomeGrouping Tests ==============
@@ -543,7 +549,7 @@ class TestMaitlandHomeGrouping:
             'timeslots': timeslots,
             'teams': teams,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = MaitlandHomeGrouping()
@@ -590,7 +596,7 @@ class TestAwayAtMaitlandGrouping:
             'teams': teams,
             'clubs': clubs,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = AwayAtMaitlandGrouping()
@@ -636,7 +642,7 @@ class TestMinimiseClubsOnAFieldBroadmeadow:
             'teams': teams,
             'clubs': clubs,
             'penalties': {},
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = MinimiseClubsOnAFieldBroadmeadow()
@@ -676,7 +682,7 @@ class TestConstraintIntegration:
             'grades': basic_grades,
             'fields': basic_fields,
             'clubs': basic_clubs,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraints = [
@@ -706,7 +712,7 @@ class TestConstraintIntegration:
             'games': games,
             'timeslots': timeslots,
             'teams': basic_teams,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = NoDoubleBookingTeamsConstraint()

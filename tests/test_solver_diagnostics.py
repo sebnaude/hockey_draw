@@ -46,7 +46,7 @@ class TestSolverConfig:
         """Test default SolverConfig values."""
         config = SolverConfig()
         
-        assert config.max_time_seconds == 7200
+        assert config.max_time_seconds == 259200
         assert config.num_workers == 8
         assert config.random_seed == 42
         assert config.log_search_progress is True

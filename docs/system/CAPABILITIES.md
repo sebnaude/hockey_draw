@@ -1,5 +1,9 @@
 # System Capabilities
 
+> **DOCUMENT CLASS:** Human Operator Documentation  
+> **Audience:** Human operators and stakeholders  
+> **Purpose:** What the system can and cannot do
+
 A precise list of every capability implemented in the Hockey Draw Scheduling System.
 
 ---
@@ -67,6 +71,7 @@ A precise list of every capability implemented in the Hockey Draw Scheduling Sys
 | `ClubDays` | Preference for club-specific days |
 | `HomeGrouping` | Group home games together |
 | `PHLSecondGradeSameVenue` | PHL and 2nd at same venue when possible |
+| `ClubGameSpread` | Minimize gaps between a club's games on a given day |
 
 ---
 

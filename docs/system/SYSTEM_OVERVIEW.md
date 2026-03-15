@@ -1,5 +1,9 @@
 # Hockey Draw Scheduling System - Technical Overview
 
+> **DOCUMENT CLASS:** Human Operator Documentation  
+> **Audience:** Developers and technical operators  
+> **Purpose:** Technical architecture documentation
+
 ## System Architecture
 
 This system generates optimal hockey competition schedules using Google OR-Tools' CP-SAT constraint programming solver.
@@ -163,7 +167,12 @@ If the solver returns INFEASIBLE, the `--relax` flag enables automatic resolutio
 │   • MatchUpSpacing, GradeAdjacency, ClubVsClub                 │
 │                                                                 │
 │ Level 4 - LOW (optimization):                                  │
-│   • TimeslotChoices, ClubDensity, PreferredTimes               │
+│   • ClubDensity at Broadmeadow                                 │
+│                                                                 │
+│ Level 5 - VERY LOW (timeslot preferences):                     │
+│   • TimeslotChoices, PreferredTimes                            │
+│                                                                 │
+│ Note: Severity STAGES are 1-4. Level 5 is in severity_4 stage. │
 └─────────────────────────────────────────────────────────────────┘
 
 Resolution Process:

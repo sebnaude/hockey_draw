@@ -221,6 +221,33 @@ Automatic via `ClubGradeAdjacencyConstraint`:
 
 ---
 
+## Club Game Spread
+
+### Minimize Gaps Between a Club's Games
+
+Automatic via `ClubGameSpreadAI`:
+
+**How gaps are calculated:**
+1. For each (club, week, day), find all day_slots where the club has a game
+2. Two teams at the **same** day_slot counts as **one** timeslot used
+3. `gaps = (max_slot - min_slot + 1) - timeslots_used`
+
+**Hard limit:** gaps ≤ 2 (+ slack if configured)
+**Soft penalty:** weight 5000 per gap slot
+
+| Scenario | Slots Used | Range | Gaps |
+|----------|-----------|-------|------|
+| Slots 1,2,3 | 3 | 3 | 0 |
+| Slots 1,3 | 2 | 3 | 1 |
+| Slots 1,4 | 2 | 4 | 2 (at limit) |
+| Slots 1,6 | 2 | 6 | 4 (infeasible) |
+
+**Slack:** `--slack N` raises hard limit to 2+N via `constraint_slack['ClubGameSpread']`
+
+**Severity:** Level 4 (LOW) — first to be relaxed by `--relax`
+
+---
+
 ## Constraint Severity Levels
 
 | Level | Name | Example Constraints | Relaxation |
@@ -228,7 +255,7 @@ Automatic via `ClubGradeAdjacencyConstraint`:
 | 1 | CRITICAL | NoDoubleBooking, EqualGames, PHLAdjacency | Never |
 | 2 | HIGH | ClubDay, TeamConflict, Maitland grouping | Last resort |
 | 3 | MEDIUM | MatchupSpacing, GradeAdjacency | If needed |
-| 4 | LOW | Timeslot choices, PreferredTimes | First to relax |
+| 4 | LOW | Timeslot choices, PreferredTimes, ClubGameSpread | First to relax |
 
 Use `--relax` flag to automatically relax constraints if solver returns INFEASIBLE.
 
@@ -249,6 +276,7 @@ For specific constraints where hardcoded limits may be too restrictive, use the 
 | `EqualMatchUpSpacingConstraint` | ±1 round from ideal | Allow ±(1+N) rounds |
 | `AwayAtMaitlandGrouping` | Max 3 away clubs per Maitland weekend | Max 3+N away clubs |
 | `MaitlandHomeGrouping` | No back-to-back home weekends | Allow N back-to-back pairs |
+| `ClubGameSpread` | Max 2 gap slots per club/day | Max 2+N gap slots |
 
 ### How It Works
 

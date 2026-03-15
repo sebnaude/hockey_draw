@@ -138,7 +138,7 @@ class TestPHLAndSecondGradeAdjacency:
             'teams': phl_2nd_teams,
             'clubs': phl_2nd_clubs,
             'fields': phl_2nd_fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = PHLAndSecondGradeAdjacency()
@@ -186,7 +186,7 @@ class TestPHLAndSecondGradeTimes:
             'teams': phl_2nd_teams,
             'clubs': phl_2nd_clubs,
             'fields': phl_2nd_fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
             'phl_preferences': {'preferred_dates': []},
         }
         
@@ -259,7 +259,7 @@ class TestPHLAndSecondGradeTimes:
             'teams': teams,
             'clubs': clubs,
             'fields': [gosford_field],
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
             'phl_preferences': {'preferred_dates': []},
         }
         
@@ -338,7 +338,7 @@ class TestMaxMaitlandHomeWeekends:
             'grades': grades,
             'clubs': [maitland_club, tigers_club],
             'fields': fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
         }
         
         constraint = MaxMaitlandHomeWeekends()
@@ -403,7 +403,7 @@ class TestEqualMatchUpSpacingConstraint:
             'grades': grades,
             'clubs': clubs,
             'fields': fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
             'num_rounds': {'3rd': 6, 'max': 6},
         }
         
@@ -463,7 +463,7 @@ class TestMaximiseClubsPerTimeslotBroadmeadow:
             'teams': teams,
             'clubs': clubs,
             'fields': fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
             'penalties': {},
         }
         
@@ -515,7 +515,7 @@ class TestPreferredTimesConstraint:
             'teams': teams,
             'clubs': clubs,
             'fields': fields,
-            'current_week': 0,
+            'current_week': 0, 'locked_weeks': set(),
             'preference_no_play': {
                 'Tigers': [{'date': '2025-03-23'}],
             },

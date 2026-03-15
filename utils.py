@@ -262,26 +262,16 @@ def max_games_per_grade(
     grades: List, 
     max_rounds: int,
     max_weekends_per_grade: Dict[str, int] = None,
-    grade_rounds_override: Dict[str, int] = None,
-    grade_formula_selection: Dict[str, int] = None
+    grade_rounds_override: Dict[str, int] = None
 ) -> Dict[str, int]:
     """
-    Given a list of Grade objects (each with num_teams) and the maximum
-    number of rounds, returns a dict mapping grade.name → max games per team.
+    Given a list of Grade objects (each with num_teams), the default maximum
+    number of rounds, and optional per-grade configurations, returns a dict 
+    mapping grade.name → max games per team.
 
-    Supports two formulas per grade:
-    
-    Formula 1 (Strict Equal Matchups):
-      - Every matchup occurs exactly the same number of times
-      - May result in bye weekends where teams don't play
-      - Formula: floor(W/(T-1)) × (T-1) games per team
-      - Example: 20 weekends, 8 teams → floor(20/7)×7 = 2×7 = 14 games
-    
-    Formula 2 (Fill All Weekends):
-      - Play every available weekend (no byes)
-      - Matchups slightly uneven: each pair meets base or base+1 times
-      - Formula: floor(2 × W × floor(T/2) / T) games per team
-      - Example: 20 weekends, 8 teams → floor(2×20×4/8) = 20 games
+    In each round you can have floor(T/2) matches, so over R rounds:
+      total_matches ≤ R * floor(T/2)
+    and since each team plays g games, total_matches = g * T / 2 must be integer.
     
     Args:
         grades: List of Grade objects with num_teams attribute
@@ -290,8 +280,6 @@ def max_games_per_grade(
                                (overrides max_rounds for specific grades)
         grade_rounds_override: Optional dict of grade name → exact rounds to play
                               (completely overrides the calculation)
-        grade_formula_selection: Optional dict of grade name → formula (1 or 2)
-                                Default is 2 (Fill All Weekends) if not specified
         
     Returns:
         Dict mapping grade name to max games per team
@@ -303,8 +291,6 @@ def max_games_per_grade(
         max_weekends_per_grade = {}
     if grade_rounds_override is None:
         grade_rounds_override = {}
-    if grade_formula_selection is None:
-        grade_formula_selection = {}
 
     for grade in grades:
         T = grade.num_teams
@@ -312,42 +298,25 @@ def max_games_per_grade(
             games_per_grade[grade.name] = 0
             continue
         
-        # Check for exact override first (highest priority)
+        # Check for exact override first
         if grade.name in grade_rounds_override:
             games_per_grade[grade.name] = grade_rounds_override[grade.name]
             continue
         
         # Get max weekends for this grade (or use default)
-        W = max_weekends_per_grade.get(grade.name, max_rounds)
-        
-        # Get formula for this grade (default to Formula 2)
-        formula = grade_formula_selection.get(grade.name, 2)
-        
-        if formula == 1:
-            # Formula 1: Strict Equal Matchups
-            # Every team plays every other team the same number of times.
-            # 
-            # For EVEN teams: A complete cycle takes (T-1) rounds, each team plays (T-1) games
-            # For ODD teams: A complete cycle takes T rounds (one bye per round), each team plays (T-1) games
-            #
-            # Rounds per cycle depends on parity:
-            rounds_per_cycle = T if (T % 2 == 1) else (T - 1)
-            games_per_cycle = T - 1  # Each team plays every other team once
-            
-            # Number of complete cycles that fit in W weekends
-            complete_cycles = W // rounds_per_cycle
-            g0 = complete_cycles * games_per_cycle
-        else:
-            # Formula 2: Fill All Weekends (default)
-            # Maximum matches across all rounds
-            max_matches = W * (T // 2)
-            # g0 = floor(2 * max_matches / T)
-            g0 = (2 * max_matches) // T
-            # Can't exceed one game per round
-            g0 = min(g0, W)
-            # Ensure g0*T is even → if T odd, force g0 even
-            if T % 2 == 1 and (g0 % 2) == 1:
-                g0 -= 1
+        grade_max_rounds = max_weekends_per_grade.get(grade.name, max_rounds)
+
+        # maximum matches across all rounds
+        max_matches = grade_max_rounds * (T // 2)
+
+        # g0 = floor( 2 * max_matches / T )
+        g0 = (2 * max_matches) // T
+        # can't exceed one game per round
+        g0 = min(g0, grade_max_rounds)
+
+        # ensure g0*T is even → if T odd, force g0 even
+        if T % 2 == 1 and (g0 % 2) == 1:
+            g0 -= 1
 
         games_per_grade[grade.name] = g0
 
@@ -431,6 +400,171 @@ def generate_games(teams: List[Team]) -> Dict[Tuple[str, str, str], Tuple]:
         for t2 in teams[i + 1:] if t1.grade == t2.grade
     }
     return games
+
+
+# ============== Forced Games (Partial Key Matching) ==============
+# Key indices for the 11-tuple: (team1, team2, grade, day, day_slot, time, week, date, round_no, field_name, field_location)
+_KEY_INDEX = {
+    'team1': 0, 'team2': 1, 'grade': 2, 'day': 3, 'day_slot': 4,
+    'time': 5, 'week': 6, 'date': 7, 'round_no': 8, 'field_name': 9, 'field_location': 10,
+}
+_SCOPE_FIELDS = {'grade', 'day', 'day_slot', 'time', 'week', 'date', 'round_no', 'field_name', 'field_location'}
+
+
+def _build_forced_game_rules(forced_games: list, teams: list) -> dict:
+    """
+    Build lookup structure from FORCED_GAMES config for fast variable filtering.
+    
+    Groups entries by their scope (non-team fields). For each scope, collects
+    all allowed team matchers. A variable matching the scope must match at least
+    one team matcher to survive.
+    
+    Team names in config can be club names (e.g., 'Maitland') — they are auto-resolved
+    to full team names (e.g., 'Maitland PHL') using the grade field and teams list.
+    
+    Returns:
+        Dict mapping scope_key (frozenset) -> list of team matchers.
+        Each team matcher is ('pair', team1, team2) or ('any', team_name).
+    """
+    if not forced_games:
+        return {}
+    
+    # Build lookup: (club_name, grade) -> [full team names]
+    team_lookup = defaultdict(list)
+    team_names_set = set()
+    for t in teams:
+        team_names_set.add(t.name)
+        team_lookup[(t.club.name, t.grade)].append(t.name)
+    
+    def resolve_team_name(name, grade=None):
+        """Resolve a club name or team name to full team name(s)."""
+        # If already a full team name, use it
+        if name in team_names_set:
+            return [name]
+        # If grade specified, try {club} {grade}
+        if grade and not isinstance(grade, (list, tuple)):
+            full = f"{name} {grade}"
+            if full in team_names_set:
+                return [full]
+            # Look up by club + grade
+            matches = team_lookup.get((name, grade), [])
+            if matches:
+                return matches
+        # If grade is a list, resolve for each grade
+        if grade and isinstance(grade, (list, tuple)):
+            results = []
+            for g in grade:
+                results.extend(resolve_team_name(name, g))
+            return results
+        # No grade — find all teams from this club
+        results = [t.name for t in teams if t.club.name == name]
+        return results if results else [name]
+    
+    # scope_key -> list of team matchers
+    scope_groups = defaultdict(list)
+    
+    for entry in forced_games:
+        grade = entry.get('grade')
+        
+        # Build scope from non-team fields
+        scope = []
+        for field in _SCOPE_FIELDS:
+            if field in entry:
+                val = entry[field]
+                idx = _KEY_INDEX[field]
+                if isinstance(val, list):
+                    scope.append((idx, tuple(val)))
+                else:
+                    scope.append((idx, val))
+        
+        scope_key = frozenset(scope)
+        
+        # Build team matcher from 'teams' key or team1/team2
+        raw_teams = entry.get('teams', [])
+        if raw_teams:
+            if len(raw_teams) == 2:
+                resolved_t1 = resolve_team_name(raw_teams[0], grade)
+                resolved_t2 = resolve_team_name(raw_teams[1], grade)
+                for rt1 in resolved_t1:
+                    for rt2 in resolved_t2:
+                        pair = tuple(sorted([rt1, rt2]))
+                        scope_groups[scope_key].append(('pair', pair[0], pair[1]))
+            elif len(raw_teams) == 1:
+                resolved = resolve_team_name(raw_teams[0], grade)
+                for rt in resolved:
+                    scope_groups[scope_key].append(('any', rt))
+        elif 'team1' in entry or 'team2' in entry:
+            t1_raw = entry.get('team1')
+            t2_raw = entry.get('team2')
+            if t1_raw and t2_raw:
+                resolved_t1 = resolve_team_name(t1_raw, grade)
+                resolved_t2 = resolve_team_name(t2_raw, grade)
+                for rt1 in resolved_t1:
+                    for rt2 in resolved_t2:
+                        pair = tuple(sorted([rt1, rt2]))
+                        scope_groups[scope_key].append(('pair', pair[0], pair[1]))
+            elif t1_raw:
+                for rt in resolve_team_name(t1_raw, grade):
+                    scope_groups[scope_key].append(('any', rt))
+            elif t2_raw:
+                for rt in resolve_team_name(t2_raw, grade):
+                    scope_groups[scope_key].append(('any', rt))
+        
+        desc = entry.get('description', f"scope={dict(scope)}")
+        matchers = scope_groups[scope_key]
+        print(f"  Forced game rule: {desc} -> {len(matchers)} team matcher(s)")
+    
+    return dict(scope_groups)
+
+
+def _is_blocked_by_forced_games(key: tuple, forced_rules: dict) -> bool:
+    """
+    Check if a variable key is blocked by forced game rules.
+    
+    A variable is blocked if it matches a rule's SCOPE but doesn't match
+    ANY of the allowed team matchers for that scope.
+    
+    Args:
+        key: 11-tuple (team1, team2, grade, day, day_slot, time, week, date, round_no, field_name, field_location)
+        forced_rules: Output of _build_forced_game_rules()
+    
+    Returns:
+        True if the variable should be eliminated.
+    """
+    for scope_key, team_matchers in forced_rules.items():
+        # Check if variable matches this scope
+        in_scope = True
+        for idx, val in scope_key:
+            key_val = key[idx]
+            if isinstance(val, tuple):
+                # List match (any-of)
+                if key_val not in val:
+                    in_scope = False
+                    break
+            else:
+                if key_val != val:
+                    in_scope = False
+                    break
+        
+        if not in_scope:
+            continue
+        
+        # Variable is in scope — check if it matches ANY team matcher
+        t1, t2 = key[0], key[1]
+        for matcher in team_matchers:
+            if matcher[0] == 'pair':
+                # Both teams must match (already sorted in both key and matcher)
+                if t1 == matcher[1] and t2 == matcher[2]:
+                    return False  # Matches — not blocked
+            elif matcher[0] == 'any':
+                # Either team must match
+                if t1 == matcher[1] or t2 == matcher[1]:
+                    return False  # Matches — not blocked
+        
+        # In scope but no team matcher matched — BLOCKED
+        return True
+    
+    return False  # No scope matched — not blocked
 
 
 def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
@@ -546,29 +680,15 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     second_vars_skipped = 0
     other_vars_created = 0
     other_vars_skipped = 0  # Track skipped vars for lower grades
+    forced_vars_skipped = 0  # Track vars eliminated by FORCED_GAMES
+    
+    # Build forced games lookup from config
+    forced_game_rules = _build_forced_game_rules(data.get('forced_games', []), teams)
     
     # Build set of PHL-only venues (Gosford) and days (Friday)
     # These should be excluded from non-PHL grades
     phl_only_venues = {'Central Coast Hockey Park'}  # Gosford is PHL-only
     phl_only_days = {'Friday'}  # Friday nights are PHL-only
-    
-    # PHL-only afternoon dates (state championship weekends)
-    # On these dates, Sunday afternoon (12pm+) at NIHC is PHL-only
-    phl_only_afternoon_dates = set(data.get('phl_only_afternoon_dates', []))
-    afternoon_cutoff = datetime.strptime('12:00', '%H:%M').time()  # 12pm
-    
-    # NIHC Friday night specific games (PHL only)
-    # Only specific matchups are allowed on specific dates
-    friday_night_config = data.get('friday_night_config', {})
-    nihc_friday_games = friday_night_config.get('nihc_friday_games', {})
-    
-    # Helper to extract club name from team name (e.g., "Souths PHL" -> "Souths")
-    def get_club_from_team_name(team_name: str) -> str:
-        """Extract club name from team name by removing the grade suffix."""
-        parts = team_name.rsplit(' ', 1)
-        if len(parts) == 2 and parts[1] in ('PHL', '2nd', '3rd', '4th', '5th', '6th'):
-            return parts[0]
-        return team_name  # Fallback to full name
     
     for game_key, game_val in game_items:
         if isinstance(game_key, tuple) and len(game_key) >= 3:
@@ -598,37 +718,6 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                     if slot_key not in phl_valid_slots:
                         phl_vars_skipped += 1
                         continue
-                
-                # NIHC Friday night specific game filtering
-                # Only specific matchups allowed on specific Friday nights at NIHC
-                if (nihc_friday_games and 
-                    t.day == 'Friday' and 
-                    t.field.location == 'Newcastle International Hockey Centre'):
-                    
-                    date_key = t.date  # Already in 'YYYY-MM-DD' format
-                    
-                    if date_key in nihc_friday_games:
-                        allowed = nihc_friday_games[date_key]
-                        club1 = get_club_from_team_name(t1_name)
-                        club2 = get_club_from_team_name(t2_name)
-                        # Sort clubs alphabetically for consistent comparison
-                        matchup = tuple(sorted([club1, club2]))
-                        
-                        if allowed == 'norths_only':
-                            # Only matchups including Norths are allowed
-                            if 'Norths' not in (club1, club2):
-                                phl_vars_skipped += 1
-                                continue
-                        elif isinstance(allowed, list):
-                            # Specific matchups only
-                            if matchup not in allowed:
-                                phl_vars_skipped += 1
-                                continue
-                    else:
-                        # Date not in nihc_friday_games means NO games allowed on this Friday
-                        phl_vars_skipped += 1
-                        continue
-                
                 phl_vars_created += 1
             # For 2nd grade games, filter if second_grade_times is defined
             elif is_second and second_valid_slots:
@@ -636,19 +725,6 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 if slot_key not in second_valid_slots:
                     second_vars_skipped += 1
                     continue
-                # Also check PHL-only afternoon dates (state championship weekends)
-                # 2nd grade cannot play Sunday afternoon at NIHC on these dates
-                if phl_only_afternoon_dates:
-                    try:
-                        slot_date = datetime.strptime(t.date, '%Y-%m-%d').date()
-                        slot_time = datetime.strptime(t.time, '%H:%M').time()
-                        if (slot_date in phl_only_afternoon_dates and 
-                            t.day == 'Sunday' and 
-                            slot_time >= afternoon_cutoff):
-                            second_vars_skipped += 1
-                            continue
-                    except (ValueError, AttributeError):
-                        pass  # If date parsing fails, allow the slot
                 second_vars_created += 1
             else:
                 # Lower grades (3rd-6th): Exclude PHL-only venues and days
@@ -660,22 +736,15 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 if t.day in phl_only_days:
                     other_vars_skipped += 1
                     continue
-                # Also check PHL-only afternoon dates (state championship weekends)
-                # Lower grades cannot play Sunday afternoon at NIHC on these dates
-                if phl_only_afternoon_dates:
-                    try:
-                        slot_date = datetime.strptime(t.date, '%Y-%m-%d').date()
-                        slot_time = datetime.strptime(t.time, '%H:%M').time()
-                        if (slot_date in phl_only_afternoon_dates and 
-                            t.day == 'Sunday' and 
-                            slot_time >= afternoon_cutoff):
-                            other_vars_skipped += 1
-                            continue
-                    except (ValueError, AttributeError):
-                        pass  # If date parsing fails, allow the slot
                 other_vars_created += 1
             
             key = (t1_name, t2_name, grade_name, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
+            
+            # Check forced game rules - eliminate vars that match scope but not game fields
+            if forced_game_rules and _is_blocked_by_forced_games(key, forced_game_rules):
+                forced_vars_skipped += 1
+                continue
+            
             X[key] = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
     
     print(f"Created {len(X)} decision variables")
@@ -683,6 +752,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     if second_valid_slots:
         print(f"  - 2nd: {second_vars_created} created, {second_vars_skipped} skipped (invalid venue/field/day/time)")
     print(f"  - Other grades: {other_vars_created} created, {other_vars_skipped} skipped (PHL-only venues/days)")
+    if forced_vars_skipped:
+        print(f"  - Forced games: {forced_vars_skipped} vars eliminated by {len(data.get('forced_games', []))} forced game rules")
     return X, Y, conflicts, unavailable_games
 
 
@@ -857,21 +928,18 @@ def build_season_data(config: dict) -> dict:
     # Get grade-specific round configuration
     max_weekends_per_grade = config.get('max_weekends_per_grade', {})
     grade_rounds_override = config.get('grade_rounds_override', {})
-    grade_formula_selection = config.get('grade_formula_selection', {})
     
     # Calculate rounds per grade (with overrides)
     num_rounds = max_games_per_grade(
         GRADES, 
         max_rounds,
         max_weekends_per_grade=max_weekends_per_grade,
-        grade_rounds_override=grade_rounds_override,
-        grade_formula_selection=grade_formula_selection
+        grade_rounds_override=grade_rounds_override
     )
     num_rounds['max'] = max_rounds
-    # Store per-grade configuration for reference
+    # Also store per-grade max weekends for reference
     num_rounds['max_weekends_per_grade'] = max_weekends_per_grade
     num_rounds['grade_rounds_override'] = grade_rounds_override
-    num_rounds['grade_formula_selection'] = grade_formula_selection
     
     for grade, rounds in num_rounds.items():
         grade_obj = next((g for g in GRADES if g.name == grade), None)
@@ -899,6 +967,7 @@ def build_season_data(config: dict) -> dict:
         'timeslots': TIMESLOTS,
         'num_rounds': num_rounds,
         'current_week': 0,
+        'locked_weeks': set(),
         'penalties': {},
         'day_time_map': day_time_map,
         'phl_game_times': phl_game_times,
@@ -914,8 +983,6 @@ def build_season_data(config: dict) -> dict:
         'home_field_map': home_field_map,
         'friday_night_config': config.get('friday_night_config', {}),
         'special_games': config.get('special_games', {}),
-        # Constraint slack overrides - allows relaxing specific constraints
-        # Format: {'EqualMatchUpSpacingConstraint': 2, ...}
-        'constraint_slack': config.get('constraint_slack', {}),
+        'forced_games': config.get('forced_games', []),
     }
 

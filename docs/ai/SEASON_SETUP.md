@@ -151,106 +151,50 @@ Verify:
 
 ---
 
-## Understanding Rounds: Available vs Played
+## Understanding max_rounds
 
-> ⚠️ **CRITICAL DISTINCTION:** There are TWO different round concepts that MUST NOT be conflated.
+### How It Works
 
-### Concept 1: Maximum Available Weekends (Hard Cap)
-
-This is the **maximum number of weekends a grade CAN play** - a hard ceiling.
+`max_rounds` is the **default cap** on games per team per season:
 
 ```python
-MAX_WEEKENDS_PER_GRADE = {
-    'PHL': 22,   # 20 Sundays + 2 extra via Friday nights (rescued weekends)
-    '2nd': 20,   # 20 Sundays only
-    '3rd': 20,   # etc.
-}
+# In utils.py
+def max_games_per_grade(grades: List, max_rounds: int) -> Dict[str, int]:
+    """Calculate max games per team for each grade."""
+    for grade in grades:
+        T = len(teams_in_grade)
+        # Each team can play at most max_rounds games
+        g0 = min(calculated_games, max_rounds)
 ```
 
-**How it's calculated:**
-- Start with total calendar Sundays in season
-- Subtract blocked weekends (Easter, State Championships, etc.)
-- For PHL: Add weekends "rescued" by Friday night option (see below)
-- Can be manually overridden to be LOWER than calculated
+### Relationship to Available Weekends
 
-**⚠️ FRIDAY NIGHTS ARE NOT EXTRA WEEKENDS:**
-- A Friday night game at Gosford is **part of that weekend**, NOT an additional weekend
-- If PHL plays Friday at Gosford, they don't also play Sunday that week
-- Friday games "rescue" weekends that would otherwise be blocked (e.g., State Championships on Saturday/Sunday)
-- Example: May 15-17 Masters SC blocks Sunday play, but PHL can play Friday at Gosford instead → weekend is still playable
+- **Available weekends** = Total Sundays - Blocked weekends
+- **max_rounds** should be ≤ available weekends
+- Setting `max_rounds` higher than available weekends has no effect
 
-### Concept 2: Actual Played Rounds (Calculated)
+### Grade-Specific Overrides
 
-This is **how many games each team actually plays**, calculated from:
-- Number of teams in the grade
-- Maximum available weekends
-- The scheduling formula chosen
-
-**Two Formula Options:**
-
-#### Formula 1: Strict Equal Matchups (Default)
-Every matchup occurs exactly the same number of times. May result in "no-play" weekends.
+Currently there is **no per-grade override** for max_rounds. The system uses:
 
 ```
-T = number of teams
-W = max available weekends
-
-Even teams: games = floor(W / (T-1)) × (T-1)
-Odd teams:  games = floor(W / T) × (T-1)
+num_rounds[grade] = min(calculated_from_team_count, max_rounds)
 ```
 
-Example: 18 weekends, 6 teams → 15 games (each opponent 3×), 3 no-play weekends
-
-### Games Formula (Automatic Calculation)
-
-The system automatically calculates maximum feasible games using:
-
+**Future enhancement:** Add `GRADE_ROUND_OVERRIDES` dict to allow:
 ```python
-# In utils.py max_games_per_grade():
-max_matches = W * floor(T/2)     # Total games possible across all weekends  
-g0 = floor(2 * max_matches / T)  # Max games per team
-g0 = min(g0, W)                  # Can't exceed available weekends
-if T is odd and g0 is odd:
-    g0 -= 1                      # Force even for odd team counts
-```
-
-**Key insight for odd teams:** One team must sit out each weekend, so max games < weekends.
-
-The `EnsureEqualGamesAndBalanceMatchUps` constraint enforces:
-- Each team plays exactly `g0` games
-- Each pair meets `base` or `base+1` times (allowing slight variation to maximize games)
-
-### Configuration
-
-```python
-# Set max available weekends per grade
-MAX_WEEKENDS_PER_GRADE = {
-    'PHL': 22,   # 20 Sundays + 2 rescued via Friday
-    '2nd': 20,
-    '3rd': 20,
-    # ...
-}
-
-# Optional: Force exact round count (overrides formula entirely)
-GRADE_ROUNDS_OVERRIDE = {
-    # '2nd': 18,  # Uncomment to force exactly 18 rounds
+GRADE_ROUND_OVERRIDES = {
+    'PHL': 22,   # Force exactly 22 rounds
+    '6th': 18,   # Cap at 18 rounds
 }
 ```
-
-### Quick Reference
-
-| Concept | Config Key | What it Controls |
-|---------|-----------|------------------|
-| Max available weekends | `MAX_WEEKENDS_PER_GRADE` | Hard ceiling on playable games |
-| Exact override | `GRADE_ROUNDS_OVERRIDE` | Force specific round count |
 
 ### 2026 Configuration
 
-- 24 total Sundays (Mar 22 - Aug 30)
-- 4 blocked weekends (Easter, Masters SC, U16 Girls SC)
-- = 20 available Sundays for most grades
-- PHL: 22 available (20 + 2 rescued via Friday at Gosford)
-- PHL with 6 teams: Each plays 22 games (4-5× vs each opponent)
+For 2026 with 22 available Sundays:
+- Set `max_rounds: 22` to allow up to 22 games
+- PHL with 5 teams: Each team plays 20 games (5-1) * 5 rounds = 20
+- Lower grades calculate their own based on team counts
 
 ---
 
@@ -267,4 +211,3 @@ Before generating:
 - [ ] `CLUB_DAYS` includes all club day events
 - [ ] Pre-season report shows correct team counts
 - [ ] Pre-season report shows correct weekend count
-- [ ] **`seasons/{year}/{year}_club_requests.md` created** with all implementations tracked

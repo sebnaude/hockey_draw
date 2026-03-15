@@ -291,19 +291,19 @@ class TestDrawStorageLockAndSplit:
 
     def test_get_locked_games(self, sample_draw_storage):
         """Test getting locked games up to a week."""
-        locked = sample_draw_storage.get_locked_games(lock_weeks_up_to=1)
+        locked = sample_draw_storage.get_locked_games(locked_weeks=1)
         assert len(locked) == 2
         assert all(g.week == 1 for g in locked)
 
     def test_get_remaining_games(self, sample_draw_storage):
         """Test getting remaining games after lock point."""
-        remaining = sample_draw_storage.get_remaining_games(lock_weeks_up_to=1)
+        remaining = sample_draw_storage.get_remaining_games(locked_weeks=1)
         assert len(remaining) == 2
         assert all(g.week > 1 for g in remaining)
 
     def test_lock_and_split(self, sample_draw_storage):
         """Test splitting draw into locked and unlocked portions."""
-        locked_draw, remaining_draw = sample_draw_storage.lock_and_split(lock_weeks_up_to=2)
+        locked_draw, remaining_draw = sample_draw_storage.lock_and_split(locked_weeks=2)
         
         # Locked should have weeks 1 and 2
         assert locked_draw.num_games == 3

@@ -68,8 +68,8 @@ Examples:
                             help='Specify run ID for checkpoints')
     gen_parser.add_argument('--locked', type=str, metavar='DRAW_FILE',
                             help='Path to draw with locked games')
-    gen_parser.add_argument('--lock-weeks', type=int, default=0,
-                            help='Lock games up to this week (use with --locked)')
+    gen_parser.add_argument('--lock-weeks', type=str, default='',
+                            help='Comma-separated list of weeks to lock (e.g. 1,2,3 or 1,5,7). Use with --locked')
     gen_parser.add_argument('--workers', type=int, default=None,
                             help='Number of solver workers (default: auto based on memory)')
     gen_parser.add_argument('--low-memory', action='store_true',
@@ -85,13 +85,7 @@ Examples:
                                  'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
     gen_parser.add_argument('--stages', nargs='+', metavar='STAGE',
                             help='Run only specific stages (e.g., --stages stage1_required). '
-                                 'Default: stage1_required, stage2_soft. '
-                                 'With --staged: severity_1, severity_2, severity_3, severity_4')
-    gen_parser.add_argument('--staged', action='store_true',
-                            help='Use severity-based staging instead of default. '
-                                 'Runs 4 stages by severity level: '
-                                 'Level 1 (CRITICAL) → Level 2 (HIGH) → Level 3 (MEDIUM) → Level 4 (LOW). '
-                                 'Each stage uses the prior solution as a HINT.')
+                                 'Available: stage1_required, stage2_soft')
     gen_parser.add_argument('--relax', action='store_true',
                             help='Enable severity-based constraint relaxation. If infeasible, '
                                  'automatically identifies problem severity group and relaxes slack variables.')
@@ -101,11 +95,6 @@ Examples:
                             help='Apply Round 1 symmetry breaking. Fixes which team pairings play '
                                  'in Round 1 using the circle method. This dramatically reduces '
                                  'search space by eliminating equivalent schedule orderings.')
-    gen_parser.add_argument('--slack', type=int, default=None, metavar='N',
-                            help='Relax constraints by adding N to their limits. '
-                                 'EqualMatchUpSpacing: ±(1+N) rounds. '
-                                 'AwayAtMaitlandGrouping: max (3+N) away clubs. '
-                                 'MaitlandHomeGrouping: allows (N) back-to-back home weekends.')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -145,7 +134,8 @@ Examples:
     # Import command
     import_parser = subparsers.add_parser('import', help='Import draw from Excel')
     import_parser.add_argument('excel_file', help='Path to Excel file')
-    import_parser.add_argument('--lock-weeks', type=int, help='Lock games up to this week')
+    import_parser.add_argument('--lock-weeks', type=str,
+                                help='Comma-separated list of weeks to lock (e.g. 1,2,3)')
     import_parser.add_argument('--output', '-o', type=str, help='Output JSON file')
     import_parser.add_argument('--year', type=int, required=True,
                               help='Season year (e.g., 2025, 2026). Required.')
@@ -178,6 +168,12 @@ Examples:
     diagnose_parser.add_argument('--ai', action='store_true',
                                  help='Use AI constraint implementations')
     
+    # Migrate command - one-time migration to new directory structure
+    migrate_parser = subparsers.add_parser('migrate', 
+        help='Migrate draws to new versioned directory structure')
+    migrate_parser.add_argument('--year', type=int, required=True,
+                                help='Season year to migrate')
+    
     args = parser.parse_args()
     
     if args.command is None:
@@ -203,6 +199,8 @@ Examples:
         run_preseason(args)
     elif args.command == 'diagnose':
         run_diagnose(args)
+    elif args.command == 'migrate':
+        run_migrate(args)
 
 
 def run_generate(args):
@@ -249,30 +247,19 @@ def run_generate(args):
     
     # Handle locked games
     locked_keys = None
-    if args.locked and args.lock_weeks:
+    locked_weeks = set()
+    if args.lock_weeks:
+        locked_weeks = set(int(w.strip()) for w in args.lock_weeks.split(',') if w.strip())
+    if args.locked and locked_weeks:
         from analytics.storage import DrawStorage
-        print(f"\nLoading locked games from {args.locked} (weeks 1-{args.lock_weeks})...")
-        _, locked_keys = DrawStorage.load_and_lock(args.locked, args.lock_weeks)
+        weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
+        print(f"\nLoading locked games from {args.locked} (weeks {weeks_label})...")
+        _, locked_keys = DrawStorage.load_and_lock(args.locked, locked_weeks)
     
     # Check for Round 1 symmetry breaking
     fix_round_1 = getattr(args, 'fix_round_1', False)
     if fix_round_1:
         print("\n[*] Round 1 symmetry breaking ENABLED")
-    
-    # Build constraint slack overrides from --slack argument
-    constraint_slack = None
-    slack_value = getattr(args, 'slack', None)
-    if slack_value is not None:
-        # Apply slack to all slack-aware constraints
-        constraint_slack = {
-            'EqualMatchUpSpacingConstraint': slack_value,  # Base=1 + slack
-            'AwayAtMaitlandGrouping': slack_value,         # Base=3 + slack (max away clubs at Maitland)
-            'MaitlandHomeGrouping': slack_value,           # Base=1 + slack (back-to-back limit)
-        }
-        print(f"\n[*] Constraint slack override: +{slack_value}")
-        print(f"    EqualMatchUpSpacing: SLACK = 1 + {slack_value} = {1 + slack_value}")
-        print(f"    AwayAtMaitlandGrouping: max away clubs = 3 + {slack_value} = {3 + slack_value}")
-        print(f"    MaitlandHomeGrouping: back-to-back limit = 1 + {slack_value} = {1 + slack_value}")
     
     if args.simple:
         from main_staged import main_simple
@@ -284,14 +271,14 @@ def run_generate(args):
                 'timeout': getattr(args, 'relax_timeout', 30.0),
             }
         solution, data = main_simple(
-            locked_keys=locked_keys, 
+            locked_keys=locked_keys,
+            locked_weeks=locked_weeks,
             solver_config=solver_config, 
             exclude_constraints=exclude, 
             use_ai=args.ai, 
             year=args.year,
             relax_config=relax_config,
-            fix_round_1=fix_round_1,
-            constraint_slack=constraint_slack
+            fix_round_1=fix_round_1
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -301,24 +288,25 @@ def run_generate(args):
                 'enabled': True,
                 'timeout': getattr(args, 'relax_timeout', 30.0),
             }
-        severity_staged = getattr(args, 'staged', False)
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
             locked_keys=locked_keys,
+            locked_weeks=locked_weeks,
             solver_config=solver_config,
             year=args.year,
             stages_to_run=stages,
             relax_config=relax_config,
-            fix_round_1=fix_round_1,
-            constraint_slack=constraint_slack,
-            use_ai=args.ai,
-            severity_staged=severity_staged
+            fix_round_1=fix_round_1
         )
     
     if solution:
         print("\n✅ Draw generated successfully!")
-        print("  Check the 'draws/' folder for output files.")
+        print(f"  Latest draw:    draws/{args.year}/current.json")
+        print(f"  Latest Excel:   draws/{args.year}/current.xlsx")
+        print(f"  All versions:   draws/{args.year}/versions/")
+        print(f"  Changelog:      draws/{args.year}/CHANGELOG.md")
+        print(f"  Checkpoints:    checkpoints/latest/")
         print("  Check the 'logs/' folder for detailed solver logs.")
     else:
         print("\n❌ Failed to generate draw.")
@@ -336,8 +324,9 @@ def run_test(args):
     
     data = load_data_for_year(args.year)
     
-    print(f"\nLoading draw from {args.draw_file}...")
-    draw = DrawStorage.load(args.draw_file)
+    draw_path = resolve_draw_path(args.draw_file, args.year)
+    print(f"\nLoading draw from {draw_path}...")
+    draw = DrawStorage.load(draw_path)
     
     print("Running constraint checks...\n")
     tester = DrawTester(draw, data)
@@ -359,8 +348,9 @@ def run_analyze(args):
     
     data = load_data_for_year(args.year)
     
-    print(f"\nLoading draw from {args.draw_file}...")
-    draw = DrawStorage.load(args.draw_file)
+    draw_path = resolve_draw_path(args.draw_file, args.year)
+    print(f"\nLoading draw from {draw_path}...")
+    draw = DrawStorage.load(draw_path)
     
     print("Generating analytics...")
     analytics = DrawAnalytics(draw, data)
@@ -388,8 +378,9 @@ def run_swap(args):
     
     data = load_data_for_year(args.year)
     
-    print(f"\nLoading draw from {args.draw_file}...")
-    draw = DrawStorage.load(args.draw_file)
+    draw_path = resolve_draw_path(args.draw_file, args.year)
+    print(f"\nLoading draw from {draw_path}...")
+    draw = DrawStorage.load(draw_path)
     
     tester = DrawTester(draw, data)
     
@@ -427,8 +418,16 @@ def run_swap(args):
         print("\n⚖️ Swap has no effect on violations.")
     
     if args.save:
-        tester.save_modified_draw(args.save)
-        print(f"\n💾 Modified draw saved to {args.save}")
+        # Save as a minor version update through the versioning system
+        from analytics.versioning import DrawVersionManager
+        version_manager = DrawVersionManager('draws', year=args.year)
+        old_draw = DrawStorage.load(draw_path)
+        modified_draw = tester.draw
+        version_manager.save_modified_draw(
+            modified_draw, old_draw,
+            f"Game swap: {args.game1} <-> {args.game2}"
+        )
+        print(f"\n💾 Modified draw saved as new version in draws/{args.year}/")
 
 
 def run_report(args):
@@ -445,8 +444,9 @@ def run_report(args):
     
     data = load_data_for_year(args.year)
     
-    print(f"\nLoading draw from {args.draw_file}...")
-    draw = DrawStorage.load(args.draw_file)
+    draw_path = resolve_draw_path(args.draw_file, args.year)
+    print(f"\nLoading draw from {draw_path}...")
+    draw = DrawStorage.load(draw_path)
     
     Path(args.output).mkdir(parents=True, exist_ok=True)
     
@@ -507,12 +507,14 @@ def run_import(args):
     print(f"  Imported {draw.num_games} games across {draw.num_weeks} weeks")
     
     if args.lock_weeks:
-        locked, remaining = draw.lock_and_split(args.lock_weeks)
-        print(f"  Locked weeks 1-{args.lock_weeks}: {locked.num_games} games")
+        locked_weeks = set(int(w.strip()) for w in args.lock_weeks.split(',') if w.strip())
+        locked, remaining = draw.lock_and_split(locked_weeks)
+        weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
+        print(f"  Locked weeks {weeks_label}: {locked.num_games} games")
         print(f"  Remaining weeks: {remaining.num_games} games")
         
         # Save locked portion
-        locked_output = args.output or args.excel_file.replace('.xlsx', f'_locked_{args.lock_weeks}.json')
+        locked_output = args.output or args.excel_file.replace('.xlsx', f'_locked_{weeks_label}.json')
         locked.save(locked_output)
         print(f"\n✅ Locked draw saved to {locked_output}")
     else:
@@ -560,6 +562,51 @@ def load_data_for_year(year: int) -> dict:
     """
     from config import load_season_data
     return load_season_data(year)
+
+
+def resolve_draw_path(draw_file: str, year: int = None) -> str:
+    """
+    Resolve a draw file path, supporting special aliases.
+    
+    Supports:
+    - "current" or "latest" -> draws/{year}/current.json
+    - A version string like "v2.0" -> draws/{year}/versions/draw_v2.0.json
+    - Any direct file path -> used as-is
+    
+    Args:
+        draw_file: Path string or alias
+        year: Season year (required for alias resolution)
+        
+    Returns:
+        Resolved absolute or relative file path
+    """
+    if draw_file.lower() in ('current', 'latest'):
+        if year is None:
+            print("ERROR: --year is required when using 'current' or 'latest'")
+            sys.exit(1)
+        resolved = f"draws/{year}/current.json"
+        if not Path(resolved).exists():
+            print(f"ERROR: No current draw found at {resolved}")
+            print(f"  Generate a draw first: python run.py generate --year {year}")
+            sys.exit(1)
+        return resolved
+    
+    # Check for version string like "v2.0" or "v1.1"
+    import re
+    version_match = re.match(r'^v?(\d+\.\d+)$', draw_file)
+    if version_match and year:
+        version_str = version_match.group(1)
+        # Try versions/ subfolder first, then base path
+        for check_path in [
+            f"draws/{year}/versions/draw_v{version_str}.json",
+            f"draws/{year}/draw_v{version_str}.json",
+        ]:
+            if Path(check_path).exists():
+                return check_path
+        print(f"ERROR: Version v{version_str} not found in draws/{year}/versions/")
+        sys.exit(1)
+    
+    return draw_file
 
 
 def run_preseason(args):
@@ -660,6 +707,22 @@ def run_diagnose(args):
         else:
             print("\n[OK] All constraints are feasible together!")
             sys.exit(0)
+
+
+def run_migrate(args):
+    """Migrate draws from legacy flat structure to versioned directory structure."""
+    print("="*60)
+    print(f"MIGRATING DRAWS - {args.year} SEASON")
+    print("="*60)
+    
+    from analytics.versioning import DrawVersionManager
+    
+    manager = DrawVersionManager('draws', year=args.year)
+    manager.migrate_legacy_draws()
+    
+    print(f"\n✅ Migration complete for {args.year}")
+    print(f"  Versions folder: draws/{args.year}/versions/")
+    print(f"  Current draw:    draws/{args.year}/current.json")
 
 
 if __name__ == "__main__":

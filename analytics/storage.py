@@ -206,42 +206,61 @@ class DrawStorage(BaseModel):
     
     # ============== Partial Draw Operations ==============
     
-    def get_locked_games(self, lock_weeks_up_to: int) -> List[StoredGame]:
-        """Get games in weeks that should be locked."""
-        return [g for g in self.games if g.week <= lock_weeks_up_to]
+    def get_locked_games(self, locked_weeks) -> List[StoredGame]:
+        """Get games in weeks that should be locked.
+        
+        Args:
+            locked_weeks: A set/list of week numbers to lock, or an int (locks weeks 1..N).
+        """
+        if isinstance(locked_weeks, int):
+            locked_weeks = set(range(1, locked_weeks + 1))
+        locked_weeks = set(locked_weeks)
+        return [g for g in self.games if g.week in locked_weeks]
     
-    def get_remaining_games(self, lock_weeks_up_to: int) -> List[StoredGame]:
-        """Get games in weeks after the lock point."""
-        return [g for g in self.games if g.week > lock_weeks_up_to]
+    def get_remaining_games(self, locked_weeks) -> List[StoredGame]:
+        """Get games in weeks that are NOT locked.
+        
+        Args:
+            locked_weeks: A set/list of week numbers to lock, or an int (locks weeks 1..N).
+        """
+        if isinstance(locked_weeks, int):
+            locked_weeks = set(range(1, locked_weeks + 1))
+        locked_weeks = set(locked_weeks)
+        return [g for g in self.games if g.week not in locked_weeks]
     
-    def lock_and_split(self, lock_weeks_up_to: int) -> Tuple["DrawStorage", "DrawStorage"]:
+    def lock_and_split(self, locked_weeks) -> Tuple["DrawStorage", "DrawStorage"]:
         """
         Split draw into locked and unlocked portions.
         
         Args:
-            lock_weeks_up_to: Lock all games in weeks <= this value
+            locked_weeks: A set/list of week numbers to lock, or an int (locks weeks 1..N).
             
         Returns:
             Tuple of (locked_draw, remaining_draw)
         """
-        locked_games = self.get_locked_games(lock_weeks_up_to)
-        remaining_games = self.get_remaining_games(lock_weeks_up_to)
+        if isinstance(locked_weeks, int):
+            locked_weeks = set(range(1, locked_weeks + 1))
+        locked_weeks = set(locked_weeks)
         
+        locked_games = self.get_locked_games(locked_weeks)
+        remaining_games = self.get_remaining_games(locked_weeks)
+        
+        weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
         locked_draw = DrawStorage(
-            description=f"{self.description} (Locked weeks 1-{lock_weeks_up_to})",
-            num_weeks=lock_weeks_up_to,
+            description=f"{self.description} (Locked weeks {weeks_label})",
+            num_weeks=len(locked_weeks),
             num_games=len(locked_games),
             games=locked_games,
-            metadata={**self.metadata, 'locked_up_to': lock_weeks_up_to}
+            metadata={**self.metadata, 'locked_weeks': sorted(locked_weeks)}
         )
         
-        remaining_weeks = set(g.week for g in remaining_games)
+        remaining_week_nums = set(g.week for g in remaining_games)
         remaining_draw = DrawStorage(
-            description=f"{self.description} (Remaining weeks {lock_weeks_up_to+1}+)",
-            num_weeks=len(remaining_weeks),
+            description=f"{self.description} (Remaining weeks)",
+            num_weeks=len(remaining_week_nums),
             num_games=len(remaining_games),
             games=remaining_games,
-            metadata={**self.metadata, 'starts_from_week': lock_weeks_up_to + 1}
+            metadata={**self.metadata, 'unlocked_weeks': sorted(remaining_week_nums)}
         )
         
         return locked_draw, remaining_draw
@@ -250,34 +269,39 @@ class DrawStorage(BaseModel):
     def load_and_lock(
         cls,
         path: str,
-        lock_weeks_up_to: int
+        locked_weeks
     ) -> Tuple["DrawStorage", List[Tuple]]:
         """
         Load a draw and prepare locked games for solver constraint injection.
         
         Args:
             path: Path to JSON draw file
-            lock_weeks_up_to: Lock all games in weeks <= this value
+            locked_weeks: A set/list of week numbers to lock, or an int (locks weeks 1..N).
             
         Returns:
             Tuple of (locked_draw, locked_game_keys)
             - locked_draw: DrawStorage containing only locked games
             - locked_game_keys: List of 11-tuple keys for model.Add(X[key] == 1)
         """
-        full_draw = cls.load(path)
-        locked_games = full_draw.get_locked_games(lock_weeks_up_to)
+        if isinstance(locked_weeks, int):
+            locked_weeks = set(range(1, locked_weeks + 1))
+        locked_weeks = set(locked_weeks)
         
+        full_draw = cls.load(path)
+        locked_games = full_draw.get_locked_games(locked_weeks)
+        
+        weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
         locked_draw = DrawStorage(
-            description=f"Locked from {full_draw.description} (weeks 1-{lock_weeks_up_to})",
-            num_weeks=lock_weeks_up_to,
+            description=f"Locked from {full_draw.description} (weeks {weeks_label})",
+            num_weeks=len(locked_weeks),
             num_games=len(locked_games),
             games=locked_games,
-            metadata={'source_file': path, 'locked_up_to': lock_weeks_up_to}
+            metadata={'source_file': path, 'locked_weeks': sorted(locked_weeks)}
         )
         
         locked_keys = [game.to_key() for game in locked_games]
         
-        print(f"Loaded {len(locked_games)} locked games from weeks 1-{lock_weeks_up_to}")
+        print(f"Loaded {len(locked_games)} locked games from weeks {weeks_label}")
         return locked_draw, locked_keys
     
     @classmethod

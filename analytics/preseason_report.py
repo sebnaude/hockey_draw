@@ -505,72 +505,52 @@ class PreSeasonReport:
         
         # Games per Grade
         lines.append("-" * 40)
-        lines.append("GAMES PER GRADE (ROUNDS CALCULATION)")
+        lines.append("GAMES PER GRADE")
         lines.append("-" * 40)
+        lines.append("(Unique matchups, games per team, and matchup frequency)")
         lines.append("")
         num_rounds = self.data.get('num_rounds', {})
         max_weekends_per_grade = num_rounds.get('max_weekends_per_grade', {})
         grade_rounds_override = num_rounds.get('grade_rounds_override', {})
         total_matchups = 0
-        
-        # Show formula explanation
-        lines.append("Formula: max_matches = W * floor(T/2), games = floor(2 * max_matches / T)")
-        lines.append("         For odd teams, games forced even. Constraint allows base or base+1 matchups.")
-        lines.append("")
-        
-        lines.append(f"{'Grade':<6} {'Teams':>5} {'MaxWk':>6} {'Games':>6} {'x/Pair':>8} {'Notes'}")
+        lines.append(f"{'Grade':<8} {'Teams':>6} {'Matchups':>10} {'Games/Team':>12} {'×/Matchup':>10} {'Distribution':>14}")
         lines.append("-" * 70)
-        
         for grade in sorted(self.grades, key=lambda g: ['PHL', '2nd', '3rd', '4th', '5th', '6th'].index(g.name) if g.name in ['PHL', '2nd', '3rd', '4th', '5th', '6th'] else 99):
             n_teams = len(grade.teams)
             matchups = n_teams * (n_teams - 1) // 2  # Unique matchups
             games_per_team = num_rounds.get(grade.name, 0)  # Games each team plays
-            max_wk = max_weekends_per_grade.get(grade.name, num_rounds.get('max', 20))
             total_matchups += matchups
             
-            # Calculate base matchups (what constraint uses)
-            if n_teams >= 2:
-                if n_teams % 2 == 0:
-                    # Even teams: base = R // (T-1)
-                    base = games_per_team // (n_teams - 1)
-                    all_equal = (base * (n_teams - 1) == games_per_team)
-                else:
-                    # Odd teams: base = R // T
-                    base = games_per_team // n_teams if n_teams > 0 else 0
-                    all_equal = (base * n_teams == games_per_team) if n_teams > 0 else True
-                    
-                if all_equal:
-                    matchup_str = f"{base}x"
-                else:
-                    matchup_str = f"{base}-{base+1}x"
+            # Calculate times per matchup
+            if matchups > 0:
+                total_games = games_per_team * n_teams // 2
+                per_matchup = total_games / matchups
+                is_even = (per_matchup == int(per_matchup))
+                dist_str = "EVEN" if is_even else f"uneven"
             else:
-                base = 0
-                matchup_str = "-"
+                per_matchup = 0
+                dist_str = "-"
             
-            # Notes
-            notes = []
+            # Check for overrides
+            override_note = ""
             if grade.name in grade_rounds_override:
-                notes.append("OVERRIDE")
-            if max_wk != num_rounds.get('max', 20):
-                notes.append(f"maxWk={max_wk}")
-            if games_per_team < max_wk:
-                bye_weeks = max_wk - games_per_team
-                notes.append(f"{bye_weeks} byes")
+                override_note = " [OVERRIDE]"
+            elif grade.name in max_weekends_per_grade:
+                max_wk = max_weekends_per_grade[grade.name]
+                if max_wk != num_rounds.get('max', 20):
+                    override_note = f" [max:{max_wk}wks]"
             
-            notes_str = ", ".join(notes) if notes else ""
-            
-            lines.append(f"{grade.name:<6} {n_teams:>5} {max_wk:>6} {games_per_team:>6} {matchup_str:>8}   {notes_str}")
-        
+            lines.append(f"{grade.name:<8} {n_teams:>6} {matchups:>10} {games_per_team:>12} {per_matchup:>10.1f} {dist_str:>14}{override_note}")
         lines.append("-" * 70)
-        lines.append(f"{'TOTAL':<6} {total_teams:>5} {'':>6} {'':>6}")
+        lines.append(f"{'TOTAL':<8} {total_teams:>6} {total_matchups:>10}")
         lines.append("")
         
-        # Explanation of columns
-        lines.append("Column legend:")
-        lines.append("  MaxWk = Maximum available weekends for the grade")
-        lines.append("  Games = Actual games each team plays (maximised by formula)")
-        lines.append("  x/Pair = How many times each pair of teams meets (base or base+1)")
-        lines.append("  byes = weekends where teams don't play")
+        # Explanation of distribution
+        lines.append("Distribution notes:")
+        lines.append("  EVEN = Each matchup played exactly the same number of times")
+        lines.append("  uneven = Some matchups played more times than others")
+        lines.append("  [max:Xwks] = Grade has X available weekends (differs from default)")
+        lines.append("  [OVERRIDE] = Grade has exact round count set in config")
         lines.append("")
         
         # Slot Capacity Analysis

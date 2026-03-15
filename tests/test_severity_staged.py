@@ -113,13 +113,17 @@ class TestConstraintGrouping:
             assert expected_level == 3, f"{name} is level {expected_level}, expected 3 for severity_3"
 
     def test_severity_4_contains_low_constraints(self):
-        """Verify Level 4 contains LOW (level 4) constraints."""
+        """Verify severity_4 stage contains LOW (level 4) and VERY LOW (level 5) constraints.
+        
+        The severity_4 stage groups both level 4 and level 5 constraints together.
+        Level 5 constraints are 'very low' priority (timeslot preferences).
+        """
         level_4_constraints = STAGES_SEVERITY['severity_4']['constraints']
         
         for constraint_cls in level_4_constraints:
             name = constraint_cls.__name__
             expected_level = CONSTRAINT_TO_SEVERITY.get(name, 4)
-            assert expected_level == 4, f"{name} is level {expected_level}, expected 4 for severity_4"
+            assert expected_level in [4, 5], f"{name} is level {expected_level}, expected 4 or 5 for severity_4"
 
     def test_no_duplicate_constraints_across_stages(self):
         """Verify no constraint appears in multiple severity stages."""

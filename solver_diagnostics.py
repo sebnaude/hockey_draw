@@ -258,8 +258,8 @@ class ResourceMonitor:
 class SolverConfig:
     """Configuration for OR-Tools CP-SAT solver with resource management."""
     
-    # Time limits
-    max_time_seconds: int = 7200
+    # Time limits (72 hours, aligned with staged solver)
+    max_time_seconds: int = 259200
     
     # Parallelism - reduces memory by limiting parallel workers
     num_workers: int = 8  # Default OR-Tools uses all cores which can be memory-heavy
@@ -291,7 +291,7 @@ class SolverConfig:
         solver.parameters.cp_model_probing_level = self.cp_model_probing_level
     
     @classmethod
-    def low_memory_config(cls, max_time: int = 7200) -> 'SolverConfig':
+    def low_memory_config(cls, max_time: int = 259200) -> 'SolverConfig':
         """Create a configuration optimized for low memory usage."""
         return cls(
             max_time_seconds=max_time,
@@ -301,7 +301,7 @@ class SolverConfig:
         )
     
     @classmethod
-    def minimal_memory_config(cls, max_time: int = 7200) -> 'SolverConfig':
+    def minimal_memory_config(cls, max_time: int = 259200) -> 'SolverConfig':
         """Create a configuration for extremely constrained memory (2 workers)."""
         return cls(
             max_time_seconds=max_time,
@@ -312,7 +312,7 @@ class SolverConfig:
         )
     
     @classmethod
-    def balanced_config(cls, max_time: int = 7200) -> 'SolverConfig':
+    def balanced_config(cls, max_time: int = 259200) -> 'SolverConfig':
         """Create a balanced configuration."""
         return cls(
             max_time_seconds=max_time,
@@ -322,7 +322,7 @@ class SolverConfig:
         )
     
     @classmethod
-    def high_performance_config(cls, max_time: int = 7200) -> 'SolverConfig':
+    def high_performance_config(cls, max_time: int = 259200) -> 'SolverConfig':
         """Create a configuration optimized for speed (uses more memory)."""
         return cls(
             max_time_seconds=max_time,
