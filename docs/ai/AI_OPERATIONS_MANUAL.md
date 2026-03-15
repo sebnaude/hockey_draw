@@ -192,16 +192,26 @@ version = manager.save_solver_output(solution, data, description, mode)
 ### Workflow 2: Lock Partial Draw and Re-Solve
 
 ```powershell
-# Lock weeks 1-5, re-solve weeks 6+
+# Lock week 1, re-solve weeks 2+
 .\.venv\Scripts\python.exe run.py generate --year 2026 \
-    --locked draws/2026/draw_v1.json --lock-weeks 5
+    --locked draws/2026/draw_v1.json --lock-weeks 1
+
+# Lock specific non-contiguous weeks
+.\.venv\Scripts\python.exe run.py generate --year 2026 \
+    --locked draws/2026/draw_v1.json --lock-weeks 1,3,5
+
+# Lock weeks 1-5 (list each week)
+.\.venv\Scripts\python.exe run.py generate --year 2026 \
+    --locked draws/2026/draw_v1.json --lock-weeks 1,2,3,4,5
 ```
 
 **What This Does:**
 1. Loads draw from JSON
-2. Extracts game keys for weeks 1-5
+2. Extracts game keys for the specified weeks
 3. Adds `model.Add(X[key] == 1)` for each locked game
-4. Solves with locked games as hard constraints
+4. Zeros out ALL other variables in locked weeks (`model.Add(var == 0)`)
+5. Constraints skip locked weeks entirely
+6. Solves remaining weeks with all constraints
 
 ### Workflow 3: Test Draw for Violations (Post-Hoc)
 
@@ -367,7 +377,8 @@ FIELD_UNAVAILABILITIES = {
 | 1 | CRITICAL | Double-booking, equal games | ❌ Never |
 | 2 | HIGH | Club days, team conflicts | ⚠️ With `--slack` |
 | 3 | MEDIUM | Matchup spacing, adjacency | ⚠️ With `--slack` |
-| 4 | LOW | Timeslot preferences | ✅ Yes |
+| 4 | LOW | Club density at Broadmeadow | ✅ Yes |
+| 5 | VERY LOW | Timeslot preferences | ✅ Yes |
 
 ### Constraint Types
 
@@ -435,7 +446,7 @@ The solver CAN deviate from hints if constraints require it.
 
 ### 4. No Partial Game Locking
 
-**Problem:** Locking is week-based only (`--lock-weeks N`). You can't lock arbitrary individual games.
+**Problem:** Locking is week-based only (`--lock-weeks 1,2,3`). You can't lock arbitrary individual games.
 
 ### 5. No "What-If" Scenario Testing
 
@@ -495,7 +506,7 @@ Current workaround:
 
 # Lock partial draw and regenerate remainder
 .\.venv\Scripts\python.exe run.py generate --year 2026 \
-    --locked draws/2026/current.json --lock-weeks 5
+    --locked draws/2026/current.json --lock-weeks 1,2,3,4,5
 
 # Migrate legacy flat draws to versioned structure
 .\.venv\Scripts\python.exe run.py migrate --year 2026

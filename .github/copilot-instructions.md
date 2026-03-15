@@ -122,7 +122,9 @@ This exclusion is hardcoded in `generate_X()` and saves ~20,000+ variables.
 
 # Generate with automatic constraint relaxation (if infeasible)
 .\.venv\Scripts\python.exe run.py generate --year 2026 --relax
-
+# Lock specific weeks from a prior draw and re-solve the rest
+.\.\.venv\\Scripts\\python.exe run.py generate --year 2026 --locked draws/2026/draw_v1.0.json --lock-weeks 1
+.\.\.venv\\Scripts\\python.exe run.py generate --year 2026 --locked draws/2026/draw_v1.0.json --lock-weeks 1,2,3
 # Pre-season report
 .\.venv\Scripts\python.exe run.py preseason --year 2026
 
@@ -145,8 +147,8 @@ When solver returns INFEASIBLE, use `--relax` to automatically find and relax th
 
 **How it works:**
 1. Tests with all constraints
-2. If INFEASIBLE, drops severity level 4 constraints and retests
-3. If still INFEASIBLE, drops level 3, then level 2
+2. If INFEASIBLE, drops severity level 5 constraints and retests
+3. If still INFEASIBLE, drops level 4, then level 3, then level 2
 4. Identifies the blocking severity group
 5. Relaxes ALL constraints in that group (slack +1)
 6. Solves with ALL constraints together (never locks partial solutions)
@@ -155,7 +157,8 @@ When solver returns INFEASIBLE, use `--relax` to automatically find and relax th
 - Level 1: CRITICAL (never relaxed) - double-booking, equal games, PHL adjacency
 - Level 2: HIGH (structural) - club days, Maitland grouping, team conflicts
 - Level 3: MEDIUM (spacing) - matchup spacing, grade adjacency, club vs club
-- Level 4: LOW (optimization) - timeslot choices, club density
+- Level 4: LOW (optimization) - club density at Broadmeadow
+- Level 5: VERY LOW (timeslot preferences) - timeslot choices, preferred times
 
 See `severity_relaxation.py` for implementation details.
 

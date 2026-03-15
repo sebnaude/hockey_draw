@@ -90,10 +90,10 @@ A precise list of every capability implemented in the Hockey Draw Scheduling Sys
 ### 3.2 Partial Draw / Locking
 | Capability | Location | Method |
 |------------|----------|--------|
-| Lock games up to week N | `analytics/storage.py` | `draw.get_locked_games(lock_weeks_up_to)` |
-| Get remaining unlocked games | `analytics/storage.py` | `draw.get_remaining_games(lock_weeks_up_to)` |
-| Split draw into locked/unlocked | `analytics/storage.py` | `draw.lock_and_split(week)` |
-| Load and prepare locked keys | `analytics/storage.py` | `DrawStorage.load_and_lock(path, week)` |
+| Lock games for specific weeks | `analytics/storage.py` | `draw.get_locked_games(locked_weeks)` |
+| Get remaining unlocked games | `analytics/storage.py` | `draw.get_remaining_games(locked_weeks)` |
+| Split draw into locked/unlocked | `analytics/storage.py` | `draw.lock_and_split(locked_weeks)` |
+| Load and prepare locked keys | `analytics/storage.py` | `DrawStorage.load_and_lock(path, locked_weeks)` |
 | Merge two draws | `analytics/storage.py` | `draw.merge_with(other_draw)` |
 
 ### 3.3 Checkpoints
