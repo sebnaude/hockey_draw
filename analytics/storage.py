@@ -852,7 +852,7 @@ def analyze_draw(draw: DrawStorage, data: Dict) -> DrawAnalytics:
 def export_draw_to_revformat(
     draw: DrawStorage,
     data: Dict,
-    output_path: str = "schedule_revformat.csv",
+    output_path: str = "draws/2026/revformat/schedule_revformat.csv",
     week_limit: Optional[int] = None
 ) -> None:
     """

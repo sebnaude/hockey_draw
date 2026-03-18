@@ -286,6 +286,7 @@ SEASON_CONFIG = {
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
     'club_days': CLUB_DAYS,
     'preference_no_play': PREFERENCE_NO_PLAY,
+    'blocked_games': BLOCKED_GAMES,
     'friday_night_config': FRIDAY_NIGHT_CONFIG,
     'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,
 }
@@ -355,6 +356,31 @@ PREFERENCE_NO_PLAY = {
 }
 ```
 
+### BLOCKED_GAMES (Hard No-Play)
+
+Variables are completely removed from the game dictionary — the solver **cannot** schedule these games.
+
+```python
+BLOCKED_GAMES = [
+    {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'dates': ['2026-05-24'],
+        'reason': 'U18 State Championships',
+    },
+    {
+        'club': 'Gosford',
+        'dates': ['2026-06-21'],
+        'reason': 'Post-SC recovery weekend',
+    },
+]
+```
+
+**Fields:** `club`, `grade`/`grades`, `teams`, `dates` (list of `'YYYY-MM-DD'` strings), `reason`  
+**Logic:** Scope match (date + optional grade) AND team match → variable removed  
+**Sister mechanism to:** `FORCED_GAMES` (which removes variables for non-matching teams)  
+**See:** `docs/ai/CONFIGURATION_REFERENCE.md` for full field reference
+
 ### FIELD_UNAVAILABILITIES (Hard Blocks)
 
 ```python
@@ -375,8 +401,8 @@ FIELD_UNAVAILABILITIES = {
 | Level | Name | Examples | Can Relax? |
 |-------|------|----------|------------|
 | 1 | CRITICAL | Double-booking, equal games | ❌ Never |
-| 2 | HIGH | Club days, team conflicts | ⚠️ With `--slack` |
-| 3 | MEDIUM | Matchup spacing, adjacency | ⚠️ With `--slack` |
+| 2 | HIGH | Club days, team conflicts, matchup spacing | ⚠️ With `--slack` |
+| 3 | MEDIUM | Grade adjacency, club alignment | ⚠️ With `--slack` |
 | 4 | LOW | Club density at Broadmeadow | ✅ Yes |
 | 5 | VERY LOW | Timeslot preferences | ✅ Yes |
 
@@ -408,8 +434,8 @@ FIELD_UNAVAILABILITIES = {
 | Stage | Level | Constraints |
 |-------|-------|-------------|
 | severity_1 | 1 | Double-booking, equal games, adjacency |
-| severity_2 | 2 | Club days, Maitland grouping |
-| severity_3 | 3 | Spacing, club alignment |
+| severity_2 | 2 | Club days, Maitland grouping, matchup spacing |
+| severity_3 | 3 | Club alignment, grade adjacency |
 | severity_4 | 4 | Timeslot optimization |
 
 ---

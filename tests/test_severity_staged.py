@@ -29,21 +29,23 @@ from constraints.severity import CONSTRAINT_TO_SEVERITY
 class TestSeverityStageStructure:
     """Tests for STAGES_SEVERITY dictionary structure."""
 
-    def test_has_four_severity_levels(self):
-        """Verify STAGES_SEVERITY has exactly 4 levels."""
-        assert len(STAGES_SEVERITY) == 4
+    def test_has_five_severity_levels(self):
+        """Verify STAGES_SEVERITY has exactly 5 levels."""
+        assert len(STAGES_SEVERITY) == 5
         assert 'severity_1' in STAGES_SEVERITY
         assert 'severity_2' in STAGES_SEVERITY
         assert 'severity_3' in STAGES_SEVERITY
         assert 'severity_4' in STAGES_SEVERITY
+        assert 'severity_5' in STAGES_SEVERITY
 
-    def test_ai_has_four_severity_levels(self):
-        """Verify STAGES_SEVERITY_AI has exactly 4 levels."""
-        assert len(STAGES_SEVERITY_AI) == 4
+    def test_ai_has_five_severity_levels(self):
+        """Verify STAGES_SEVERITY_AI has exactly 5 levels."""
+        assert len(STAGES_SEVERITY_AI) == 5
         assert 'severity_1' in STAGES_SEVERITY_AI
         assert 'severity_2' in STAGES_SEVERITY_AI
         assert 'severity_3' in STAGES_SEVERITY_AI
         assert 'severity_4' in STAGES_SEVERITY_AI
+        assert 'severity_5' in STAGES_SEVERITY_AI
 
     def test_each_stage_has_required_keys(self):
         """Verify each severity stage has required configuration keys."""
@@ -74,10 +76,14 @@ class TestSeverityStageStructure:
         for stage_name, config in STAGES_SEVERITY.items():
             assert len(config['constraints']) > 0, f"{stage_name} has no constraints"
 
+    def test_severity_5_is_not_required(self):
+        """Severity 5 (VERY LOW) should be required=False (timeslot preferences)."""
+        assert STAGES_SEVERITY['severity_5']['required'] is False
+
     def test_severity_stage_ordering(self):
         """Verify stage names are ordered correctly."""
         stage_names = list(STAGES_SEVERITY.keys())
-        assert stage_names == ['severity_1', 'severity_2', 'severity_3', 'severity_4']
+        assert stage_names == ['severity_1', 'severity_2', 'severity_3', 'severity_4', 'severity_5']
 
 
 # ============== Constraint Grouping Tests ==============
@@ -91,7 +97,7 @@ class TestConstraintGrouping:
         
         for constraint_cls in level_1_constraints:
             name = constraint_cls.__name__
-            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 4)
+            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 5)
             assert expected_level == 1, f"{name} is level {expected_level}, expected 1 for severity_1"
 
     def test_severity_2_contains_high_constraints(self):
@@ -100,7 +106,7 @@ class TestConstraintGrouping:
         
         for constraint_cls in level_2_constraints:
             name = constraint_cls.__name__
-            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 4)
+            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 5)
             assert expected_level == 2, f"{name} is level {expected_level}, expected 2 for severity_2"
 
     def test_severity_3_contains_medium_constraints(self):
@@ -109,21 +115,26 @@ class TestConstraintGrouping:
         
         for constraint_cls in level_3_constraints:
             name = constraint_cls.__name__
-            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 4)
+            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 5)
             assert expected_level == 3, f"{name} is level {expected_level}, expected 3 for severity_3"
 
     def test_severity_4_contains_low_constraints(self):
-        """Verify severity_4 stage contains LOW (level 4) and VERY LOW (level 5) constraints.
-        
-        The severity_4 stage groups both level 4 and level 5 constraints together.
-        Level 5 constraints are 'very low' priority (timeslot preferences).
-        """
+        """Verify severity_4 stage contains LOW (level 4) constraints."""
         level_4_constraints = STAGES_SEVERITY['severity_4']['constraints']
         
         for constraint_cls in level_4_constraints:
             name = constraint_cls.__name__
-            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 4)
-            assert expected_level in [4, 5], f"{name} is level {expected_level}, expected 4 or 5 for severity_4"
+            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 5)
+            assert expected_level == 4, f"{name} is level {expected_level}, expected 4 for severity_4"
+
+    def test_severity_5_contains_very_low_constraints(self):
+        """Verify severity_5 stage contains VERY LOW (level 5) constraints."""
+        level_5_constraints = STAGES_SEVERITY['severity_5']['constraints']
+        
+        for constraint_cls in level_5_constraints:
+            name = constraint_cls.__name__
+            expected_level = CONSTRAINT_TO_SEVERITY.get(name, 5)
+            assert expected_level == 5, f"{name} is level {expected_level}, expected 5 for severity_5"
 
     def test_no_duplicate_constraints_across_stages(self):
         """Verify no constraint appears in multiple severity stages."""

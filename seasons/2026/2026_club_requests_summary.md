@@ -114,15 +114,21 @@
 
 ## No-Play Requests
 
-### Crusaders
-- **6th Grade** - April 17-19 (NSW Masters at Moorebank)
-- **6th Grade** - June 26-28 (NSW Masters at Tamworth)
+### Hard No-Play (Team CANNOT be scheduled)
 
-### Souths
+#### Souths
 - **PHL & 2nd Grade** - May 24 (U18 State Championships)
 
-### Gosford
+#### Gosford
 - **All grades** - June 21 (Recovery weekend after Men's SC)
+
+#### Crusaders
+- **6th Grade** - June 28 (NSW Masters at Tamworth)
+
+### Soft No-Play (Solver will try to avoid)
+
+### Crusaders
+- **6th Grade** - April 17-19 (NSW Masters at Moorebank)
 
 ### Colts (Best Effort)
 - Align 5th/6th grade byes with Masters weekends (April 17-19, June 26-28) if possible

@@ -111,6 +111,7 @@ Unavailabilities┘
 - `field_unavailabilities`: Dict - Blocked dates per venue
 - `club_days`: Dict - Special club event dates
 - `preference_no_play`: Dict - Soft scheduling restrictions
+- `blocked_games`: List - Hard no-play rules (variables removed)
 
 ### 2. Variable Generation Phase
 
@@ -161,10 +162,10 @@ If the solver returns INFEASIBLE, the `--relax` flag enables automatic resolutio
 │   • NoDoubleBooking, EqualGames, PHL adjacency, HomeAway       │
 │                                                                 │
 │ Level 2 - HIGH (structural):                                   │
-│   • ClubDay, MaitlandGrouping, TeamConflict                    │
+│   • ClubDay, MaitlandGrouping, TeamConflict, MatchUpSpacing     │
 │                                                                 │
 │ Level 3 - MEDIUM (spacing/alignment):                          │
-│   • MatchUpSpacing, GradeAdjacency, ClubVsClub                 │
+│   • GradeAdjacency, ClubVsClub                                  │
 │                                                                 │
 │ Level 4 - LOW (optimization):                                  │
 │   • ClubDensity at Broadmeadow                                 │
@@ -172,14 +173,15 @@ If the solver returns INFEASIBLE, the `--relax` flag enables automatic resolutio
 │ Level 5 - VERY LOW (timeslot preferences):                     │
 │   • TimeslotChoices, PreferredTimes                            │
 │                                                                 │
-│ Note: Severity STAGES are 1-4. Level 5 is in severity_4 stage. │
+│ Note: Severity STAGES are 1-5.                                 │
 └─────────────────────────────────────────────────────────────────┘
 
 Resolution Process:
 1. Test with all constraints → INFEASIBLE
-2. Drop Level 4, test → still INFEASIBLE?
-3. Drop Level 3, test → still INFEASIBLE?
-4. Drop Level 2, test → FEASIBLE!
+2. Drop Level 5, test → still INFEASIBLE?
+3. Drop Level 4, test → still INFEASIBLE?
+4. Drop Level 3, test → still INFEASIBLE?
+5. Drop Level 2, test → FEASIBLE!
    → Level 2 is the blocking group
 5. Relax ALL Level 2 constraints (slack +1)
 6. Solve with ALL constraints together

@@ -38,7 +38,8 @@ from ortools.sat.python import cp_model
 # Level 1: CRITICAL - never relaxed
 # Level 2: HIGH - structural constraints
 # Level 3: MEDIUM - spacing/alignment
-# Level 4: LOW - soft optimization
+# Level 4: LOW - club density/optimization
+# Level 5: VERY LOW - timeslot preferences
 
 CONSTRAINT_TO_SEVERITY = {
     # Level 1 - CRITICAL (never dropped/relaxed)
@@ -66,33 +67,35 @@ CONSTRAINT_TO_SEVERITY = {
     'AwayAtMaitlandGroupingAI': 2,
     'TeamConflictConstraint': 2,
     'TeamConflictConstraintAI': 2,
+    'EqualMatchUpSpacingConstraint': 2,
+    'EqualMatchUpSpacingConstraintAI': 2,
     
     # Level 3 - MEDIUM (spacing, alignment)
-    'EqualMatchUpSpacingConstraint': 3,
-    'EqualMatchUpSpacingConstraintAI': 3,
     'ClubGradeAdjacencyConstraint': 3,
     'ClubGradeAdjacencyConstraintAI': 3,
     'ClubVsClubAlignment': 3,
     'ClubVsClubAlignmentAI': 3,
     
-    # Level 4 - LOW (soft optimization)
+    # Level 4 - LOW (club density/optimization)
     'ClubGameSpread': 4,
     'ClubGameSpreadAI': 4,
-    'EnsureBestTimeslotChoices': 4,
-    'EnsureBestTimeslotChoicesAI': 4,
     'MaximiseClubsPerTimeslotBroadmeadow': 4,
     'MaximiseClubsPerTimeslotBroadmeadowAI': 4,
     'MinimiseClubsOnAFieldBroadmeadow': 4,
     'MinimiseClubsOnAFieldBroadmeadowAI': 4,
-    'PreferredTimesConstraint': 4,
-    'PreferredTimesConstraintAI': 4,
+    
+    # Level 5 - VERY LOW (timeslot preferences)
+    'EnsureBestTimeslotChoices': 5,
+    'EnsureBestTimeslotChoicesAI': 5,
+    'PreferredTimesConstraint': 5,
+    'PreferredTimesConstraintAI': 5,
 }
 
 
 def get_severity_level(constraint_cls) -> int:
     """Get severity level for a constraint class."""
     name = constraint_cls.__name__
-    return CONSTRAINT_TO_SEVERITY.get(name, 4)  # Default to lowest severity
+    return CONSTRAINT_TO_SEVERITY.get(name, 5)  # Default to lowest severity
 
 
 def group_constraints_by_severity(constraints: list) -> Dict[int, list]:
@@ -100,7 +103,7 @@ def group_constraints_by_severity(constraints: list) -> Dict[int, list]:
     Group a list of constraint classes by their severity level.
     
     Returns:
-        Dict mapping severity level (1-4) to list of constraint classes
+        Dict mapping severity level (1-5) to list of constraint classes
     """
     groups = defaultdict(list)
     for constraint_cls in constraints:
@@ -178,7 +181,7 @@ class SeverityGroupResolver:
         Get constraint classes to test, excluding specified severity levels.
         
         Args:
-            exclude_levels: Set of severity levels to exclude (e.g., {4, 3})
+            exclude_levels: Set of severity levels to exclude (e.g., {5, 4})
             
         Returns:
             List of constraint classes to apply
@@ -257,11 +260,11 @@ class SeverityGroupResolver:
         self._log(f"  Result: {status} - INFEASIBLE, starting exclusion tests...")
         
         # Progressive exclusion: try excluding each level from lowest to highest
-        # (Level 4 first, then 3, then 2; Level 1 is never excluded)
+        # (Level 5 first, then 4, then 3, then 2; Level 1 is never excluded)
         excluded = set()
         problem_level = None
         
-        for level in [4, 3, 2]:
+        for level in [5, 4, 3, 2]:
             if level not in self.severity_groups:
                 self._log(f"\n[SKIP] Level {level} - no constraints at this level")
                 continue
@@ -282,7 +285,7 @@ class SeverityGroupResolver:
                 self._log(f"  Result: {status} - still INFEASIBLE")
         
         if problem_level is None and not is_feasible:
-            # Even with levels 4,3,2 excluded, still infeasible
+            # Even with levels 5,4,3,2 excluded, still infeasible
             # This means Level 1 constraints are mutually infeasible
             self._log("\n  >>> FATAL: Level 1 constraints alone are INFEASIBLE <<<")
             self._log("  Check your data configuration for conflicts.")

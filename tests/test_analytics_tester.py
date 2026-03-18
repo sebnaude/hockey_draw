@@ -252,7 +252,7 @@ class TestViolationReport:
     def test_full_report(self):
         """Test full report generation."""
         violations = [
-            Violation(constraint='NoDoubleBooking', severity='CRITICAL', message='Error 1'),
+            Violation(constraint='NoDoubleBooking', severity='CRITICAL', message='Error 1', severity_level=1),
         ]
         report = ViolationReport(
             draw_description='Test Draw',

@@ -17,11 +17,11 @@
 
 ## No-Play Requests
 
-When someone says "Team X can't play on Date Y", you have **two options**:
+When someone says "Team X can't play on Date Y", you have **three options**:
 
-### Option 1: Soft Constraint (Recommended for most cases)
+### Option 1: Soft Constraint (Penalty-based preference)
 
-**Use when:** Request is a preference, player availability issue, or could be overridden if necessary.
+**Use when:** Request is a mild preference that could be overridden if necessary.
 
 **How to apply:**
 
@@ -47,9 +47,52 @@ PREFERENCE_NO_PLAY = {
 
 **Behavior:** Solver will try to avoid these dates, but may use them if necessary.
 
-### Option 2: Hard Constraint (XLSX Variable Removal)
+### Option 2: Hard Variable Removal via BLOCKED_GAMES (Recommended for most no-play requests)
 
-**Use when:** Absolutely cannot play - venue closed, team doesn't exist that day, etc.
+**Use when:** Team absolutely cannot play — state championships, player unavailability, recovery weekends.
+
+**How to apply:**
+
+Add to `BLOCKED_GAMES` list in `config/season_{year}.py`:
+
+```python
+BLOCKED_GAMES = [
+    # Block specific club + grade on a date
+    {
+        'club': 'Crusaders',
+        'grade': '6th',
+        'date': '2026-06-28',        # String format YYYY-MM-DD (must match timeslot date)
+        'description': 'Crusaders 6th - NSW Masters at Tamworth',
+    },
+    # Block multiple grades
+    {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'date': '2026-05-24',
+        'description': 'Souths PHL/2nd - U18 State Championships',
+    },
+    # Block ALL club teams on a date
+    {
+        'club': 'Gosford',
+        'date': '2026-06-21',
+        'description': 'Gosford recovery weekend',
+    },
+]
+```
+
+**Format:** Same as `FORCED_GAMES` — supports `club`, `teams`, `grade`, `grades`, `date`, `day`, and all scope fields.
+
+**Behavior:** Game variables for matching teams on matching dates are **never created**. The solver cannot schedule those games — no constraint needed.
+
+**Sister mechanism to `FORCED_GAMES`:**
+- `FORCED_GAMES`: variables matching scope but NOT matching teams → eliminated (forces specific matchups)
+- `BLOCKED_GAMES`: variables matching scope AND matching teams → eliminated (prevents specific teams from playing)
+
+**Registered in `SEASON_CONFIG` as:** `'blocked_games': BLOCKED_GAMES`
+
+### Option 3: Hard Constraint (XLSX Variable Removal)
+
+**Use when:** Complex per-team blocking with multiple dates, or when an Excel-based workflow is preferred.
 
 **How to apply:**
 
@@ -72,14 +115,7 @@ PREFERENCE_NO_PLAY = {
 |-------|-------|
 | Crusaders 5th | Crusaders 6th |
 
-**Column meanings:**
-- `whole_weekend`: Blocks entire weekend (by week number) - format `DD/MM/YYYY`
-- `whole_day`: Blocks specific calendar day - format `DD/MM/YYYY`
-- `timeslot`: Blocks specific slot - format `DD/MM/YYYY HH:MM`
-
 2. The system reads this at variable creation time and **excludes those games entirely**.
-
-**Behavior:** No game variables are created for that team on those dates.
 
 ### Decision Guide
 
@@ -88,10 +124,10 @@ PREFERENCE_NO_PLAY = {
 
 | User Says | Apply |
 |-----------|-------|
-| "They can't play, they won't be there" | Hard (noplay XLSX) |
-| "They'd prefer not to play" | Soft (PREFERENCE_NO_PLAY) |
-| "It's a state championship, most players away" | Soft (PREFERENCE_NO_PLAY) |
-| "The venue is closed" | Hard (FIELD_UNAVAILABILITIES) |
+| "They can't play, they won't be there" | Hard (`BLOCKED_GAMES`) |
+| "They'd prefer not to play" | Soft (`PREFERENCE_NO_PLAY`) |
+| "It's a state championship, most players away" | Hard (`BLOCKED_GAMES`) |
+| "The venue is closed" | Hard (`FIELD_UNAVAILABILITIES`) |
 
 ---
 
@@ -253,9 +289,10 @@ Automatic via `ClubGameSpreadAI`:
 | Level | Name | Example Constraints | Relaxation |
 |-------|------|---------------------|------------|
 | 1 | CRITICAL | NoDoubleBooking, EqualGames, PHLAdjacency | Never |
-| 2 | HIGH | ClubDay, TeamConflict, Maitland grouping | Last resort |
-| 3 | MEDIUM | MatchupSpacing, GradeAdjacency | If needed |
-| 4 | LOW | Timeslot choices, PreferredTimes, ClubGameSpread | First to relax |
+| 2 | HIGH | ClubDay, TeamConflict, Maitland grouping, MatchupSpacing | Last resort |
+| 3 | MEDIUM | GradeAdjacency, ClubVsClub | If needed |
+| 4 | LOW | ClubDensity, ClubGameSpread | First to relax |
+| 5 | VERY LOW | Timeslot choices, PreferredTimes | First to relax |
 
 Use `--relax` flag to automatically relax constraints if solver returns INFEASIBLE.
 

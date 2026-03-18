@@ -67,7 +67,7 @@ class SoftConstraint(ABC):
         """
         self.slack_level = slack_level
         self._penalty_weight = penalty_weight
-        self.severity_level = 4  # Default, override in subclasses
+        self.severity_level = 5  # Default, override in subclasses
     
     @property
     def penalty_weight(self) -> int:
@@ -438,17 +438,23 @@ class EqualMatchUpSpacingConstraintSoft(SoftConstraint):
         timeslots = data['timeslots']
         max_rounds = data['num_rounds']['max']
         
+        # Get additional slack from config (--slack flag)
+        config_slack = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 0)
+        
         grade_spacing_vars = defaultdict(lambda: defaultdict(int))
         
         for grade in data['grades']:
             # Ideal spacing = T - 1 (see all other opponents before rematch)
             space = grade.num_teams - 1
             
-            min_grade_spacing_var = model.NewIntVar(0, space + self.SLACK, f'grade_spacing_{grade.name}_soft')
-            model.Add(min_grade_spacing_var == max(0, space - self.SLACK))
+            # Cap effective slack at T // 2 + 1
+            effective_slack = min(self.SLACK + config_slack, grade.num_teams // 2 + 1)
             
-            max_grade_spacing_var = model.NewIntVar(0, space + self.SLACK * 2, f'max_grade_spacing_{grade.name}_soft')
-            model.Add(max_grade_spacing_var == space + self.SLACK)
+            min_grade_spacing_var = model.NewIntVar(0, space + effective_slack, f'grade_spacing_{grade.name}_soft')
+            model.Add(min_grade_spacing_var == max(0, space - effective_slack))
+            
+            max_grade_spacing_var = model.NewIntVar(0, space + effective_slack * 2, f'max_grade_spacing_{grade.name}_soft')
+            model.Add(max_grade_spacing_var == space + effective_slack)
             
             grade_spacing_vars[grade.name]['min'] = min_grade_spacing_var
             grade_spacing_vars[grade.name]['max'] = max_grade_spacing_var
@@ -760,7 +766,7 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
     def __init__(self, slack_level: int = 1, penalty_weight: Optional[int] = None,
                  allow_gaps: bool = True, allow_overflow: bool = True):
         super().__init__(slack_level, penalty_weight)
-        self.severity_level = 4
+        self.severity_level = 5
         self.allow_gaps = allow_gaps
         self.allow_overflow = allow_overflow
     
@@ -1045,7 +1051,7 @@ class PreferredTimesConstraintSoft(SoftConstraint):
             weight_multiplier: Multiply base penalty weight (lower = more relaxed)
         """
         super().__init__(slack_level, penalty_weight)
-        self.severity_level = 4
+        self.severity_level = 5
         
         # Reduce weight based on slack level
         self.weight_multiplier = weight_multiplier / (1 + self.slack_level * 0.5)

@@ -29,6 +29,8 @@ from utils import (
     get_grade_by_name,
     convert_X_to_roster,
     export_roster_to_excel,
+    _build_blocked_game_rules,
+    _is_blocked_by_no_play,
 )
 
 
@@ -737,3 +739,117 @@ class TestBuildSeasonData:
         assert 'day_time_map' in data
         assert 'phl_game_times' in data
         assert 'field_unavailabilities' in data
+
+
+# ============== Blocked Games (No-Play Variable Removal) Tests ==============
+
+class TestBuildBlockedGameRules:
+    """Tests for _build_blocked_game_rules function."""
+
+    def test_empty_list_returns_empty(self, sample_teams):
+        result = _build_blocked_game_rules([], sample_teams)
+        assert result == {}
+
+    def test_club_name_resolves_to_all_club_teams(self, sample_teams):
+        """Club-only entry should resolve to all teams from that club."""
+        blocked = [{
+            'club': 'Tigers',
+            'date': '2025-03-23',
+            'description': 'Test block',
+        }]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        assert len(rules) == 1
+        scope_key = list(rules.keys())[0]
+        matchers = rules[scope_key]
+        matched_names = {m[1] for m in matchers}
+        assert 'Tigers PHL' in matched_names
+        assert 'Tigers 2nd' in matched_names
+        assert 'Tigers 3rd' in matched_names
+
+    def test_club_with_grade_resolves_to_specific_team(self, sample_teams):
+        """Club + grade should resolve to only the specific graded team."""
+        blocked = [{
+            'club': 'Tigers',
+            'grade': 'PHL',
+            'date': '2025-03-23',
+            'description': 'Test block PHL only',
+        }]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        scope_key = list(rules.keys())[0]
+        matchers = rules[scope_key]
+        matched_names = {m[1] for m in matchers}
+        assert matched_names == {'Tigers PHL'}
+
+    def test_club_with_multiple_grades(self, sample_teams):
+        """Club + grades list should resolve both grades."""
+        blocked = [{
+            'club': 'Tigers',
+            'grades': ['PHL', '2nd'],
+            'date': '2025-03-23',
+            'description': 'Test multi-grade block',
+        }]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        scope_key = list(rules.keys())[0]
+        matchers = rules[scope_key]
+        matched_names = {m[1] for m in matchers}
+        assert matched_names == {'Tigers PHL', 'Tigers 2nd'}
+
+
+class TestIsBlockedByNoPlay:
+    """Tests for _is_blocked_by_no_play function."""
+
+    def test_matching_team_and_scope_is_blocked(self, sample_teams):
+        """Variable matching both scope and team should be blocked."""
+        blocked = [{
+            'club': 'Tigers',
+            'grade': 'PHL',
+            'date': '2025-03-23',
+        }]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        # Tigers PHL vs Wests PHL on 2025-03-23 — should be blocked
+        key = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, rules) is True
+
+    def test_matching_team_as_team2_is_blocked(self, sample_teams):
+        """Variable with blocked team as team2 should also be blocked."""
+        blocked = [{'club': 'Tigers', 'grade': 'PHL', 'date': '2025-03-23'}]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        # Wests PHL vs Tigers PHL (Tigers is team2)
+        key = ('Maitland PHL', 'Tigers PHL', 'PHL', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, rules) is True
+
+    def test_different_date_not_blocked(self, sample_teams):
+        """Same team, different date should NOT be blocked."""
+        blocked = [{'club': 'Tigers', 'grade': 'PHL', 'date': '2025-03-23'}]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        key = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 2, '2025-03-30', 2, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, rules) is False
+
+    def test_different_team_not_blocked(self, sample_teams):
+        """Different team on same date should NOT be blocked."""
+        blocked = [{'club': 'Tigers', 'grade': 'PHL', 'date': '2025-03-23'}]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        # Wests vs Maitland (no Tigers) on blocked date
+        key = ('Maitland PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, rules) is False
+
+    def test_different_grade_not_blocked(self, sample_teams):
+        """Same club different grade should NOT be blocked when grade is specified."""
+        blocked = [{'club': 'Tigers', 'grade': 'PHL', 'date': '2025-03-23'}]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        key = ('Tigers 2nd', 'Wests 2nd', '2nd', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, rules) is False
+
+    def test_no_grade_blocks_all_club_grades(self, sample_teams):
+        """Club-only block (no grade) should block all grades."""
+        blocked = [{'club': 'Tigers', 'date': '2025-03-23'}]
+        rules = _build_blocked_game_rules(blocked, sample_teams)
+        key_phl = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        key_2nd = ('Tigers 2nd', 'Wests 2nd', '2nd', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key_phl, rules) is True
+        assert _is_blocked_by_no_play(key_2nd, rules) is True
+
+    def test_empty_rules_blocks_nothing(self):
+        """No blocked game rules should block nothing."""
+        key = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 1, '2025-03-23', 1, 'EF', 'Newcastle International Hockey Centre')
+        assert _is_blocked_by_no_play(key, {}) is False

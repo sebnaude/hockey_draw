@@ -59,11 +59,13 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'ClubGradeAdjacency': 3,
     'ClubVsClubAlignment': 3,
     
-    # Level 4 - LOW (soft optimization)
-    'EnsureBestTimeslotChoices': 4,
+    # Level 4 - LOW (club density/optimization)
     'MaximiseClubsPerTimeslotBroadmeadow': 4,
     'MinimiseClubsOnAFieldBroadmeadow': 4,
-    'PreferredTimesConstraint': 4,
+    
+    # Level 5 - VERY LOW (timeslot preferences)
+    'EnsureBestTimeslotChoices': 5,
+    'PreferredTimesConstraint': 5,
 }
 
 # Mapping from severity level to label
@@ -72,6 +74,7 @@ SEVERITY_LEVEL_LABELS = {
     2: 'HIGH', 
     3: 'MEDIUM',
     4: 'LOW',
+    5: 'VERY LOW',
 }
 
 
@@ -79,11 +82,11 @@ SEVERITY_LEVEL_LABELS = {
 class Violation:
     """Represents a single constraint violation."""
     constraint: str
-    severity: str  # 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'
+    severity: str  # 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'VERY LOW'
     message: str
     affected_games: List[str] = field(default_factory=list)
     week: Optional[int] = None
-    severity_level: int = 4  # 1-4, lower = worse
+    severity_level: int = 5  # 1-5, lower = worse
     
     def __str__(self) -> str:
         games_str = f" [{', '.join(self.affected_games)}]" if self.affected_games else ""
@@ -93,8 +96,8 @@ class Violation:
     def create(cls, constraint: str, message: str, 
                affected_games: List[str] = None, week: Optional[int] = None) -> 'Violation':
         """Factory method that auto-determines severity from constraint name."""
-        level = CONSTRAINT_SEVERITY_LEVELS.get(constraint, 4)
-        severity = SEVERITY_LEVEL_LABELS.get(level, 'LOW')
+        level = CONSTRAINT_SEVERITY_LEVELS.get(constraint, 5)
+        severity = SEVERITY_LEVEL_LABELS.get(level, 'VERY LOW')
         return cls(
             constraint=constraint,
             severity=severity,
@@ -185,8 +188,8 @@ class ViolationReport:
         if not self.violations:
             lines.append("✅ ALL CONSTRAINTS SATISFIED")
         else:
-            # Group by severity level (1-4)
-            for level in [1, 2, 3, 4]:
+            # Group by severity level (1-5)
+            for level in [1, 2, 3, 4, 5]:
                 level_violations = self.violations_by_level(level)
                 if level_violations:
                     label = SEVERITY_LEVEL_LABELS.get(level, 'UNKNOWN')
@@ -625,7 +628,7 @@ class DrawTester:
                     'type': 'empty' | 'swap',
                     'swap_with': game_id (if swap),
                     'report': ViolationReport,
-                    'severity_level': int (0 = no violations, 1-4 = worst to least severe),
+                    'severity_level': int (0 = no violations, 1-5 = worst to least severe),
                     'violation_count': int,
                     'rank_explanation': str
                 },
@@ -1320,9 +1323,9 @@ def get_severity_level(constraint_name: str) -> int:
         constraint_name: Name of the constraint
         
     Returns:
-        Severity level (1-4, lower = more severe)
+        Severity level (1-5, lower = more severe)
     """
-    return CONSTRAINT_SEVERITY_LEVELS.get(constraint_name, 4)
+    return CONSTRAINT_SEVERITY_LEVELS.get(constraint_name, 5)
 
 
 def get_severity_label(level: int) -> str:

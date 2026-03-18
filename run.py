@@ -85,7 +85,13 @@ Examples:
                                  'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
     gen_parser.add_argument('--stages', nargs='+', metavar='STAGE',
                             help='Run only specific stages (e.g., --stages stage1_required). '
-                                 'Available: stage1_required, stage2_soft')
+                                 'Default: stage1_required, stage2_soft. '
+                                 'With --staged: severity_1, severity_2, severity_3, severity_4, severity_5')
+    gen_parser.add_argument('--staged', action='store_true',
+                            help='Use severity-based staging instead of default. '
+                                 'Runs 5 stages by severity level: '
+                                 'Level 1 (CRITICAL) → Level 2 (HIGH) → Level 3 (MEDIUM) → Level 4 (LOW) → Level 5 (VERY LOW). '
+                                 'Each stage uses the prior solution as a HINT.')
     gen_parser.add_argument('--relax', action='store_true',
                             help='Enable severity-based constraint relaxation. If infeasible, '
                                  'automatically identifies problem severity group and relaxes slack variables.')
@@ -95,6 +101,10 @@ Examples:
                             help='Apply Round 1 symmetry breaking. Fixes which team pairings play '
                                  'in Round 1 using the circle method. This dramatically reduces '
                                  'search space by eliminating equivalent schedule orderings.')
+    gen_parser.add_argument('--slack', type=int, default=None, metavar='N',
+                            help='Relax constraints by adding N to their limits. '
+                                 'Applies to all slack-aware constraints: '
+                                 'EqualMatchUpSpacing, MaitlandHomeGrouping, AwayAtMaitlandGrouping, etc.')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -234,8 +244,9 @@ def run_generate(args):
     elif args.high_performance:
         print("\n[*] Using HIGH PERFORMANCE configuration (all cores)")
         solver_config = SolverConfig.high_performance_config()
-    elif args.workers:
-        print(f"\n[*] Using custom worker count: {args.workers}")
+    elif args.workers is not None:
+        label = "all cores" if args.workers == 0 else str(args.workers)
+        print(f"\n[*] Using custom worker count: {label}")
         solver_config = SolverConfig.balanced_config()
         solver_config.num_workers = args.workers
     else:
@@ -261,6 +272,22 @@ def run_generate(args):
     if fix_round_1:
         print("\n[*] Round 1 symmetry breaking ENABLED")
     
+    # Build constraint slack overrides from --slack argument
+    constraint_slack = None
+    slack_value = getattr(args, 'slack', None)
+    if slack_value is not None:
+        # Apply slack to all slack-aware constraints
+        constraint_slack = {
+            'EqualMatchUpSpacingConstraint': slack_value,
+            'AwayAtMaitlandGrouping': slack_value,
+            'MaitlandHomeGrouping': slack_value,
+            'ClubVsClubAlignment': slack_value,
+            'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
+            'MinimiseClubsOnAFieldBroadmeadow': slack_value,
+            'ClubGameSpread': slack_value,
+        }
+        print(f"\n[*] Constraint slack override: +{slack_value}")
+    
     if args.simple:
         from main_staged import main_simple
         exclude = args.exclude or []
@@ -278,7 +305,8 @@ def run_generate(args):
             use_ai=args.ai, 
             year=args.year,
             relax_config=relax_config,
-            fix_round_1=fix_round_1
+            fix_round_1=fix_round_1,
+            constraint_slack=constraint_slack
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -288,6 +316,7 @@ def run_generate(args):
                 'enabled': True,
                 'timeout': getattr(args, 'relax_timeout', 30.0),
             }
+        severity_staged = getattr(args, 'staged', False)
         solution, data = main_staged(
             run_id=final_run_id, 
             resume_from=resume_from,
@@ -297,7 +326,9 @@ def run_generate(args):
             year=args.year,
             stages_to_run=stages,
             relax_config=relax_config,
-            fix_round_1=fix_round_1
+            fix_round_1=fix_round_1,
+            constraint_slack=constraint_slack,
+            severity_staged=severity_staged
         )
     
     if solution:

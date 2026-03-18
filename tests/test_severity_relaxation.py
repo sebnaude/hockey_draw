@@ -47,10 +47,10 @@ class TestConstraintToSeverity:
         assert 'NoDoubleBookingFieldsConstraint' in level1_names
         assert 'EnsureEqualGamesAndBalanceMatchUps' in level1_names
 
-    def test_all_levels_are_1_to_4(self):
-        """Test all severity levels are between 1 and 4."""
+    def test_all_levels_are_1_to_5(self):
+        """Test all severity levels are between 1 and 5."""
         for level in CONSTRAINT_TO_SEVERITY.values():
-            assert level in [1, 2, 3, 4]
+            assert level in [1, 2, 3, 4, 5]
 
 
 # ============== get_severity_level Tests ==============
@@ -74,13 +74,13 @@ class TestGetSeverityLevel:
         level = get_severity_level(ClubDayConstraintAI)
         assert level == 2
 
-    def test_returns_4_for_unknown_constraint(self):
-        """Test returns 4 (lowest) for unknown constraints."""
+    def test_returns_5_for_unknown_constraint(self):
+        """Test returns 5 (lowest) for unknown constraints."""
         class UnknownConstraint:
             pass
         
         level = get_severity_level(UnknownConstraint)
-        assert level == 4
+        assert level == 5
 
 
 # ============== group_constraints_by_severity Tests ==============
@@ -143,7 +143,7 @@ class TestSeverityGroupState:
 
     def test_can_relax_true_for_non_level1(self):
         """Test can_relax returns True for level 2+ with slack room."""
-        for level in [2, 3, 4]:
+        for level in [2, 3, 4, 5]:
             state = SeverityGroupState(level=level, constraint_classes=[])
             assert state.can_relax() is True
 
@@ -287,15 +287,11 @@ class TestSeverityGroupResolverIntegration:
         level1_classes = resolver.severity_groups[1].constraint_classes
         assert NoDoubleBookingTeamsConstraintAI in level1_classes
         
-        # Level 2 should have ClubDay
+        # Level 2 should have ClubDay and EqualMatchUpSpacing
         assert 2 in resolver.severity_groups
         level2_classes = resolver.severity_groups[2].constraint_classes
         assert ClubDayConstraintAI in level2_classes
-        
-        # Level 3 should have EqualMatchUpSpacing
-        assert 3 in resolver.severity_groups
-        level3_classes = resolver.severity_groups[3].constraint_classes
-        assert EqualMatchUpSpacingConstraintAI in level3_classes
+        assert EqualMatchUpSpacingConstraintAI in level2_classes
 
     def test_severity_group_state_can_relax(self):
         """Test checking if a severity group can be relaxed."""

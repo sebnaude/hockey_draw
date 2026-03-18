@@ -170,33 +170,53 @@ CLUB_DAYS = {
 # ============== No-Play Preferences (Soft Constraints) ==============
 
 PREFERENCE_NO_PLAY = {
-    # Crusaders 6th Grade - Masters State Championships
+    # Crusaders 6th Grade - Masters State Championships (Moorebank)
     'Crusaders_6th_Masters_Moorebank': {
         'club': 'Crusaders',
         'grade': '6th',
         'dates': [datetime(2026, 4, 17), datetime(2026, 4, 18), datetime(2026, 4, 19)],
         'reason': 'NSW Masters Men\'s at Moorebank',
     },
-    'Crusaders_6th_Masters_Tamworth': {
+}
+
+# ============== Blocked Games (Hard No-Play Variable Removal) ==============
+# Sister mechanism to FORCED_GAMES. Same config format but opposite logic:
+# FORCED_GAMES: variables matching scope but NOT matching teams → eliminated
+# BLOCKED_GAMES: variables matching scope AND matching teams → eliminated
+#
+# Use this for no-play requests where games must NOT exist (player unavailability,
+# state championships, recovery weekends, etc.)
+#
+# Supported fields: same as FORCED_GAMES — club, teams, grade, grades, date, day, etc.
+
+BLOCKED_GAMES = [
+    # Crusaders 6th Grade - NSW Masters at Tamworth (Jun 26-28)
+    # All Crusaders 6th affected — key players away at state championship
+    {
         'club': 'Crusaders',
         'grade': '6th',
-        'dates': [datetime(2026, 6, 26), datetime(2026, 6, 27), datetime(2026, 6, 28)],
+        'date': '2026-06-28',  # Sunday Jun 28 is the playing date
+        'description': 'Crusaders 6th - NSW Masters at Tamworth',
         'reason': 'NSW Masters Men\'s at Tamworth',
     },
-    # Souths PHL/2nd - U18's State Championships
-    'Souths_U18_SC': {
+    # Souths PHL & 2nd Grade - U18 State Championships (May 24)
+    # Both Souths PHL and Souths 2nd affected
+    {
         'club': 'Souths',
         'grades': ['PHL', '2nd'],
-        'dates': [datetime(2026, 5, 24)],  # Sunday, includes Friday night before
+        'date': '2026-05-24',
+        'description': 'Souths PHL/2nd - U18 State Championships',
         'reason': 'U18\'s State Championships',
     },
-    # Gosford - Weekend after Men's SC
-    'Gosford_Post_SC': {
+    # Gosford - Recovery weekend after Men's SC (Jun 21)
+    # All Gosford teams affected (only PHL exists for Gosford)
+    {
         'club': 'Gosford',
-        'dates': [datetime(2026, 6, 21)],  # Weekend after June 14 Men's SC
+        'date': '2026-06-21',
+        'description': 'Gosford - Recovery after Men\'s State Championships',
         'reason': 'Recovery weekend after Men\'s State Championships',
     },
-}
+]
 
 # ============== PHL Preferences ==============
 # Note: PHL_PREFERENCES only supports 'preferred_dates' key for the constraint system.
@@ -439,6 +459,9 @@ SEASON_CONFIG = {
     
     # Forced games (partial key variable elimination)
     'forced_games': FORCED_GAMES,
+    
+    # Blocked games (no-play variable elimination)
+    'blocked_games': BLOCKED_GAMES,
     
     # Home field mappings
     'home_field_map': {

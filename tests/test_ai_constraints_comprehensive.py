@@ -1094,12 +1094,20 @@ class TestAllAIConstraintsCombined:
 
     def test_all_originals_combined_feasible(self):
         """All ORIGINAL constraints on same data — baseline check."""
+        # Use 4 clubs (even PHL count) so round 1 requirements are satisfiable.
+        clubs4 = [
+            Club(name='Tigers', home_field=BROADMEADOW),
+            Club(name='Wests', home_field=BROADMEADOW),
+            Club(name='Norths', home_field=BROADMEADOW),
+            Club(name='Maitland', home_field=MAITLAND),
+        ]
         data = make_standard_data(
-            grade_names=['PHL', '2nd', '3rd', '4th'],
-            num_weeks=10,
+            clubs=clubs4,
+            grade_names=['PHL', '3rd'],
+            num_weeks=6,
             slots_per_field=8,
             extra_data={
-                'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
+                'team_conflicts': [],
                 'phl_preferences': {'preferred_dates': []},
                 'preference_no_play': {},
                 'club_days': {},

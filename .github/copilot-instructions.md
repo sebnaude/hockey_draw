@@ -74,7 +74,12 @@ Two dicts control which **decision variables** are created:
 |------|----------|-----------|
 | `PHL_GAME_TIMES` | PHL variables | EF/WF only (no SF), restricted times |
 | `SECOND_GRADE_TIMES` | 2nd grade variables | EF/WF only, Gosford not listed, PHL times ± 1 slot |
+Two lists control **variable removal** by team/date:
 
+| Config | Purpose | Logic |
+|--------|---------|-------|
+| `FORCED_GAMES` | Force specific matchups at specific slots | Scope match + team NOT match → variable removed |
+| `BLOCKED_GAMES` | Prevent teams from playing on specific dates | Scope match + team match → variable removed |
 - Filtering in `utils.py` → `generate_X()`
 - **Cannot create NEW timeslots** - only existing `DAY_TIME_MAP` slots
 - Format: `{ venue: { field: { day: [times] } } }` (2026+)
@@ -155,8 +160,8 @@ When solver returns INFEASIBLE, use `--relax` to automatically find and relax th
 
 **Severity Levels:**
 - Level 1: CRITICAL (never relaxed) - double-booking, equal games, PHL adjacency
-- Level 2: HIGH (structural) - club days, Maitland grouping, team conflicts
-- Level 3: MEDIUM (spacing) - matchup spacing, grade adjacency, club vs club
+- Level 2: HIGH (structural) - club days, Maitland grouping, team conflicts, matchup spacing
+- Level 3: MEDIUM (spacing) - grade adjacency, club vs club
 - Level 4: LOW (optimization) - club density at Broadmeadow
 - Level 5: VERY LOW (timeslot preferences) - timeslot choices, preferred times
 

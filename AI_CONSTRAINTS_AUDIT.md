@@ -27,8 +27,8 @@ The solver uses a 4-tier severity system for constraint relaxation when infeasib
 | Level | Name | Behavior | Constraints |
 |-------|------|----------|-------------|
 | **1** | CRITICAL | Never relaxed | NoDoubleBooking*, EnsureEqualGames*, PHLAndSecondGrade*, FiftyFiftyHomeandAway, Maitland* |
-| **2** | HIGH | Structural, club-specific | ClubDayConstraint, AwayAtMaitlandGrouping, TeamConflictConstraint |
-| **3** | MEDIUM | Spacing/alignment | EqualMatchUpSpacing, ClubGradeAdjacency, ClubVsClubAlignment |
+| **2** | HIGH | Structural, club-specific | ClubDayConstraint, AwayAtMaitlandGrouping, TeamConflictConstraint, EqualMatchUpSpacing |
+| **3** | MEDIUM | Spacing/alignment | ClubGradeAdjacency, ClubVsClubAlignment |
 | **4** | LOW | Soft optimization | EnsureBestTimeslotChoices, MaximiseClubs*, MinimiseClubs*, PreferredTimes |
 
 ### Soft Constraint Variants (constraints/soft.py)
@@ -40,7 +40,7 @@ Each constraint below has a `*Soft` version with configurable slack and penalty 
 | ClubDayConstraint | 2 | ✅ | 100,000 | 0-2 |
 | AwayAtMaitlandGrouping | 2 | ✅ | 100,000 | 0-2 |
 | TeamConflictConstraint | 2 | ✅ | 100,000 | 0-2 |
-| EqualMatchUpSpacing | 3 | ✅ | 50,000 | 0-2 |
+| EqualMatchUpSpacing | 2 | ✅ | 50,000 | 0-2 |
 | ClubGradeAdjacency | 3 | ✅ | 50,000 | 0-2 |
 | ClubVsClubAlignment | 3 | ✅ | 50,000 | 0-2 |
 | EnsureBestTimeslotChoices | 4 | ✅ | 10,000 | 0-2 |
@@ -56,8 +56,8 @@ Each constraint below has a `*Soft` version with configurable slack and penalty 
 ### How Relaxation Works (`--relax` flag)
 
 1. Tries solving with all constraints
-2. If INFEASIBLE, drops severity level 4 constraints and retests
-3. If still INFEASIBLE, drops level 3, then level 2
+2. If INFEASIBLE, drops severity level 5 constraints and retests
+3. If still INFEASIBLE, drops level 4, then level 3, then level 2
 4. Identifies the blocking severity group
 5. Relaxes ALL constraints in that group (slack +1)
 6. Solves with ALL constraints together (no partial locks)
@@ -183,7 +183,7 @@ Each constraint below has a `*Soft` version with configurable slack and penalty 
 
 ---
 
-### ❌ EqualMatchUpSpacingConstraint (Severity 3 - MEDIUM)
+### ❌ EqualMatchUpSpacingConstraint (Severity 2 - HIGH)
 
 | | Original | AI |
 |---|---|---|
@@ -289,7 +289,7 @@ Each constraint below has a `*Soft` version with configurable slack and penalty 
 | TeamConflictConstraint | 2 | ✅ | ✅ Slightly | ✅ | None |
 | ClubDayConstraint | 2 | ✅ | ✅ Cleaner | ✅ | None |
 | AwayAtMaitlandGrouping | 2 | ✅ | ➖ Same | ✅ | None |
-| EqualMatchUpSpacing | 3 | ❌ | N/A | ✅ | **Port entire spacing logic** |
+| EqualMatchUpSpacing | 2 | ❌ | N/A | ✅ | **Port entire spacing logic** |
 | ClubGradeAdjacency | 3 | ✅ | ✅ Cleaner | ✅ | Minor: dup-grade edge case |
 | ClubVsClubAlignment | 3 | ⚠️ | N/A | ✅ | **Port field alignment** |
 | EnsureBestTimeslotChoices | 4 | ❌ | N/A | ✅ | **Port slot-number bounding** |

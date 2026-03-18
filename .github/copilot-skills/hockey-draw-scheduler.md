@@ -187,8 +187,8 @@ The `--relax` flag provides automatic infeasibility resolution during generation
 
 **How it works:**
 1. Tests with all constraints → if INFEASIBLE, starts severity group testing
-2. Drops severity level 4 (LOW) constraints and retests
-3. If still INFEASIBLE, drops level 3 (MEDIUM), then level 2 (HIGH)
+2. Drops severity level 5 (VERY LOW) constraints and retests
+3. If still INFEASIBLE, drops level 4 (LOW), then level 3 (MEDIUM), then level 2 (HIGH)
 4. Identifies the blocking severity group
 5. Relaxes ALL constraints in that group (slack +1)
 6. Solves with ALL constraints together (never locks partial solutions)
@@ -199,7 +199,8 @@ The `--relax` flag provides automatic infeasibility resolution during generation
 | 1 | CRITICAL | NoDoubleBooking, EqualGames, PHL adjacency, HomeAway | Never |
 | 2 | HIGH | ClubDay, MaitlandGrouping, TeamConflict | Yes |
 | 3 | MEDIUM | MatchUpSpacing, GradeAdjacency, ClubVsClub | Yes |
-| 4 | LOW | TimeslotChoices, ClubDensity, PreferredTimes | Yes |
+| 4 | LOW | ClubDensity, ClubGameSpread | Yes |
+| 5 | VERY LOW | TimeslotChoices, PreferredTimes | Yes |
 
 **Key principle**: Never lock in partial solutions. Always solve with all constraints together.
 

@@ -108,6 +108,42 @@ CLUB_DAYS = {
     # 'ClubName': datetime(YYYY, M, D),
 }
 
+# ============== Blocked Games (Hard No-Play) ==============
+# These are HARD constraints - variables are completely removed from the
+# game dictionary, making it impossible for the solver to schedule these games.
+#
+# Use for requests where a team MUST NOT play on a specific date
+# (e.g., representative commitments, post-tournament recovery).
+#
+# Each entry can specify:
+# - club: Affects all teams from that club
+# - grade/grades: Only affects teams in that grade(s)
+# - teams: Specific team names (overrides club resolution)
+# - dates: List of date strings ('YYYY-MM-DD') to block
+# - reason: Documentation of why this is blocked
+#
+# See docs/ai/CONFIGURATION_REFERENCE.md for full field reference.
+
+BLOCKED_GAMES = [
+    # {
+    #     'club': 'ClubName',
+    #     'grade': '6th',
+    #     'dates': ['YYYY-MM-DD'],
+    #     'reason': 'Representative tournament',
+    # },
+    # {
+    #     'club': 'ClubName',
+    #     'grades': ['PHL', '2nd'],
+    #     'dates': ['YYYY-MM-DD'],
+    #     'reason': 'U18 State Championships',
+    # },
+    # {
+    #     'club': 'Gosford',  # Blocks all Gosford teams
+    #     'dates': ['YYYY-MM-DD'],
+    #     'reason': 'Post-tournament recovery',
+    # },
+]
+
 # ============== No-Play Preferences (Soft Constraints) ==============
 # These are SOFT constraints - the solver will try to avoid scheduling
 # these games but may if necessary.
@@ -175,7 +211,8 @@ SEASON_CONFIG = {
     # Club events
     'club_days': CLUB_DAYS,
     
-    # Preferences
+    # No-play rules
+    'blocked_games': BLOCKED_GAMES,
     'preference_no_play': PREFERENCE_NO_PLAY,
     'phl_preferences': PHL_PREFERENCES,
     

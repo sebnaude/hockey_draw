@@ -222,6 +222,23 @@ preference_no_play = {
 }
 ```
 
+#### Blocked Games (Hard no-play)
+
+For requests where a team **must not** play on a specific date, use `BLOCKED_GAMES`. Variables are completely removed from the game dictionary.
+
+```python
+BLOCKED_GAMES = [
+    {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'dates': ['2026-05-24'],
+        'reason': 'U18 State Championships',
+    },
+]
+```
+
+See `docs/ai/CONFIGURATION_REFERENCE.md` for full field reference.
+
 ---
 
 ## File Structure

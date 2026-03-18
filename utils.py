@@ -567,6 +567,144 @@ def _is_blocked_by_forced_games(key: tuple, forced_rules: dict) -> bool:
     return False  # No scope matched — not blocked
 
 
+# ============== Blocked Games (No-Play Variable Removal) ==============
+# Sister mechanism to FORCED_GAMES. Same config format but opposite logic:
+# FORCED_GAMES: variables matching scope but NOT matching teams → eliminated
+# BLOCKED_GAMES: variables matching scope AND matching teams → eliminated
+
+def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
+    """
+    Build lookup structure from BLOCKED_GAMES config for fast variable filtering.
+    
+    Same format as FORCED_GAMES entries. For each scope, collects team matchers.
+    A variable matching both the scope AND a team matcher is eliminated.
+    
+    Returns:
+        Dict mapping scope_key (frozenset) -> list of team matchers.
+        Each team matcher is ('pair', team1, team2) or ('any', team_name).
+    """
+    if not blocked_games:
+        return {}
+    
+    # Build lookup: (club_name, grade) -> [full team names]
+    team_lookup = defaultdict(list)
+    team_names_set = set()
+    for t in teams:
+        team_names_set.add(t.name)
+        team_lookup[(t.club.name, t.grade)].append(t.name)
+    
+    def resolve_team_name(name, grade=None):
+        """Resolve a club name or team name to full team name(s)."""
+        if name in team_names_set:
+            return [name]
+        if grade and not isinstance(grade, (list, tuple)):
+            full = f"{name} {grade}"
+            if full in team_names_set:
+                return [full]
+            matches = team_lookup.get((name, grade), [])
+            if matches:
+                return matches
+        if grade and isinstance(grade, (list, tuple)):
+            results = []
+            for g in grade:
+                results.extend(resolve_team_name(name, g))
+            return results
+        results = [t.name for t in teams if t.club.name == name]
+        return results if results else [name]
+    
+    scope_groups = defaultdict(list)
+    
+    for entry in blocked_games:
+        grade = entry.get('grade')
+        grades = entry.get('grades', [])
+        effective_grade = grades if grades else grade
+        
+        # Build scope from non-team fields
+        scope = []
+        for field in _SCOPE_FIELDS:
+            if field in entry:
+                val = entry[field]
+                idx = _KEY_INDEX[field]
+                if isinstance(val, list):
+                    scope.append((idx, tuple(val)))
+                else:
+                    scope.append((idx, val))
+        
+        scope_key = frozenset(scope)
+        
+        # Build team matchers from 'teams' or 'club' key
+        raw_teams = entry.get('teams', [])
+        club = entry.get('club')
+        
+        if raw_teams:
+            if len(raw_teams) == 2:
+                resolved_t1 = resolve_team_name(raw_teams[0], effective_grade)
+                resolved_t2 = resolve_team_name(raw_teams[1], effective_grade)
+                for rt1 in resolved_t1:
+                    for rt2 in resolved_t2:
+                        pair = tuple(sorted([rt1, rt2]))
+                        scope_groups[scope_key].append(('pair', pair[0], pair[1]))
+            elif len(raw_teams) == 1:
+                resolved = resolve_team_name(raw_teams[0], effective_grade)
+                for rt in resolved:
+                    scope_groups[scope_key].append(('any', rt))
+        elif club:
+            resolved = resolve_team_name(club, effective_grade)
+            for rt in resolved:
+                scope_groups[scope_key].append(('any', rt))
+        
+        desc = entry.get('description', entry.get('reason', f"scope={dict(scope)}"))
+        matchers = scope_groups[scope_key]
+        print(f"  Blocked game rule: {desc} -> {len(matchers)} team matcher(s)")
+    
+    return dict(scope_groups)
+
+
+def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
+    """
+    Check if a variable key is blocked by no-play rules.
+    
+    A variable is blocked if it matches a rule's SCOPE AND matches
+    ANY of the team matchers for that scope.
+    (Inverse of FORCED_GAMES logic.)
+    
+    Args:
+        key: 11-tuple variable key
+        blocked_rules: Output of _build_blocked_game_rules()
+    
+    Returns:
+        True if the variable should be eliminated.
+    """
+    for scope_key, team_matchers in blocked_rules.items():
+        # Check if variable matches this scope
+        in_scope = True
+        for idx, val in scope_key:
+            key_val = key[idx]
+            if isinstance(val, tuple):
+                if key_val not in val:
+                    in_scope = False
+                    break
+            else:
+                if key_val != val:
+                    in_scope = False
+                    break
+        
+        if not in_scope:
+            continue
+        
+        # Variable is in scope — check if it matches ANY team matcher
+        t1, t2 = key[0], key[1]
+        for matcher in team_matchers:
+            if matcher[0] == 'pair':
+                if t1 == matcher[1] and t2 == matcher[2]:
+                    return True  # Matches scope AND team — BLOCKED
+            elif matcher[0] == 'any':
+                if t1 == matcher[1] or t2 == matcher[1]:
+                    return True  # Matches scope AND team — BLOCKED
+    
+    return False  # No match — not blocked
+
+
 def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
@@ -681,9 +819,13 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     other_vars_created = 0
     other_vars_skipped = 0  # Track skipped vars for lower grades
     forced_vars_skipped = 0  # Track vars eliminated by FORCED_GAMES
+    blocked_vars_skipped = 0  # Track vars eliminated by BLOCKED_GAMES
     
     # Build forced games lookup from config
     forced_game_rules = _build_forced_game_rules(data.get('forced_games', []), teams)
+    
+    # Build blocked games (no-play) lookup from config
+    blocked_game_rules = _build_blocked_game_rules(data.get('blocked_games', []), teams)
     
     # Build set of PHL-only venues (Gosford) and days (Friday)
     # These should be excluded from non-PHL grades
@@ -745,6 +887,11 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 forced_vars_skipped += 1
                 continue
             
+            # Check blocked game rules - eliminate vars for teams that cannot play on these dates
+            if blocked_game_rules and _is_blocked_by_no_play(key, blocked_game_rules):
+                blocked_vars_skipped += 1
+                continue
+            
             X[key] = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
     
     print(f"Created {len(X)} decision variables")
@@ -754,6 +901,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     print(f"  - Other grades: {other_vars_created} created, {other_vars_skipped} skipped (PHL-only venues/days)")
     if forced_vars_skipped:
         print(f"  - Forced games: {forced_vars_skipped} vars eliminated by {len(data.get('forced_games', []))} forced game rules")
+    if blocked_vars_skipped:
+        print(f"  - Blocked games: {blocked_vars_skipped} vars eliminated by {len(data.get('blocked_games', []))} no-play rules")
     return X, Y, conflicts, unavailable_games
 
 
@@ -984,5 +1133,6 @@ def build_season_data(config: dict) -> dict:
         'friday_night_config': config.get('friday_night_config', {}),
         'special_games': config.get('special_games', {}),
         'forced_games': config.get('forced_games', []),
+        'blocked_games': config.get('blocked_games', []),
     }
 

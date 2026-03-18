@@ -868,6 +868,9 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
         grades = data['grades']
         max_rounds = data['num_rounds'].get('max', 21)
         
+        # Get additional slack from config (--slack flag)
+        config_slack = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 0)
+        
         constraints_added = 0
         
         # Pre-compute per-grade spacing variables (same as original)
@@ -876,8 +879,9 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
             if grade.num_teams > 0:
                 space = max_rounds // grade.num_teams
                 
-                min_spacing = space - self.SLACK
-                max_spacing = space + self.SLACK
+                effective_slack = min(self.SLACK + config_slack, grade.num_teams // 2 + 1)
+                min_spacing = space - effective_slack
+                max_spacing = space + effective_slack
                 
                 min_var = model.NewIntVar(min(0, min_spacing), max_spacing, f'ai_grade_spacing_min_{grade.name}')
                 model.Add(min_var == min_spacing)
@@ -1195,7 +1199,10 @@ class ClubVsClubAlignmentAI(ConstraintAI):
                                 constraints_added += 1
                     
                     if coincide_vars:
-                        model.Add(sum(coincide_vars) == num_games)
+                        # Get slack from config (--slack flag)
+                        config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0)
+                        min_required = max(0, num_games - config_slack)
+                        model.Add(sum(coincide_vars) >= min_required)
                         constraints_added += 1
         
         return constraints_added
@@ -1214,6 +1221,10 @@ class MaitlandHomeGroupingAI(ConstraintAI):
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['MaitlandHomeGrouping'] = {'weight': 1000000, 'penalties': []}
+        
+        # Allow slack override from config (--slack flag)
+        slack = data.get('constraint_slack', {}).get('MaitlandHomeGrouping', 0)
+        back_to_back_limit = 1 + slack
         
         timeslots = data['timeslots']
         games = data['games']
@@ -1286,7 +1297,7 @@ class MaitlandHomeGroupingAI(ConstraintAI):
             prev_week = sorted_weeks[i - 1]
             curr_week = sorted_weeks[i]
             
-            model.Add(home_indicators[prev_week] + home_indicators[curr_week] <= 1)
+            model.Add(home_indicators[prev_week] + home_indicators[curr_week] <= back_to_back_limit)
             constraints_added += 1
         
         return constraints_added
@@ -1306,6 +1317,10 @@ class AwayAtMaitlandGroupingAI(ConstraintAI):
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['AwayAtMaitlandGrouping'] = {'weight': 100000, 'penalties': []}
+        
+        # Allow slack override from config (--slack flag)
+        slack = data.get('constraint_slack', {}).get('AwayAtMaitlandGrouping', 0)
+        hard_limit = self.HARD_LIMIT + slack
         
         teams = data['teams']
         timeslots = data['timeslots']
@@ -1354,7 +1369,7 @@ class AwayAtMaitlandGroupingAI(ConstraintAI):
             model.Add(num_clubs == sum(club_indicators))
             
             # Hard limit
-            model.Add(num_clubs <= self.HARD_LIMIT)
+            model.Add(num_clubs <= hard_limit)
             constraints_added += 1
             
             # Soft penalty
@@ -1385,6 +1400,11 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['MaximiseClubsPerTimeslotBroadmeadow'] = {'weight': 5000, 'penalties': []}
+        
+        # Allow slack override from config (--slack flag)
+        # Negative because slack DECREASES the minimum requirement
+        slack = data.get('constraint_slack', {}).get('MaximiseClubsPerTimeslotBroadmeadow', 0)
+        hard_limit_offset = self.HARD_LIMIT - slack
         
         teams = data['teams']
         locked_weeks = data.get('locked_weeks', set())
@@ -1446,8 +1466,10 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
             hard_min_base = model.NewIntVar(0, len(presence_vars), f'ai_hmin_base_{slot}')
             model.AddDivisionEquality(hard_min_base, total_teams, 2)
             
+            raw_minimum = model.NewIntVar(-10, len(presence_vars), f'ai_hmin_raw_{slot}')
+            model.Add(raw_minimum == hard_min_base + hard_limit_offset)
             hard_minimum = model.NewIntVar(0, len(presence_vars), f'ai_hmin_{slot}')
-            model.Add(hard_minimum == hard_min_base + self.HARD_LIMIT)
+            model.AddMaxEquality(hard_minimum, [raw_minimum, model.NewConstant(0)])
             
             model.Add(num_clubs >= hard_minimum)
             
@@ -1476,6 +1498,10 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['MinimiseClubsOnAFieldBroadmeadow'] = {'weight': 5000, 'penalties': []}
+        
+        # Allow slack override from config (--slack flag)
+        slack = data.get('constraint_slack', {}).get('MinimiseClubsOnAFieldBroadmeadow', 0)
+        hard_limit = self.HARD_LIMIT + slack
         
         teams = data['teams']
         locked_weeks = data.get('locked_weeks', set())
@@ -1524,7 +1550,7 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
             model.Add(num_clubs == sum(presence_vars))
             
             # Hard limit
-            model.Add(num_clubs <= self.HARD_LIMIT)
+            model.Add(num_clubs <= hard_limit)
             constraints_added += 1
             
             # Penalty

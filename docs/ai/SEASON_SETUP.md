@@ -33,7 +33,8 @@
 | Information | Source | Config Location |
 |-------------|--------|-----------------|
 | Club days | Club requests | `CLUB_DAYS` dict |
-| No-play requests | Club requests | `PREFERENCE_NO_PLAY` dict |
+| Hard no-play requests | Club requests | `BLOCKED_GAMES` list |
+| Soft no-play requests | Club requests | `PREFERENCE_NO_PLAY` dict |
 | Special games (e.g., Taree) | Club requests | `SPECIAL_GAMES` dict |
 
 ---
@@ -111,7 +112,25 @@ See `GAME_TIME_DICTIONARIES.md` for full details.
 
 ### Step 6: Add Club Requests
 
+**Hard no-play requests (variables removed from game dictionary):**
+
+Use `BLOCKED_GAMES` when a team **must not** play on a date (representative duties, post-tournament recovery). See `CONSTRAINT_APPLICATION.md` Option 2.
+
+```python
+BLOCKED_GAMES = [
+    {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'dates': ['2026-05-24'],
+        'reason': 'U18 State Championships',
+    },
+]
+```
+
 **No-play requests (soft):**
+
+Use `PREFERENCE_NO_PLAY` when the solver should **try to avoid** a date but can schedule there if needed.
+
 ```python
 PREFERENCE_NO_PLAY = {
     'Crusaders_6th_Masters': {
@@ -207,6 +226,7 @@ Before generating:
 - [ ] `FIELD_UNAVAILABILITIES` updated for blocked weekends
 - [ ] `PHL_GAME_TIMES` and `SECOND_GRADE_TIMES` reviewed
 - [ ] `FRIDAY_NIGHT_CONFIG` set for Gosford/NIHC Friday nights
+- [ ] `BLOCKED_GAMES` includes all hard no-play requests
 - [ ] `PREFERENCE_NO_PLAY` includes all soft no-play requests
 - [ ] `CLUB_DAYS` includes all club day events
 - [ ] Pre-season report shows correct team counts

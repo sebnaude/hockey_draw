@@ -21,11 +21,24 @@ from typing import List, Optional
 
 # Team naming conventions for clubs with multiple teams in a grade
 # Format: 'ClubName': ['FirstTeamName', 'SecondTeamName', ...]
+# IMPORTANT: When a club has two teams in the same grade, BOTH teams must have
+# distinguishing names. Never leave one as just the club name.
+#
+# Grade-specific overrides go in TEAM_NAME_GRADE_OVERRIDES below.
 TEAM_NAME_CONVENTIONS = {
-    'Tigers': ['Tigers', 'Tigers Black'],           # Black & Yellow colours
-    'Wests': ['Wests', 'Wests Red'],                # Red & Green colours
-    'University': ['Uni', 'Uni Seapigs'],           # Seapigs is the alternate
-    'Colts': ['Colts Gold', 'Colts Green'],         # Gold & Green colours
+    'Tigers': ['Tigers Yellow', 'Tigers Black'],              # Yellow & Black colours
+    'Wests': ['Wests Green', 'Wests Red'],                  # Green & Red colours
+    'University': ['University', 'University Seapigs'],      # Seapigs is the alternate
+    'Colts': ['Colts Gold', 'Colts Green'],                 # Gold & Green colours
+}
+
+# Grade-specific overrides for clubs where certain grades have different naming
+# Format: 'ClubName': { 'Grade': ['FirstTeamName', 'SecondTeamName'] }
+TEAM_NAME_GRADE_OVERRIDES = {
+    'University': {
+        '4th': ['University Redhogs', 'University Seapigs'],
+        '6th': ['University Gentlemen', 'University Seapigs'],
+    },
 }
 
 # Default team name (used when club not in conventions)
@@ -33,13 +46,14 @@ DEFAULT_FIRST_NAME = None  # Use club name
 DEFAULT_SUFFIX_PATTERN = '{club} {number}'  # e.g., "Maitland 2"
 
 
-def get_team_names(club: str, count: int = 1) -> List[str]:
+def get_team_names(club: str, count: int = 1, grade: str = None) -> List[str]:
     """
     Get the standard team names for a club based on naming conventions.
     
     Args:
         club: The club name (e.g., 'Tigers', 'Colts')
         count: Number of teams in the grade (1, 2, or more)
+        grade: Optional grade name for grade-specific overrides
     
     Returns:
         List of team names to use
@@ -47,15 +61,26 @@ def get_team_names(club: str, count: int = 1) -> List[str]:
     Examples:
         >>> get_team_names('Tigers', 1)
         ['Tigers']
-        >>> get_team_names('Tigers', 2)
+        >>> get_team_names('Tigers', 2, '6th')
         ['Tigers', 'Tigers Black']
         >>> get_team_names('Colts', 2)
         ['Colts Gold', 'Colts Green']
+        >>> get_team_names('University', 2, '4th')
+        ['University Redhogs', 'University Seapigs']
+        >>> get_team_names('University', 2, '6th')
+        ['University Gentlemen', 'University Seapigs']
         >>> get_team_names('Maitland', 2)
         ['Maitland', 'Maitland 2']
     """
     if count <= 0:
         return []
+    
+    # Check for grade-specific override first
+    if grade and club in TEAM_NAME_GRADE_OVERRIDES:
+        if grade in TEAM_NAME_GRADE_OVERRIDES[club]:
+            conventions = TEAM_NAME_GRADE_OVERRIDES[club][grade]
+            if count <= len(conventions):
+                return conventions[:count]
     
     # Check if club has defined naming conventions
     if club in TEAM_NAME_CONVENTIONS:

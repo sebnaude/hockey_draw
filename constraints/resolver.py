@@ -160,7 +160,7 @@ class ConstraintSlackRegistry:
             'constraints_by_level': {
                 level: [name for name, s in self.constraints.items() 
                         if s.severity_level == level]
-                for level in range(1, 5)
+                for level in range(1, 6)
             },
             'current_states': {
                 name: {
@@ -361,7 +361,7 @@ class InfeasibilityResolver:
             
             # Skip Level 1 constraints - they can't be relaxed anyway
             state = self.registry.get_state(name)
-            level = state.severity_level if state else CONSTRAINT_SEVERITY_LEVELS.get(name, 4)
+            level = state.severity_level if state else CONSTRAINT_SEVERITY_LEVELS.get(name, 5)
             
             if level == 1:
                 self._log(f"    [{i+1}/{len(constraint_classes)}] {name}: SKIP (Level 1)")
@@ -410,9 +410,9 @@ class InfeasibilityResolver:
                     self._log(f"\n[FAILED] No relaxable constraints found but still {result.status}")
                     return False, relaxed
             
-            # Sort by severity (prefer relaxing lower severity first: level 4 before 3)
+            # Sort by severity (prefer relaxing lower severity first: level 5 before 4)
             blocking_with_levels = [
-                (name, self.registry.get_state(name).severity_level if self.registry.get_state(name) else 4)
+                (name, self.registry.get_state(name).severity_level if self.registry.get_state(name) else 5)
                 for name in blocking
             ]
             blocking_with_levels.sort(key=lambda x: -x[1])

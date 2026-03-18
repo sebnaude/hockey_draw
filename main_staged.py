@@ -262,8 +262,8 @@ STAGES_AI = {
     },
 }
 
-# Severity-based stages: group constraints by severity level (1-4)
-# These allow progressive solving from CRITICAL → LOW priority constraints.
+# Severity-based stages: group constraints by severity level (1-5)
+# These allow progressive solving from CRITICAL → VERY LOW priority constraints.
 STAGES_SEVERITY = {
     'severity_1': {
         'name': 'Critical Constraints',
@@ -284,10 +284,11 @@ STAGES_SEVERITY = {
     },
     'severity_2': {
         'name': 'High Priority Constraints',
-        'description': 'Club days, team conflicts, Maitland away grouping',
+        'description': 'Club days, team conflicts, Maitland away grouping, matchup spacing',
         'constraints': [
             AwayAtMaitlandGrouping,
             ClubDayConstraint,
+            EqualMatchUpSpacingConstraint,
             TeamConflictConstraint,
         ],
         'max_time_seconds': 7200,
@@ -296,11 +297,10 @@ STAGES_SEVERITY = {
     },
     'severity_3': {
         'name': 'Medium Priority Constraints',
-        'description': 'Matchup spacing, grade adjacency, club vs club alignment',
+        'description': 'Grade adjacency, club vs club alignment',
         'constraints': [
             ClubGradeAdjacencyConstraint,
             ClubVsClubAlignment,
-            EqualMatchUpSpacingConstraint,
         ],
         'max_time_seconds': 14400,
         'required': True,
@@ -308,11 +308,20 @@ STAGES_SEVERITY = {
     },
     'severity_4': {
         'name': 'Low Priority Constraints',
-        'description': 'Timeslot choices, club density, field continuity, preferences',
+        'description': 'Club density at Broadmeadow, club game spread',
         'constraints': [
-            EnsureBestTimeslotChoices,
             MaximiseClubsPerTimeslotBroadmeadow,
             MinimiseClubsOnAFieldBroadmeadow,
+        ],
+        'max_time_seconds': 86400,
+        'required': False,
+        'use_callback': True,
+    },
+    'severity_5': {
+        'name': 'Very Low Priority Constraints',
+        'description': 'Timeslot choices, preferred times',
+        'constraints': [
+            EnsureBestTimeslotChoices,
             PreferredTimesConstraint,
         ],
         'max_time_seconds': 259200,
@@ -341,10 +350,11 @@ STAGES_SEVERITY_AI = {
     },
     'severity_2': {
         'name': 'High Priority Constraints (AI)',
-        'description': 'Club days, team conflicts, Maitland away grouping - AI',
+        'description': 'Club days, team conflicts, Maitland away grouping, matchup spacing - AI',
         'constraints': [
             AwayAtMaitlandGroupingAI,
             ClubDayConstraintAI,
+            EqualMatchUpSpacingConstraintAI,
             TeamConflictConstraintAI,
         ],
         'max_time_seconds': 7200,
@@ -353,11 +363,10 @@ STAGES_SEVERITY_AI = {
     },
     'severity_3': {
         'name': 'Medium Priority Constraints (AI)',
-        'description': 'Matchup spacing, grade adjacency, club vs club alignment - AI',
+        'description': 'Grade adjacency, club vs club alignment - AI',
         'constraints': [
             ClubGradeAdjacencyConstraintAI,
             ClubVsClubAlignmentAI,
-            EqualMatchUpSpacingConstraintAI,
         ],
         'max_time_seconds': 14400,
         'required': True,
@@ -365,11 +374,20 @@ STAGES_SEVERITY_AI = {
     },
     'severity_4': {
         'name': 'Low Priority Constraints (AI)',
-        'description': 'Timeslot choices, club density, field continuity, preferences - AI',
+        'description': 'Club density at Broadmeadow, club game spread - AI',
         'constraints': [
-            EnsureBestTimeslotChoicesAI,
             MaximiseClubsPerTimeslotBroadmeadowAI,
             MinimiseClubsOnAFieldBroadmeadowAI,
+        ],
+        'max_time_seconds': 86400,
+        'required': False,
+        'use_callback': True,
+    },
+    'severity_5': {
+        'name': 'Very Low Priority Constraints (AI)',
+        'description': 'Timeslot choices, preferred times - AI',
+        'constraints': [
+            EnsureBestTimeslotChoicesAI,
             PreferredTimesConstraintAI,
         ],
         'max_time_seconds': 259200,
@@ -809,7 +827,14 @@ class StagedScheduleSolver:
         print(f"Run directory: {run_dir}")
         
         # Select stage dictionary based on mode
-        active_stages = STAGES_SEVERITY if severity_staged else STAGES
+        if severity_staged:
+            active_stages = STAGES_SEVERITY
+            mode_label = f"SEVERITY-BASED stages (Level 1 \u2192 2 \u2192 3 \u2192 4 \u2192 5)"
+        else:
+            active_stages = STAGES
+            mode_label = "DEFAULT stages (required + soft)"
+        print(f"Mode: {mode_label}")
+        self.logger.info(f"Using {mode_label}")
         stages_to_run = stages_to_run or list(active_stages.keys())
         self.logger.info(f"Stages to run: {stages_to_run} (severity_staged={severity_staged})")
         
@@ -820,15 +845,17 @@ class StagedScheduleSolver:
             loaded = self.checkpoint_manager.load_stage(run_dir, resume_from)
             if loaded:
                 self.current_solution = loaded['solution']
-                self.logger.info(f"Loaded checkpoint from {resume_from}: "
-                               f"{sum(1 for v in loaded['solution'].values() if v == 1)} games")
-                print(f"Resuming from {resume_from}")
+                games_in_hint = sum(1 for v in loaded['solution'].values() if v == 1)
+                self.logger.info(f"Loaded checkpoint from {resume_from}: {games_in_hint} games")
+                print(f"Resuming from {resume_from} (loaded {games_in_hint} games as hint)")
                 
                 # Skip stages before resume point
                 skip_idx = stages_to_run.index(resume_from) + 1
                 stages_to_run = stages_to_run[skip_idx:]
+                print(f"Will run remaining stages: {stages_to_run}")
                 self.logger.info(f"Remaining stages after resume: {stages_to_run}")
             else:
+                self.logger.warning(f"Stage {resume_from} not found or checkpoint not loadable")
                 self.logger.warning(f"Could not load checkpoint for {resume_from}")
         
         # Process each stage
@@ -865,8 +892,10 @@ class StagedScheduleSolver:
             self.logger.info("Applying constraints...")
             print("Applying constraints:")
             constraints_added = self.apply_constraints(stage_config['constraints'])
+            constraint_names = [cls.__name__ for cls in stage_config['constraints']]
             self.logger.info(f"  Constraints added this stage: {constraints_added}")
             self.logger.info(f"  Model total constraints: {len(self.model.Proto().constraints)}")
+            print(f"  Applying {len(stage_config['constraints'])} constraints from stage: {constraint_names}")
             print(f"  Total: {constraints_added} constraints added")
             print(f"  Model total: {len(self.model.Proto().constraints)} constraints")
             
@@ -932,7 +961,8 @@ def load_data(year: int) -> dict:
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
                 locked_weeks: set = None, solver_config: SolverConfig = None, year: int = None,
                 stages_to_run: list = None, relax_config: dict = None,
-                fix_round_1: bool = False):
+                fix_round_1: bool = False, constraint_slack: dict = None,
+                severity_staged: bool = False):
     """
     Main entry point for staged solving.
     
@@ -943,9 +973,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         locked_weeks: Optional set of week numbers that are locked.
         solver_config: Optional solver configuration for resource management.
         year: The season year (e.g., 2025, 2026). Required.
-        stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft
+        stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft.
+            With severity_staged: severity_1, severity_2, severity_3, severity_4.
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
+        constraint_slack: Optional dict mapping constraint names to slack values.
+        severity_staged: If True, use severity-based staging (5 levels by severity).
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -979,6 +1012,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     # Set locked weeks in data for constraints to use
     if locked_weeks:
         data['locked_weeks'] = set(locked_weeks)
+    
+    # Apply constraint slack overrides
+    if constraint_slack:
+        data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
+        logger.info(f"  Constraint slack overrides: {constraint_slack}")
+        print(f"  Constraint slack overrides: {constraint_slack}")
     
     logger.info(f"  Teams: {len(data['teams'])}")
     logger.info(f"  Grades: {len(data['grades'])}")
@@ -1031,7 +1070,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     
     # Run staged solve
     try:
-        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run)
+        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run, severity_staged=severity_staged)
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")
         logger.critical(traceback.format_exc())
@@ -1069,7 +1108,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False):
+def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False, constraint_slack: dict = None):
     """
     Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
@@ -1083,19 +1122,23 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         year: The season year (e.g., 2025, 2026). Required.
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
+        constraint_slack: Optional dict mapping constraint names to slack values.
         
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
     """
     if year is None:
         raise ValueError("Year is required. Use --year YYYY to specify the season.")
+    # Set up logging for single solve mode
+    logger = setup_logging(run_id="simple")
+    
     mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     print("="*60)
     print(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
     print("="*60)
     
     # Initialize resource monitoring
-    resource_monitor = ResourceMonitor() if PSUTIL_AVAILABLE else None
+    resource_monitor = ResourceMonitor(logger=logger) if PSUTIL_AVAILABLE else None
     if resource_monitor:
         print("\n📊 Resource monitoring enabled")
         resource_monitor.log_snapshot(prefix="STARTUP")
@@ -1109,6 +1152,11 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     # Set locked weeks in data for constraints to use
     if locked_weeks:
         data['locked_weeks'] = set(locked_weeks)
+    
+    # Apply constraint slack overrides
+    if constraint_slack:
+        data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
+        print(f"  Constraint slack overrides: {constraint_slack}")
     
     # Create model
     model = cp_model.CpModel()
@@ -1252,7 +1300,21 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         print("\n📊 Pre-solve resource snapshot:")
         resource_monitor.log_snapshot(prefix="PRE-SOLVE")
     
-    status = solver.Solve(model)
+    # Start background resource monitoring during solve
+    if resource_monitor:
+        resource_monitor.start_monitoring(interval=30.0)
+        logger.info("Started resource monitoring (interval: 30.0s)")
+    
+    try:
+        status = solver.Solve(model)
+    finally:
+        # Stop resource monitoring
+        if resource_monitor:
+            snapshots = resource_monitor.stop_monitoring()
+            peak_memory = resource_monitor.get_peak_memory()
+            if peak_memory:
+                logger.info(f"Peak process memory during solve: {peak_memory:.0f}MB")
+                print(f"\n📊 Peak process memory: {peak_memory:.0f}MB")
     
     # Log post-solve resource state
     if resource_monitor:

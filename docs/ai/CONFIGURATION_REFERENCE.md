@@ -350,3 +350,61 @@ Club names in `teams` are auto-resolved to full team names:
 - Passed through: `SEASON_CONFIG['forced_games']` → `build_season_data()` → `data['forced_games']`
 - Filtering: `_build_forced_game_rules()` and `_is_blocked_by_forced_games()` in `utils.py`
 - Called from: `generate_X()` — checked for each variable before creation
+
+---
+
+## BLOCKED_GAMES (No-Play Variable Elimination)
+
+Sister mechanism to `FORCED_GAMES` with **opposite logic**. Eliminates variables for specific teams on specific dates — the team literally cannot be scheduled on that date.
+
+- `FORCED_GAMES`: variables matching scope but NOT matching teams → eliminated (forces specific matchups)
+- `BLOCKED_GAMES`: variables matching scope AND matching teams → eliminated (prevents teams from playing)
+
+```python
+BLOCKED_GAMES = [
+    # Block a specific club+grade on a date
+    {
+        'club': 'Crusaders',
+        'grade': '6th',
+        'date': '2026-06-28',
+        'description': 'Crusaders 6th - NSW Masters at Tamworth',
+    },
+    # Block multiple grades for a club
+    {
+        'club': 'Souths',
+        'grades': ['PHL', '2nd'],
+        'date': '2026-05-24',
+        'description': 'Souths PHL/2nd - U18 State Championships',
+    },
+    # Block ALL teams from a club on a date
+    {
+        'club': 'Gosford',
+        'date': '2026-06-21',
+        'description': 'Gosford - Recovery after Mens State Championships',
+    },
+]
+```
+
+### Field Reference
+
+Same fields as `FORCED_GAMES` (see above), plus:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `club` | str | Club name — resolved to all matching team names. Use instead of `teams` for club-wide blocks. |
+| `grades` | list | Multiple grades — used with `club` to resolve specific graded teams. |
+
+### How It Works
+
+1. **Scope** = all specified fields EXCEPT club/teams (grade, date, day, etc.)
+2. **Team matchers** = club/teams resolved to full team names
+3. For each variable in `generate_X()`:
+   - If it matches ALL scope fields AND matches a team matcher → **eliminated**
+   - Otherwise → unaffected
+
+### Implementation
+
+- Config: `BLOCKED_GAMES` list in `config/season_{year}.py`
+- Passed through: `SEASON_CONFIG['blocked_games']` → `build_season_data()` → `data['blocked_games']`
+- Filtering: `_build_blocked_game_rules()` and `_is_blocked_by_no_play()` in `utils.py`
+- Called from: `generate_X()` — checked for each variable after forced games check

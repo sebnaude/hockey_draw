@@ -48,8 +48,8 @@ This document tracks all requests received from clubs, their implementation stat
 | NIHC Friday: Jun 19 = Tigers vs Wests | HCPL | **Matchup Filtering** | `FORCED_GAMES[1]`: teams=['Tigers','Wests'], grade='PHL', date='2026-06-19' | ⚠️ Date blocked by U16 Girls SC unavailability — needs part_days fix |
 | NIHC Friday: Jul 24 = Norths vs TBC | HCPL | **Matchup Filtering** | `FORCED_GAMES[2]`: teams=['Norths'], grade='PHL', date='2026-07-24' | Any opponent OK |
 | Friday night clubs: Wests x2, Tigers x2, Souths x2, Norths x1, Maitland x1 | Various | **Config Value** | `FRIDAY_NIGHT_CONFIG['friday_clubs']` dict | Club allocations tracked |
-| Souths no PHL/2nd on May 24 (U18 SC) | Souths | **Soft Constraint** | `PREFERENCE_NO_PLAY['Souths_U18_SC']` | Penalty-based avoidance |
-| Gosford no match weekend after Men's SC (Jun 21) | Gosford | **Soft Constraint** | `PREFERENCE_NO_PLAY['Gosford_Post_SC']` | Penalty-based avoidance |
+| Souths no PHL/2nd on May 24 (U18 SC) | Souths | **Variable Removal** | `BLOCKED_GAMES` entry: Souths PHL/2nd on 2026-05-24 | Hard — variables eliminated from game dictionary |
+| Gosford no match weekend after Men's SC (Jun 21) | Gosford | **Variable Removal** | `BLOCKED_GAMES` entry: Gosford on 2026-06-21 | Hard — variables eliminated from game dictionary |
 
 ### Field Unavailabilities
 
@@ -68,12 +68,12 @@ This document tracks all requests received from clubs, their implementation stat
 |---------|------|----------------------|------------------------|-------|
 | Crusaders Club Day - June 14 | Crusaders | **Config + Constraint** | `CLUB_DAYS['Crusaders'] = datetime(2026, 6, 14)` + `ClubDayConstraint` | All teams same field, consecutive |
 
-### No-Play Preferences (Soft Constraints)
+### No-Play Requests
 
 | Request | Club | Implementation Method | Implementation Location | Notes |
 |---------|------|----------------------|------------------------|-------|
-| Crusaders 6th - NSW Masters Moorebank (Apr 17-19) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_Masters_1']` | Penalty weight 10,000 |
-| Crusaders 6th - NSW Masters Tamworth (Jun 26-28) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_Masters_2']` | Penalty weight 10,000 |
+| Crusaders 6th - NSW Masters Moorebank (Apr 17-19) | Crusaders | **Soft Constraint** | `PREFERENCE_NO_PLAY['Crusaders_6th_Masters_Moorebank']` | Penalty weight — mild preference |
+| Crusaders 6th - NSW Masters Tamworth (Jun 26-28) | Crusaders | **Variable Removal** | `BLOCKED_GAMES` entry: Crusaders 6th on 2026-06-28 | Hard — variables eliminated from game dictionary |
 
 ---
 

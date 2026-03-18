@@ -157,20 +157,24 @@ If the solver returns INFEASIBLE, the `--relax` flag enables automatic resolutio
 │   • NoDoubleBooking, EqualGames, PHL adjacency, HomeAway       │
 │                                                                 │
 │ Level 2 - HIGH (structural):                                   │
-│   • ClubDay, MaitlandGrouping, TeamConflict                    │
+│   • ClubDay, MaitlandGrouping, TeamConflict, MatchUpSpacing     │
 │                                                                 │
 │ Level 3 - MEDIUM (spacing/alignment):                          │
-│   • MatchUpSpacing, GradeAdjacency, ClubVsClub                 │
+│   • GradeAdjacency, ClubVsClub                                  │
 │                                                                 │
 │ Level 4 - LOW (optimization):                                  │
-│   • TimeslotChoices, ClubDensity, PreferredTimes               │
+│   • ClubDensity at Broadmeadow                                 │
+│                                                                 │
+│ Level 5 - VERY LOW (timeslot preferences):                     │
+│   • TimeslotChoices, PreferredTimes                            │
 └─────────────────────────────────────────────────────────────────┘
 
 Resolution Process:
 1. Test with all constraints → INFEASIBLE
-2. Drop Level 4, test → still INFEASIBLE?
-3. Drop Level 3, test → still INFEASIBLE?
-4. Drop Level 2, test → FEASIBLE!
+2. Drop Level 5, test → still INFEASIBLE?
+3. Drop Level 4, test → still INFEASIBLE?
+4. Drop Level 3, test → still INFEASIBLE?
+5. Drop Level 2, test → FEASIBLE!
    → Level 2 is the blocking group
 5. Relax ALL Level 2 constraints (slack +1)
 6. Solve with ALL constraints together

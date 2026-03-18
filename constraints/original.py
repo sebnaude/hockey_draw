@@ -698,7 +698,7 @@ class EqualMatchUpSpacingConstraint(Constraint):
             return max(1, ideal - 2 * ideal // 3)
         
         slack_per_grade = {
-            name: get_base_slack(T) + config_slack
+            name: min(get_base_slack(T) + config_slack, T // 2 + 1)
             for name, T in grades.items()
         }
         

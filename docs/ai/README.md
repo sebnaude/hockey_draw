@@ -28,9 +28,10 @@
 
 ### Adding a No-Play Request
 1. Read `CONSTRAINT_APPLICATION.md` - "No-Play Requests" section
-2. Decide: Soft constraint (PREFERENCE_NO_PLAY) vs Hard constraint (noplay XLSX)
-3. Apply the appropriate method
-4. Document in season reports
+2. Decide: Hard constraint (`BLOCKED_GAMES`) vs Soft constraint (`PREFERENCE_NO_PLAY`) vs XLSX
+3. Hard = variables removed, team **cannot** play; Soft = penalty, solver **tries** to avoid
+4. Apply the appropriate method
+5. Document in season reports
 
 ### Modifying PHL/2nd Grade Times
 1. Read `GAME_TIME_DICTIONARIES.md`
