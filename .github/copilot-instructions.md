@@ -1,14 +1,15 @@
 # Copilot Instructions for Hockey Draw Scheduler
 
-## ⚠️ IMPERATIVE: Read Before Acting
+## 🚨 MANDATORY: Read AI Docs On EVERY Conversation Start
 
-**Before making ANY changes to configuration or constraints:**
-1. Read the relevant AI documentation in `docs/ai/`
-2. When you learn something new, **UPDATE** the relevant AI doc so you know next time
+**At the start of EVERY conversation — before answering ANY question or making ANY change — you MUST read:**
 
----
+1. `docs/ai/AI_OPERATIONS_MANUAL.md` — The consolidated operations manual covering architecture, data flow, configuration, constraints, workflows, and limitations
+2. `config/season_2026.py` (or the relevant season) — The ACTUAL season config including `FIELD_UNAVAILABILITIES`, `FORCED_GAMES`, `BLOCKED_GAMES`, `PHL_GAME_TIMES`, `SECOND_GRADE_TIMES`, and all other config dicts
 
-## AI Documentation Index
+**This is NON-NEGOTIABLE.** The system has multiple layers of variable filtering and game restriction (time dicts, field unavailabilities, forced games, blocked games, no-play XLSX). You CANNOT answer questions about what is or isn't configured without reading the actual config file. Do NOT guess or assume — READ THE FILES.
+
+**Additional reference docs (read when relevant):**
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
@@ -18,6 +19,8 @@
 | `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |
 | `docs/ai/GAME_TIME_DICTIONARIES.md` | PHL/2nd grade variable filtering | Modifying game times |
 | `docs/ai/SYSTEM_OPERATION.md` | Running the solver | Generating draws |
+
+**When you learn something new, UPDATE the relevant AI doc so you know next time.**
 
 ---
 

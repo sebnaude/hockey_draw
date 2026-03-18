@@ -853,140 +853,147 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
     """
     Spread matchups evenly across rounds.
     
-    Enhanced version:
-    - Cleaner bound calculations
-    - Simplified round tracking
-    - Better constraint formulation
+    Aligned with original EqualMatchUpSpacingConstraint:
+    - Ideal spacing = T - 1 (see all opponents before rematch)
+    - base_slack = max(1, ideal - 2*ideal//3) ≈ one-third of ideal
+    - Only minimum gap enforced as HARD constraint (no maximum gap)
+    - |diff| from ideal penalized as SOFT
     """
     PRIORITY = "medium"
     
-    SLACK = 1
+    PENALTY_WEIGHT = 5000
     
     def apply(self, model, X, data) -> int:
-        timeslots = data['timeslots']
         games = data['games']
-        grades = data['grades']
-        max_rounds = data['num_rounds'].get('max', 21)
+        timeslots = data['timeslots']
+        R = data['num_rounds']['max']
+        grades = {g.name: g.num_teams for g in data['grades']}
         
         # Get additional slack from config (--slack flag)
         config_slack = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 0)
         
         constraints_added = 0
         
-        # Pre-compute per-grade spacing variables (same as original)
-        grade_spacing_vars = defaultdict(dict)
-        for grade in grades:
-            if grade.num_teams > 0:
-                space = max_rounds // grade.num_teams
-                
-                effective_slack = min(self.SLACK + config_slack, grade.num_teams // 2 + 1)
-                min_spacing = space - effective_slack
-                max_spacing = space + effective_slack
-                
-                min_var = model.NewIntVar(min(0, min_spacing), max_spacing, f'ai_grade_spacing_min_{grade.name}')
-                model.Add(min_var == min_spacing)
-                
-                max_var = model.NewIntVar(0, max_spacing, f'ai_grade_spacing_max_{grade.name}')
-                model.Add(max_var == max_spacing)
-                
-                grade_spacing_vars[grade.name]['min'] = min_var
-                grade_spacing_vars[grade.name]['max'] = max_var
+        # Initialize penalty tracking
+        if 'penalties' not in data:
+            data['penalties'] = {}
+        if 'EqualMatchUpSpacing' not in data.get('penalties', {}):
+            data['penalties']['EqualMatchUpSpacing'] = {'weight': self.PENALTY_WEIGHT, 'penalties': []}
+
+        # Derive base slack so that min gap = 2*(T-1)//3
+        # space = T - 1 (ideal: see all other opponents before rematch)
+        # base_slack = (T-1) - 2*(T-1)//3 (approx one-third of T-1)
+        def get_base_slack(num_teams):
+            ideal = num_teams - 1
+            return max(1, ideal - 2 * ideal // 3)
         
-        # Track meetings per (t1, t2, grade) -> round_no -> [vars]
+        slack_per_grade = {
+            name: min(get_base_slack(T) + config_slack, T // 2 + 1)
+            for name, T in grades.items()
+        }
+        
+        # Ideal spacing = T - 1 (see all other opponents before rematch)
+        space_per_grade = {
+            name: T - 1
+            for name, T in grades.items()
+        }
+
+        # Gather game-vars by (t1, t2, grade, round_no)
         meetings = defaultdict(lambda: defaultdict(list))
-        
         for t in timeslots:
             if not t.day:
                 continue
             for (t1, t2, grade) in games:
-                key = (t1, t2, grade, t.day, t.day_slot, t.time,
-                       t.week, t.date, t.round_no, t.field.name, t.field.location)
+                key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key in X:
                     meetings[(t1, t2, grade)][t.round_no].append(X[key])
-        
-        # Build spacing constraints for each pair
-        for team_pair, rounds in meetings.items():
-            t1, t2, grade = team_pair
+
+        # For each matchup pair, build spacing constraints
+        for (t1, t2, grade), round_map in meetings.items():
+            base_slack = slack_per_grade[grade]
+            space = space_per_grade[grade]
             
-            if grade not in grade_spacing_vars:
-                continue
-            
-            indicator_list = []
-            week_no_list = []
-            
-            sorted_rounds = dict(sorted(rounds.items(), key=lambda x: x[0]))
-            for round_no, game_vars in sorted_rounds.items():
-                if len(game_vars) > 1:
-                    indicator = model.NewBoolVar(f'ai_meet_ind_{t1}_{t2}_{round_no}')
-                    model.AddMaxEquality(indicator, game_vars)
-                    indicator_list.append(indicator)
-                    
-                    week_var = model.NewIntVar(0, max_rounds, f'ai_wk_{t1}_{t2}_{round_no}')
-                    model.Add(week_var == round_no).OnlyEnforceIf(indicator)
-                    model.Add(week_var == 0).OnlyEnforceIf(indicator.Not())
-                    week_no_list.append(week_var)
-            
-            if len(indicator_list) < 2:
-                continue
-            
-            M = max_rounds * len(indicator_list)  # upper bound for var ranges
-            
-            # Count meetings
-            no_meetings = model.NewIntVar(0, len(indicator_list), f'ai_K_{t1}_{t2}')
-            model.Add(no_meetings == sum(indicator_list))
-            
+            # Build round indicators and week vars
+            indic = []
+            weekvs = []
+            for r in range(1, R + 1):
+                vars_at_r = round_map.get(r, [])
+                # indicator: do they meet in round r?
+                b = model.NewBoolVar(f"ai_eqsp_ind_{t1}_{t2}_{grade}_r{r}")
+                if vars_at_r:
+                    model.AddMaxEquality(b, vars_at_r)
+                else:
+                    model.Add(b == 0)
+                indic.append(b)
+                constraints_added += 1
+
+                # week var: =r if meeting, else 0
+                wv = model.NewIntVar(0, R, f"ai_eqsp_wv_{t1}_{t2}_{grade}_r{r}")
+                model.Add(wv == r).OnlyEnforceIf(b)
+                model.Add(wv == 0).OnlyEnforceIf(b.Not())
+                weekvs.append(wv)
+                constraints_added += 2
+
+            # K = total number of meetings
+            K = model.NewIntVar(0, R, f"ai_eqsp_K_{t1}_{t2}_{grade}")
+            model.Add(K == sum(indic))
+            constraints_added += 1
+
             # Only enforce when K >= 2
-            meets_twice = model.NewBoolVar(f'ai_m2_{t1}_{t2}')
-            model.Add(no_meetings >= 2).OnlyEnforceIf(meets_twice)
-            model.Add(no_meetings < 2).OnlyEnforceIf(meets_twice.Not())
-            
-            # Sum of round numbers
-            round_sum = model.NewIntVar(0, M, f'ai_rs_{t1}_{t2}')
-            model.Add(round_sum == sum(week_no_list))
-            
-            # Max round where they meet
-            max_round_meet = model.NewIntVar(0, max_rounds, f'ai_mr_{t1}_{t2}')
-            model.AddMaxEquality(max_round_meet, week_no_list)
-            
-            # K * max_round
-            multi_max = model.NewIntVar(0, M, f'ai_km_{t1}_{t2}')
-            model.AddMultiplicationEquality(multi_max, [max_round_meet, no_meetings])
-            
-            # K * (K-1) for upper bound coefficient
-            ub_coef = model.NewIntVar(0, M, f'ai_ubc_{t1}_{t2}')
-            model.AddMultiplicationEquality(ub_coef, [no_meetings - 1, no_meetings])
-            
-            # K*(K-1)/2
-            ub_coef_half = model.NewIntVar(0, M, f'ai_ubch_{t1}_{t2}')
-            model.AddDivisionEquality(ub_coef_half, ub_coef, 2)
-            
-            # upper_bound_subtraction = min_spacing_var * K*(K-1)/2
-            ub_sub = model.NewIntVar(-M, M, f'ai_ubs_{t1}_{t2}')
-            model.AddMultiplicationEquality(ub_sub, [grade_spacing_vars[grade]['min'], ub_coef_half])
-            
-            # K * (K-1) for lower bound coefficient (same formula, different spacing)
-            lb_coef = model.NewIntVar(0, M, f'ai_lbc_{t1}_{t2}')
-            model.AddMultiplicationEquality(lb_coef, [no_meetings, no_meetings - 1])
-            
-            lb_coef_half = model.NewIntVar(0, M, f'ai_lbch_{t1}_{t2}')
-            model.AddDivisionEquality(lb_coef_half, lb_coef, 2)
-            
-            # lower_bound_subtraction = max_spacing_var * K*(K-1)/2
-            lb_sub = model.NewIntVar(0, M, f'ai_lbs_{t1}_{t2}')
-            model.AddMultiplicationEquality(lb_sub, [grade_spacing_vars[grade]['max'], lb_coef_half])
-            
-            # upper_bound = K*max_round - min_spacing * K*(K-1)/2
-            upper_bound = model.NewIntVar(-M, M, f'ai_ub_{t1}_{t2}')
-            model.Add(upper_bound == multi_max - ub_sub)
-            
-            # lower_bound = K*max_round - max_spacing * K*(K-1)/2
-            lower_bound = model.NewIntVar(-M, M, f'ai_lb_{t1}_{t2}')
-            model.Add(lower_bound == multi_max - lb_sub)
-            
-            # Enforce: lower_bound <= round_sum <= upper_bound (when K >= 2)
-            model.Add(round_sum <= upper_bound).OnlyEnforceIf(meets_twice)
-            model.Add(round_sum >= lower_bound).OnlyEnforceIf(meets_twice)
+            meets2 = model.NewBoolVar(f"ai_eqsp_m2_{t1}_{t2}_{grade}")
+            model.Add(K >= 2).OnlyEnforceIf(meets2)
+            model.Add(K < 2).OnlyEnforceIf(meets2.Not())
             constraints_added += 2
+
+            # round_sum = sum of weeks where they meet
+            round_sum = model.NewIntVar(0, R * R, f"ai_eqsp_rs_{t1}_{t2}_{grade}")
+            model.Add(round_sum == sum(weekvs))
+            constraints_added += 1
+
+            # max_r = latest week they meet
+            max_r = model.NewIntVar(0, R, f"ai_eqsp_mr_{t1}_{t2}_{grade}")
+            model.AddMaxEquality(max_r, weekvs)
+            constraints_added += 1
+
+            # Compute K*(K-1)/2 for spacing formula
+            km1 = model.NewIntVar(-R, R, f"ai_eqsp_km1_{t1}_{t2}_{grade}")
+            prod = model.NewIntVar(-R * R, R * R, f"ai_eqsp_prd_{t1}_{t2}_{grade}")
+            half = model.NewIntVar(0, R * (R - 1) // 2, f"ai_eqsp_half_{t1}_{t2}_{grade}")
+            model.Add(km1 == K - 1)
+            model.AddMultiplicationEquality(prod, [K, km1]).OnlyEnforceIf(meets2)
+            model.AddDivisionEquality(half, prod, 2).OnlyEnforceIf(meets2)
+            constraints_added += 3
+
+            # ideal = K * max_r - space * half
+            # This is the expected sum if meetings were evenly spaced backward from max_r
+            kmax = model.NewIntVar(0, R * R, f"ai_eqsp_kmax_{t1}_{t2}_{grade}")
+            space_half = model.NewIntVar(-R * R, R * R, f"ai_eqsp_sphalf_{t1}_{t2}_{grade}")
+            ideal = model.NewIntVar(-R * R, R * R, f"ai_eqsp_ideal_{t1}_{t2}_{grade}")
+            model.AddMultiplicationEquality(kmax, [K, max_r]).OnlyEnforceIf(meets2)
+            model.AddMultiplicationEquality(space_half, [space, half]).OnlyEnforceIf(meets2)
+            model.Add(ideal == kmax - space_half).OnlyEnforceIf(meets2)
+            constraints_added += 3
+
+            # Compute allowed slack = base_slack * half (scales with number of meetings)
+            max_slack = model.NewIntVar(0, R * (R - 1) // 2 * (base_slack + 5), f"ai_eqsp_maxslk_{t1}_{t2}_{grade}")
+            model.Add(max_slack == half * base_slack).OnlyEnforceIf(meets2)
+            constraints_added += 1
+
+            # diff = round_sum - ideal
+            # Positive diff means games are bunched (gap < ideal) → enforce min gap
+            # Negative diff means games are spread (gap > ideal) → allow freely
+            diff = model.NewIntVar(-R * R, R * R, f"ai_eqsp_diff_{t1}_{t2}_{grade}")
+            model.Add(diff == round_sum - ideal).OnlyEnforceIf(meets2)
+            constraints_added += 1
+
+            # HARD constraint: diff <= max_slack (enforces minimum gap only, no maximum gap)
+            model.Add(diff <= max_slack).OnlyEnforceIf(meets2)
+            constraints_added += 1
+
+            # SOFT penalty: minimize |diff| to prefer spacing close to ideal
+            abs_diff = model.NewIntVar(0, R * R, f"ai_eqsp_absdiff_{t1}_{t2}_{grade}")
+            model.AddAbsEquality(abs_diff, diff)
+            data['penalties']['EqualMatchUpSpacing']['penalties'].append(abs_diff)
         
         return constraints_added
 

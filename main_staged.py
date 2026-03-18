@@ -1133,9 +1133,15 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     logger = setup_logging(run_id="simple")
     
     mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
+    logger.info("=" * 60)
+    logger.info(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
+    logger.info("=" * 60)
     print("="*60)
     print(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
     print("="*60)
+    
+    # Log system info
+    log_system_info(logger)
     
     # Initialize resource monitoring
     resource_monitor = ResourceMonitor(logger=logger) if PSUTIL_AVAILABLE else None
@@ -1144,6 +1150,12 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         resource_monitor.log_snapshot(prefix="STARTUP")
     else:
         print("\n⚠️  Resource monitoring unavailable (install psutil)")
+    
+    # Initialize checkpoint manager for intermediate saves
+    checkpoint_manager = CheckpointManager()
+    run_dir = checkpoint_manager.get_run_dir()
+    logger.info(f"Run directory: {run_dir}")
+    print(f"Run directory: {run_dir}")
     
     # Load data
     print(f"\nLoading data for year {year}...")
@@ -1288,12 +1300,15 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     print("\nSolving...")
     solver = cp_model.CpSolver()
     solver.parameters.log_search_progress = True
-    solver.parameters.max_time_in_seconds = 28800  # 8 hours
+    solver.parameters.max_time_in_seconds = 259200  # 72 hours (matches staged mode)
     
     # Apply solver configuration if provided
     if solver_config:
         solver_config.apply_to_solver(solver)
         print(f"  Solver configured: workers={solver_config.num_workers}")
+    
+    # Log model info before solve
+    log_model_info(model, X, logger)
     
     # Log pre-solve resource state
     if resource_monitor:
@@ -1305,8 +1320,28 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         resource_monitor.start_monitoring(interval=30.0)
         logger.info("Started resource monitoring (interval: 30.0s)")
     
+    # Create intermediate solution callback for checkpoint saves
+    stage_name = "simple_solve"
+    callback = IntermediateSolutionCallback(
+        X=X,
+        checkpoint_manager=checkpoint_manager,
+        run_dir=run_dir,
+        stage_name=stage_name,
+        data=data,
+        save_interval=60
+    )
+    logger.info("Using solution callback for intermediate saves...")
+    print("  Using solution callback for intermediate saves...")
+    
+    start_time = datetime.now()
+    
     try:
-        status = solver.Solve(model)
+        status = solver.Solve(model, callback)
+    except Exception as e:
+        logger.critical(f"CRITICAL ERROR during solve: {e}")
+        logger.critical(traceback.format_exc())
+        print(f"\nCRITICAL ERROR: {e}")
+        raise
     finally:
         # Stop resource monitoring
         if resource_monitor:
@@ -1316,15 +1351,35 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
                 logger.info(f"Peak process memory during solve: {peak_memory:.0f}MB")
                 print(f"\n📊 Peak process memory: {peak_memory:.0f}MB")
     
+    solve_time = (datetime.now() - start_time).total_seconds()
+    logger.info(f"Callback found {callback.solution_count} intermediate solutions")
+    print(f"  Callback found {callback.solution_count} intermediate solutions")
+    
     # Log post-solve resource state
     if resource_monitor:
         print("\n📊 Post-solve resource snapshot:")
         resource_monitor.log_snapshot(prefix="POST-SOLVE")
     
-    print(f"\nStatus: {solver.status_name(status)}")
+    status_name = solver.status_name(status)
+    print(f"\nStatus: {status_name}")
+    print(f"Solve time: {solve_time:.1f}s")
     
     if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
         solution = {key: solver.Value(var) for key, var in X.items()}
+        objective = solver.ObjectiveValue()
+        games_scheduled = sum(1 for v in solution.values() if v == 1)
+        
+        # Log solve result
+        log_solve_result(status_name, objective, solve_time, games_scheduled, logger)
+        print(f"  Objective: {objective}")
+        print(f"  Games scheduled: {games_scheduled}")
+        
+        # Save final checkpoint
+        logger.info(f"Saving final checkpoint for {stage_name}...")
+        checkpoint_manager.save_stage(
+            run_dir, stage_name, solution, data, status_name, solve_time
+        )
+        logger.info("Final checkpoint saved successfully")
         
         # Use unified versioning system
         print("\n" + "="*60)
@@ -1345,8 +1400,11 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
             is_major=True
         )
         
+        logger.info(f"Saved as {version.version_string}")
+        logger.info("Simple solve completed successfully")
         return solution, data
     else:
+        logger.warning(f"Simple solve did not find solution: {status_name}")
         print("No valid solution found.")
         return None, data
 
