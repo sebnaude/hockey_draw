@@ -399,6 +399,7 @@ def run_generate(args):
         if args.exclude:
             print("WARNING: --exclude is ignored with --unified (unified engine applies all constraints).")
 
+
     exclude = args.exclude or []
     relax_config = None
     if getattr(args, 'relax', False):
@@ -420,6 +421,7 @@ def run_generate(args):
 
     if use_unified:
         print("\n[!] EXPERIMENTAL: --unified mode is not fully tested. Use --simple for production.")
+
 
     if args.simple or use_unified:
         from main_staged import main_simple

@@ -272,7 +272,7 @@ class InfeasibilityResolver:
         test_data['penalties'] = {}
         
         X, Y, conflicts = generate_X(model, test_data)
-        
+
         if isinstance(test_data.get('games'), dict):
             test_data['games'] = list(test_data['games'].keys())
         test_data['team_conflicts'] = conflicts

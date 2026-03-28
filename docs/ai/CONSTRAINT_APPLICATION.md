@@ -205,17 +205,26 @@ CLUB_DAYS = {
 ### Gosford Friday Nights
 
 1. Set exact count in `CONSTRAINT_DEFAULTS['gosford_friday_games']`
-2. Add times to `PHL_GAME_TIMES['Central Coast Hockey Park']` (e.g. 8pm)
-3. Use `FORCED_GAMES` to lock specific matchups to specific Gosford Friday dates
-4. Constraint `PHLAndSecondGradeTimes` enforces exact count
+2. Add times to `PHL_GAME_TIMES['Central Coast Hockey Park']` (8pm confirmed at AGM)
+3. Use `FORCED_GAMES` to force games on confirmed Friday dates (scope-only, no team needed — PHL_GAME_TIMES restricts to Gosford-involved games)
+4. Use `BLOCKED_GAMES` to prevent games on non-confirmed Friday dates
+5. Constraint `PHLAndSecondGradeTimes` enforces exact count
+
+### Maitland Friday Nights
+
+1. Set exact count in `CONSTRAINT_DEFAULTS['maitland_friday_games']`
+2. Add times to `PHL_GAME_TIMES['Maitland Park']` (7pm)
+3. `home_field_map` already restricts to Maitland-involved games
+4. Use `BLOCKED_GAMES` to block all non-Gosford clubs from PHL Friday at Maitland Park
+5. Net result: only Gosford vs Maitland PHL variables exist on Fridays at Maitland
+6. Constraint `PHLAndSecondGradeTimes` enforces exact count
 
 ### NIHC Friday Nights
 
-1. Set times in `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']`
+1. Set times in `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']` (7pm)
 2. Set max count in `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']`
 3. Use `FORCED_GAMES` to lock specific matchups to NIHC Friday dates
-4. Use `BLOCKED_GAMES` to prevent games on non-confirmed Friday dates
-5. Constraint limits Friday games at NIHC to the configured max
+4. Constraint `PHLAndSecondGradeTimes` limits Friday games at NIHC to the configured max
 
 ---
 

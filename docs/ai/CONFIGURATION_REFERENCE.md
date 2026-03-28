@@ -234,12 +234,13 @@ FIELD_UNAVAILABILITIES = {
 
 ## Friday Night Configuration
 
-Friday night games are now configured across multiple existing config structures:
+Friday night games are configured across multiple existing config structures (no separate `FRIDAY_NIGHT_CONFIG` dict):
 
-- **Game counts**: `CONSTRAINT_DEFAULTS['gosford_friday_games']` (exact count at Gosford, AGM decision) and `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']` (max at NIHC)
-- **Timeslots**: `PHL_GAME_TIMES` controls which Friday times are available at each venue (e.g. 8pm at Gosford, 7pm at NIHC)
-- **Matchups**: `FORCED_GAMES` locks specific team matchups to specific Friday dates
-- **Date filtering**: `BLOCKED_GAMES` prevents games on non-confirmed Friday dates
+- **Game counts**: `CONSTRAINT_DEFAULTS` — `gosford_friday_games` (exact, AGM), `maitland_friday_games` (exact), `max_friday_broadmeadow` (max at NIHC)
+- **Timeslots**: `PHL_GAME_TIMES` controls which Friday times exist at each venue (8pm Gosford, 7pm Maitland, 7pm NIHC EF only)
+- **Forced dates**: `FORCED_GAMES` forces specific Friday dates at Gosford (5 dates) and specific matchups at NIHC (3 dates)
+- **Date filtering**: `BLOCKED_GAMES` prevents non-confirmed Gosford Friday dates, and blocks non-Gosford clubs from Maitland Fridays
+- **Constraint enforcement**: `PHLAndSecondGradeTimes` (both original and AI) enforces the exact/max counts
 
 ---
 
@@ -307,37 +308,42 @@ SPECIAL_GAMES = {
 
 ---
 
-## FORCED_GAMES (Partial Key Variable Elimination)
+## FORCED_GAMES (Partial Key Matching)
 
-Forces specific matchups on specific dates/venues by eliminating all non-matching variables from the solver.
+Collects all variables matching a partial key specification and applies a constraint (`sum == 1` by default). Variables that DON'T match the scope are left alone — they are NOT eliminated.
 
 ```python
 FORCED_GAMES = [
-    # Each entry is a partial key dict. Fields split into:
-    #   Scope fields: grade, day, day_slot, time, week, date, round_no, field_name, field_location
-    #   Game fields:  teams (list of 1-2 club names)
-    #
-    # Variables matching ALL scope fields but NOT matching game fields → eliminated.
-    # Multiple entries with the same scope are OR'd (any match keeps the var).
-    
-    # Example: Force exact matchup on a specific Friday
+    # Each entry specifies scope fields to match against decision variable keys.
+    # All matching variables are collected, then sum(matching) is constrained.
+
+    # Example: Force exact matchup on a specific Friday (sum == 1)
     {
-        'teams': ['Maitland', 'Souths'],      # Club names (auto-resolved via grade)
+        'teams': ['Norths', 'Maitland'],
         'grade': 'PHL',
         'date': '2026-05-08',
         'day': 'Friday',
         'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Souths vs Maitland',
+        'description': 'NIHC Friday Night - Norths vs Maitland',
     },
-    
-    # Example: Any opponent for a specific team
+
+    # Example: Scope-only (no teams) — force any game at this venue/date
     {
-        'teams': ['Norths'],                   # Single team = Norths must be involved
         'grade': 'PHL',
-        'date': '2026-07-24',
+        'date': '2026-03-27',
         'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Gosford Friday Night - Mar 27',
+    },
+
+    # Example: At most 1 game (constraint: 'lesse' for sum <= 1)
+    {
+        'grade': 'PHL',
+        'date': '2026-05-17',
+        'day': 'Sunday',
         'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Norths home (opponent TBC)',
+        'constraint': 'lesse',
+        'description': 'Masters SC weekend - max 1 PHL game at NIHC',
     },
 ]
 ```
@@ -346,7 +352,7 @@ FORCED_GAMES = [
 
 | Field | Type | Maps to Key Index | Description |
 |-------|------|-------------------|-------------|
-| `teams` | list | 0, 1 (team1, team2) | 1-2 club names. Auto-resolved to full team names using grade. |
+| `teams` | list | 0, 1 (team1, team2) | 1-2 club names. Auto-resolved to full team names using grade. Optional — omit to match all teams. |
 | `grade` | str/list | 2 | Grade name(s). Also used to resolve club names to team names. |
 | `day` | str | 3 | Day of week (e.g., 'Friday', 'Sunday') |
 | `day_slot` | int | 4 | Time slot index |
@@ -356,28 +362,29 @@ FORCED_GAMES = [
 | `round_no` | int | 8 | Round number |
 | `field_name` | str | 9 | Field name (e.g., 'EF', 'WF') |
 | `field_location` | str | 10 | Venue name |
+| `constraint` | str | — | Equality type: `'equal'` (default, sum==1), `'lesse'` (<=1), `'greatere'` (>=1), `'greater'` (>1), `'less'` (<1) |
 | `description` | str | — | Logging only, not used for matching |
 
 ### How It Works
 
-1. **Scope** = all specified fields EXCEPT teams (grade, date, day, venue, etc.)
-2. **Game** = teams (resolved to full team names using grade + teams list)
-3. For each variable in `generate_X()`:
-   - If it matches ALL scope fields: check if teams also match
-   - If teams DON'T match → variable eliminated (not created)
-   - If scope doesn't match → variable unaffected
+1. **Scope** = all specified scope fields (grade, date, day, venue, etc.)
+2. **Team matchers** = teams resolved to full names (or `('all',)` if no teams specified)
+3. All variables matching scope + team matcher are collected into a group
+4. Constraint applied: `model.Add(sum(group) <op> 1)` where `<op>` is determined by `constraint` field
+5. If a forced game scope matches **zero** variables, the solver exits with a diagnostic error
 
 ### Team Name Resolution
 
 Club names in `teams` are auto-resolved to full team names:
 - `'Maitland'` + `grade='PHL'` → `'Maitland PHL'`
 - `'Colts'` + `grade='5th'` → `['Colts Gold 5th', 'Colts Green 5th']` (both teams match)
+- No `teams` or `club` → matches ALL teams in scope
 
 ### Implementation
 
 - Config: `FORCED_GAMES` list in `config/season_{year}.py`
 - Passed through: `SEASON_CONFIG['forced_games']` → `build_season_data()` → `data['forced_games']`
-- Filtering: `_build_forced_game_rules()` and `_is_blocked_by_forced_games()` in `utils.py`
+- Filtering: `_build_forced_game_rules()` and `_check_forced_game_status()` in `utils.py`
 - Called from: `generate_X()` — checked for each variable before creation
 - Recorded in: draw JSON `metadata.forced_games` + `metadata.forced_game_outcomes` (with `satisfied` flag)
 
@@ -385,10 +392,7 @@ Club names in `teams` are auto-resolved to full team names:
 
 ## BLOCKED_GAMES (No-Play Variable Elimination)
 
-Sister mechanism to `FORCED_GAMES` with **opposite logic**. Eliminates variables for specific teams on specific dates — the team literally cannot be scheduled on that date.
-
-- `FORCED_GAMES`: variables matching scope but NOT matching teams → eliminated (forces specific matchups)
-- `BLOCKED_GAMES`: variables matching scope AND matching teams → eliminated (prevents teams from playing)
+Eliminates variables matching scope + team matchers. If no teams/club specified, blocks ALL variables matching the scope.
 
 ```python
 BLOCKED_GAMES = [
@@ -406,18 +410,19 @@ BLOCKED_GAMES = [
         'date': '2026-05-24',
         'description': 'Souths PHL/2nd - U18 State Championships',
     },
-    # Block ALL teams from a club on a date
+    # Block ALL variables matching scope (no teams/club = block everything)
     {
-        'club': 'Gosford',
-        'date': '2026-06-21',
-        'description': 'Gosford - Recovery after Mens State Championships',
+        'grade': '2nd',
+        'date': '2026-05-17',
+        'field_location': 'Maitland Park',
+        'description': 'Masters SC weekend - Maitland PHL only',
     },
 ]
 ```
 
 ### Field Reference
 
-Same fields as `FORCED_GAMES` (see above), plus:
+Same scope fields as `FORCED_GAMES` (see above), plus:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -426,10 +431,10 @@ Same fields as `FORCED_GAMES` (see above), plus:
 
 ### How It Works
 
-1. **Scope** = all specified fields EXCEPT club/teams (grade, date, day, etc.)
-2. **Team matchers** = club/teams resolved to full team names
+1. **Scope** = all specified scope fields (grade, date, day, field_location, etc.)
+2. **Team matchers** = club/teams resolved to full team names. If neither specified, matcher list is empty.
 3. For each variable in `generate_X()`:
-   - If it matches ALL scope fields AND matches a team matcher → **eliminated**
+   - If it matches ALL scope fields AND (matches a team matcher OR no team matchers exist) → **eliminated**
    - Otherwise → unaffected
 
 ### Implementation

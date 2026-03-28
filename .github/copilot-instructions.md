@@ -103,9 +103,10 @@ This exclusion is hardcoded in `generate_X()` and saves ~20,000+ variables.
 |-------|-------|------|--------|
 | Broadmeadow (NIHC) | ≤ 3 | Maximum | Operational constraint |
 | Gosford (CCHP) | = 8 | Exact | AGM decision 2026 |
+| Maitland Park | = 2 | Exact | Gosford vs Maitland only |
 
 - **Constraint:** `PHLAndSecondGradeTimes` (both original and AI version)
-- **Config:** `FRIDAY_NIGHT_CONFIG` in `config/season_{year}.py`
+- **Config:** `CONSTRAINT_DEFAULTS` in `config/season_{year}.py` (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`) + `FORCED_GAMES` for date/matchup locking
 - **Testing:** `PHLTimingValidator` verifies both limits
 
 ---

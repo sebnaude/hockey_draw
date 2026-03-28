@@ -79,6 +79,7 @@ PHL_GAME_TIMES = {
     },
     'Maitland Park': {
         'Maitland Main Field': {
+            'Friday': [tm(19, 0)],  # 7pm - Gosford vs Maitland only (other clubs blocked via BLOCKED_GAMES)
             'Sunday': [tm(12, 0), tm(13, 0), tm(15, 0), tm(16, 30)]
         },
     },
@@ -178,20 +179,15 @@ Simply remove from the list. No variables will be created for that slot.
 
 ### Adding Friday Nights
 
-1. Add to `DAY_TIME_MAP` if not present (for consistency)
-2. Add to `PHL_GAME_TIMES` under 'Friday' key
-3. Update `CONSTRAINT_DEFAULTS` with counts (`gosford_friday_games`, `max_friday_broadmeadow`)
+1. Add to `PHL_GAME_TIMES` under 'Friday' key for the venue/field
+2. Update `CONSTRAINT_DEFAULTS` with counts (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`)
+3. Use `FORCED_GAMES` to force specific dates/matchups (supports `constraint` field for equality types)
+4. Use `BLOCKED_GAMES` to restrict which teams/dates can play (e.g., block non-Gosford clubs from Maitland Fridays)
 
-```python
-DAY_TIME_MAP = {
-    'Newcastle International Hockey Centre': {
-        'Friday': [tm(19, 0)],  # Add Friday if not present
-        'Sunday': [...],
-    },
-}
-
-PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday'] = [tm(19, 0)]
-```
+**Venue-specific notes:**
+- **Gosford**: `home_field_map` restricts to Gosford-involved games. `FORCED_GAMES` forces specific dates. `BLOCKED_GAMES` blocks non-confirmed dates.
+- **Maitland**: `home_field_map` restricts to Maitland-involved games. `BLOCKED_GAMES` further restricts to Gosford-only opponents on Fridays.
+- **NIHC**: `FORCED_GAMES` locks specific matchups to specific NIHC Friday dates.
 
 ---
 

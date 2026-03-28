@@ -15,8 +15,8 @@ This is a constraint programming system for generating hockey competition draws 
 ├── utils.py                # Utility functions + build_season_data()
 ├── solver_diagnostics.py   # Logging and resource monitoring
 ├── constraints/            # Constraint modules
-│   ├── original.py         # Original constraints (READ-ONLY)
-│   ├── ai.py               # AI-enhanced constraints (edit this)
+│   ├── original.py         # Original constraints (edit only when directed)
+│   ├── ai.py               # AI-enhanced constraints (default edit target)
 │   ├── soft.py             # Soft constraint variants
 │   ├── severity.py         # Severity-based relaxation
 │   └── resolver.py         # Infeasibility resolver
@@ -38,15 +38,12 @@ This is a constraint programming system for generating hockey competition draws 
     └── {year}/teams/       # Team CSV files
 ```
 
-## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
+## ⚠️ `constraints/original.py` — Only Edit When Directed
 
-**`constraints/original.py` is NEVER to be edited.**
-The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints/ai.py` only.
+The original human-written constraints are the **source of truth**. Do NOT edit `constraints/original.py` unless the user explicitly asks you to. By default, all fixes go to `constraints/ai.py` only.
 
-- ✅ Edit `constraints/ai.py`
-- ✅ Edit `tests/test_ai_constraints_comprehensive.py`
-- ❌ **NEVER** edit `constraints/original.py`
-- ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
+- ✅ Default edit targets: `constraints/ai.py`, `tests/test_ai_constraints_comprehensive.py`
+- ⚠️ Only edit when user directs: `constraints/original.py`, `tests/test_constraints.py`, `tests/test_constraints_equivalence.py`
 
 ## AI Constraints (`constraints/ai.py`)
 
@@ -204,7 +201,7 @@ CP-SAT can save model state and continue with additional constraints. Staged sol
 
 ### Why Separate `constraints/original.py` and `constraints/ai.py`?
 
-- `constraints/original.py`: Original implementations, **READ-ONLY source of truth** — never edit
+- `constraints/original.py`: Original implementations, **source of truth** — edit only when user directs
 - `constraints/ai.py`: AI-enhanced versions with:
   - Full parity with originals (18/18 constraints audited, 5 bugs fixed)
   - Better code organization and documentation

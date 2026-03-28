@@ -61,8 +61,8 @@ project/
 │   ├── season_2026.py      # Season-specific config
 │   └── team_naming.py      # Team name helpers
 ├── constraints/
-│   ├── original.py         # Original human-written constraints
-│   ├── ai.py               # AI-enhanced constraints
+│   ├── original.py         # Original constraints (edit only when directed)
+│   ├── ai.py               # AI-enhanced constraints (default edit target)
 │   ├── soft.py             # Soft constraint versions
 │   ├── severity.py         # Severity-based grouping
 │   └── symmetry.py         # Symmetry breaking

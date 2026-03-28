@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Tuple, Set
 from models import Team, Club, Grade, Game, WeeklyDraw, Roster, Timeslot, PlayingField
 import re
 import os
+import sys
 from datetime import datetime
 import pandas as pd
 from collections import defaultdict
@@ -430,24 +431,33 @@ _KEY_INDEX = {
 _SCOPE_FIELDS = {'grade', 'day', 'day_slot', 'time', 'week', 'date', 'round_no', 'field_name', 'field_location'}
 
 
-def _build_forced_game_rules(forced_games: list, teams: list) -> dict:
+def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
     """
     Build lookup structure from FORCED_GAMES config for fast variable filtering.
-    
+
     Groups entries by their scope (non-team fields). For each scope, collects
     all allowed team matchers. A variable matching the scope must match at least
     one team matcher to survive.
-    
+
+    Each entry supports a 'constraint' field controlling the equality type:
+        'equal'    (default) — sum(vars) == 1
+        'lesse'              — sum(vars) <= 1
+        'greater'            — sum(vars) > 1  (i.e. >= 2)
+        'greatere'           — sum(vars) >= 1
+        'less'               — sum(vars) < 1  (i.e. == 0, rarely useful)
+
     Team names in config can be club names (e.g., 'Maitland') — they are auto-resolved
     to full team names (e.g., 'Maitland PHL') using the grade field and teams list.
-    
+
     Returns:
-        Dict mapping scope_key (frozenset) -> list of team matchers.
+        Tuple of (scope_groups dict, constraint_types dict).
+        scope_groups: scope_key (frozenset) -> list of team matchers.
+        constraint_types: scope_key (frozenset) -> constraint type string.
         Each team matcher is ('pair', team1, team2) or ('any', team_name).
     """
     if not forced_games:
-        return {}
-    
+        return {}, {}
+
     # Build lookup: (club_name, grade) -> [full team names]
     team_lookup = defaultdict(list)
     team_names_set = set()
@@ -481,7 +491,9 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> dict:
     
     # scope_key -> list of team matchers
     scope_groups = defaultdict(list)
-    
+    # scope_key -> constraint type ('equal', 'lesse', 'greater', 'greatere', 'less')
+    constraint_types = {}
+
     for entry in forced_games:
         grade = entry.get('grade')
         
@@ -497,8 +509,12 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> dict:
                     scope.append((idx, val))
         
         scope_key = frozenset(scope)
-        
+
+        # Store constraint type (default: 'equal' for sum == 1)
+        constraint_types[scope_key] = entry.get('constraint', 'equal')
+
         # Build team matcher from 'teams' key or team1/team2
+        # If no teams specified, use ('all',) matcher to match any team pair in scope
         raw_teams = entry.get('teams', [])
         if raw_teams:
             if len(raw_teams) == 2:
@@ -528,16 +544,23 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> dict:
             elif t2_raw:
                 for rt in resolve_team_name(t2_raw, grade):
                     scope_groups[scope_key].append(('any', rt))
+        else:
+            # No teams specified — force any game matching the scope
+            scope_groups[scope_key].append(('all',))
         
         desc = entry.get('description', f"scope={dict(scope)}")
         matchers = scope_groups[scope_key]
         matcher_details = ', '.join(
-            f"{m[1]} vs {m[2]}" if m[0] == 'pair' else f"{m[1]} vs any"
+            "any vs any" if m[0] == 'all'
+            else f"{m[1]} vs {m[2]}" if m[0] == 'pair'
+            else f"{m[1]} vs any"
             for m in matchers
         )
-        print(f"  Forced game rule: {desc} -> {len(matchers)} team matcher(s): [{matcher_details}]")
-    
-    return dict(scope_groups)
+        ctype = constraint_types[scope_key]
+        ctype_desc = f" [{ctype}]" if ctype != 'equal' else ''
+        print(f"  Forced game rule: {desc} -> {len(matchers)} team matcher(s): [{matcher_details}]{ctype_desc}")
+
+    return dict(scope_groups), constraint_types
 
 
 def _check_forced_game_status(key: tuple, forced_rules: dict):
@@ -578,7 +601,9 @@ def _check_forced_game_status(key: tuple, forced_rules: dict):
         t1, t2 = key[0], key[1]
         sorted_pair = tuple(sorted([t1, t2]))
         for matcher in team_matchers:
-            if matcher[0] == 'pair':
+            if matcher[0] == 'all':
+                return ('force', scope_key)  # No team filter — any game in scope
+            elif matcher[0] == 'pair':
                 if sorted_pair[0] == matcher[1] and sorted_pair[1] == matcher[2]:
                     return ('force', scope_key)  # Matches — force this game
             elif matcher[0] == 'any':
@@ -675,10 +700,16 @@ def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
             resolved = resolve_team_name(club, effective_grade)
             for rt in resolved:
                 scope_groups[scope_key].append(('any', rt))
-        
+        else:
+            # No teams or club specified — block ALL variables matching this scope
+            # Ensure the scope key exists (with empty matcher list = block all)
+            if scope_key not in scope_groups:
+                scope_groups[scope_key] = []
+
         desc = entry.get('description', entry.get('reason', f"scope={dict(scope)}"))
         matchers = scope_groups[scope_key]
-        print(f"  Blocked game rule: {desc} -> {len(matchers)} team matcher(s)")
+        matcher_desc = f"{len(matchers)} team matcher(s)" if matchers else "ALL teams (no filter)"
+        print(f"  Blocked game rule: {desc} -> {matcher_desc}")
     
     return dict(scope_groups)
 
@@ -714,7 +745,11 @@ def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
         
         if not in_scope:
             continue
-        
+
+        # No team matchers = block ALL variables in scope
+        if not team_matchers:
+            return True
+
         # Variable is in scope — check if it matches ANY team matcher
         t1, t2 = key[0], key[1]
         sorted_pair = tuple(sorted([t1, t2]))
@@ -725,11 +760,171 @@ def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
             elif matcher[0] == 'any':
                 if t1 == matcher[1] or t2 == matcher[1]:
                     return True  # Matches scope AND team — BLOCKED
-    
+
     return False  # No match — not blocked
 
 
-def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
+def _diagnose_missing_forced_game(entry: dict, forced_rules: dict, scope_key, data: dict) -> list:
+    """
+    Diagnose why a forced game rule matched zero decision variables.
+
+    Checks each filter layer that could eliminate variables and returns
+    a list of human-readable reason strings.
+    """
+    reasons = []
+    timeslots = data['timeslots']
+    teams = data['teams']
+    team_names = {t.name for t in teams}
+    team_to_club = {t.name: t.club.name for t in teams}
+
+    # Extract scope fields for readable output
+    idx_to_name = {v: k for k, v in _KEY_INDEX.items()}
+    scope_dict = {idx_to_name.get(idx, str(idx)): val for idx, val in scope_key}
+
+    grade = scope_dict.get('grade')
+    date = scope_dict.get('date')
+    day = scope_dict.get('day')
+    field_location = scope_dict.get('field_location')
+
+    # 1. Check if specified date has any timeslots at all
+    if date:
+        date_timeslots = [t for t in timeslots if t.date == date]
+        if not date_timeslots:
+            all_dates = sorted(set(t.date for t in timeslots if t.date))
+            reasons.append(f"Date '{date}' has no timeslots in the season. "
+                          f"Season dates range from {all_dates[0]} to {all_dates[-1]}.")
+            return reasons
+
+        # Check if the day matches any timeslots on that date
+        if day:
+            day_match = [t for t in date_timeslots if t.day == day]
+            if not day_match:
+                actual_days = set(t.day for t in date_timeslots)
+                reasons.append(f"Date '{date}' has timeslots on {actual_days}, not '{day}'.")
+                return reasons
+
+    # 2. Check if specified venue has timeslots on that date/day
+    if field_location:
+        venue_slots = [t for t in timeslots if t.field.location == field_location]
+        if not venue_slots:
+            reasons.append(f"Venue '{field_location}' has no timeslots in the season.")
+            return reasons
+        if date:
+            venue_date = [t for t in venue_slots if t.date == date]
+            if not venue_date:
+                reasons.append(f"Venue '{field_location}' has no timeslots on date '{date}'. "
+                              f"Check FIELD_UNAVAILABILITIES.")
+
+    # 3. Check team resolution
+    raw_teams = entry.get('teams', [])
+    if raw_teams:
+        team_lookup = defaultdict(list)
+        for t in teams:
+            team_lookup[(t.club.name, t.grade)].append(t.name)
+
+        for team_name in raw_teams:
+            full_name = f"{team_name} {grade}" if grade else team_name
+            if full_name not in team_names and team_name not in team_names:
+                club_teams = [t.name for t in teams if t.club.name == team_name]
+                if not club_teams:
+                    reasons.append(f"Team/club '{team_name}' not found in any grade.")
+                elif grade:
+                    grade_teams = team_lookup.get((team_name, grade), [])
+                    if not grade_teams:
+                        reasons.append(f"Club '{team_name}' has no team in grade '{grade}'. "
+                                      f"Their grades: {sorted(set(t.grade for t in teams if t.club.name == team_name))}")
+
+    # 4. Check PHL game times filter
+    if grade == 'PHL':
+        phl_game_times = data.get('phl_game_times', {})
+        if phl_game_times and field_location:
+            venue_times = phl_game_times.get(field_location, {})
+            if not venue_times:
+                reasons.append(f"PHL_GAME_TIMES has no entries for venue '{field_location}'.")
+            elif day:
+                # Check nested format: venue -> field -> day -> times
+                has_day = False
+                for field_or_day, val in venue_times.items():
+                    if isinstance(val, dict):
+                        # Nested: field -> day -> times
+                        if day in val:
+                            has_day = True
+                    elif field_or_day == day:
+                        # Simple: day -> times
+                        has_day = True
+                if not has_day:
+                    reasons.append(f"PHL_GAME_TIMES has no '{day}' slots at '{field_location}'.")
+
+    # 5. Check 2nd grade time filter
+    if grade == '2nd':
+        second_grade_times = data.get('second_grade_times', {})
+        if second_grade_times and field_location:
+            venue_times = second_grade_times.get(field_location, {})
+            if not venue_times:
+                reasons.append(f"SECOND_GRADE_TIMES has no entries for venue '{field_location}'.")
+
+    # 6. Check lower grades excluded from PHL-only venues/days
+    if grade and grade not in ('PHL', '2nd'):
+        if field_location == 'Central Coast Hockey Park':
+            reasons.append(f"Grade '{grade}' cannot play at Gosford (PHL-only venue).")
+        if day == 'Friday':
+            reasons.append(f"Grade '{grade}' cannot play on Fridays (PHL-only day).")
+
+    # 7. Check home venue filter
+    home_field_map = data.get('home_field_map', {})
+    if field_location and field_location in home_field_map.values():
+        home_club = None
+        for club_name, venue in home_field_map.items():
+            if venue == field_location:
+                home_club = club_name
+                break
+        if home_club and raw_teams:
+            team_clubs = set()
+            for t_name in raw_teams:
+                if t_name in team_to_club.values():
+                    team_clubs.add(t_name)
+                else:
+                    club = team_to_club.get(f"{t_name} {grade}", team_to_club.get(t_name))
+                    if club:
+                        team_clubs.add(club)
+            if home_club not in team_clubs:
+                reasons.append(f"Venue '{field_location}' requires home club '{home_club}', "
+                              f"but forced teams are from clubs: {team_clubs}.")
+
+    # 8. Check BLOCKED_GAMES conflict
+    blocked_games = data.get('blocked_games', [])
+    for blocked in blocked_games:
+        # Simple check: does a blocked game overlap scope?
+        overlap = True
+        for field in _SCOPE_FIELDS:
+            if field in entry and field in blocked:
+                if entry[field] != blocked[field]:
+                    overlap = False
+                    break
+        if overlap and 'date' in entry and 'date' in blocked:
+            blocked_teams = blocked.get('teams', [])
+            forced_teams = entry.get('teams', [])
+            if blocked.get('club'):
+                # Club-level block — check if any forced team is from that club
+                for ft in forced_teams:
+                    club = team_to_club.get(f"{ft} {grade}", '')
+                    if club == blocked['club'] or ft == blocked['club']:
+                        reasons.append(f"BLOCKED_GAMES blocks club '{blocked['club']}' on "
+                                      f"date '{blocked['date']}': {blocked.get('description', '')}")
+            elif blocked_teams:
+                common = set(forced_teams) & set(blocked_teams)
+                if common:
+                    reasons.append(f"BLOCKED_GAMES blocks team(s) {common} on "
+                                  f"date '{blocked['date']}': {blocked.get('description', '')}")
+
+    if not reasons:
+        reasons.append("No specific cause identified. Check that the combination of scope fields "
+                      "(grade, date, day, venue, field) produces valid timeslots after all filters.")
+
+    return reasons
+
+
+def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
     
@@ -845,7 +1040,7 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
     blocked_vars_skipped = 0  # Track vars eliminated by BLOCKED_GAMES
     
     # Build forced games lookup from config
-    forced_game_rules = _build_forced_game_rules(data.get('forced_games', []), teams)
+    forced_game_rules, forced_constraint_types = _build_forced_game_rules(data.get('forced_games', []), teams)
     
     # Build blocked games (no-play) lookup from config
     blocked_game_rules = _build_blocked_game_rules(data.get('blocked_games', []), teams)
@@ -954,10 +1149,70 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
                 continue
             
             X[key] = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
-    
-    # Add forced game constraints: exactly one variable per forced scope must be 1
+
+    # Pre-check: verify all forced game rules matched at least one variable.
+    # If any forced game has zero matching vars, diagnose why and exit.
+    idx_to_name = {v: k for k, v in _KEY_INDEX.items()}
+    missing_forced = []
+    for scope_key in forced_game_rules:
+        if scope_key not in forced_scope_vars or len(forced_scope_vars[scope_key]) == 0:
+            missing_forced.append(scope_key)
+
+    if missing_forced:
+        # Build scope_key -> original entry mapping for diagnostics
+        forced_games = data.get('forced_games', [])
+        scope_to_entry = {}
+        for entry in forced_games:
+            scope = []
+            for field in _SCOPE_FIELDS:
+                if field in entry:
+                    val = entry[field]
+                    idx = _KEY_INDEX[field]
+                    if isinstance(val, list):
+                        scope.append((idx, tuple(val)))
+                    else:
+                        scope.append((idx, val))
+            sk = frozenset(scope)
+            scope_to_entry[sk] = entry
+
+        print(f"\n{'='*70}")
+        print(f"FATAL: {len(missing_forced)} forced game(s) have NO playable variables!")
+        print(f"The solver cannot satisfy these forced games. Fix config before running.")
+        print(f"{'='*70}")
+        for sk in missing_forced:
+            scope_desc = ', '.join(f"{idx_to_name.get(idx, idx)}={val}" for idx, val in sorted(sk))
+            entry = scope_to_entry.get(sk, {})
+            desc = entry.get('description', scope_desc)
+            print(f"\n  FORCED GAME: {desc}")
+            print(f"    Scope: {scope_desc}")
+            teams_info = entry.get('teams', [])
+            if teams_info:
+                print(f"    Teams: {teams_info}")
+            reasons = _diagnose_missing_forced_game(entry, forced_game_rules, sk, data)
+            print(f"    Diagnosis:")
+            for reason in reasons:
+                print(f"      - {reason}")
+        print(f"\n{'='*70}")
+        print("Fix the FORCED_GAMES config, BLOCKED_GAMES, PHL_GAME_TIMES, "
+              "FIELD_UNAVAILABILITIES, or season dates to resolve.")
+        print(f"{'='*70}\n")
+        sys.exit(1)
+
     for scope_key, vars_list in forced_scope_vars.items():
-        model.Add(sum(vars_list) == 1)
+        ctype = forced_constraint_types.get(scope_key, 'equal')
+        if ctype == 'equal':
+            model.Add(sum(vars_list) == 1)
+        elif ctype == 'lesse':
+            model.Add(sum(vars_list) <= 1)
+        elif ctype == 'greatere':
+            model.Add(sum(vars_list) >= 1)
+        elif ctype == 'greater':
+            model.Add(sum(vars_list) > 1)
+        elif ctype == 'less':
+            model.Add(sum(vars_list) < 1)
+        else:
+            print(f"  WARNING: Unknown constraint type '{ctype}' for forced game, defaulting to equal")
+            model.Add(sum(vars_list) == 1)
     
     print(f"Created {len(X)} decision variables")
     print(f"  - PHL: {phl_vars_created} created, {phl_vars_skipped} skipped (invalid venue/field/day/time)")
@@ -968,10 +1223,11 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict, Dict]:
         print(f"  - Home venue filter: {home_venue_skipped} vars eliminated (game at away venue without home club)")
     if forced_vars_forced:
         print(f"  - Forced games: {forced_vars_forced} vars forced across {len(forced_scope_vars)} forced game scopes")
-        idx_to_name = {v: k for k, v in _KEY_INDEX.items()}
         for scope_key, vars_list in forced_scope_vars.items():
             scope_desc = ', '.join(f"{idx_to_name.get(idx, idx)}={val}" for idx, val in sorted(scope_key))
-            print(f"    scope({scope_desc}): {len(vars_list)} decision vars -> sum == 1")
+            ctype = forced_constraint_types.get(scope_key, 'equal')
+            op = {'equal': '==', 'lesse': '<=', 'greatere': '>=', 'greater': '>', 'less': '<'}.get(ctype, '==')
+            print(f"    scope({scope_desc}): {len(vars_list)} decision vars -> sum {op} 1")
     if blocked_vars_skipped:
         print(f"  - Blocked games: {blocked_vars_skipped} vars eliminated by {len(data.get('blocked_games', []))} no-play rules")
     return X, Y, conflicts

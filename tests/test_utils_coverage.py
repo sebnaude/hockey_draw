@@ -440,17 +440,17 @@ class TestBuildForcedGameRules:
     """Cover lines 433-540."""
 
     def test_empty_forced_games(self, teams):
-        result = _build_forced_game_rules([], teams)
+        result, _ = _build_forced_game_rules([], teams)
         assert result == {}
 
     def test_none_forced_games(self, teams):
-        result = _build_forced_game_rules(None, teams)
+        result, _ = _build_forced_game_rules(None, teams)
         assert result == {}
 
     def test_pair_forced_game(self, teams):
         """Two-team forced game creates pair matcher."""
         entries = [{'teams': ['Norths PHL', 'Tigers PHL'], 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         assert len(result) == 1
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
@@ -460,7 +460,7 @@ class TestBuildForcedGameRules:
     def test_single_team_forced_game(self, teams):
         """Single-team forced game creates 'any' matcher."""
         entries = [{'teams': ['Norths PHL'], 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         assert matchers[0][0] == 'any'
@@ -469,7 +469,7 @@ class TestBuildForcedGameRules:
     def test_club_name_resolution(self, teams):
         """Club name resolves to full team name with grade."""
         entries = [{'teams': ['Norths'], 'grade': 'PHL', 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         assert any(m[1] == 'Norths PHL' for m in matchers)
@@ -477,7 +477,7 @@ class TestBuildForcedGameRules:
     def test_club_name_without_grade(self, teams):
         """Club name without grade resolves to all club teams."""
         entries = [{'teams': ['Norths'], 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         # Norths has PHL, 2nd, 3rd teams
@@ -489,7 +489,7 @@ class TestBuildForcedGameRules:
     def test_team1_team2_keys(self, teams):
         """Lines 515-530: team1/team2 keys instead of 'teams'."""
         entries = [{'team1': 'Norths PHL', 'team2': 'Tigers PHL', 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         assert matchers[0][0] == 'pair'
@@ -497,7 +497,7 @@ class TestBuildForcedGameRules:
     def test_team1_only(self, teams):
         """Line 525-527: only team1 specified."""
         entries = [{'team1': 'Norths PHL', 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         assert matchers[0][0] == 'any'
@@ -506,7 +506,7 @@ class TestBuildForcedGameRules:
     def test_team2_only(self, teams):
         """Line 528-530: only team2 specified."""
         entries = [{'team2': 'Tigers PHL', 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         assert matchers[0][0] == 'any'
@@ -515,7 +515,7 @@ class TestBuildForcedGameRules:
     def test_list_scope_value(self, teams):
         """Lines 494-496: scope field with list value (converted to tuple)."""
         entries = [{'teams': ['Norths PHL'], 'week': [1, 2]}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         # The week should be stored as tuple in scope
         for idx, val in scope_key:
@@ -525,7 +525,7 @@ class TestBuildForcedGameRules:
     def test_grade_list_resolution(self, teams):
         """Lines 473-477: grade as list resolves for each grade."""
         entries = [{'teams': ['Norths'], 'grade': ['PHL', '2nd'], 'week': 1}]
-        result = _build_forced_game_rules(entries, teams)
+        result, _ = _build_forced_game_rules(entries, teams)
         scope_key = list(result.keys())[0]
         matchers = result[scope_key]
         names = {m[1] for m in matchers}

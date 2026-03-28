@@ -22,10 +22,12 @@
 | Information | Source | Config Location |
 |-------------|--------|-----------------|
 | Friday night games at Gosford (count) | AGM decision | `CONSTRAINT_DEFAULTS['gosford_friday_games']` |
-| Friday night dates at Gosford | Club agreements | `FORCED_GAMES` (lock matchups) + `BLOCKED_GAMES` (block non-confirmed dates) |
-| Which clubs play Friday at Gosford | Club agreements | Documented in nominations (preference only, not constraint-enforced) |
-| Gosford Friday start time | AGM decision | `PHL_GAME_TIMES['Central Coast Hockey Park']['Friday']` |
-| NIHC Friday start time | HNH Committee | `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']` |
+| Friday night games at Maitland (count) | Committee | `CONSTRAINT_DEFAULTS['maitland_friday_games']` |
+| Friday night dates at Gosford | Club agreements | `FORCED_GAMES` (force dates) + `BLOCKED_GAMES` (block non-confirmed) |
+| Maitland Friday opponents | Committee | `BLOCKED_GAMES` blocks non-Gosford clubs at Maitland on Fridays |
+| Gosford Friday start time | AGM decision | `PHL_GAME_TIMES['Central Coast Hockey Park']['Friday']` (8pm) |
+| Maitland Friday start time | Committee | `PHL_GAME_TIMES['Maitland Park']['Friday']` (7pm) |
+| NIHC Friday start time | HNH Committee | `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']` (7pm) |
 
 ### Club Requests (Soft Constraints)
 
@@ -223,9 +225,9 @@ Before generating:
 - [ ] `SEASON_CONFIG` dates set correctly
 - [ ] `FIELD_UNAVAILABILITIES` updated for blocked weekends
 - [ ] `PHL_GAME_TIMES` and `SECOND_GRADE_TIMES` reviewed
-- [ ] `CONSTRAINT_DEFAULTS` set for Friday night counts (`gosford_friday_games`, `max_friday_broadmeadow`)
-- [ ] `FORCED_GAMES` configured for Friday night matchups
-- [ ] `BLOCKED_GAMES` configured to block non-confirmed Friday dates
+- [ ] `CONSTRAINT_DEFAULTS` set for Friday night counts (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`)
+- [ ] `FORCED_GAMES` configured for Friday night dates/matchups (supports `constraint` field for equality types)
+- [ ] `BLOCKED_GAMES` configured to block non-confirmed Friday dates and restrict Maitland Fridays to Gosford only
 - [ ] `BLOCKED_GAMES` includes all hard no-play requests
 - [ ] `PREFERENCE_NO_PLAY` includes all soft no-play requests
 - [ ] `CLUB_DAYS` includes all club day events

@@ -757,7 +757,7 @@ class StagedScheduleSolver:
         self.X, self.Y, conflicts = generate_X(
             self.model, self.data
         )
-        
+
         # Merge dummy variables into X — constraints use key length and t.day checks
         # to exclude them where needed, but game-count constraints need access
         self.X.update(self.Y)
@@ -1573,7 +1573,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     # Initialize variables
     X, Y, conflicts = generate_X(model, data)
     X.update(Y)
-    
+
     # Handle locked games
     if locked_keys:
         locked_keys_set = set(locked_keys) if not isinstance(locked_keys, set) else locked_keys
@@ -1597,7 +1597,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
                     model.Add(var == 0)
                     zeroed += 1
             print(f"  Zeroed {zeroed} non-locked variables in locked weeks")
-    
+
     data['team_conflicts'] = conflicts
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']
     
