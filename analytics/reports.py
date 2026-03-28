@@ -23,7 +23,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
 import pandas as pd
@@ -32,7 +32,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analytics.storage import DrawStorage, StoredGame, DrawAnalytics
-from analytics.tester import DrawTester, ViolationReport, Violation
+from analytics.tester import DrawTester, ViolationReport
 
 
 # ============== Club Report ==============
@@ -311,8 +311,8 @@ class TeamReport:
         
         # Summary stats
         total_games = len(schedule)
-        home_games = len(schedule[schedule['H/A'] == 'H'])
-        away_games = len(schedule[schedule['H/A'] == 'A'])
+        home_games = len(schedule[schedule['H/A'] == 'H']) if total_games > 0 else 0
+        away_games = len(schedule[schedule['H/A'] == 'A']) if total_games > 0 else 0
         
         summary = pd.DataFrame([
             {'Metric': 'Total Games', 'Value': total_games},
@@ -845,4 +845,4 @@ def generate_all_reports(draw_path: str, data: Dict, output_dir: str = "reports"
     # HTML report
     generate_html_report(draw, data, str(Path(output_dir) / "draw_report.html"))
     
-    print(f"\n✅ All reports generated in {output_dir}/")
+    print(f"\n[OK] All reports generated in {output_dir}/")

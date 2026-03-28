@@ -17,11 +17,12 @@ All season-specific configuration lives in: `config/season_{year}.py`
 SEASON_CONFIG = {
     'year': 2026,
     'start_date': datetime(2026, 3, 22),      # First playing Sunday
-    'last_round_date': datetime(2026, 8, 30),  # Last regular season round
-    'end_date': datetime(2026, 9, 19),         # Grand Final date
-    
+    'end_date': datetime(2026, 8, 30),         # Last club game before finals
+
     'max_rounds': 22,           # Maximum games per team (see notes below)
-    'num_dummy_timeslots': 3,   # Overflow slots for scheduling flexibility
+    # Dummy overflow slots: not attached to a real time/venue, eases solver burden.
+    # Penalty for using them is set in PENALTY_WEIGHTS['dummy_slots'].
+    'num_dummy_timeslots': 3,
     
     'play_anzac_sunday': True,  # Whether to play on ANZAC Sunday
     
@@ -39,10 +40,47 @@ SEASON_CONFIG = {
     'club_days': CLUB_DAYS,
     'phl_preferences': PHL_PREFERENCES,
     'preference_no_play': PREFERENCE_NO_PLAY,
-    'friday_night_config': FRIDAY_NIGHT_CONFIG,
     'special_games': SPECIAL_GAMES,
+    'forced_games': FORCED_GAMES,
+    'blocked_games': BLOCKED_GAMES,
+    'home_field_map': { 'Maitland': 'Maitland Park', 'Gosford': 'Central Coast Hockey Park' },
+    'grade_order': ['PHL', '2nd', '3rd', '4th', '5th', '6th'],
+    'penalty_weights': PENALTY_WEIGHTS,
+    'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,
+    'grade_rounds_override': GRADE_ROUNDS_OVERRIDE,
+    'grade_scheduling_method': GRADE_SCHEDULING_METHOD,
+    'max_time_per_stage': 172800,  # 2 days per solver stage (seconds)
 }
 ```
+
+### num_dummy_timeslots Parameter
+
+**What it does:** Controls how many dummy overflow timeslots are created. These are not attached to a real time or venue — they exist to give the solver extra capacity and ease scheduling pressure.
+
+**Default:** 3
+
+**How it works:**
+- Dummy variables use short 4-tuple keys `(t1, t2, grade, index)` and are merged into X
+- Constraints exclude them via `len(key) < 11` or `and t.day` checks
+- Game-count constraints (e.g. `EqualGamesAndBalanceMatchUps`) explicitly include dummy vars
+- The solver penalises using dummy slots via `PENALTY_WEIGHTS['dummy_slots']`
+- Set `dummy_slots` penalty weight to 0 for free use, or higher to discourage use
+
+**Config example:**
+```python
+'num_dummy_timeslots': 3,  # Number of overflow slots
+
+PENALTY_WEIGHTS = {
+    ...
+    'dummy_slots': 1,  # Penalty per dummy slot used (0 = no penalty)
+}
+```
+
+### max_time_per_stage Parameter
+
+**What it does:** Sets the default maximum solver time per stage (in seconds). Each stage in severity-based or default solving uses this limit unless the stage dict overrides with its own `max_time_seconds`.
+
+**Default:** 172800 (2 days)
 
 ### max_rounds Parameter
 
@@ -194,23 +232,14 @@ FIELD_UNAVAILABILITIES = {
 
 ---
 
-## FRIDAY_NIGHT_CONFIG
+## Friday Night Configuration
 
-```python
-FRIDAY_NIGHT_CONFIG = {
-    'gosford_friday_count': 8,       # Total Friday games at Gosford (AGM decision)
-    'friday_clubs': {                # Which clubs play at Gosford Fridays
-        'Wests': 2,
-        'Souths': 2,
-        'Norths': 1,
-        'Tigers': 2,
-        'Maitland': 1,
-    },
-    'friday_dates': [...],           # Confirmed Friday dates
-    'gosford_friday_times': [tm(20, 0)],  # 8pm
-    'nihc_friday_times': [tm(19, 0)],     # 7pm
-}
-```
+Friday night games are now configured across multiple existing config structures:
+
+- **Game counts**: `CONSTRAINT_DEFAULTS['gosford_friday_games']` (exact count at Gosford, AGM decision) and `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']` (max at NIHC)
+- **Timeslots**: `PHL_GAME_TIMES` controls which Friday times are available at each venue (e.g. 8pm at Gosford, 7pm at NIHC)
+- **Matchups**: `FORCED_GAMES` locks specific team matchups to specific Friday dates
+- **Date filtering**: `BLOCKED_GAMES` prevents games on non-confirmed Friday dates
 
 ---
 
@@ -350,6 +379,7 @@ Club names in `teams` are auto-resolved to full team names:
 - Passed through: `SEASON_CONFIG['forced_games']` → `build_season_data()` → `data['forced_games']`
 - Filtering: `_build_forced_game_rules()` and `_is_blocked_by_forced_games()` in `utils.py`
 - Called from: `generate_X()` — checked for each variable before creation
+- Recorded in: draw JSON `metadata.forced_games` + `metadata.forced_game_outcomes` (with `satisfied` flag)
 
 ---
 
@@ -408,3 +438,4 @@ Same fields as `FORCED_GAMES` (see above), plus:
 - Passed through: `SEASON_CONFIG['blocked_games']` → `build_season_data()` → `data['blocked_games']`
 - Filtering: `_build_blocked_game_rules()` and `_is_blocked_by_no_play()` in `utils.py`
 - Called from: `generate_X()` — checked for each variable after forced games check
+- Recorded in: draw JSON `metadata.blocked_games` + `metadata.blocked_game_outcomes` (with `respected` flag)

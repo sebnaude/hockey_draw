@@ -85,7 +85,7 @@ BLOCKING ITEMS FOR DRAW GENERATION:
 
 NICE TO HAVE (can add later):
 -----------------------------
-- Red & Blue Derby date (August TBC)
+- Red & Blue Derby date: May 10 (confirmed)
 - Taree game date (May TBC)  
 - Masters training weekend (August TBC)
 - Additional club days (Wests, Uni, Tigers, Port)

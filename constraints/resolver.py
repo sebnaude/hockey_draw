@@ -32,19 +32,16 @@ Usage:
             registry.increase_slack(culprit)
 """
 
-import os
 import sys
-from typing import List, Dict, Any, Optional, Tuple, Type, Set
+from typing import List, Dict, Any, Optional, Tuple, Type
 from dataclasses import dataclass, field
-from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
 
 from ortools.sat.python import cp_model
 
 # Local imports
 from utils import generate_X
-from analytics.tester import CONSTRAINT_SEVERITY_LEVELS, SEVERITY_LEVEL_LABELS
+from analytics.tester import CONSTRAINT_SEVERITY_LEVELS
 
 
 # ============== Helper Functions ==============
@@ -274,11 +271,10 @@ class InfeasibilityResolver:
         test_data = dict(self.data)
         test_data['penalties'] = {}
         
-        X, Y, conflicts, unavailable_games = generate_X(model, test_data)
+        X, Y, conflicts = generate_X(model, test_data)
         
         if isinstance(test_data.get('games'), dict):
             test_data['games'] = list(test_data['games'].keys())
-        test_data['unavailable_games'] = unavailable_games
         test_data['team_conflicts'] = conflicts
         
         return model, X, test_data

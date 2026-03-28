@@ -15,7 +15,7 @@ Each constraint class mirrors its counterpart in constraints.py with the suffix 
 
 from ortools.sat.python import cp_model
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Tuple, Set, Optional
+from typing import Dict, Any, List
 from collections import defaultdict
 from datetime import datetime, timedelta
 from itertools import combinations
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 # Import utility functions
 from utils import (
-    get_club, get_duplicated_graded_teams, get_teams_from_club, 
+    get_club, get_duplicated_graded_teams, get_teams_from_club,
     get_club_from_clubname, get_nearest_week_by_date
 )
 
@@ -139,7 +139,7 @@ class NoDoubleBookingFieldsConstraintAI(ConstraintAI):
         # Group by (week, day_slot, field_name)
         slot_vars = self._group_vars_by(
             X_filtered,
-            lambda k: (k[6], k[4], k[9]) if len(k) >= 10 else None
+            lambda k: (k[6], k[3], k[4], k[9]) if len(k) >= 10 else None
         )
         
         constraints_added = 0
@@ -234,7 +234,7 @@ class PHLAndSecondGradeAdjacencyAI(ConstraintAI):
     """
     PRIORITY = "strong"
     
-    ADJACENCY_MINUTES = 120  # 2 hours
+    ADJACENCY_MINUTES = 180  # 3 hours (matches original)
     
     def apply(self, model, X, data) -> int:
         games = data['games']
@@ -319,15 +319,15 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
     
     BROADMEADOW = 'Newcastle International Hockey Centre'
     GOSFORD = 'Central Coast Hockey Park'
-    MAX_FRIDAY_GAMES = 3
-    GOSFORD_FRIDAY_GAMES = 8  # AGM confirmed
-    
+    MAITLAND = 'Maitland Park'
+
     def apply(self, model, X, data) -> int:
         # Initialize penalties
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['phl_preferences'] = {'weight': 10000, 'penalties': []}
-        
+        weights = data.get('penalty_weights', {})
+        data['penalties']['phl_preferences'] = {'weight': weights.get('phl_preferences', 10000), 'penalties': []}
+
         games = data['games']
         timeslots = data['timeslots']
         teams = data['teams']
@@ -342,6 +342,9 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
         club_2nd_vars = defaultdict(list)  # Same structure
         friday_broadmeadow_vars = []
         friday_gosford_vars = []
+        friday_maitland_vars = []
+        friday_gosford_round_vars = defaultdict(list)  # round_no -> vars
+        phl_round1_vars = defaultdict(list)  # team -> vars
         preferred_date_vars = defaultdict(list)
         
         preferred_dates = set(
@@ -377,7 +380,17 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
                     # Friday at Gosford (Central Coast Hockey Park)
                     if t.day == 'Friday' and t.field.location == self.GOSFORD:
                         friday_gosford_vars.append(var)
-                    
+                        friday_gosford_round_vars[t.round_no].append(var)
+
+                    # Friday at Maitland
+                    if t.day == 'Friday' and t.field.location == self.MAITLAND:
+                        friday_maitland_vars.append(var)
+
+                    # PHL round 1 participation
+                    if t.round_no == 1:
+                        phl_round1_vars[t1].append(var)
+                        phl_round1_vars[t2].append(var)
+
                     # Preferred dates
                     if t.date in preferred_dates:
                         preferred_date_vars[t.date].append(var)
@@ -404,16 +417,40 @@ class PHLAndSecondGradeTimesAI(ConstraintAI):
                 model.Add(sum(phl_vars) + sum(second_vars) <= 1)
                 constraints_added += 1
         
+        # Read configurable limits
+        defaults = data.get('constraint_defaults', {})
+        max_friday_broadmeadow = defaults.get('max_friday_broadmeadow', 3)
+        gosford_friday_games = defaults.get('gosford_friday_games', 8)
+        maitland_friday_games = defaults.get('maitland_friday_games', 2)
+
         # Constraint 3: Max Friday night games at Broadmeadow
         if friday_broadmeadow_vars:
-            model.Add(sum(friday_broadmeadow_vars) <= self.MAX_FRIDAY_GAMES)
+            model.Add(sum(friday_broadmeadow_vars) <= max_friday_broadmeadow)
             constraints_added += 1
-        
-        # Constraint 4: Exactly 8 Friday night games at Gosford (AGM decision)
+
+        # Constraint 4: Exactly N Friday night games at Gosford
         if friday_gosford_vars:
-            model.Add(sum(friday_gosford_vars) == self.GOSFORD_FRIDAY_GAMES)
+            model.Add(sum(friday_gosford_vars) == gosford_friday_games)
             constraints_added += 1
-        
+
+        # Constraint 4b: Exactly N Friday night games at Maitland (Gosford vs Maitland only)
+        if friday_maitland_vars:
+            model.Add(sum(friday_maitland_vars) == maitland_friday_games)
+            constraints_added += 1
+
+        # Constraint 5: Gosford Friday games in specific rounds
+        for round_no, round_vars in friday_gosford_round_vars.items():
+            if round_no in [2, 4, 5, 9, 10]:
+                model.Add(sum(round_vars) == 1)
+                constraints_added += 1
+
+        # Constraint 6: Every PHL team must play in round 1
+        phl_teams = [team.name for team in teams if team.grade == 'PHL']
+        for phl_team in phl_teams:
+            if phl_team in phl_round1_vars:
+                model.Add(sum(phl_round1_vars[phl_team]) >= 1)
+                constraints_added += 1
+
         # Soft constraint: Preferred dates (penalty for not having exactly 1 game)
         for date, vars_list in preferred_date_vars.items():
             if vars_list:
@@ -612,119 +649,110 @@ class MaxMaitlandHomeWeekendsAI(ConstraintAI):
 
 class EnsureBestTimeslotChoicesAI(ConstraintAI):
     """
-    Ensure optimal timeslot usage:
-    - No gaps between used timeslots
-    - Contiguous scheduling from earliest slots
-    
-    Enhanced version:
-    - Cleaner indicator variable creation
-    - Simplified gap detection logic
+    Ensure games stack from earliest timeslots with no gaps, per location.
+
+    Rule: at a given location, you cannot use slot N on ANY field until slot N-1
+    is filled on ALL fields at that location. Each location (Broadmeadow, Maitland,
+    Gosford) is treated independently.
+
+    This naturally enforces:
+    - Per-field contiguity (no gaps on any single field)
+    - Cross-field stacking (all fields fill before moving to next slot)
+    - Games pushed to earliest slots (can't skip to late slots)
+
+    Additionally, 7pm (19:00) games incur a soft penalty as the worst timeslot.
     """
     PRIORITY = "medium"
-    
-    BROADMEADOW = 'Newcastle International Hockey Centre'
-    BROADMEADOW_MAX_SLOTS = 6
-    
+    WORST_TIME = '19:00'  # 7pm is the worst timeslot
+
     def apply(self, model, X, data) -> int:
         timeslots = data['timeslots']
         games = data['games']
-        fields = data['fields']
         locked_weeks = data.get('locked_weeks', set())
-        
+
         constraints_added = 0
-        
-        # Group vars by (week, day, location, day_slot) and also by (week, day, location) for total games
-        slot_vars = defaultdict(list)
-        games_per_location = defaultdict(lambda: defaultdict(list))
-        
+
+        # Group vars by (week, day, location, field_name, day_slot)
+        field_slot_vars = defaultdict(list)
+
         for t in timeslots:
             if t.week in locked_weeks or not t.day:
                 continue
-            
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time,
                        t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key in X:
-                    slot_key = (t.week, t.day, t.field.location, t.day_slot)
-                    slot_vars[slot_key].append(X[key])
-                    games_per_location[(t.week, t.day)][t.field.location].append(X[key])
-        
-        # Create slot indicators and slot number variables
-        location_day_slots = defaultdict(dict)
-        slot_number_vars = defaultdict(dict)
-        
-        for slot_key, vars_list in slot_vars.items():
-            week, day, location, day_slot = slot_key
-            
-            if len(vars_list) > 1:
-                indicator = model.NewBoolVar(f'ai_slot_used_{week}_{day}_{location}_{day_slot}')
+                    fs_key = (t.week, t.day, t.field.location, t.field.name, t.day_slot)
+                    field_slot_vars[fs_key].append(X[key])
+
+        # Build per-field-slot indicators:
+        # (week, day, location) -> {field_name: {day_slot: indicator_var}}
+        loc_fields = defaultdict(lambda: defaultdict(dict))
+
+        for fs_key, vars_list in field_slot_vars.items():
+            week, day, location, field_name, day_slot = fs_key
+            if len(vars_list) == 1:
+                indicator = vars_list[0]
+            else:
+                indicator = model.NewBoolVar(f'ai_fs_{week}_{field_name}_{day_slot}')
                 model.AddMaxEquality(indicator, vars_list)
-                location_day_slots[(week, day, location)][day_slot] = indicator
-                
-                # Track slot number for bounding
-                num_var = model.NewIntVar(0, len(slot_vars), f'ai_slot_num_{week}_{location}_{day_slot}')
-                model.Add(num_var == int(day_slot))
-                slot_number_vars[(week, day, location)][day_slot] = num_var
-        
-        # Part 1: No gaps constraint
-        for (week, day, location), day_slots in location_day_slots.items():
-            sorted_slots = sorted(day_slots.keys())
-            
-            for i in range(1, len(sorted_slots) - 1):
-                prev_slot = sorted_slots[i - 1]
+            loc_fields[(week, day, location)][field_name][day_slot] = indicator
+
+        # Stacking constraint: for each consecutive pair of available slots,
+        # if ANY field uses the later slot, ALL fields must use the earlier slot.
+        # When f == f2 this gives per-field contiguity (no gaps).
+        # When f != f2 this gives cross-field stacking (fill row before next).
+        for (week, day, location), fields_dict in loc_fields.items():
+            field_names = list(fields_dict.keys())
+
+            # Collect all slots that have variables on any field
+            all_slots = set()
+            for field_slots in fields_dict.values():
+                all_slots.update(field_slots.keys())
+            sorted_slots = sorted(all_slots)
+
+            if len(sorted_slots) < 2:
+                continue
+
+            for i in range(len(sorted_slots) - 1):
                 curr_slot = sorted_slots[i]
                 next_slot = sorted_slots[i + 1]
-                
-                if prev_slot in day_slots and curr_slot in day_slots and next_slot in day_slots:
-                    model.Add(
-                        day_slots[prev_slot] + day_slots[next_slot] <= 1
-                    ).OnlyEnforceIf(day_slots[curr_slot].Not())
-                    constraints_added += 1
-        
-        # Part 2: Slot-number bounding — push games into earliest timeslots
-        for (week, day), locations in games_per_location.items():
-            for location, location_vars in locations.items():
-                # Count fields at this location
-                fields_at_location = [f for f in fields if f.location == location]
-                num_fields = len(fields_at_location)
-                if num_fields == 0:
-                    continue
-                
-                # Calculate needed timeslots: ceil(games / fields) = floor(games / fields) + 1
-                no_location_games = model.NewIntVar(0, len(games), f'ai_loc_games_{week}_{location}')
-                model.Add(no_location_games == sum(location_vars))
-                
-                quotient = model.NewIntVar(0, len(timeslots), f'ai_quot_{week}_{location}')
-                model.AddDivisionEquality(quotient, no_location_games, num_fields)
-                
-                no_timeslots = model.NewIntVar(0, len(timeslots), f'ai_nslots_{week}_{location}')
-                model.Add(no_timeslots == quotient + 1)
-                
-                # Apply slot number bounds
-                number_vars = slot_number_vars.get((week, day, location), {})
-                for day_slot, number_var in number_vars.items():
-                    indicator_var = location_day_slots[(week, day, location)][day_slot]
-                    
-                    if location == self.BROADMEADOW:
-                        # Broadmeadow: cap at BROADMEADOW_MAX_SLOTS
-                        equiv = model.NewIntVar(0, 200, f'ai_equiv_{week}_{location}_{day_slot}')
-                        model.Add(equiv >= self.BROADMEADOW_MAX_SLOTS)
-                        model.Add(equiv >= no_timeslots)
-                        
-                        cap_indicator = model.NewBoolVar(f'ai_cap_ind_{week}_{location}_{day_slot}')
-                        model.Add(no_timeslots <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator)
-                        model.Add(no_timeslots > self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator.Not())
-                        
-                        model.Add(equiv <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(cap_indicator)
-                        model.Add(equiv <= no_timeslots).OnlyEnforceIf(cap_indicator.Not())
-                        
-                        model.Add(number_var <= equiv).OnlyEnforceIf(indicator_var)
-                    else:
-                        # Other locations: slot number must be within needed timeslots
-                        model.Add(number_var <= no_timeslots).OnlyEnforceIf(indicator_var)
-                    
-                    constraints_added += 1
-        
+
+                for f in field_names:
+                    curr_ind = fields_dict[f].get(curr_slot)
+                    if curr_ind is None:
+                        continue  # field has no vars at this slot
+
+                    for f2 in field_names:
+                        next_ind = fields_dict[f2].get(next_slot)
+                        if next_ind is None:
+                            continue  # other field has no vars at next slot
+
+                        # If f2 uses next_slot, then f must use curr_slot
+                        model.AddImplication(next_ind, curr_ind)
+                        constraints_added += 1
+
+        # Soft penalty: 7pm (19:00) is the worst timeslot
+        weights = data.get('penalty_weights', {})
+        if 'penalties' not in data:
+            data['penalties'] = {}
+        penalty_key = 'EnsureBestTimeslotChoices_7pm'
+        data['penalties'][penalty_key] = {
+            'weight': weights.get(penalty_key, 100_000),
+            'penalties': []
+        }
+
+        for key, var in X.items():
+            if len(key) < 11 or not key[3]:
+                continue
+            if key[6] in locked_weeks:
+                continue
+            if key[5] == self.WORST_TIME:
+                pv = model.NewIntVar(0, 1, f'ai_7pm_penalty_{key[6]}_{key[0]}_{key[1]}')
+                model.Add(pv == var)
+                data['penalties'][penalty_key]['penalties'].append(pv)
+                constraints_added += 1
+
         return constraints_added
 
 
@@ -851,52 +879,58 @@ class ClubDayConstraintAI(ConstraintAI):
 
 class EqualMatchUpSpacingConstraintAI(ConstraintAI):
     """
-    Spread matchups evenly across rounds.
-    
-    Aligned with original EqualMatchUpSpacingConstraint:
-    - Ideal spacing = T - 1 (see all opponents before rematch)
-    - base_slack = max(1, ideal - 2*ideal//3) ≈ one-third of ideal
-    - Only minimum gap enforced as HARD constraint (no maximum gap)
-    - |diff| from ideal penalized as SOFT
+    Spread matchups evenly across rounds using pairwise forbidden gaps
+    and sliding window density penalties.
+
+    Equivalent to original EqualMatchUpSpacingConstraint but uses zero
+    nonlinear operations (no multiplication, division, max, or abs equality).
+
+    HARD constraint (pairwise forbidden gaps):
+        For each matchup pair, for each pair of rounds (r1, r2) where
+        0 < r2 - r1 < min_gap: the pair cannot play in both rounds.
+        This is mathematically equivalent to enforcing a minimum gap between
+        any two meetings, for all values of K (number of meetings).
+
+    SOFT penalty (sliding window density):
+        For each matchup pair, slide a window of size `space` across all
+        rounds. In each window, penalize having more than 1 meeting.
+        This naturally pushes gaps toward >= ideal spacing using only
+        O(R - space) IntVars per pair (no BoolVars needed).
+
+    Parameters (same as original):
+        - Ideal spacing = T - 2 (play all other opponents before rematch)
+        - Floor = T // 2 + 1 (minimum gap can never go below this)
+        - spacing_base_slack: configurable in season config (default 0)
+        - --slack N: added on top of base_slack to further loosen
+        - min_gap = max(T // 2 + 1, ideal - base_slack - config_slack)
     """
     PRIORITY = "medium"
-    
-    PENALTY_WEIGHT = 5000
-    
+
     def apply(self, model, X, data) -> int:
         games = data['games']
         timeslots = data['timeslots']
         R = data['num_rounds']['max']
         grades = {g.name: g.num_teams for g in data['grades']}
-        
-        # Get additional slack from config (--slack flag)
+
         config_slack = data.get('constraint_slack', {}).get('EqualMatchUpSpacingConstraint', 0)
-        
+        defaults = data.get('constraint_defaults', {})
+        base_slack = defaults.get('spacing_base_slack', 0)
+        weights = data.get('penalty_weights', {})
+
         constraints_added = 0
-        
-        # Initialize penalty tracking
+
         if 'penalties' not in data:
             data['penalties'] = {}
         if 'EqualMatchUpSpacing' not in data.get('penalties', {}):
-            data['penalties']['EqualMatchUpSpacing'] = {'weight': self.PENALTY_WEIGHT, 'penalties': []}
+            data['penalties']['EqualMatchUpSpacing'] = {'weight': weights.get('EqualMatchUpSpacing', 5000), 'penalties': []}
 
-        # Derive base slack so that min gap = 2*(T-1)//3
-        # space = T - 1 (ideal: see all other opponents before rematch)
-        # base_slack = (T-1) - 2*(T-1)//3 (approx one-third of T-1)
-        def get_base_slack(num_teams):
-            ideal = num_teams - 1
-            return max(1, ideal - 2 * ideal // 3)
-        
-        slack_per_grade = {
-            name: min(get_base_slack(T) + config_slack, T // 2 + 1)
-            for name, T in grades.items()
-        }
-        
-        # Ideal spacing = T - 1 (see all other opponents before rematch)
-        space_per_grade = {
-            name: T - 1
-            for name, T in grades.items()
-        }
+        min_gap_per_grade = {}
+        space_per_grade = {}
+        for name, T in grades.items():
+            ideal = T - 2
+            floor = min(T // 2, T - 2)
+            min_gap_per_grade[name] = max(floor, ideal - base_slack - config_slack)
+            space_per_grade[name] = ideal
 
         # Gather game-vars by (t1, t2, grade, round_no)
         meetings = defaultdict(lambda: defaultdict(list))
@@ -908,93 +942,50 @@ class EqualMatchUpSpacingConstraintAI(ConstraintAI):
                 if key in X:
                     meetings[(t1, t2, grade)][t.round_no].append(X[key])
 
-        # For each matchup pair, build spacing constraints
         for (t1, t2, grade), round_map in meetings.items():
-            base_slack = slack_per_grade[grade]
+            min_gap = min_gap_per_grade[grade]
             space = space_per_grade[grade]
-            
-            # Build round indicators and week vars
-            indic = []
-            weekvs = []
-            for r in range(1, R + 1):
-                vars_at_r = round_map.get(r, [])
-                # indicator: do they meet in round r?
-                b = model.NewBoolVar(f"ai_eqsp_ind_{t1}_{t2}_{grade}_r{r}")
-                if vars_at_r:
-                    model.AddMaxEquality(b, vars_at_r)
-                else:
-                    model.Add(b == 0)
-                indic.append(b)
+
+            # Collect rounds that actually have variables for this pair
+            active_rounds = sorted(r for r in round_map if round_map[r])
+
+            # --- HARD constraint: pairwise forbidden gaps ---
+            # For any two rounds closer than min_gap, the pair cannot play in both.
+            for i, r1 in enumerate(active_rounds):
+                vars_r1 = round_map[r1]
+                for r2 in active_rounds[i + 1:]:
+                    gap = r2 - r1
+                    if gap >= min_gap:
+                        break  # sorted, so all subsequent gaps are larger
+                    model.Add(sum(vars_r1) + sum(round_map[r2]) <= 1)
+                    constraints_added += 1
+
+            # --- SOFT penalty: sliding window density ---
+            # Slide a window of `space` consecutive rounds across the season.
+            # In each window, penalize having more than 1 meeting.
+            # This pushes the solver toward ideal spacing (gap >= space)
+            # using only O(R - space) IntVars per pair.
+            if space >= R:
+                continue  # window covers entire season, nothing to penalize
+
+            for r_start in range(1, R - space + 2):
+                r_end = r_start + space - 1
+                # Collect all X vars for this pair within [r_start, r_end]
+                window_vars = []
+                for r in range(r_start, r_end + 1):
+                    if r in round_map:
+                        window_vars.extend(round_map[r])
+
+                if len(window_vars) < 2:
+                    continue  # can't have > 1 meeting with < 2 vars
+
+                pen = model.NewIntVar(
+                    0, len(window_vars),
+                    f"ai_eqsp_wpen_{t1}_{t2}_{grade}_w{r_start}")
+                model.Add(pen >= sum(window_vars) - 1)
+                data['penalties']['EqualMatchUpSpacing']['penalties'].append(pen)
                 constraints_added += 1
 
-                # week var: =r if meeting, else 0
-                wv = model.NewIntVar(0, R, f"ai_eqsp_wv_{t1}_{t2}_{grade}_r{r}")
-                model.Add(wv == r).OnlyEnforceIf(b)
-                model.Add(wv == 0).OnlyEnforceIf(b.Not())
-                weekvs.append(wv)
-                constraints_added += 2
-
-            # K = total number of meetings
-            K = model.NewIntVar(0, R, f"ai_eqsp_K_{t1}_{t2}_{grade}")
-            model.Add(K == sum(indic))
-            constraints_added += 1
-
-            # Only enforce when K >= 2
-            meets2 = model.NewBoolVar(f"ai_eqsp_m2_{t1}_{t2}_{grade}")
-            model.Add(K >= 2).OnlyEnforceIf(meets2)
-            model.Add(K < 2).OnlyEnforceIf(meets2.Not())
-            constraints_added += 2
-
-            # round_sum = sum of weeks where they meet
-            round_sum = model.NewIntVar(0, R * R, f"ai_eqsp_rs_{t1}_{t2}_{grade}")
-            model.Add(round_sum == sum(weekvs))
-            constraints_added += 1
-
-            # max_r = latest week they meet
-            max_r = model.NewIntVar(0, R, f"ai_eqsp_mr_{t1}_{t2}_{grade}")
-            model.AddMaxEquality(max_r, weekvs)
-            constraints_added += 1
-
-            # Compute K*(K-1)/2 for spacing formula
-            km1 = model.NewIntVar(-R, R, f"ai_eqsp_km1_{t1}_{t2}_{grade}")
-            prod = model.NewIntVar(-R * R, R * R, f"ai_eqsp_prd_{t1}_{t2}_{grade}")
-            half = model.NewIntVar(0, R * (R - 1) // 2, f"ai_eqsp_half_{t1}_{t2}_{grade}")
-            model.Add(km1 == K - 1)
-            model.AddMultiplicationEquality(prod, [K, km1]).OnlyEnforceIf(meets2)
-            model.AddDivisionEquality(half, prod, 2).OnlyEnforceIf(meets2)
-            constraints_added += 3
-
-            # ideal = K * max_r - space * half
-            # This is the expected sum if meetings were evenly spaced backward from max_r
-            kmax = model.NewIntVar(0, R * R, f"ai_eqsp_kmax_{t1}_{t2}_{grade}")
-            space_half = model.NewIntVar(-R * R, R * R, f"ai_eqsp_sphalf_{t1}_{t2}_{grade}")
-            ideal = model.NewIntVar(-R * R, R * R, f"ai_eqsp_ideal_{t1}_{t2}_{grade}")
-            model.AddMultiplicationEquality(kmax, [K, max_r]).OnlyEnforceIf(meets2)
-            model.AddMultiplicationEquality(space_half, [space, half]).OnlyEnforceIf(meets2)
-            model.Add(ideal == kmax - space_half).OnlyEnforceIf(meets2)
-            constraints_added += 3
-
-            # Compute allowed slack = base_slack * half (scales with number of meetings)
-            max_slack = model.NewIntVar(0, R * (R - 1) // 2 * (base_slack + 5), f"ai_eqsp_maxslk_{t1}_{t2}_{grade}")
-            model.Add(max_slack == half * base_slack).OnlyEnforceIf(meets2)
-            constraints_added += 1
-
-            # diff = round_sum - ideal
-            # Positive diff means games are bunched (gap < ideal) → enforce min gap
-            # Negative diff means games are spread (gap > ideal) → allow freely
-            diff = model.NewIntVar(-R * R, R * R, f"ai_eqsp_diff_{t1}_{t2}_{grade}")
-            model.Add(diff == round_sum - ideal).OnlyEnforceIf(meets2)
-            constraints_added += 1
-
-            # HARD constraint: diff <= max_slack (enforces minimum gap only, no maximum gap)
-            model.Add(diff <= max_slack).OnlyEnforceIf(meets2)
-            constraints_added += 1
-
-            # SOFT penalty: minimize |diff| to prefer spacing close to ideal
-            abs_diff = model.NewIntVar(0, R * R, f"ai_eqsp_absdiff_{t1}_{t2}_{grade}")
-            model.AddAbsEquality(abs_diff, diff)
-            data['penalties']['EqualMatchUpSpacing']['penalties'].append(abs_diff)
-        
         return constraints_added
 
 
@@ -1028,7 +1019,8 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
         # Initialize penalty tracking for soft adjacent-grade constraint
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['ClubGradeAdjacencyConstraint'] = {'weight': 50000, 'penalties': []}
+        weights = data.get('penalty_weights', {})
+        data['penalties']['ClubGradeAdjacencyConstraint'] = {'weight': weights.get('ClubGradeAdjacencyConstraint', 50000), 'penalties': []}
         
         # Adjacent grade pairs
         adj_pairs = [
@@ -1038,36 +1030,56 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
         
         # Build team-to-club mapping
         team_club = {t.name: t.club.name for t in teams}
-        
+
+        # Precompute duplicate-grade teams per club
+        club_dup_grades = defaultdict(lambda: defaultdict(list))
+        for club in [c.name for c in clubs]:
+            for grade in [g.name for g in grades]:
+                dup_teams = get_duplicated_graded_teams(club, grade, teams)
+                if dup_teams:
+                    club_dup_grades[club][grade].extend(dup_teams)
+
         # Group vars by (slot, club, grade) where slot = (week, day_slot)
         # NOTE: slot ignores field - same time on different fields still conflicts
         slot_club_grade_vars = defaultdict(list)
-        
+        # Track duplicate-grade team games for hard constraint
+        club_dup_games = defaultdict(list)
+
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
                 continue
-            
+
             # Skip locked weeks
             if key[6] in locked_weeks:
                 continue
-            
+
             t1, t2, grade = key[0], key[1], key[2]
             slot = (key[6], key[4])  # week, day_slot - NO field!
-            
+
             t1_club = team_club.get(t1)
             t2_club = team_club.get(t2)
-            
+
             # When clubs differ, add var to both clubs' buckets
             # When clubs same (intra-club), add var only ONCE to avoid double-counting
             if t1_club and t2_club:
                 if t1_club != t2_club:
-                    # Different clubs: add to both
                     slot_club_grade_vars[(slot, t1_club, grade)].append(var)
                     slot_club_grade_vars[(slot, t2_club, grade)].append(var)
+                    # Track games involving duplicate-grade teams
+                    if t1 in club_dup_grades[t1_club].get(grade, []):
+                        club_dup_games[(t1_club, slot, grade)].append(var)
+                    if t2 in club_dup_grades[t2_club].get(grade, []):
+                        club_dup_games[(t2_club, slot, grade)].append(var)
                 else:
                     # Same club (intra-club match): add only once
                     slot_club_grade_vars[(slot, t1_club, grade)].append(var)
-        
+
+        # Constraint 1 (HARD): Duplicate teams in same grade can't play simultaneously
+        for (club, slot, grade), vars_ in club_dup_games.items():
+            if vars_:
+                model.Add(sum(vars_) <= 1)
+                constraints_added += 1
+
         # Constraint 2 (SOFT): Adjacent grades - penalize overlaps but allow them
         # penalty = max(0, sum(g1) + sum(g2) - 1) for each slot
         adj_idx = 0
@@ -1109,12 +1121,22 @@ class ClubVsClubAlignmentAI(ConstraintAI):
     PRIORITY = "soft"
     
     def apply(self, model, X, data) -> int:
+        weights = data.get('penalty_weights', {})
+        COINCIDE_PENALTY_WEIGHT = weights.get('ClubVsClubAlignment', 100000)
+        FIELD_PENALTY_WEIGHT = weights.get('ClubVsClubAlignmentField', 50000)
+
+        if 'penalties' not in data:
+            data['penalties'] = {}
+        data['penalties']['ClubVsClubAlignment'] = {'weight': COINCIDE_PENALTY_WEIGHT, 'penalties': []}
+        data['penalties']['ClubVsClubAlignmentField'] = {'weight': FIELD_PENALTY_WEIGHT, 'penalties': []}
+
         grades = data['grades']
         teams = data['teams']
         num_rounds = data['num_rounds']
-        
+
         constraints_added = 0
-        
+        field_penalty_idx = 0
+
         # Calculate games per team per grade
         per_team_games = {
             g.name: (num_rounds['max'] // (g.num_teams - 1)) if g.num_teams > 1 and g.num_teams % 2 == 0 
@@ -1126,28 +1148,34 @@ class ClubVsClubAlignmentAI(ConstraintAI):
         # Sort grades by number of games (ascending)
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
         
+        locked_weeks = data.get('locked_weeks', set())
+
         # Group games by (grade, club_pair, round) and track Sunday field usage
+        # Skip locked weeks — this is an optimization constraint and locked rounds
+        # may not satisfy it (they were potentially solved without it).
         grade_club_round_vars = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         fields_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        
+
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
                 continue
-            
+            if key[6] in locked_weeks:
+                continue
+
             t1, t2, grade = key[0], key[1], key[2]
             round_no = key[8]
             day = key[3]
             field_name = key[9]
-            
+
             if grade in ['PHL', '2nd']:  # Skip top grades
                 continue
-            
+
             club1 = get_club(t1, teams)
             club2 = get_club(t2, teams)
             club_pair = tuple(sorted((club1, club2)))
-            
+
             grade_club_round_vars[grade][club_pair][round_no].append(var)
-            
+
             # Track Sunday field usage for field alignment
             if day == 'Sunday':
                 fields_dict[club_pair][round_no][field_name].append(var)
@@ -1191,7 +1219,7 @@ class ClubVsClubAlignmentAI(ConstraintAI):
                         
                         coincide_vars.append(coincide)
                         
-                        # Sunday field alignment: when coinciding, all Sunday games on same field
+                        # Sunday field alignment: when coinciding, limit fields used
                         field_round_vars = fields_dict[club_pair].get(round_no, {})
                         if field_round_vars:
                             field_indicators = []
@@ -1199,18 +1227,40 @@ class ClubVsClubAlignmentAI(ConstraintAI):
                                 fi = model.NewBoolVar(f"ai_fld_{club_pair}_{round_no}_{field_name}")
                                 model.AddMaxEquality(fi, game_vars)
                                 field_indicators.append(fi)
-                            
-                            # When coinciding, exactly 1 field should be used
+
                             if field_indicators:
-                                model.Add(sum(field_indicators) == 1).OnlyEnforceIf(coincide)
+                                # HARD: max 2 fields when coinciding
+                                num_fields_used = model.NewIntVar(0, len(field_indicators),
+                                    f"ai_nflds_{club_pair}_{round_no}_{field_penalty_idx}")
+                                model.Add(num_fields_used == sum(field_indicators))
+                                model.Add(num_fields_used <= 2).OnlyEnforceIf(coincide)
                                 constraints_added += 1
-                    
+
+                                # SOFT: penalize using 2 fields (prefer 1)
+                                field_excess = model.NewIntVar(0, len(field_indicators),
+                                    f"ai_fexcess_{club_pair}_{round_no}_{field_penalty_idx}")
+                                model.Add(field_excess >= num_fields_used - 1).OnlyEnforceIf(coincide)
+                                model.Add(field_excess == 0).OnlyEnforceIf(coincide.Not())
+                                data['penalties']['ClubVsClubAlignmentField']['penalties'].append(field_excess)
+                                field_penalty_idx += 1
+
                     if coincide_vars:
                         # Get slack from config (--slack flag)
                         config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0)
                         min_required = max(0, num_games - config_slack)
+
+                        # HARD: at least min_required coincidences
                         model.Add(sum(coincide_vars) >= min_required)
                         constraints_added += 1
+
+                        # SOFT: penalize each miss below num_games target
+                        actual_coincidences = model.NewIntVar(0, len(coincide_vars),
+                            f"ai_actual_coin_{club_pair}_{grade}_{other_grade}")
+                        model.Add(actual_coincidences == sum(coincide_vars))
+                        coincide_deficit = model.NewIntVar(0, num_games,
+                            f"ai_coin_deficit_{club_pair}_{grade}_{other_grade}")
+                        model.Add(coincide_deficit >= num_games - actual_coincidences)
+                        data['penalties']['ClubVsClubAlignment']['penalties'].append(coincide_deficit)
         
         return constraints_added
 
@@ -1227,86 +1277,94 @@ class MaitlandHomeGroupingAI(ConstraintAI):
     def apply(self, model, X, data) -> int:
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['MaitlandHomeGrouping'] = {'weight': 1000000, 'penalties': []}
-        
-        # Allow slack override from config (--slack flag)
+        weights = data.get('penalty_weights', {})
+        data['penalties']['MaitlandHomeGrouping'] = {'weight': weights.get('MaitlandHomeGrouping', 1000000), 'penalties': []}
+
+        defaults = data.get('constraint_defaults', {})
+        base_max = defaults.get('maitland_max_consecutive_home', 1)
         slack = data.get('constraint_slack', {}).get('MaitlandHomeGrouping', 0)
-        back_to_back_limit = 1 + slack
-        
+        back_to_back_limit = base_max + slack
+
         timeslots = data['timeslots']
         games = data['games']
         locked_weeks = data.get('locked_weeks', set())
-        
+
         constraints_added = 0
-        
-        # Group Maitland games by week
+
+        # Group Maitland games by week — include ALL weeks (locked and unlocked)
+        # so the back-to-back hard constraint sees locked weeks' home status.
         week_home_vars = defaultdict(list)
         week_all_vars = defaultdict(list)
-        
+
         for t in timeslots:
-            if t.week in locked_weeks or not t.day:
+            if not t.day:
                 continue
-            
+
             for (t1, t2, grade) in games:
                 if 'Maitland' not in t1 and 'Maitland' not in t2:
                     continue
-                
+
                 key = (t1, t2, grade, t.day, t.day_slot, t.time,
                        t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key not in X:
                     continue
-                
+
                 var = X[key]
                 week_all_vars[t.week].append(var)
-                
+
                 if t.field.location == 'Maitland Park':
                     week_home_vars[t.week].append(var)
-        
-        # Create home week indicators and add penalties
+
+        # Create home week indicators for ALL weeks (locked + unlocked)
+        # but only add penalty variables for UNLOCKED weeks.
         home_indicators = {}
-        
+
         for week in sorted(week_all_vars.keys()):
             all_vars = week_all_vars[week]
             home_vars = week_home_vars.get(week, [])
-            
+
             if not all_vars:
                 continue
-            
+
             max_games = len(all_vars)
-            
+
             # Home games count
             home_count = model.NewIntVar(0, max_games, f'mait_home_{week}')
             if home_vars:
                 model.Add(home_count == sum(home_vars))
             else:
                 model.Add(home_count == 0)
-            
-            # Away games count
-            away_count = model.NewIntVar(0, max_games, f'mait_away_{week}')
-            model.Add(away_count == sum(all_vars) - home_count)
-            
-            # Penalty: min(home, away) - encourages all home or all away
-            penalty = model.NewIntVar(0, max_games, f'mait_penalty_{week}')
-            model.AddMinEquality(penalty, [home_count, away_count])
-            data['penalties']['MaitlandHomeGrouping']['penalties'].append(penalty)
-            
-            # Home week indicator
+
+            # Penalty and away count only for unlocked weeks (can't optimise locked weeks)
+            if week not in locked_weeks:
+                away_count = model.NewIntVar(0, max_games, f'mait_away_{week}')
+                model.Add(away_count == sum(all_vars) - home_count)
+
+                penalty = model.NewIntVar(0, max_games, f'mait_penalty_{week}')
+                model.AddMinEquality(penalty, [home_count, away_count])
+                data['penalties']['MaitlandHomeGrouping']['penalties'].append(penalty)
+
+            # Home week indicator — needed for ALL weeks (back-to-back constraint)
+            # For locked weeks the variables are already fixed (0 or 1),
+            # so the indicator is deterministic.
             home_ind = model.NewBoolVar(f'mait_home_ind_{week}')
             if home_vars:
                 model.AddMaxEquality(home_ind, home_vars)
             else:
                 model.Add(home_ind == 0)
             home_indicators[week] = home_ind
-        
-        # Hard constraint: No back-to-back home weekends
+
+        # Hard constraint: Max N consecutive home weekends (sliding window)
+        # slack=0: max 1 consecutive (no back-to-back)
+        # slack=1: max 2 consecutive, slack=2: max 3, etc.
+        max_consecutive = back_to_back_limit  # already 1 + slack
+        window_size = max_consecutive + 1
         sorted_weeks = sorted(home_indicators.keys())
-        for i in range(1, len(sorted_weeks)):
-            prev_week = sorted_weeks[i - 1]
-            curr_week = sorted_weeks[i]
-            
-            model.Add(home_indicators[prev_week] + home_indicators[curr_week] <= back_to_back_limit)
+        for i in range(len(sorted_weeks) - window_size + 1):
+            window_indicators = [home_indicators[sorted_weeks[j]] for j in range(i, i + window_size)]
+            model.Add(sum(window_indicators) <= max_consecutive)
             constraints_added += 1
-        
+
         return constraints_added
 
 
@@ -1318,17 +1376,17 @@ class AwayAtMaitlandGroupingAI(ConstraintAI):
     """
     PRIORITY = "soft"
     
-    HARD_LIMIT = 3
-    
     def apply(self, model, X, data) -> int:
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['AwayAtMaitlandGrouping'] = {'weight': 100000, 'penalties': []}
-        
-        # Allow slack override from config (--slack flag)
+        weights = data.get('penalty_weights', {})
+        data['penalties']['AwayAtMaitlandGrouping'] = {'weight': weights.get('AwayAtMaitlandGrouping', 100000), 'penalties': []}
+
+        defaults = data.get('constraint_defaults', {})
+        base_limit = defaults.get('away_maitland_max_clubs', 3)
         slack = data.get('constraint_slack', {}).get('AwayAtMaitlandGrouping', 0)
-        hard_limit = self.HARD_LIMIT + slack
-        
+        hard_limit = base_limit + slack
+
         teams = data['teams']
         timeslots = data['timeslots']
         games = data['games']
@@ -1406,7 +1464,8 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
     def apply(self, model, X, data) -> int:
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['MaximiseClubsPerTimeslotBroadmeadow'] = {'weight': 5000, 'penalties': []}
+        weights = data.get('penalty_weights', {})
+        data['penalties']['MaximiseClubsPerTimeslotBroadmeadow'] = {'weight': weights.get('MaximiseClubsPerTimeslotBroadmeadow', 5000), 'penalties': []}
         
         # Allow slack override from config (--slack flag)
         # Negative because slack DECREASES the minimum requirement
@@ -1499,16 +1558,16 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
     """
     PRIORITY = "soft"
     
-    HARD_LIMIT = 5
-    
     def apply(self, model, X, data) -> int:
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['MinimiseClubsOnAFieldBroadmeadow'] = {'weight': 5000, 'penalties': []}
-        
-        # Allow slack override from config (--slack flag)
+        weights = data.get('penalty_weights', {})
+        data['penalties']['MinimiseClubsOnAFieldBroadmeadow'] = {'weight': weights.get('MinimiseClubsOnAFieldBroadmeadow', 5000), 'penalties': []}
+
+        defaults = data.get('constraint_defaults', {})
+        base_limit = defaults.get('max_clubs_per_field', 5)
         slack = data.get('constraint_slack', {}).get('MinimiseClubsOnAFieldBroadmeadow', 0)
-        hard_limit = self.HARD_LIMIT + slack
+        hard_limit = base_limit + slack
         
         teams = data['teams']
         locked_weeks = data.get('locked_weeks', set())
@@ -1572,62 +1631,65 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
 class PreferredTimesConstraintAI(ConstraintAI):
     """
     Apply penalties for scheduling at non-preferred times.
+    Supports both 2025 format ({club: [restrictions]}) and
+    2026 format ({entry_key: {club, dates, grade}}).
     """
     PRIORITY = "soft"
-    
+
     def apply(self, model, X, data) -> int:
+        from constraints.original import _normalize_preference_no_play
+
         if 'penalties' not in data:
             data['penalties'] = {}
-        data['penalties']['PreferredTimesConstraint'] = {'weight': 10000000, 'penalties': []}
-        
+        weights = data.get('penalty_weights', {})
+        data['penalties']['PreferredTimesConstraint'] = {'weight': weights.get('PreferredTimesConstraint', 10000000), 'penalties': []}
+
         teams = data['teams']
         clubs = data['clubs']
         noplay = data.get('preference_no_play', {})
         timeslots = data['timeslots']
         locked_weeks = data.get('locked_weeks', set())
-        
+
+        if not noplay:
+            return 0
+
         constraints_added = 0
-        
-        for club_name, restrictions in noplay.items():
-            club_teams = get_teams_from_club(club_name, teams)
-            
-            for idx, constraint in enumerate(restrictions):
-                date = constraint.get('date')
-                if not date:
+
+        # Keys for matching game tuples to restriction dicts
+        allowed_keys = ['team_name', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
+        allowed_keys2 = ['team1', 'team_name', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
+
+        # Normalize both formats to consistent structure
+        normalized = _normalize_preference_no_play(noplay, teams, clubs)
+
+        for entry_key, club_name, club_teams, constraint in normalized:
+            if 'date' not in constraint:
+                continue
+
+            if get_nearest_week_by_date(constraint['date'], timeslots) in locked_weeks:
+                continue
+
+            for i, game_key in enumerate(X):
+                if len(game_key) < 11:
                     continue
-                
-                week = get_nearest_week_by_date(date, timeslots)
-                if week in locked_weeks:
+
+                # Check if any club team is in this game
+                if game_key[0] not in club_teams and game_key[1] not in club_teams:
                     continue
-                
-                # Find matching games
-                for key, var in X.items():
-                    if len(key) < 11:
-                        continue
-                    
-                    t1, t2 = key[0], key[1]
-                    if t1 not in club_teams and t2 not in club_teams:
-                        continue
-                    
-                    # Check all constraint conditions
-                    matches = True
-                    
-                    if 'date' in constraint and key[7] != constraint['date']:
-                        matches = False
-                    if 'field_location' in constraint and key[10] != constraint['field_location']:
-                        matches = False
-                    if 'time' in constraint and key[5] != constraint['time']:
-                        matches = False
-                    if 'team_name' in constraint:
-                        if constraint['team_name'] not in (t1, t2):
-                            matches = False
-                    
-                    if matches:
-                        penalty = model.NewIntVar(0, 1, f'noplay_{club_name}_{idx}_{hash(key)}')
-                        model.Add(penalty == var)
-                        data['penalties']['PreferredTimesConstraint']['penalties'].append(penalty)
-                        constraints_added += 1
-        
+
+                # Try matching with both key orderings
+                game_dict = dict(zip(allowed_keys, game_key))
+                game_dict2 = dict(zip(allowed_keys2, game_key))
+
+                matches = all(game_dict.get(k) == v for k, v in constraint.items())
+                matches2 = all(game_dict2.get(k) == v for k, v in constraint.items())
+
+                if matches or matches2:
+                    penalty_var = model.NewIntVar(0, 1, f"ai_penalty_{entry_key}_{i}")
+                    model.Add(penalty_var == X[game_key])
+                    data['penalties']['PreferredTimesConstraint']['penalties'].append(penalty_var)
+                    constraints_added += 1
+
         return constraints_added
 
 
@@ -1635,140 +1697,270 @@ class PreferredTimesConstraintAI(ConstraintAI):
 
 class ClubGameSpreadAI(ConstraintAI):
     """
-    Minimize gaps between a club's games on a given day.
-    
+    Minimize gaps between a club's games on a given day, and limit double-ups.
+
     For each (club, week, day):
-    1. Count distinct timeslots the club occupies (two teams at the same
-       day_slot counts as ONE timeslot used, not two)
+    1. Count total games the club has scheduled (num_games)
     2. Find min and max day_slot used
-    3. gaps = (max_slot - min_slot + 1) - timeslots_used
-       This gives the number of UNUSED timeslots between their first and last game.
-    
-    Hard constraint:
-        gaps <= HARD_LIMIT + slack (default HARD_LIMIT = 2)
-    
-    Soft constraint:
-        Penalize gaps — ideal is 0 (all games in consecutive slots).
-    
+    3. gap = (max_slot - min_slot + 1) - num_games
+       Positive gap = unused slots in the range (games are spread out).
+       Negative gap = double-ups (more games than slots in the range).
+       Zero = games perfectly fill consecutive slots.
+
+    Hard constraints (only when club has >= 2 games on that day):
+        UPPER: gap <= max_gap + slack          (limits spread, default max_gap=2)
+        LOWER: gap >= -(max_overlap + slack)   (limits double-ups, default max_overlap=0)
+
+    With max_overlap=0 and slack=0:
+        gap >= 0 means range >= num_games, so no double-ups allowed.
+        A 4-team club needs at least 4 distinct slots.
+
+    Config params (in constraint_defaults):
+        club_game_spread_max_gap:     upper bound base (default 2)
+        club_game_spread_max_overlap: lower bound base (default 0, no double-ups)
+
+    Soft constraint (time):
+        Penalize |gap| — ideal is 0 (all games in consecutive slots).
+        Both spread (positive gap) and double-ups (negative gap) are penalized.
+
+    Field concentration (per club, week, day):
+        field_spread = num_games - max_games_on_any_single_field
+        Hard: field_spread <= max(0, num_games // 2 - 1) + slack
+        Soft: penalize field_spread (ideal = 0, all games on one field).
+
     EDGE CASES:
-    - Clubs with <= 1 timeslot used have 0 gaps (skipped)
-    - Two teams from the same club playing at the same day_slot = 1 timeslot
+    - Clubs with <= 1 game on a day are skipped
+    - Two teams from the same club at the same day_slot counts as 2 games
+      (not 1), making gap more negative — penalized by lower bound
     - Friday PHL games are a different day — gaps computed per (week, day)
+    - Single-slot case: if all possible games are at one slot, range=1,
+      gap=1-num_games; lower bound still enforced
     """
     PRIORITY = "soft"
-    
-    HARD_LIMIT = 2
-    PENALTY_WEIGHT = 5000
-    
+
     def apply(self, model, X, data) -> int:
         teams = data['teams']
         locked_weeks = data.get('locked_weeks', set())
+        defaults = data.get('constraint_defaults', {})
+        max_gap_base = defaults.get('club_game_spread_max_gap', 2)
+        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
         config_slack = data.get('constraint_slack', {}).get('ClubGameSpread', 0)
-        
+        weights = data.get('penalty_weights', {})
+
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['ClubGameSpread'] = {
-            'weight': self.PENALTY_WEIGHT, 'penalties': []
+            'weight': weights.get('ClubGameSpread', 5000), 'penalties': []
         }
-        
+        data['penalties']['ClubFieldConcentration'] = {
+            'weight': weights.get('ClubFieldConcentration', 5000), 'penalties': []
+        }
+
         constraints_added = 0
-        hard_limit = self.HARD_LIMIT + config_slack
-        
+        hard_upper = max_gap_base + config_slack
+        hard_lower = -(max_overlap_base + config_slack)
+
         # Build team-to-club mapping
         team_club = {t.name: t.club.name for t in teams}
-        
+
         # Group X vars by (club, week, day, day_slot) -> list of vars
-        # We group to the slot level so we can build one indicator per slot
+        # Also group by (club, week, day, field) for field concentration
         club_week_day_slot_vars = defaultdict(list)
-        
+        club_week_day_field_vars = defaultdict(list)
+
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
                 continue
             week = key[6]
             if week in locked_weeks:
                 continue
-            
+
             day = key[3]
             day_slot = key[4]
+            field_key = (key[9], key[10])  # (field_name, field_location)
             t1, t2 = key[0], key[1]
-            
+
             t1_club = team_club.get(t1)
             t2_club = team_club.get(t2)
-            
+
             if t1_club:
                 club_week_day_slot_vars[(t1_club, week, day, day_slot)].append(var)
+                club_week_day_field_vars[(t1_club, week, day, field_key)].append(var)
             if t2_club and t2_club != t1_club:
                 club_week_day_slot_vars[(t2_club, week, day, day_slot)].append(var)
-        
-        # Regroup: (club, week, day) -> sorted list of unique day_slots with their vars
+                club_week_day_field_vars[(t2_club, week, day, field_key)].append(var)
+
+        # Regroup: (club, week, day) -> {day_slot: [vars]}
         club_week_day_groups = defaultdict(dict)
         for (club, week, day, day_slot), vars_list in club_week_day_slot_vars.items():
             club_week_day_groups[(club, week, day)][day_slot] = vars_list
-        
+
+        # Regroup: (club, week, day) -> {field: [vars]}
+        club_week_day_field_groups = defaultdict(dict)
+        for (club, week, day, field_key), vars_list in club_week_day_field_vars.items():
+            club_week_day_field_groups[(club, week, day)][field_key] = vars_list
+
         for (club, week, day), slots_dict in club_week_day_groups.items():
             unique_slots = sorted(slots_dict.keys())
-            
+
             if len(unique_slots) <= 1:
+                # Single slot: range=1, gap=1-num_games.
+                # Still enforce lower bound to prevent excessive double-ups.
+                all_vars = slots_dict[unique_slots[0]]
+                if len(all_vars) < 2:
+                    continue
+
+                num_games = model.NewIntVar(0, len(all_vars),
+                                            f'cgs_ng_{club}_w{week}_{day}')
+                model.Add(num_games == sum(all_vars))
+                constraints_added += 1
+
+                has_multiple = model.NewBoolVar(f'cgs_multi_{club}_w{week}_{day}')
+                model.Add(num_games >= 2).OnlyEnforceIf(has_multiple)
+                model.Add(num_games <= 1).OnlyEnforceIf(has_multiple.Not())
+                constraints_added += 2
+
+                # gap = 1 - num_games >= hard_lower => num_games <= 1 - hard_lower
+                max_allowed = 1 - hard_lower
+                model.Add(num_games <= max_allowed).OnlyEnforceIf(has_multiple)
+                constraints_added += 1
                 continue
-            
+
             min_slot = unique_slots[0]
             max_slot = unique_slots[-1]
-            
+
+            # Collect ALL vars for the club on this (week, day)
+            all_vars_for_day = []
+            for s in unique_slots:
+                all_vars_for_day.extend(slots_dict[s])
+
             # is_active[s] = 1 iff club has at least one game at slot s
             is_active = {}
             for s in unique_slots:
                 indicator = model.NewBoolVar(f'cgs_active_{club}_w{week}_{day}_s{s}')
                 model.AddMaxEquality(indicator, slots_dict[s])
                 is_active[s] = indicator
-            
-            # num_timeslots_used = sum of active indicators
-            num_used = model.NewIntVar(0, len(unique_slots),
-                                       f'cgs_used_{club}_w{week}_{day}')
-            model.Add(num_used == sum(is_active[s] for s in unique_slots))
+
+            # num_games = total games for this club on this day
+            num_games = model.NewIntVar(0, len(all_vars_for_day),
+                                        f'cgs_ng_{club}_w{week}_{day}')
+            model.Add(num_games == sum(all_vars_for_day))
             constraints_added += 1
-            
-            # min_active and max_active day_slots
+
+            # min_active and max_active day_slots (exact, not just bounds)
+            # Use AddMinEquality/AddMaxEquality with sentinel values for inactive slots
             min_active = model.NewIntVar(min_slot, max_slot,
                                           f'cgs_min_{club}_w{week}_{day}')
             max_active = model.NewIntVar(min_slot, max_slot,
                                           f'cgs_max_{club}_w{week}_{day}')
-            
+
+            # For min: inactive slots get sentinel max_slot+1 (won't be chosen as min)
+            # For max: inactive slots get sentinel min_slot-1 (won't be chosen as max)
+            min_candidates = []
+            max_candidates = []
             for s in unique_slots:
-                model.Add(min_active <= s).OnlyEnforceIf(is_active[s])
-                model.Add(max_active >= s).OnlyEnforceIf(is_active[s])
-                constraints_added += 2
-            
+                # min candidate: s if active, else max_slot (high sentinel)
+                mc = model.NewIntVar(min_slot, max_slot,
+                                      f'cgs_minc_{club}_w{week}_{day}_s{s}')
+                model.Add(mc == s).OnlyEnforceIf(is_active[s])
+                model.Add(mc == max_slot).OnlyEnforceIf(is_active[s].Not())
+                min_candidates.append(mc)
+
+                # max candidate: s if active, else min_slot (low sentinel)
+                xc = model.NewIntVar(min_slot, max_slot,
+                                      f'cgs_maxc_{club}_w{week}_{day}_s{s}')
+                model.Add(xc == s).OnlyEnforceIf(is_active[s])
+                model.Add(xc == min_slot).OnlyEnforceIf(is_active[s].Not())
+                max_candidates.append(xc)
+                constraints_added += 4
+
+            model.AddMinEquality(min_active, min_candidates)
+            model.AddMaxEquality(max_active, max_candidates)
+            constraints_added += 2
+
             # range_size = max_active - min_active + 1
             range_size = model.NewIntVar(1, max_slot - min_slot + 1,
                                           f'cgs_range_{club}_w{week}_{day}')
             model.Add(range_size == max_active - min_active + 1)
             constraints_added += 1
-            
-            # gaps = range_size - num_timeslots_used
-            max_gaps = max_slot - min_slot  # theoretical maximum
-            gaps = model.NewIntVar(0, max_gaps,
-                                    f'cgs_gaps_{club}_w{week}_{day}')
-            model.Add(gaps == range_size - num_used)
+
+            # gap = range_size - num_games (can be negative = double-ups)
+            max_gap_possible = max_slot - min_slot
+            min_gap_possible = 1 - len(all_vars_for_day)
+            gap = model.NewIntVar(min_gap_possible, max_gap_possible,
+                                   f'cgs_gap_{club}_w{week}_{day}')
+            model.Add(gap == range_size - num_games)
             constraints_added += 1
-            
-            # Only enforce when club uses >= 2 timeslots
+
+            # Only enforce when club has >= 2 games
             has_multiple = model.NewBoolVar(f'cgs_multi_{club}_w{week}_{day}')
-            model.Add(num_used >= 2).OnlyEnforceIf(has_multiple)
-            model.Add(num_used <= 1).OnlyEnforceIf(has_multiple.Not())
+            model.Add(num_games >= 2).OnlyEnforceIf(has_multiple)
+            model.Add(num_games <= 1).OnlyEnforceIf(has_multiple.Not())
             constraints_added += 2
-            
-            # HARD: gaps <= hard_limit (only when multiple timeslots used)
-            model.Add(gaps <= hard_limit).OnlyEnforceIf(has_multiple)
+
+            # HARD UPPER: gap <= hard_upper (limits spread)
+            model.Add(gap <= hard_upper).OnlyEnforceIf(has_multiple)
             constraints_added += 1
-            
-            # SOFT: penalize gaps
-            penalty = model.NewIntVar(0, max_gaps,
+
+            # HARD LOWER: gap >= hard_lower (limits double-ups)
+            model.Add(gap >= hard_lower).OnlyEnforceIf(has_multiple)
+            constraints_added += 1
+
+            # SOFT: penalize |gap| — both spread (positive) and double-ups (negative)
+            # push toward gap=0 (perfect consecutive fill)
+            max_abs = max(max_gap_possible, -min_gap_possible)
+            penalty = model.NewIntVar(0, max_abs,
                                        f'cgs_pen_{club}_w{week}_{day}')
-            model.Add(penalty >= gaps).OnlyEnforceIf(has_multiple)
+            model.Add(penalty >= gap).OnlyEnforceIf(has_multiple)
+            model.Add(penalty >= -gap).OnlyEnforceIf(has_multiple)
             model.Add(penalty == 0).OnlyEnforceIf(has_multiple.Not())
             data['penalties']['ClubGameSpread']['penalties'].append(penalty)
-            constraints_added += 2
-        
+            constraints_added += 3
+
+            # --- Field concentration ---
+            # field_spread = num_games - max_games_on_any_single_field
+            # Ideal = 0 (all games on one field). Hard cap scales with club size.
+            field_dict = club_week_day_field_groups.get((club, week, day), {})
+            if field_dict:
+                # games_on_field[f] = sum of vars for this club on field f this day
+                field_game_counts = []
+                n_all = len(all_vars_for_day)
+                for f_key, f_vars in field_dict.items():
+                    fcount = model.NewIntVar(0, len(f_vars),
+                                              f'cgs_fc_{club}_w{week}_{day}_{f_key[0]}')
+                    model.Add(fcount == sum(f_vars))
+                    field_game_counts.append(fcount)
+                    constraints_added += 1
+
+                # max_field_games = max games on any single field
+                max_field = model.NewIntVar(0, n_all,
+                                             f'cgs_maxf_{club}_w{week}_{day}')
+                model.AddMaxEquality(max_field, field_game_counts)
+                constraints_added += 1
+
+                # field_spread = num_games - max_field_games
+                field_spread = model.NewIntVar(0, n_all,
+                                                f'cgs_fspread_{club}_w{week}_{day}')
+                model.Add(field_spread == num_games - max_field)
+                constraints_added += 1
+
+                # Hard cap: field_spread <= max(0, num_games // 2 - 1) + slack
+                # Since num_games is a variable, linearize:
+                # field_spread <= num_games // 2 - 1 + slack
+                # => 2 * field_spread <= num_games - 2 + 2*slack
+                # field_spread >= 0 by domain, so small clubs (num_games<2)
+                # are handled by has_multiple guard.
+                model.Add(2 * field_spread <= num_games - 2 + 2 * config_slack).OnlyEnforceIf(has_multiple)
+                constraints_added += 1
+
+                # SOFT: penalize field_spread
+                f_penalty = model.NewIntVar(0, n_all,
+                                             f'cgs_fpen_{club}_w{week}_{day}')
+                model.Add(f_penalty >= field_spread).OnlyEnforceIf(has_multiple)
+                model.Add(f_penalty == 0).OnlyEnforceIf(has_multiple.Not())
+                data['penalties']['ClubFieldConcentration']['penalties'].append(f_penalty)
+                constraints_added += 2
+
         return constraints_added
 
 

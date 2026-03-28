@@ -216,7 +216,6 @@ def make_standard_data(clubs=None, grade_names=None, num_weeks=4,
         'num_dummy_timeslots': 0,
         'penalties': {},
         'team_conflicts': [],
-        'unavailable_games': [],
     }
     if extra_data:
         data.update(extra_data)
@@ -668,7 +667,7 @@ class TestAIConstraintsRejectViolations:
 # ============================================================================
 
 class TestEqualMatchUpSpacingAI:
-    """Intensive tests for EqualMatchUpSpacingConstraintAI (was a complete no-op)."""
+    """Intensive tests for EqualMatchUpSpacingConstraintAI (pairwise forbidden gaps)."""
 
     def test_feasible_with_good_spacing(self):
         """Well-spaced matchups should be feasible."""
@@ -699,6 +698,224 @@ class TestEqualMatchUpSpacingAI:
 
         assert is_feasible(status_ai) == is_feasible(status_orig), (
             f"Parity mismatch: AI={status_ai}, Original={status_orig}"
+        )
+
+    def test_enforces_minimum_gap(self):
+        """Two meetings within min_gap rounds must be infeasible.
+
+        With 5 teams: space=4, base_slack=max(1, 4 - 2*4//3) = max(1, 4-2) = 2.
+        min_gap = 4 - 2 = 2.
+        If we force a pair to meet in rounds 1 and 2 (gap=1 < min_gap=2),
+        the constraint must reject it.
+        """
+        clubs = [
+            Club(name='Alpha', home_field=BROADMEADOW),
+            Club(name='Beta', home_field=BROADMEADOW),
+            Club(name='Gamma', home_field=BROADMEADOW),
+            Club(name='Delta', home_field=BROADMEADOW),
+            Club(name='Epsilon', home_field=BROADMEADOW),
+        ]
+        data = make_standard_data(clubs=clubs, grade_names=['3rd'],
+                                  num_weeks=6, slots_per_field=4)
+        # 5 teams: ideal=3, floor=min(2,3)=2, min_gap=max(2,3)=3
+        model, X = create_model_and_vars(data['games'], data['timeslots'])
+
+        # Force Alpha 3rd vs Beta 3rd to play in round 1 AND round 2 (gap=1 < min_gap=3)
+        pair_r1 = [v for k, v in X.items()
+                   if k[0] == 'Alpha 3rd' and k[1] == 'Beta 3rd' and k[8] == 1]
+        pair_r2 = [v for k, v in X.items()
+                   if k[0] == 'Alpha 3rd' and k[1] == 'Beta 3rd' and k[8] == 2]
+        assert pair_r1 and pair_r2, "Must have vars in rounds 1 and 2"
+        model.Add(sum(pair_r1) == 1)
+        model.Add(sum(pair_r2) == 1)
+
+        EqualMatchUpSpacingConstraintAI().apply(model, X, data)
+        status, _ = solve(model)
+        assert status == cp_model.INFEASIBLE, (
+            "Forcing gap=1 with min_gap=3 must be INFEASIBLE"
+        )
+
+    def test_allows_meeting_at_min_gap(self):
+        """Two meetings exactly at min_gap rounds apart should be feasible.
+
+        5 teams: ideal=3, floor=min(2,3)=2, min_gap=max(2,3)=3. Force gap=3 (rounds 1 and 4).
+        """
+        clubs = [
+            Club(name='Alpha', home_field=BROADMEADOW),
+            Club(name='Beta', home_field=BROADMEADOW),
+            Club(name='Gamma', home_field=BROADMEADOW),
+            Club(name='Delta', home_field=BROADMEADOW),
+            Club(name='Epsilon', home_field=BROADMEADOW),
+        ]
+        data = make_standard_data(clubs=clubs, grade_names=['3rd'],
+                                  num_weeks=8, slots_per_field=4)
+        model, X = create_model_and_vars(data['games'], data['timeslots'])
+
+        # Force Alpha vs Beta in round 1 AND round 4 (gap=3 == min_gap)
+        pair_r1 = [v for k, v in X.items()
+                   if k[0] == 'Alpha 3rd' and k[1] == 'Beta 3rd' and k[8] == 1]
+        pair_r4 = [v for k, v in X.items()
+                   if k[0] == 'Alpha 3rd' and k[1] == 'Beta 3rd' and k[8] == 4]
+        assert pair_r1 and pair_r4, "Must have vars in rounds 1 and 4"
+        model.Add(sum(pair_r1) == 1)
+        model.Add(sum(pair_r4) == 1)
+
+        EqualMatchUpSpacingConstraintAI().apply(model, X, data)
+        status, _ = solve(model)
+        assert is_feasible(status), (
+            "Gap exactly at min_gap should be feasible"
+        )
+
+    def test_soft_penalty_created(self):
+        """Soft penalties must be populated in data['penalties']."""
+        data = make_standard_data(num_weeks=10, slots_per_field=4)
+        model, X = create_model_and_vars(data['games'], data['timeslots'])
+        EqualMatchUpSpacingConstraintAI().apply(model, X, data)
+        penalties = data['penalties'].get('EqualMatchUpSpacing', {}).get('penalties', [])
+        assert len(penalties) > 0, "Must create soft penalty variables"
+
+    def test_no_nonlinear_operations(self):
+        """Pairwise formulation must not use multiplication, division, or abs.
+
+        The original uses 3 AddMultiplicationEquality, 1 AddDivisionEquality,
+        and 1 AddAbsEquality per matchup pair. These are the most expensive
+        operations in CP-SAT. The pairwise formulation eliminates all of them.
+        """
+        data = make_standard_data(num_weeks=10, slots_per_field=5)
+        model_ai, X_ai = create_model_and_vars(data['games'], data['timeslots'])
+        EqualMatchUpSpacingConstraintAI().apply(model_ai, X_ai, data)
+
+        proto = model_ai.Proto()
+        for ct in proto.constraints:
+            assert not ct.has_int_prod(), (
+                "AI constraint must not use AddMultiplicationEquality"
+            )
+            assert not ct.has_int_div(), (
+                "AI constraint must not use AddDivisionEquality"
+            )
+
+        # Both original and AI now use pairwise approach — verify original is also clean
+        data2 = make_standard_data(num_weeks=10, slots_per_field=5)
+        model_orig, X_orig = create_model_and_vars(data2['games'], data2['timeslots'])
+        EqualMatchUpSpacingConstraint().apply(model_orig, X_orig, data2)
+        orig_proto = model_orig.Proto()
+        has_mult = any(ct.has_int_prod() for ct in orig_proto.constraints)
+        has_div = any(ct.has_int_div() for ct in orig_proto.constraints)
+        assert not has_mult, "Original should not use multiplication (pairwise now)"
+        assert not has_div, "Original should not use division (pairwise now)"
+
+    def test_no_max_equality_operations(self):
+        """Pairwise formulation must not use AddMaxEquality.
+
+        The original uses AddMaxEquality for round indicators and max_r.
+        The pairwise approach uses only linear sums instead.
+        """
+        data = make_standard_data(num_weeks=10, slots_per_field=5)
+        model_ai, X_ai = create_model_and_vars(data['games'], data['timeslots'])
+        EqualMatchUpSpacingConstraintAI().apply(model_ai, X_ai, data)
+
+        proto = model_ai.Proto()
+        for ct in proto.constraints:
+            assert not ct.has_lin_max(), (
+                "AI constraint must not use AddMaxEquality/AddAbsEquality"
+            )
+
+    def test_slack_config_respected(self):
+        """Increasing slack should allow tighter gaps."""
+        # 8 teams: ideal=6, floor=min(4,6)=4. Without slack: min_gap=6.
+        # With slack=2: min_gap=max(4, 6-0-2)=max(4,4)=4. Gap=5 feasible (5 > 4).
+        # Without slack gap=5 would be infeasible (min_gap=6).
+        clubs = [Club(name=f'Club{i}', home_field=BROADMEADOW) for i in range(8)]
+        data_no_slack = make_standard_data(clubs=clubs, grade_names=['3rd'],
+                                           num_weeks=12, slots_per_field=4)
+        model_ns, X_ns = create_model_and_vars(data_no_slack['games'], data_no_slack['timeslots'])
+
+        # Force gap=5 (rounds 1 and 6) — should be infeasible without slack
+        pair_r1 = [v for k, v in X_ns.items()
+                   if k[0] == 'Club0 3rd' and k[1] == 'Club1 3rd' and k[8] == 1]
+        pair_r6 = [v for k, v in X_ns.items()
+                   if k[0] == 'Club0 3rd' and k[1] == 'Club1 3rd' and k[8] == 6]
+        assert pair_r1 and pair_r6
+        model_ns.Add(sum(pair_r1) == 1)
+        model_ns.Add(sum(pair_r6) == 1)
+        EqualMatchUpSpacingConstraintAI().apply(model_ns, X_ns, data_no_slack)
+        status_ns, _ = solve(model_ns)
+        assert not is_feasible(status_ns), "Gap=5 with min_gap=6 should be infeasible"
+
+        # Now with slack=2: min_gap=5, gap=5 should be feasible
+        data_slack = make_standard_data(clubs=clubs, grade_names=['3rd'],
+                                        num_weeks=12, slots_per_field=4,
+                                        extra_data={'constraint_slack': {
+                                            'EqualMatchUpSpacingConstraint': 2}})
+        model_s, X_s = create_model_and_vars(data_slack['games'], data_slack['timeslots'])
+        pair_r1 = [v for k, v in X_s.items()
+                   if k[0] == 'Club0 3rd' and k[1] == 'Club1 3rd' and k[8] == 1]
+        pair_r6 = [v for k, v in X_s.items()
+                   if k[0] == 'Club0 3rd' and k[1] == 'Club1 3rd' and k[8] == 6]
+        assert pair_r1 and pair_r6
+        model_s.Add(sum(pair_r1) == 1)
+        model_s.Add(sum(pair_r6) == 1)
+        EqualMatchUpSpacingConstraintAI().apply(model_s, X_s, data_slack)
+        status_s, _ = solve(model_s)
+        assert is_feasible(status_s), (
+            "With slack=2, min_gap=4 so gap=5 should be feasible"
+        )
+
+    def test_parity_with_original_multiple_sizes(self):
+        """Parity across different team counts and week counts."""
+        configs = [
+            (3, ['3rd'], 6),   # 3 clubs, 1 grade, 6 weeks
+            (5, ['3rd'], 10),  # 5 clubs, 1 grade, 10 weeks
+            (4, ['3rd', '4th'], 8),  # 4 clubs, 2 grades, 8 weeks
+        ]
+        for num_clubs, grade_names, num_weeks in configs:
+            clubs = [Club(name=f'Club{i}', home_field=BROADMEADOW)
+                     for i in range(num_clubs)]
+
+            data = make_standard_data(clubs=clubs, grade_names=grade_names,
+                                      num_weeks=num_weeks, slots_per_field=5)
+
+            model_ai, X_ai = create_model_and_vars(data['games'], data['timeslots'])
+            EqualMatchUpSpacingConstraintAI().apply(model_ai, X_ai, data)
+            status_ai, _ = solve(model_ai)
+
+            data2 = make_standard_data(clubs=clubs, grade_names=grade_names,
+                                       num_weeks=num_weeks, slots_per_field=5)
+            model_orig, X_orig = create_model_and_vars(data2['games'], data2['timeslots'])
+            EqualMatchUpSpacingConstraint().apply(model_orig, X_orig, data2)
+            status_orig, _ = solve(model_orig)
+
+            assert is_feasible(status_ai) == is_feasible(status_orig), (
+                f"Parity mismatch for {num_clubs} clubs, {grade_names}, "
+                f"{num_weeks} weeks: AI={status_ai}, Orig={status_orig}"
+            )
+
+    def test_three_meetings_spacing(self):
+        """With 3 meetings, all consecutive gaps must respect min_gap.
+
+        3 clubs, 1 grade → 3 teams, ideal=1, floor=min(1,1)=1, min_gap=1.
+        Forcing rounds 1, 3, 5 (all gaps=2 >= min_gap=1) should be feasible.
+        """
+        clubs = [
+            Club(name='A', home_field=BROADMEADOW),
+            Club(name='B', home_field=BROADMEADOW),
+            Club(name='C', home_field=BROADMEADOW),
+        ]
+        data = make_standard_data(clubs=clubs, grade_names=['3rd'],
+                                  num_weeks=6, slots_per_field=4)
+        model, X = create_model_and_vars(data['games'], data['timeslots'])
+
+        # Force A vs B in rounds 1, 3, and 5 (all gaps = 2 = min_gap)
+        for r in [1, 3, 5]:
+            pair_vars = [v for k, v in X.items()
+                         if k[0] == 'A 3rd' and k[1] == 'B 3rd' and k[8] == r]
+            if pair_vars:
+                model.Add(sum(pair_vars) == 1)
+
+        EqualMatchUpSpacingConstraintAI().apply(model, X, data)
+        status, _ = solve(model)
+        assert is_feasible(status), (
+            "With 3 teams min_gap=2, gaps of 2 should be feasible"
         )
 
 
@@ -1024,19 +1241,21 @@ class TestAllAIConstraintsCombined:
 
     def test_all_ai_constraints_feasible_small(self):
         """All AI constraints on small dataset — must be feasible.
-        
+
         THIS IS THE TEST THAT WOULD HAVE PREVENTED THE INFEASIBLE BUG.
         Uses generous capacity so constraints don't conflict due to tight data.
-        
-        Note: 4 grades with >6 weeks causes OOM during solve due to
-        EqualMatchUpSpacing creating O(pairs × rounds) intermediate vars.
-        6 weeks / 5 slots is the sweet spot: enough rounds for spacing
-        constraints to be meaningful, without exceeding memory.
+
+        Note: The pairwise EqualMatchUpSpacing no longer has the O(pairs × rounds)
+        OOM issue, so we can use more weeks/slots than the original 6/5 limit.
         """
+        # Use lower grades only — PHL/2nd trigger PHL-specific constraints
+        # (adjacency, round 1, Gosford) that are infeasible on synthetic data
+        # without real Friday timeslots and Gosford venue.
+        # Production 2026 data tests cover the full constraint set.
         data = make_standard_data(
-            grade_names=['PHL', '2nd', '3rd', '4th'],
+            grade_names=['3rd', '4th'],
             num_weeks=6,
-            slots_per_field=5,
+            slots_per_field=6,
             extra_data={
                 'team_conflicts': [('Tigers 3rd', 'Tigers 4th')],
                 'phl_preferences': {'preferred_dates': []},

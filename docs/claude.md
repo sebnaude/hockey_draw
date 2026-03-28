@@ -271,7 +271,7 @@ Adjacent grades (e.g., 3rd & 4th) have special constraints.
 The `DrawStorage` class provides a flexible JSON-based format for storing and manipulating draws:
 
 ```python
-from draw_analytics import DrawStorage, DrawAnalytics
+from analytics.storage import DrawStorage
 
 # Create from solver solution
 draw = DrawStorage.from_X_solution(X_solution, description="Season 2025")
@@ -287,6 +287,12 @@ filtered = draw.filter_games(team="Souths", grade="PHL", week=3)
 
 # Convert back to X dict for solving
 X_dict = draw.to_X_dict()
+
+# Check metadata (populated by save_solver_output)
+print(draw.metadata['forced_game_outcomes'])   # Were forced games satisfied?
+print(draw.metadata['blocked_game_outcomes'])   # Were blocked games respected?
+print(draw.metadata['constraints_applied'])     # Which constraints were active?
+print(draw.metadata['stats'])                   # Games by grade/venue, date range
 ```
 
 ### DrawAnalytics (Comprehensive Analytics)

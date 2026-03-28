@@ -114,25 +114,6 @@ PHL_PREFERENCES = {
     'gosford_2nd_grade_bye': False,  # Set to True if confirmed for 2027
 }
 
-# ============== Friday Night Configuration ==============
-# MUST BE EXPLICITLY SET - Do not inherit from previous year
-
-FRIDAY_NIGHT_CONFIG = {
-    'gosford_friday_count': 0,  # Number of Friday night home games for Gosford
-    'friday_clubs': {
-        # 'Wests': 0,
-        # 'Souths': 0,
-        # 'Norths': 0,
-        # 'Tigers': 0,
-        # 'Maitland': 0,
-    },
-    'friday_dates': [
-        # datetime(2027, 3, 26),  # Example dates
-    ],
-    'gosford_friday_times': [],  # e.g., [tm(20, 0)]
-    'nihc_friday_times': [],     # e.g., [tm(19, 0)]
-}
-
 # ============== Special Games ==============
 # MUST BE EXPLICITLY SET - Do not inherit from previous year
 
@@ -154,8 +135,7 @@ SEASON_CONFIG = {
     
     # CRITICAL: These dates MUST be set for 2027
     'start_date': None,           # e.g., datetime(2027, 3, 21) - First round Sunday
-    'last_round_date': None,      # e.g., datetime(2027, 8, 29) - Last regular round Sunday
-    'end_date': None,             # e.g., datetime(2027, 9, 18) - Grand Final date
+    'end_date': None,             # e.g., datetime(2027, 8, 29) - Last club game before finals
     
     # CRITICAL: Verify rounds calculation matches available weekends
     'max_rounds': 0,              # Must match: (Sundays between start and last_round) - blocked_weekends
@@ -186,9 +166,6 @@ SEASON_CONFIG = {
     'preference_no_play': PREFERENCE_NO_PLAY,
     'phl_preferences': PHL_PREFERENCES,
     
-    # Friday night settings - reference the dict above
-    'friday_night_config': FRIDAY_NIGHT_CONFIG,
-    
     # Special games - reference the dict above
     'special_games': SPECIAL_GAMES,
     
@@ -217,8 +194,6 @@ def get_season_data() -> dict:
     # Validation checks
     if SEASON_CONFIG['start_date'] is None:
         raise ValueError("2027 SEASON_CONFIG['start_date'] is not set!")
-    if SEASON_CONFIG['last_round_date'] is None:
-        raise ValueError("2027 SEASON_CONFIG['last_round_date'] is not set!")
     if SEASON_CONFIG['end_date'] is None:
         raise ValueError("2027 SEASON_CONFIG['end_date'] is not set!")
     if SEASON_CONFIG['max_rounds'] == 0:
@@ -243,9 +218,11 @@ Before using this config, ensure ALL items are completed:
 □ CLUB_DAYS - Set all club day dates
 □ PREFERENCE_NO_PLAY - Add all soft no-play constraints
 □ PHL_PREFERENCES - Set PHL configuration
-□ FRIDAY_NIGHT_CONFIG - Set Friday night games config
+□ CONSTRAINT_DEFAULTS - Set gosford_friday_games and max_friday_broadmeadow
+□ FORCED_GAMES - Add forced Friday night matchups
+□ BLOCKED_GAMES - Block non-confirmed Friday dates at Gosford
 □ SPECIAL_GAMES - Add any special venue games
-□ SEASON_CONFIG dates - Set start_date, last_round_date, end_date
+□ SEASON_CONFIG dates - Set start_date, end_date (last club game before finals)
 □ SEASON_CONFIG max_rounds - Verify calculation matches available weekends
 □ home_field_map - Set club home fields
 

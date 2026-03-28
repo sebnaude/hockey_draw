@@ -14,7 +14,7 @@ This document tracks all requests received from clubs, their implementation stat
 |--------|-------------|---------|
 | **Config Value** | Set in `config/season_2026.py` | `SEASON_CONFIG['max_rounds'] = 20` |
 | **Variable Filtering** | Remove variables at generation time | `PHL_GAME_TIMES` dict excludes SF field |
-| **Matchup Filtering** | Restrict specific matchups to dates | `nihc_friday_games` dict in `FRIDAY_NIGHT_CONFIG` |
+| **Matchup Filtering** | Restrict specific matchups to dates | `FORCED_GAMES` list + `BLOCKED_GAMES` in config |
 | **Hard Constraint** | Solver must satisfy | `model.Add(sum(vars) == 8)` in constraint |
 | **Soft Constraint** | Penalty if violated | `PREFERENCE_NO_PLAY` with penalty weight |
 | **Field Unavailability** | Block venue/date entirely | `FIELD_UNAVAILABILITIES` dict |
@@ -42,13 +42,14 @@ This document tracks all requests received from clubs, their implementation stat
 | Gosford Sunday times: 12pm or 1:30pm only | Gosford | **Variable Filtering** | `PHL_GAME_TIMES['Central Coast Hockey Park']['Sunday'] = [tm(12, 0), tm(13, 30)]` | Restricted to 2 slots |
 | NIHC Friday night max 3 games | HCPL | **Hard Constraint** | `PHLAndSecondGradeTimes` → `model.Add(sum(friday_broadmeadow_vars) <= 3)` | Operational limit |
 | NIHC Friday time: 7:00pm | HCPL | **Variable Filtering** | `PHL_GAME_TIMES['NIHC']['EF/WF']['Friday'] = [tm(19, 0)]` | Junior Boys program alignment |
-| Norths Friday night June 12 (80th anniversary) | Norths | **Config Value** | `FRIDAY_NIGHT_CONFIG['friday_dates']` includes `datetime(2026, 6, 12)` | Confirmed date |
+| Norths 80th Anniversary — Norths v Wests weekend Jun 14 | Norths | **Matchup Filtering** | `FORCED_GAMES`: Norths v Wests on 2026-06-14 (Sunday) | Jun 12 is a regular Gosford Friday; the 80th is the Sunday |
 | NIHC Friday games: specific matchups only | HCPL | **Matchup Filtering** | `FORCED_GAMES` list + `_is_blocked_by_forced_games()` in `generate_X()` | Only allowed matchups get variables |
 | NIHC Friday: May 8 = Souths vs Maitland | HCPL | **Matchup Filtering** | `FORCED_GAMES[0]`: teams=['Maitland','Souths'], grade='PHL', date='2026-05-08' | Locked matchup |
 | NIHC Friday: Jun 19 = Tigers vs Wests | HCPL | **Matchup Filtering** | `FORCED_GAMES[1]`: teams=['Tigers','Wests'], grade='PHL', date='2026-06-19' | ⚠️ Date blocked by U16 Girls SC unavailability — needs part_days fix |
 | NIHC Friday: Jul 24 = Norths vs TBC | HCPL | **Matchup Filtering** | `FORCED_GAMES[2]`: teams=['Norths'], grade='PHL', date='2026-07-24' | Any opponent OK |
-| Friday night clubs: Wests x2, Tigers x2, Souths x2, Norths x1, Maitland x1 | Various | **Config Value** | `FRIDAY_NIGHT_CONFIG['friday_clubs']` dict | Club allocations tracked |
+| Friday night clubs: Wests x2, Tigers x2, Souths x2, Norths x1, Maitland x1 | Various | **Preference Only** | Documented in nominations (not constraint-enforced) | Club allocations are preferences, not hard constraints |
 | Souths no PHL/2nd on May 24 (U18 SC) | Souths | **Variable Removal** | `BLOCKED_GAMES` entry: Souths PHL/2nd on 2026-05-24 | Hard — variables eliminated from game dictionary |
+| Gosford ANZAC Friday night home game (Apr 24) | Gosford | **Matchup Filtering** | `FORCED_GAMES` entry: Gosford PHL on 2026-04-24 at CCHP | Gosford home game locked to ANZAC long weekend Friday |
 | Gosford no match weekend after Men's SC (Jun 21) | Gosford | **Variable Removal** | `BLOCKED_GAMES` entry: Gosford on 2026-06-21 | Hard — variables eliminated from game dictionary |
 
 ### Field Unavailabilities
@@ -67,6 +68,7 @@ This document tracks all requests received from clubs, their implementation stat
 | Request | Club | Implementation Method | Implementation Location | Notes |
 |---------|------|----------------------|------------------------|-------|
 | Crusaders Club Day - June 14 | Crusaders | **Config + Constraint** | `CLUB_DAYS['Crusaders'] = datetime(2026, 6, 14)` + `ClubDayConstraint` | All teams same field, consecutive |
+| University Club Day - July 26 | University | **Config + Constraint** | `CLUB_DAYS['University'] = datetime(2026, 7, 26)` + `ClubDayConstraint` | All teams same field, consecutive |
 
 ### No-Play Requests
 
@@ -101,7 +103,7 @@ This document tracks all requests received from clubs, their implementation stat
 | Request | Club | Details | Reason Not Implemented |
 |---------|------|---------|------------------------|
 | Wests Club Day | Wests | Need 2026 date | No email received |
-| University Club Day | University | Need 2026 date | No email received |
+| University Club Day | University | July 26, 2026 | ✅ In CLUB_DAYS |
 | Tigers Club Day | Tigers | Need 2026 date | No email received |
 | Port Stephens Club Day | Port Stephens | Need 2026 date | No email received |
 | Colts Club Day | Colts | Any date - string all games together | Need to allocate date |
@@ -110,9 +112,16 @@ This document tracks all requests received from clubs, their implementation stat
 
 | Request | Club | Details | Reason Not Implemented |
 |---------|------|---------|------------------------|
-| Red & Blue Derby | Souths/Norths | August date TBC | Need date from clubs |
+| Red & Blue Derby | Souths/Norths | May 10 - Confirmed | ✅ In FORCED_GAMES (PHL, 2nd, 3rd, 4th) |
 | Masters State Training Weekend | HCPL | August (Sat/Sun finishing 12pm Sun) | No date set yet |
 | August catch-up weekend | HCPL | Reserve for wet weather deferrals | Need to designate weekend |
+
+### Umpire Requests (In Perpetuity)
+
+| Request | Source | Details | Priority |
+|---------|--------|---------|----------|
+| No Maitland home games in week 1 or 2 | Umpires | Applies every season in perpetuity | High |
+| No Gosford home games in week 1 | Umpires | Applies every season in perpetuity | High |
 
 ### Scheduling Preferences (Soft - Best Effort)
 

@@ -81,12 +81,12 @@ These fundamental rules ensure the draw is valid and playable.
 - 2nd grade and PHL from the same club cannot occur at the same timeslot at Broadmeadow
 - Maximum 3 Friday night PHL games at Broadmeadow
 - Exactly 8 Friday night PHL games at Gosford (Central Coast Hockey Park) - AGM decision 2026
-- NIHC Friday matchups limited to specific dates/teams via `nihc_friday_games` config:
+- NIHC Friday matchups limited to specific dates/teams via `FORCED_GAMES`:
   - May 8: Souths vs Maitland
   - June 19: Tigers vs Wests
   - July 24: Norths vs TBC (any opponent)
 
-**Enforcement:** Uses timeslot indicators and sum constraints per location/club combination. NIHC Friday matchups are filtered at variable generation time using `FRIDAY_NIGHT_CONFIG['nihc_friday_games']`.
+**Enforcement:** Uses timeslot indicators and sum constraints per location/club combination. Friday game counts are configured via `CONSTRAINT_DEFAULTS` (`gosford_friday_games`, `max_friday_broadmeadow`). NIHC Friday matchups are filtered at variable generation time using `FORCED_GAMES` and `BLOCKED_GAMES`.
 
 **Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots. The Gosford Friday requirement was confirmed at the 2026 AGM. NIHC Friday matchups are pre-scheduled to align with Junior Boys program and special events.
 
@@ -95,9 +95,9 @@ These fundamental rules ensure the draw is valid and playable.
 ### Rule 6: 50/50 Home and Away Balance
 **Constraint:** `FiftyFiftyHomeandAway`
 
-**Description:** Teams from away venues (Maitland, Gosford) should play approximately 50% of their games at home and 50% away.
+**Description:** Teams from away venues (Maitland, Gosford) should play approximately 50% of their games at home and 50% away **per opponent pair**. Each (team, opponent) pair is individually balanced, but aggregate home/away totals can be lopsided if most odd-meeting pairs land on the same side.
 
-**Enforcement:** 
+**Enforcement (per pair):**
 ```
 home_games * 2 >= total_games - 1
 home_games * 2 <= total_games + 1
@@ -204,9 +204,11 @@ These constraints use penalty variables that are minimized in the objective func
 ### Rule 14: Maitland Home Grouping
 **Constraint:** `MaitlandHomeGrouping`
 
-**Description:** 
+**Description:**
 - Encourages all Maitland games in a week to be either all home or all away
-- **Hard element:** No back-to-back Maitland home weekends
+- **Hard element:** Maximum consecutive home weekends enforced via sliding window. With `--slack N`, allows up to (1 + N) consecutive home weeks. Default (no slack): no back-to-back.
+
+**Sliding window enforcement:** In any window of (max_consecutive + 1) consecutive Maitland-game weeks, at most max_consecutive can be home weeks. No-play weeks are excluded from the sequence.
 
 **Penalty:** `min(home_games, away_games)` per week
 
@@ -321,7 +323,7 @@ These rules arise from the combination of constraints or data filtering.
 ---
 
 ### Implied Rule 5: Friday Night Restrictions
-**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint + `FRIDAY_NIGHT_CONFIG['nihc_friday_games']`
+**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint + `FORCED_GAMES` / `BLOCKED_GAMES`
 
 **Description:**
 - Friday games are PHL-only (only PHL grade plays on Fridays)
@@ -334,7 +336,7 @@ These rules arise from the combination of constraints or data filtering.
   - June 19: Tigers vs Wests only
   - July 24: Norths vs any opponent
 
-**Implementation:** NIHC Friday matchup filtering is done via `nihc_friday_games` dict in `FRIDAY_NIGHT_CONFIG`. Only listed dates/matchups generate decision variables - other Friday nights at NIHC are blocked.
+**Implementation:** NIHC Friday matchup filtering is done via `FORCED_GAMES` (which locks specific matchups to dates) and `BLOCKED_GAMES` (which prevents non-confirmed Friday dates). Friday game counts are set in `CONSTRAINT_DEFAULTS` (`gosford_friday_games`, `max_friday_broadmeadow`). Friday timeslots are controlled by `PHL_GAME_TIMES`.
 
 **Note:** Lower grades (3rd-6th) are automatically excluded from Friday variables during decision variable generation.
 

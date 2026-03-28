@@ -180,7 +180,7 @@ Simply remove from the list. No variables will be created for that slot.
 
 1. Add to `DAY_TIME_MAP` if not present (for consistency)
 2. Add to `PHL_GAME_TIMES` under 'Friday' key
-3. Update `FRIDAY_NIGHT_CONFIG` with counts and dates
+3. Update `CONSTRAINT_DEFAULTS` with counts (`gosford_friday_games`, `max_friday_broadmeadow`)
 
 ```python
 DAY_TIME_MAP = {

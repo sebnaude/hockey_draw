@@ -24,7 +24,6 @@ See docs/README.md for full documentation.
 """
 
 import sys
-import os
 import argparse
 from pathlib import Path
 
@@ -66,10 +65,18 @@ Examples:
                             help='Use simple single-solve instead of staged')
     gen_parser.add_argument('--run-id', type=str,
                             help='Specify run ID for checkpoints')
-    gen_parser.add_argument('--locked', type=str, metavar='DRAW_FILE',
-                            help='Path to draw with locked games')
+    gen_parser.add_argument('--description', type=str, default='',
+                            help='Short description saved to draw metadata (e.g. "optimising weeks 2-4")')
+    gen_parser.add_argument('--locked', type=str, metavar='SOURCE',
+                            help='Source for locked games: draw JSON (.json), '
+                                 'checkpoint directory (e.g. checkpoints/latest), '
+                                 'or solution pickle (.pkl). Use with --lock-weeks.')
     gen_parser.add_argument('--lock-weeks', type=str, default='',
                             help='Comma-separated list of weeks to lock (e.g. 1,2,3 or 1,5,7). Use with --locked')
+    gen_parser.add_argument('--hint', type=str, metavar='FILE',
+                            help='Path to a prior solution to use as solver hints (speeds up search). '
+                                 'Accepts draw JSON (.json) or checkpoint pickle (.pkl). '
+                                 'Hints are suggestions, not locks - solver can deviate.')
     gen_parser.add_argument('--workers', type=int, default=None,
                             help='Number of solver workers (default: auto based on memory)')
     gen_parser.add_argument('--low-memory', action='store_true',
@@ -80,6 +87,8 @@ Examples:
                             help='Use high-performance config (all cores, full linearization)')
     gen_parser.add_argument('--ai', action='store_true',
                             help='Use AI-enhanced constraint implementations instead of originals')
+    gen_parser.add_argument('--unified', action='store_true',
+                            help='Use unified constraint engine (shared helpers, 3-phase solving)')
     gen_parser.add_argument('--exclude', nargs='+', metavar='CONSTRAINT',
                             help='Exclude specific constraints from simple mode solve. '
                                  'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
@@ -213,6 +222,61 @@ Examples:
         run_migrate(args)
 
 
+def _load_locked_keys(path: str, locked_weeks: set) -> list:
+    """
+    Load locked game keys from a draw JSON, checkpoint directory, or pickle file.
+
+    Supports:
+    - Draw JSON (.json): Uses DrawStorage.load_and_lock()
+    - Checkpoint directory (e.g. checkpoints/latest): Loads solution.pkl from inside
+    - Pickle file (.pkl): Loads solution dict directly
+
+    Returns list of 11-tuple keys for model.Add(X[key] == 1).
+    """
+    import pickle
+
+    weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
+    p = Path(path)
+
+    # Case 1: Draw JSON file
+    if p.suffix == '.json':
+        from analytics.storage import DrawStorage
+        _, locked_keys = DrawStorage.load_and_lock(path, locked_weeks)
+        return locked_keys
+
+    # Case 2: Checkpoint directory (contains solution.pkl)
+    if p.is_dir():
+        pkl_path = p / 'solution.pkl'
+        if not pkl_path.exists():
+            print(f"ERROR: No solution.pkl found in {path}")
+            sys.exit(1)
+        print(f"  Loading checkpoint from {pkl_path}")
+        with open(pkl_path, 'rb') as f:
+            solution = pickle.load(f)
+        locked_keys = [
+            key for key, val in solution.items()
+            if val == 1 and len(key) >= 7 and key[6] in locked_weeks
+        ]
+        print(f"Loaded {len(locked_keys)} locked games from checkpoint (weeks {weeks_label})")
+        return locked_keys
+
+    # Case 3: Direct pickle file
+    if p.suffix == '.pkl':
+        print(f"  Loading solution pickle from {path}")
+        with open(path, 'rb') as f:
+            solution = pickle.load(f)
+        locked_keys = [
+            key for key, val in solution.items()
+            if val == 1 and len(key) >= 7 and key[6] in locked_weeks
+        ]
+        print(f"Loaded {len(locked_keys)} locked games from pickle (weeks {weeks_label})")
+        return locked_keys
+
+    print(f"ERROR: Unknown locked file format: {path}")
+    print(f"  Expected: .json (draw), .pkl (pickle), or directory (checkpoint)")
+    sys.exit(1)
+
+
 def run_generate(args):
     """Generate a new draw."""
     print("="*60)
@@ -262,11 +326,47 @@ def run_generate(args):
     if args.lock_weeks:
         locked_weeks = set(int(w.strip()) for w in args.lock_weeks.split(',') if w.strip())
     if args.locked and locked_weeks:
-        from analytics.storage import DrawStorage
+        locked_path = args.locked
         weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
-        print(f"\nLoading locked games from {args.locked} (weeks {weeks_label})...")
-        _, locked_keys = DrawStorage.load_and_lock(args.locked, locked_weeks)
+        print(f"\nLoading locked games from {locked_path} (weeks {weeks_label})...")
+        locked_keys = _load_locked_keys(locked_path, locked_weeks)
     
+    # Load hint solution if provided
+    # If --locked is a pickle/checkpoint and no --hint given, use locked source as hint too
+    hint_solution = None
+    hint_path = getattr(args, 'hint', None)
+    if not hint_path and args.locked and locked_weeks:
+        locked_p = Path(args.locked)
+        if locked_p.suffix == '.pkl' or locked_p.is_dir():
+            hint_path = args.locked
+            print(f"\n[*] Using locked source as hint: {hint_path}")
+    if hint_path:
+        import pickle
+        if hint_path.endswith('.pkl'):
+            print(f"\nLoading hint solution from pickle: {hint_path}")
+            with open(hint_path, 'rb') as f:
+                hint_solution = pickle.load(f)
+            hint_games = sum(1 for v in hint_solution.values() if v == 1)
+            print(f"  Loaded {hint_games} scheduled games as hints")
+        elif Path(hint_path).is_dir():
+            pkl_path = Path(hint_path) / 'solution.pkl'
+            if pkl_path.exists():
+                print(f"\nLoading hint solution from checkpoint: {pkl_path}")
+                with open(pkl_path, 'rb') as f:
+                    hint_solution = pickle.load(f)
+                hint_games = sum(1 for v in hint_solution.values() if v == 1)
+                print(f"  Loaded {hint_games} scheduled games as hints")
+            else:
+                print(f"\n[!] No solution.pkl found in {hint_path}")
+        elif hint_path.endswith('.json'):
+            print(f"\nLoading hint solution from draw JSON: {hint_path}")
+            from analytics.storage import DrawStorage
+            draw = DrawStorage.load(hint_path)
+            hint_solution = draw.to_X_dict()
+            print(f"  Loaded {len(hint_solution)} scheduled games as hints")
+        else:
+            print(f"\n[!] Unknown hint file format: {hint_path} (expected .json, .pkl, or checkpoint dir)")
+
     # Check for Round 1 symmetry breaking
     fix_round_1 = getattr(args, 'fix_round_1', False)
     if fix_round_1:
@@ -288,37 +388,62 @@ def run_generate(args):
         }
         print(f"\n[*] Constraint slack override: +{slack_value}")
     
-    if args.simple:
+    use_unified = getattr(args, 'unified', False)
+
+    # Validate incompatible flag combinations
+    if use_unified:
+        if getattr(args, 'staged', False):
+            print("WARNING: --unified and --staged are incompatible. Using --unified.")
+        if args.ai:
+            print("WARNING: --ai is ignored with --unified (unified engine has its own implementation).")
+        if args.exclude:
+            print("WARNING: --exclude is ignored with --unified (unified engine applies all constraints).")
+
+    exclude = args.exclude or []
+    relax_config = None
+    if getattr(args, 'relax', False):
+        relax_config = {
+            'enabled': True,
+            'timeout': getattr(args, 'relax_timeout', 30.0),
+        }
+
+    user_description = getattr(args, 'description', '') or ''
+
+    # Build provenance info for metadata (sources of locked games and hints)
+    provenance = {}
+    if args.locked and locked_weeks:
+        provenance['locked_source'] = args.locked
+        provenance['locked_weeks'] = sorted(locked_weeks)
+        provenance['locked_game_count'] = len(locked_keys) if locked_keys else 0
+    if hint_path:
+        provenance['hint_source'] = hint_path
+
+    if use_unified:
+        print("\n[!] EXPERIMENTAL: --unified mode is not fully tested. Use --simple for production.")
+
+    if args.simple or use_unified:
         from main_staged import main_simple
-        exclude = args.exclude or []
-        relax_config = None
-        if getattr(args, 'relax', False):
-            relax_config = {
-                'enabled': True,
-                'timeout': getattr(args, 'relax_timeout', 30.0),
-            }
         solution, data = main_simple(
             locked_keys=locked_keys,
             locked_weeks=locked_weeks,
-            solver_config=solver_config, 
-            exclude_constraints=exclude, 
-            use_ai=args.ai, 
+            solver_config=solver_config,
+            exclude_constraints=exclude,
+            use_ai=args.ai,
             year=args.year,
             relax_config=relax_config,
             fix_round_1=fix_round_1,
-            constraint_slack=constraint_slack
+            constraint_slack=constraint_slack,
+            hint_solution=hint_solution,
+            use_unified=use_unified,
+            run_id=final_run_id,
+            description=user_description,
+            provenance=provenance,
         )
     else:
         stages = getattr(args, 'stages', None)
-        relax_config = None
-        if getattr(args, 'relax', False):
-            relax_config = {
-                'enabled': True,
-                'timeout': getattr(args, 'relax_timeout', 30.0),
-            }
         severity_staged = getattr(args, 'staged', False)
         solution, data = main_staged(
-            run_id=final_run_id, 
+            run_id=final_run_id,
             resume_from=resume_from,
             locked_keys=locked_keys,
             locked_weeks=locked_weeks,
@@ -328,11 +453,16 @@ def run_generate(args):
             relax_config=relax_config,
             fix_round_1=fix_round_1,
             constraint_slack=constraint_slack,
-            severity_staged=severity_staged
+            severity_staged=severity_staged,
+            hint_solution=hint_solution,
+            use_ai=args.ai,
+            exclude_constraints=exclude,
+            description=user_description,
+            provenance=provenance,
         )
     
     if solution:
-        print("\n✅ Draw generated successfully!")
+        print("\n[OK] Draw generated successfully!")
         print(f"  Latest draw:    draws/{args.year}/current.json")
         print(f"  Latest Excel:   draws/{args.year}/current.xlsx")
         print(f"  All versions:   draws/{args.year}/versions/")
@@ -340,7 +470,7 @@ def run_generate(args):
         print(f"  Checkpoints:    checkpoints/latest/")
         print("  Check the 'logs/' folder for detailed solver logs.")
     else:
-        print("\n❌ Failed to generate draw.")
+        print("\n[X] Failed to generate draw.")
         sys.exit(1)
 
 
@@ -389,7 +519,7 @@ def run_analyze(args):
     output_file = args.output or args.draw_file.replace('.json', '_analytics.xlsx')
     analytics.export_analytics_to_excel(output_file)
     
-    print(f"\n✅ Analytics exported to {output_file}")
+    print(f"\n[OK] Analytics exported to {output_file}")
     
     print("\nQuick Summary:")
     print(analytics.grade_summary().to_string(index=False))
@@ -424,7 +554,7 @@ def run_swap(args):
     success = tester.swap_games(args.game1, args.game2)
     
     if not success:
-        print(f"\n❌ Failed to swap games. Check that both IDs exist.")
+        print(f"\n[X] Failed to swap games. Check that both IDs exist.")
         sys.exit(1)
     
     # Check new violations
@@ -437,16 +567,16 @@ def run_swap(args):
     print(f"  Change:              {'+' if new_count > original_count else ''}{new_count - original_count}")
     
     if new_count > original_count:
-        print("\n⚠️ Swap introduces new violations:")
+        print("\n[WARNING] Swap introduces new violations:")
         # Show only new violations
         original_msgs = {v.message for v in original_report.violations}
         for v in new_report.violations:
             if v.message not in original_msgs:
                 print(f"  [{v.severity}] {v.constraint}: {v.message}")
     elif new_count < original_count:
-        print("\n✅ Swap reduces violations!")
+        print("\n[OK] Swap reduces violations!")
     else:
-        print("\n⚖️ Swap has no effect on violations.")
+        print("\n[INFO] Swap has no effect on violations.")
     
     if args.save:
         # Save as a minor version update through the versioning system
@@ -458,7 +588,7 @@ def run_swap(args):
             modified_draw, old_draw,
             f"Game swap: {args.game1} <-> {args.game2}"
         )
-        print(f"\n💾 Modified draw saved as new version in draws/{args.year}/")
+        print(f"\n[SAVED] Modified draw saved as new version in draws/{args.year}/")
 
 
 def run_report(args):
@@ -510,16 +640,16 @@ def run_report(args):
         cert.generate(str(output_path))
         
         if cert.is_compliant():
-            print("\n✅ Draw is COMPLIANT - all constraints satisfied")
+            print("\n[OK] Draw is COMPLIANT - all constraints satisfied")
         else:
-            print(f"\n❌ Draw is NON-COMPLIANT - {len(cert.report.violations)} violations")
+            print(f"\n[X] Draw is NON-COMPLIANT - {len(cert.report.violations)} violations")
     
     if args.html:
         print("Generating HTML report...")
         output_path = Path(args.output) / "draw_report.html"
         generate_html_report(draw, data, str(output_path))
     
-    print(f"\n✅ Reports generated in {args.output}/")
+    print(f"\n[OK] Reports generated in {args.output}/")
 
 
 def run_import(args):
@@ -547,11 +677,11 @@ def run_import(args):
         # Save locked portion
         locked_output = args.output or args.excel_file.replace('.xlsx', f'_locked_{weeks_label}.json')
         locked.save(locked_output)
-        print(f"\n✅ Locked draw saved to {locked_output}")
+        print(f"\n[OK] Locked draw saved to {locked_output}")
     else:
         output = args.output or args.excel_file.replace('.xlsx', '.json')
         draw.save(output)
-        print(f"\n✅ Draw saved to {output}")
+        print(f"\n[OK] Draw saved to {output}")
 
 
 def run_list_constraints(use_ai=False):
@@ -569,7 +699,8 @@ def run_list_constraints(use_ai=False):
         print("-" * 40)
         print(f"Description: {stage_info['description']}")
         print(f"Required: {'Yes' if stage_info.get('required') else 'No'}")
-        print(f"Time Limit: {stage_info['max_time_seconds'] // 60} minutes")
+        max_time = stage_info.get('max_time_seconds', 172800)
+        print(f"Time Limit: {max_time // 60} minutes")
         print("Constraints:")
         for constraint_cls in stage_info['constraints']:
             doc = constraint_cls.__doc__ or "No description"
@@ -751,7 +882,7 @@ def run_migrate(args):
     manager = DrawVersionManager('draws', year=args.year)
     manager.migrate_legacy_draws()
     
-    print(f"\n✅ Migration complete for {args.year}")
+    print(f"\n[OK] Migration complete for {args.year}")
     print(f"  Versions folder: draws/{args.year}/versions/")
     print(f"  Current draw:    draws/{args.year}/current.json")
 

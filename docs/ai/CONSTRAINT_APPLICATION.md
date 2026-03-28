@@ -204,15 +204,18 @@ CLUB_DAYS = {
 
 ### Gosford Friday Nights
 
-1. Set count in `FRIDAY_NIGHT_CONFIG['gosford_friday_count']`
-2. Add times to `PHL_GAME_TIMES['Central Coast Hockey Park']`
-3. Constraint `PHLAndSecondGradeTimes` enforces exact count
+1. Set exact count in `CONSTRAINT_DEFAULTS['gosford_friday_games']`
+2. Add times to `PHL_GAME_TIMES['Central Coast Hockey Park']` (e.g. 8pm)
+3. Use `FORCED_GAMES` to lock specific matchups to specific Gosford Friday dates
+4. Constraint `PHLAndSecondGradeTimes` enforces exact count
 
 ### NIHC Friday Nights
 
 1. Set times in `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']`
-2. Configure limit in `FRIDAY_NIGHT_CONFIG`
-3. Constraint limits to 3 Friday games at NIHC
+2. Set max count in `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']`
+3. Use `FORCED_GAMES` to lock specific matchups to NIHC Friday dates
+4. Use `BLOCKED_GAMES` to prevent games on non-confirmed Friday dates
+5. Constraint limits Friday games at NIHC to the configured max
 
 ---
 

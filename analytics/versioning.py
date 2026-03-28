@@ -582,10 +582,13 @@ class DrawVersionManager:
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         full_description = f"{description} ({mode} mode, {timestamp})"
-        
+
         # 1. Create DrawStorage from solution
         draw = DrawStorage.from_X_solution(solution, description=full_description)
-        
+
+        # 1b. Populate rich metadata for provenance
+        draw.metadata = self._build_draw_metadata(draw, solution, data, mode, timestamp)
+
         # 2. Export schedule Excel to a temp location, then version it
         roster = convert_X_to_roster(solution, data)
         temp_xlsx = self.base_path / f"_temp_schedule_{timestamp}.xlsx"
@@ -666,7 +669,148 @@ class DrawVersionManager:
         print(f"  Changelog:  {self.changelog_path}")
         
         return version
-    
+
+    def _build_draw_metadata(self, draw, solution, data, mode, timestamp):
+        """Build rich metadata dict for draw provenance and auditability."""
+        from collections import Counter
+
+        scheduled = {k: v for k, v in solution.items() if v == 1}
+
+        # Game stats
+        grades = Counter(k[2] for k, v in solution.items() if v == 1 and len(k) >= 11)
+        venues = Counter(k[10] for k, v in solution.items() if v == 1 and len(k) >= 11)
+        friday_games = [k for k in scheduled if len(k) >= 11 and k[3] == 'Friday']
+        friday_venues = Counter(k[10] for k in friday_games)
+        dates = sorted(set(k[7] for k in scheduled if len(k) >= 11))
+
+        metadata = {
+            'description': data.get('_user_description', ''),
+            'generated_at': timestamp,
+            'mode': mode,
+            'year': data.get('year'),
+
+            # Solver config
+            'solver_config': {
+                'mode': data.get('_solver_mode', mode),
+                'use_ai': data.get('_use_ai', False),
+                'workers': data.get('_solver_workers'),
+                'relax_enabled': data.get('_relax_enabled', False),
+                'excluded_constraints': data.get('_excluded_constraints', []),
+                'locked_weeks': sorted(data.get('locked_weeks', set())),
+                'locked_source': data.get('_provenance', {}).get('locked_source', ''),
+                'locked_game_count': data.get('_provenance', {}).get('locked_game_count', 0),
+                'hint_source': data.get('_provenance', {}).get('hint_source', ''),
+                'constraint_slack': self._serialize_for_json(data.get('constraint_slack', {})),
+            },
+
+            # Constraints applied
+            'constraints_applied': data.get('constraints_applied', []),
+
+            # Input restrictions
+            'forced_games': data.get('forced_games', []),
+            'blocked_games': data.get('blocked_games', []),
+            'field_unavailabilities': self._serialize_for_json(
+                data.get('field_unavailabilities', {})
+            ),
+            # Penalties
+            'penalties': {
+                name: len(info.get('penalties', []))
+                for name, info in data.get('penalties', {}).items()
+            },
+
+            # Draw statistics
+            'stats': {
+                'total_games': len(scheduled),
+                'total_variables': len(solution),
+                'games_by_grade': dict(grades),
+                'games_by_venue': dict(venues),
+                'friday_night_count': dict(friday_venues),
+                'date_range': [dates[0], dates[-1]] if dates else [],
+                'total_match_days': len(dates),
+                'weeks_used': len(set(
+                    k[6] for k in scheduled if len(k) >= 11
+                )),
+            },
+        }
+
+        # Forced game outcomes - verify each forced game against the solution
+        forced_outcomes = []
+        for fg in data.get('forced_games', []):
+            outcome = dict(fg)  # copy config entry
+            outcome['satisfied'] = self._check_forced_game(fg, scheduled)
+            forced_outcomes.append(outcome)
+        metadata['forced_game_outcomes'] = forced_outcomes
+
+        # Blocked game outcomes
+        blocked_outcomes = []
+        for bg in data.get('blocked_games', []):
+            outcome = dict(bg)
+            outcome['respected'] = self._check_blocked_game(bg, scheduled)
+            blocked_outcomes.append(outcome)
+        metadata['blocked_game_outcomes'] = blocked_outcomes
+
+        return metadata
+
+    @staticmethod
+    def _serialize_for_json(obj):
+        """Make config objects JSON-serializable."""
+        if isinstance(obj, dict):
+            return {k: DrawVersionManager._serialize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [DrawVersionManager._serialize_for_json(v) for v in obj]
+        elif hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        elif hasattr(obj, 'strftime'):
+            return obj.strftime('%H:%M')
+        elif isinstance(obj, set):
+            return sorted(obj)
+        return obj
+
+    @staticmethod
+    def _club_matches(team_name, club_name):
+        """Check if a team name belongs to a club (e.g. 'Wests Red 4th' matches 'Wests')."""
+        return team_name.startswith(club_name + ' ') or team_name == club_name
+
+    def _check_forced_game(self, fg, scheduled):
+        """Check if a forced game config entry is satisfied in the solution."""
+        teams = fg.get('teams', [])
+        grade = fg.get('grade')
+        date = fg.get('date')
+
+        for k in scheduled:
+            if len(k) < 11:
+                continue
+            if date and k[7] != date:
+                continue
+            if grade and k[2] != grade:
+                continue
+
+            if len(teams) == 2:
+                if (self._club_matches(k[0], teams[0]) and self._club_matches(k[1], teams[1])) or \
+                   (self._club_matches(k[0], teams[1]) and self._club_matches(k[1], teams[0])):
+                    return True
+            elif len(teams) == 1:
+                if self._club_matches(k[0], teams[0]) or self._club_matches(k[1], teams[0]):
+                    return True
+        return False
+
+    def _check_blocked_game(self, bg, scheduled):
+        """Check if a blocked game config entry is respected (no violating games)."""
+        club = bg.get('club')
+        date = bg.get('date')
+        grades = bg.get('grades', [bg['grade']] if 'grade' in bg else [])
+
+        for k in scheduled:
+            if len(k) < 11:
+                continue
+            if k[7] != date:
+                continue
+            if grades and k[2] not in grades:
+                continue
+            if club and (self._club_matches(k[0], club) or self._club_matches(k[1], club)):
+                return False  # violation found
+        return True  # no violations
+
     def migrate_legacy_draws(self):
         """
         Migrate draw_v*.json files from base path into versions/ subfolder.

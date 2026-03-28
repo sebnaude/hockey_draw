@@ -8,7 +8,7 @@ that differ only in their ordering (e.g., which games appear in which round).
 
 from ortools.sat.python import cp_model
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List
 from collections import defaultdict
 
 
@@ -110,6 +110,3 @@ class FixRound1SymmetryBreaking(Constraint):
         return constraints_added
 
 
-class FixRound1SymmetryBreakingAI(FixRound1SymmetryBreaking):
-    """AI-enhanced alias for FixRound1SymmetryBreaking (identical implementation)."""
-    pass

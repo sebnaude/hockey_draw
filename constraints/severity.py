@@ -25,7 +25,7 @@ The resolver:
 
 import sys
 from typing import List, Dict, Any, Optional, Tuple, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
 
@@ -60,6 +60,9 @@ CONSTRAINT_TO_SEVERITY = {
     'MaitlandHomeGrouping': 1,
     'MaitlandHomeGroupingAI': 1,
     
+    'EqualMatchUpSpacingConstraint': 1,
+    'EqualMatchUpSpacingConstraintAI': 1,
+
     # Level 2 - HIGH (structural, club-specific)
     'ClubDayConstraint': 2,
     'ClubDayConstraintAI': 2,
@@ -67,18 +70,16 @@ CONSTRAINT_TO_SEVERITY = {
     'AwayAtMaitlandGroupingAI': 2,
     'TeamConflictConstraint': 2,
     'TeamConflictConstraintAI': 2,
-    'EqualMatchUpSpacingConstraint': 2,
-    'EqualMatchUpSpacingConstraintAI': 2,
-    
-    # Level 3 - MEDIUM (spacing, alignment)
+
+    # Level 3 - MEDIUM (spacing, alignment, game spread)
     'ClubGradeAdjacencyConstraint': 3,
     'ClubGradeAdjacencyConstraintAI': 3,
     'ClubVsClubAlignment': 3,
     'ClubVsClubAlignmentAI': 3,
-    
+    'ClubGameSpread': 3,
+    'ClubGameSpreadAI': 3,
+
     # Level 4 - LOW (club density/optimization)
-    'ClubGameSpread': 4,
-    'ClubGameSpreadAI': 4,
     'MaximiseClubsPerTimeslotBroadmeadow': 4,
     'MaximiseClubsPerTimeslotBroadmeadowAI': 4,
     'MinimiseClubsOnAFieldBroadmeadow': 4,
@@ -366,12 +367,11 @@ def create_relaxation_test_func(data: dict, generate_X_func, timeout: float = 10
         test_data['penalties'] = {}
         
         # Generate X
-        X, Y, conflicts, unavailable_games = generate_X_func(model, test_data)
+        X, Y, conflicts = generate_X_func(model, test_data)
         
         # Prepare data
         if isinstance(test_data.get('games'), dict):
             test_data['games'] = list(test_data['games'].keys())
-        test_data['unavailable_games'] = unavailable_games
         test_data['team_conflicts'] = conflicts
         
         # Apply constraints

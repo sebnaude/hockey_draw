@@ -34,6 +34,7 @@ from constraints.original import (
     MaximiseClubsPerTimeslotBroadmeadow,
     MinimiseClubsOnAFieldBroadmeadow,
     PreferredTimesConstraint,
+    ClubGameSpread,
 )
 
 # AI constraints (backward compatible with: from constraints_ai import ...)
@@ -121,6 +122,7 @@ __all__ = [
     'MaximiseClubsPerTimeslotBroadmeadow',
     'MinimiseClubsOnAFieldBroadmeadow',
     'PreferredTimesConstraint',
+    'ClubGameSpread',
     # AI
     'ConstraintAI',
     'PenaltyConfig',

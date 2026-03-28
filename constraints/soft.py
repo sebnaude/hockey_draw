@@ -30,7 +30,7 @@ from ortools.sat.python import cp_model
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from itertools import combinations
 
 from utils import (
@@ -758,128 +758,110 @@ class ClubVsClubAlignmentSoft(SoftConstraint):
 class EnsureBestTimeslotChoicesSoft(SoftConstraint):
     """
     Soft version of EnsureBestTimeslotChoices.
-    
-    Original: No gaps between used timeslots, efficient game organization (hard).
-    Soft version: Penalizes gaps and inefficient slot usage.
+
+    Penalises stacking violations: at a given location, using slot N on any field
+    when slot N-1 is not filled on all fields incurs a penalty. Each location
+    (Broadmeadow, Maitland, Gosford) is treated independently.
+
+    Also penalises 7pm (19:00) games as the worst timeslot.
     """
-    
+
     def __init__(self, slack_level: int = 1, penalty_weight: Optional[int] = None,
                  allow_gaps: bool = True, allow_overflow: bool = True):
         super().__init__(slack_level, penalty_weight)
         self.severity_level = 5
         self.allow_gaps = allow_gaps
         self.allow_overflow = allow_overflow
-    
+
     def apply(self, model, X, data):
         self._init_penalties(data, 'EnsureBestTimeslotChoicesSoft')
-        
-        games = data['games']
+
         timeslots = data['timeslots']
-        fields = data['fields']
+        games = data['games']
         locked_weeks = data.get('locked_weeks', set())
-        
-        timeslots_weekly = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        games_per_location = defaultdict(lambda: defaultdict(list))
-        
+
+        # Group vars by (week, day, location, field_name, day_slot)
+        field_slot_vars = defaultdict(list)
+
         for t in timeslots:
+            if not t.day:
+                continue
             for (t1, t2, grade) in games:
-                key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day:
-                    timeslots_weekly[(t.week, t.day)][t.field.location][t.day_slot].append(X[key])
-                    games_per_location[(t.week, t.day)][t.field.location].append(X[key])
-        
-        timeslots_indicators = defaultdict(lambda: defaultdict(lambda: defaultdict()))
-        timeslot_numbers = defaultdict(lambda: defaultdict(lambda: defaultdict()))
-        
-        for (week, day), locations in timeslots_weekly.items():
+                key = (t1, t2, grade, t.day, t.day_slot, t.time,
+                       t.week, t.date, t.round_no, t.field.name, t.field.location)
+                if key in X:
+                    fs_key = (t.week, t.day, t.field.location, t.field.name, t.day_slot)
+                    field_slot_vars[fs_key].append(X[key])
+
+        # Build per-field-slot indicators
+        loc_fields = defaultdict(lambda: defaultdict(dict))
+
+        for fs_key, vars_list in field_slot_vars.items():
+            week, day, location, field_name, day_slot = fs_key
             if week in locked_weeks:
                 continue
-            
-            for location, day_slots in locations.items():
-                for day_slot, game_vars in day_slots.items():
-                    if len(game_vars) > 1:
-                        timeslot_indicator = model.NewBoolVar(f'timeslots_indicator_{week}_{location}_soft')
-                        timeslots_indicators[(week, day)][location][day_slot] = timeslot_indicator
-                        model.AddMaxEquality(timeslot_indicator, game_vars)
-                        
-                        timeslot_number = model.NewIntVar(0, len(day_slots), f'timeslot_number_{week}_{location}_soft')
-                        timeslot_numbers[(week, day)][location][day_slot] = timeslot_number
-                        model.Add(timeslot_number == int(day_slot))
-        
-        # Gap constraint - soft version
-        for (week, day), locations in timeslots_indicators.items():
-            for location, day_slots in locations.items():
-                sorted_slots = sorted(day_slots.keys())
-                for i in range(1, len(sorted_slots) - 1):
-                    if sorted_slots[i-1] not in day_slots or sorted_slots[i+1] not in day_slots:
-                        continue
-                    
-                    prior_slot = day_slots[sorted_slots[i - 1]]
-                    relevant_slot = day_slots[sorted_slots[i]]
-                    following_slot = day_slots[sorted_slots[i + 1]]
-                    
-                    if self.allow_gaps:
-                        # Soft: penalize gaps
-                        gap = model.NewBoolVar(f'gap_{week}_{location}_{sorted_slots[i]}_soft')
-                        model.Add(gap >= prior_slot + following_slot - relevant_slot - 1)
-                        data['penalties']['EnsureBestTimeslotChoicesSoft']['penalties'].append(gap)
-                    else:
-                        # Hard: no gaps
-                        model.Add(prior_slot + following_slot <= 1).OnlyEnforceIf(relevant_slot.Not())
-        
-        # Timeslot efficiency
-        for (week, day), locations in games_per_location.items():
-            if week in locked_weeks:
+            if len(vars_list) == 1:
+                indicator = vars_list[0]
+            else:
+                indicator = model.NewBoolVar(f'soft_fs_{week}_{field_name}_{day_slot}')
+                model.AddMaxEquality(indicator, vars_list)
+            loc_fields[(week, day, location)][field_name][day_slot] = indicator
+
+        # Stacking constraint (soft): penalise when a field uses slot N+1
+        # but another field doesn't use slot N
+        for (week, day, location), fields_dict in loc_fields.items():
+            field_names = list(fields_dict.keys())
+
+            all_slots = set()
+            for field_slots in fields_dict.values():
+                all_slots.update(field_slots.keys())
+            sorted_slots = sorted(all_slots)
+
+            if len(sorted_slots) < 2:
                 continue
-            
-            for location in locations:
-                fields_at_location = [field for field in fields if field.location == location]
-                num_fields = len(fields_at_location)
-                if num_fields == 0:
-                    continue
-                
-                no_location_games = model.NewIntVar(0, len(games), f'no_location_games_{week}_{location}_soft')
-                model.Add(no_location_games == sum(locations[location]))
-                
-                quotient = model.NewIntVar(0, len(timeslots), f'quotient_{week}_{location}_soft')
-                model.AddDivisionEquality(quotient, no_location_games, num_fields)
-                
-                no_timeslots = model.NewIntVar(0, len(timeslots), f'no_timeslots_{week}_{location}_soft')
-                model.Add(no_timeslots == quotient + 1)
-                
-                number_vars = timeslot_numbers[(week, day)][location]
-                for day_slot, number_var in number_vars.items():
-                    indicator_var = timeslots_indicators[(week, day)][location].get(day_slot)
-                    if indicator_var is None:
+
+            for i in range(len(sorted_slots) - 1):
+                curr_slot = sorted_slots[i]
+                next_slot = sorted_slots[i + 1]
+
+                for f in field_names:
+                    curr_ind = fields_dict[f].get(curr_slot)
+                    if curr_ind is None:
                         continue
-                    
-                    if location == 'Newcastle International Hockey Centre':
-                        equivalence_indicator = model.NewIntVar(0, 200, f'equivalence_indicator_{week}_{location}_{day_slot}_soft')
-                        model.Add(equivalence_indicator >= 6)
-                        model.Add(equivalence_indicator >= no_timeslots)
-                        
-                        no_timeslots_indic = model.NewBoolVar(f'no_timeslots_indicator_{week}_{location}_{day_slot}_soft')
-                        model.Add(no_timeslots <= 6).OnlyEnforceIf(no_timeslots_indic)
-                        model.Add(no_timeslots > 6).OnlyEnforceIf(no_timeslots_indic.Not())
-                        
-                        model.Add(equivalence_indicator <= 6).OnlyEnforceIf(no_timeslots_indic)
-                        model.Add(equivalence_indicator <= no_timeslots).OnlyEnforceIf(no_timeslots_indic.Not())
-                        
-                        if self.allow_overflow:
-                            overflow = model.NewIntVar(0, 100, f'slot_overflow_{week}_{location}_{day_slot}_soft')
-                            model.Add(overflow >= number_var - equivalence_indicator).OnlyEnforceIf(indicator_var)
-                            model.Add(overflow == 0).OnlyEnforceIf(indicator_var.Not())
-                            data['penalties']['EnsureBestTimeslotChoicesSoft']['penalties'].append(overflow)
+
+                    for f2 in field_names:
+                        next_ind = fields_dict[f2].get(next_slot)
+                        if next_ind is None:
+                            continue
+
+                        if self.allow_gaps:
+                            # Soft: penalise stacking violations
+                            violation = model.NewBoolVar(
+                                f'stack_viol_{week}_{location}_{f}_{curr_slot}_{f2}_{next_slot}_soft')
+                            # violation = 1 when next_ind=1 and curr_ind=0
+                            model.Add(violation >= next_ind - curr_ind)
+                            data['penalties']['EnsureBestTimeslotChoicesSoft']['penalties'].append(violation)
                         else:
-                            model.Add(number_var <= equivalence_indicator).OnlyEnforceIf(indicator_var)
-                    else:
-                        if self.allow_overflow:
-                            overflow = model.NewIntVar(0, 100, f'slot_overflow_{week}_{location}_{day_slot}_soft')
-                            model.Add(overflow >= number_var - no_timeslots).OnlyEnforceIf(indicator_var)
-                            model.Add(overflow == 0).OnlyEnforceIf(indicator_var.Not())
-                            data['penalties']['EnsureBestTimeslotChoicesSoft']['penalties'].append(overflow)
-                        else:
-                            model.Add(number_var <= no_timeslots).OnlyEnforceIf(indicator_var)
+                            # Hard: enforce stacking
+                            model.AddImplication(next_ind, curr_ind)
+
+        # Penalise 7pm (19:00) games — worst timeslot
+        worst_time = '19:00'
+        penalty_key = 'EnsureBestTimeslotChoices_7pm'
+        weights = data.get('penalty_weights', {})
+        data['penalties'][penalty_key] = {
+            'weight': weights.get(penalty_key, 100_000),
+            'penalties': []
+        }
+        for key, var in X.items():
+            if len(key) < 11 or not key[3]:
+                continue
+            if key[6] in locked_weeks:
+                continue
+            if key[5] == worst_time:
+                pv = model.NewIntVar(0, 1, f'7pm_penalty_{key[6]}_{key[0]}_{key[1]}_soft')
+                model.Add(pv == var)
+                data['penalties'][penalty_key]['penalties'].append(pv)
 
 
 class MaximiseClubsPerTimeslotBroadmeadowSoft(SoftConstraint):
