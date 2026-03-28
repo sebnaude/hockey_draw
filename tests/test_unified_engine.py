@@ -413,34 +413,18 @@ class TestPhaseB:
 
 class TestPhaseC:
 
-    def test_phase_c_returns_count(self, mini_engine):
-        """Phase C returns a constraint count."""
+    def test_stage_2_adds_spread_penalties(self, mini_engine):
+        """Stage 2 creates ClubGameSpread penalty entries."""
         mini_engine.build_groupings()
-        mini_engine.apply_phase_a()
-        mini_engine.apply_phase_b()
-        count = mini_engine.apply_phase_c()
-        assert count >= 0
-
-    def test_phase_c_requires_groupings(self, mini_engine):
-        """Phase C asserts groupings are built."""
-        with pytest.raises(AssertionError, match="build_groupings"):
-            mini_engine.apply_phase_c()
-
-    def test_phase_c_adds_spread_penalties(self, mini_engine):
-        """Phase C creates ClubGameSpread penalty entries."""
-        mini_engine.build_groupings()
-        mini_engine.apply_phase_a()
-        mini_engine.apply_phase_b()
-        mini_engine.apply_phase_c()
+        mini_engine.apply_stage_1_hard()
+        mini_engine.apply_stage_2_soft()
 
         penalties = mini_engine.data['penalties']
         assert 'ClubGameSpread' in penalties
-        assert 'MaximiseClubsPerTimeslotBroadmeadow' in penalties
-        assert 'MinimiseClubsOnAFieldBroadmeadow' in penalties
+        assert 'ClubFieldConcentration' in penalties
 
-    def test_total_constraints_higher_than_phase_a(self, mini_unified_data):
-        """All phases together produce more constraints than Phase A alone."""
-        # Phase A only
+    def test_total_constraints_higher_than_stage_1(self, mini_unified_data):
+        """Both stages together produce more constraints than Stage 1 alone."""
         model_a, X_a = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -448,9 +432,8 @@ class TestPhaseC:
         data_a['penalties'] = {}
         engine_a = UnifiedConstraintEngine(model_a, X_a, data_a)
         engine_a.build_groupings()
-        count_a = engine_a.apply_phase_a()
+        count_a = engine_a.apply_stage_1_hard()
 
-        # All phases
         model_all, X_all = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -458,16 +441,15 @@ class TestPhaseC:
         data_all['penalties'] = {}
         engine_all = UnifiedConstraintEngine(model_all, X_all, data_all)
         engine_all.build_groupings()
-        total = engine_all.apply_phase_a() + engine_all.apply_phase_b() + engine_all.apply_phase_c()
+        total = engine_all.apply_stage_1_hard() + engine_all.apply_stage_2_soft()
 
         assert total >= count_a
 
-    def test_model_valid_after_all_phases(self, mini_engine):
-        """Model is not invalid after all three phases."""
+    def test_model_valid_after_all_stages(self, mini_engine):
+        """Model is not invalid after both stages."""
         mini_engine.build_groupings()
-        mini_engine.apply_phase_a()
-        mini_engine.apply_phase_b()
-        mini_engine.apply_phase_c()
+        mini_engine.apply_stage_1_hard()
+        mini_engine.apply_stage_2_soft()
 
         status, solver = solve_with_timeout(mini_engine.model, timeout_seconds=3.0)
         assert status != cp_model.MODEL_INVALID
@@ -610,8 +592,6 @@ class TestConstraintCoverage:
             'AwayAtMaitlandGrouping',
             'ClubGameSpread',
             'ClubFieldConcentration',
-            'MaximiseClubsPerTimeslotBroadmeadow',
-            'MinimiseClubsOnAFieldBroadmeadow',
             'EnsureBestTimeslotChoices_7pm',
         ]
         for key in expected_penalty_keys:
@@ -633,8 +613,6 @@ class TestConstraintCoverage:
             'fifty_fifty': engine._fifty_fifty_home_away(),
             'maitland_grouping': engine._maitland_grouping_hard(),
             'away_maitland': engine._away_maitland_hard(),
-            'clubs_per_timeslot': engine._clubs_per_timeslot_hard(),
-            'clubs_on_field': engine._clubs_on_field_hard(),
         }
 
         # These should definitely have constraints with our mini data
@@ -652,8 +630,8 @@ class TestConstraintCoverage:
         )
         engine = UnifiedConstraintEngine(model, X, mini_unified_data)
 
-        # Phase A methods (hard constraints)
-        phase_a_methods = [
+        # Stage 1 methods (hard constraints)
+        stage_1_methods = [
             '_no_double_booking_teams',
             '_no_double_booking_fields',
             '_equal_games_balanced_matchups',
@@ -668,12 +646,13 @@ class TestConstraintCoverage:
             '_maitland_grouping_hard',
             '_away_maitland_hard',
             '_club_day_scheduling',
-            '_clubs_per_timeslot_hard',
-            '_clubs_on_field_hard',
+            '_best_timeslot_choices',
+            '_club_day_field_contiguity',
+            '_club_game_spread_hard',
         ]
 
-        # Phase B methods (soft penalties)
-        phase_b_methods = [
+        # Stage 2 methods (soft penalties)
+        stage_2_methods = [
             '_matchup_spacing_soft',
             '_grade_adjacency_soft',
             '_club_alignment_soft',
@@ -681,18 +660,10 @@ class TestConstraintCoverage:
             '_away_maitland_soft',
             '_phl_times_soft',
             '_preferred_times',
+            '_club_game_spread_soft',
         ]
 
-        # Phase C methods (intra-day optimization)
-        phase_c_methods = [
-            '_best_timeslot_choices',
-            '_club_day_field_contiguity',
-            '_club_game_spread',
-            '_clubs_per_timeslot_soft',
-            '_clubs_on_field_soft',
-        ]
-
-        all_methods = phase_a_methods + phase_b_methods + phase_c_methods
+        all_methods = stage_1_methods + stage_2_methods
         for method_name in all_methods:
             assert hasattr(engine, method_name), f"Missing method: {method_name}"
             assert callable(getattr(engine, method_name)), f"Not callable: {method_name}"

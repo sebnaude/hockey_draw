@@ -386,8 +386,11 @@ class UnifiedConstraintEngine:
     # PHASE A: HARD INTER-WEEK CONSTRAINTS
     # ================================================================
 
-    def apply_phase_a(self):
-        """Apply all hard inter-week constraints (minimal model for feasibility)."""
+    def apply_stage_1_hard(self):
+        """Stage 1: All hard constraints (feasibility).
+
+        These are binary constraints that MUST be satisfied for a valid draw.
+        """
         assert self._groupings_built, "Call build_groupings() first"
         c = 0
         c += self._no_double_booking_teams()
@@ -404,10 +407,14 @@ class UnifiedConstraintEngine:
         c += self._maitland_grouping_hard()
         c += self._away_maitland_hard()
         c += self._club_day_scheduling()
-        c += self._clubs_per_timeslot_hard()
-        c += self._clubs_on_field_hard()
+        c += self._best_timeslot_choices()
+        c += self._club_day_field_contiguity()
+        c += self._club_game_spread_hard()
         self.constraints_added += c
         return c
+
+    # Keep old name as alias for backward compatibility
+    apply_phase_a = apply_stage_1_hard
 
     def _no_double_booking_teams(self):
         n = 0
@@ -664,20 +671,6 @@ class UnifiedConstraintEngine:
                         self.model.Add(coincide >= ind1 + ind2 - 1)
                         coincide_vars.append(coincide)
 
-                        # Max 2 fields when coinciding
-                        field_round = self.by_sunday_clubpair_round_field[club_pair].get(round_no, {})
-                        if field_round:
-                            fi_list = []
-                            for fn, gvars in field_round.items():
-                                fi = self.model.NewBoolVar(f"u_fld_{club_pair}_{round_no}_{fn}")
-                                self.model.AddMaxEquality(fi, gvars)
-                                fi_list.append(fi)
-                            if fi_list:
-                                nf = self.model.NewIntVar(0, len(fi_list), f"u_nflds_{club_pair}_{round_no}")
-                                self.model.Add(nf == sum(fi_list))
-                                self.model.Add(nf <= 2).OnlyEnforceIf(coincide)
-                                n += 1
-
                     if coincide_vars:
                         min_req = max(0, num_games - config_slack)
                         self.model.Add(sum(coincide_vars) >= min_req)
@@ -834,8 +827,12 @@ class UnifiedConstraintEngine:
     # PHASE B: SOFT INTER-WEEK PENALTIES
     # ================================================================
 
-    def apply_phase_b(self):
-        """Add soft inter-week penalties on top of Phase A."""
+    def apply_stage_2_soft(self):
+        """Stage 2: All soft constraints (optimization).
+
+        These create penalty variables that the objective minimizes.
+        They further optimize a feasible solution from Stage 1.
+        """
         assert self._groupings_built, "Call build_groupings() first"
         c = 0
         c += self._matchup_spacing_soft()
@@ -845,8 +842,12 @@ class UnifiedConstraintEngine:
         c += self._away_maitland_soft()
         c += self._phl_times_soft()
         c += self._preferred_times()
+        c += self._club_game_spread_soft()
         self.constraints_added += c
         return c
+
+    # Keep old name as alias for backward compatibility
+    apply_phase_b = apply_stage_2_soft
 
     def _matchup_spacing_soft(self):
         """Sliding window density penalties."""
@@ -908,7 +909,6 @@ class UnifiedConstraintEngine:
         n = 0
         weights = self.data.get('penalty_weights', {})
         self.data['penalties']['ClubVsClubAlignment'] = {'weight': weights.get('ClubVsClubAlignment', 100000), 'penalties': []}
-        self.data['penalties']['ClubVsClubAlignmentField'] = {'weight': weights.get('ClubVsClubAlignmentField', 50000), 'penalties': []}
 
         per_team_games = {
             g.name: (self.num_rounds['max'] // (g.num_teams - 1)) if g.num_teams > 1 and g.num_teams % 2 == 0
@@ -918,7 +918,6 @@ class UnifiedConstraintEngine:
         }
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
         config_slack = self.slack.get('ClubVsClubAlignment', 0)
-        fidx = 0
 
         processed = []
         prev_num = 0
@@ -937,44 +936,20 @@ class UnifiedConstraintEngine:
                     for round_no, vars_list in rounds.items():
                         if round_no not in other_rounds:
                             continue
-                        # Reuse indicators from Phase A if available
-                        ind1_key = f"u_g1_{grade}_{club_pair}_{round_no}"
-                        ind2_key = f"u_g2_{other_grade}_{club_pair}_{round_no}"
-                        coin_key = f"u_coin_{club_pair}_{round_no}"
-
-                        # These were created in Phase A, look them up
+                        # Reuse indicators from Stage 1 if available
                         coincide = self._shared_indicators.get(('coin', grade, other_grade, club_pair, round_no))
                         if coincide is None:
-                            # Create if Phase A wasn't run (fallback)
-                            ind1 = self.model.NewBoolVar(ind1_key)
+                            # Create if Stage 1 wasn't run (fallback)
+                            ind1 = self.model.NewBoolVar(f"u_g1_{grade}_{club_pair}_{round_no}")
                             self.model.AddMaxEquality(ind1, vars_list)
-                            ind2 = self.model.NewBoolVar(ind2_key)
+                            ind2 = self.model.NewBoolVar(f"u_g2_{other_grade}_{club_pair}_{round_no}")
                             self.model.AddMaxEquality(ind2, other_rounds[round_no])
-                            coincide = self.model.NewBoolVar(coin_key)
+                            coincide = self.model.NewBoolVar(f"u_coin_{club_pair}_{round_no}")
                             self.model.Add(coincide <= ind1)
                             self.model.Add(coincide <= ind2)
                             self.model.Add(coincide >= ind1 + ind2 - 1)
 
                         coincide_vars.append(coincide)
-
-                        # Field excess penalty
-                        field_round = self.by_sunday_clubpair_round_field[club_pair].get(round_no, {})
-                        if field_round:
-                            fi_list = []
-                            for fn, gvars in field_round.items():
-                                fi = self.model.NewBoolVar(f"u_sfld_{club_pair}_{round_no}_{fn}_{fidx}")
-                                self.model.AddMaxEquality(fi, gvars)
-                                fi_list.append(fi)
-                            if fi_list:
-                                nf = self.model.NewIntVar(0, len(fi_list),
-                                    f"u_sfexcess_{club_pair}_{round_no}_{fidx}")
-                                self.model.Add(nf == sum(fi_list))
-                                fex = self.model.NewIntVar(0, len(fi_list),
-                                    f"u_fex_{club_pair}_{round_no}_{fidx}")
-                                self.model.Add(fex >= nf - 1).OnlyEnforceIf(coincide)
-                                self.model.Add(fex == 0).OnlyEnforceIf(coincide.Not())
-                                self.data['penalties']['ClubVsClubAlignmentField']['penalties'].append(fex)
-                                fidx += 1
 
                     if coincide_vars:
                         actual = self.model.NewIntVar(0, len(coincide_vars),
@@ -1094,16 +1069,9 @@ class UnifiedConstraintEngine:
     # ================================================================
 
     def apply_phase_c(self):
-        """Add intra-day optimization constraints."""
-        assert self._groupings_built, "Call build_groupings() first"
-        c = 0
-        c += self._best_timeslot_choices()
-        c += self._club_day_field_contiguity()
-        c += self._club_game_spread()
-        c += self._clubs_per_timeslot_soft()
-        c += self._clubs_on_field_soft()
-        self.constraints_added += c
-        return c
+        """DEPRECATED: Use apply_stage_1_hard() + apply_stage_2_soft() instead.
+        Kept for backward compatibility only."""
+        return 0
 
     def _best_timeslot_choices(self):
         """Per-field stacking (cross-field implication) + 7pm penalty.
@@ -1227,40 +1195,35 @@ class UnifiedConstraintEngine:
                 n += 1
         return n
 
-    def _club_game_spread(self):
-        """Minimize gaps between a club's games on a given day + field concentration.
+    def _club_game_spread_hard(self):
+        """Hard: limit gaps between a club's games on a given day + field concentration cap.
 
-        Matches ai.py ClubGameSpreadAI including field concentration tracking.
+        For each (club, week, day):
+        - gaps = range_size - num_used_slots; must be <= hard_limit
+        - field_spread = num_games - max_field; hard cap: 2*field_spread <= num_games - 2 + 2*slack
         """
         n = 0
-        weights = self.data.get('penalty_weights', {})
-        self.data['penalties']['ClubGameSpread'] = {
-            'weight': weights.get('ClubGameSpread', 5000), 'penalties': []
-        }
-        self.data['penalties']['ClubFieldConcentration'] = {
-            'weight': weights.get('ClubFieldConcentration', 5000), 'penalties': []
-        }
         config_slack = self.slack.get('ClubGameSpread', 0)
         hard_limit = self.CLUB_GAME_SPREAD_HARD_LIMIT + config_slack
 
-        # Regroup by (club, week, day)
-        club_week_day_groups = defaultdict(dict)
+        # Build shared groupings for hard+soft
+        self._cgs_groups = defaultdict(dict)
         for (club, week, day, day_slot), vars_list in self.by_club_week_day_slot.items():
-            club_week_day_groups[(club, week, day)][day_slot] = vars_list
+            self._cgs_groups[(club, week, day)][day_slot] = vars_list
 
-        # Regroup field vars by (club, week, day)
-        club_week_day_field_groups = defaultdict(dict)
+        self._cgs_field_groups = defaultdict(dict)
         for (club, week, day, field_key), vars_list in self.by_club_week_day_field.items():
-            club_week_day_field_groups[(club, week, day)][field_key] = vars_list
+            self._cgs_field_groups[(club, week, day)][field_key] = vars_list
 
-        for (club, week, day), slots_dict in club_week_day_groups.items():
+        # Store shared vars for soft phase reuse
+        self._cgs_shared = {}
+
+        for (club, week, day), slots_dict in self._cgs_groups.items():
             unique_slots = sorted(slots_dict.keys())
             if len(unique_slots) <= 1:
                 continue
 
             min_slot, max_slot = unique_slots[0], unique_slots[-1]
-
-            # Collect ALL vars for the club on this (week, day)
             all_vars_for_day = []
             for s in unique_slots:
                 all_vars_for_day.extend(slots_dict[s])
@@ -1272,7 +1235,6 @@ class UnifiedConstraintEngine:
                     f'u_cgs_act_{club}_w{week}_{day}_s{s}')
                 is_active[s] = ia
 
-            # num_games = total games for this club on this day
             num_games = self.model.NewIntVar(0, len(all_vars_for_day),
                                               f'u_cgs_ng_{club}_w{week}_{day}')
             self.model.Add(num_games == sum(all_vars_for_day))
@@ -1297,18 +1259,12 @@ class UnifiedConstraintEngine:
             self.model.Add(num_games >= 2).OnlyEnforceIf(has_multi)
             self.model.Add(num_games <= 1).OnlyEnforceIf(has_multi.Not())
 
+            # Hard: gap limit
             self.model.Add(gaps <= hard_limit).OnlyEnforceIf(has_multi)
-
-            pen = self.model.NewIntVar(0, max_gaps, f'u_cgs_pen_{club}_w{week}_{day}')
-            self.model.Add(pen >= gaps).OnlyEnforceIf(has_multi)
-            self.model.Add(pen == 0).OnlyEnforceIf(has_multi.Not())
-            self.data['penalties']['ClubGameSpread']['penalties'].append(pen)
             n += 1
 
-            # --- Field concentration ---
-            # field_spread = num_games - max_games_on_any_single_field
-            # Ideal = 0 (all games on one field). Hard cap scales with club size.
-            field_dict = club_week_day_field_groups.get((club, week, day), {})
+            # Hard: field concentration cap
+            field_dict = self._cgs_field_groups.get((club, week, day), {})
             if field_dict:
                 field_game_counts = []
                 n_all = len(all_vars_for_day)
@@ -1317,30 +1273,71 @@ class UnifiedConstraintEngine:
                                                    f'u_cgs_fc_{club}_w{week}_{day}_{f_key[0]}')
                     self.model.Add(fcount == sum(f_vars))
                     field_game_counts.append(fcount)
-                    n += 1
 
                 max_field = self.model.NewIntVar(0, n_all,
                                                   f'u_cgs_maxf_{club}_w{week}_{day}')
                 self.model.AddMaxEquality(max_field, field_game_counts)
-                n += 1
 
                 field_spread = self.model.NewIntVar(0, n_all,
                                                      f'u_cgs_fspread_{club}_w{week}_{day}')
                 self.model.Add(field_spread == num_games - max_field)
-                n += 1
 
-                # Hard cap: 2 * field_spread <= num_games - 2 + 2*slack
                 self.model.Add(2 * field_spread <= num_games - 2 + 2 * config_slack).OnlyEnforceIf(has_multi)
                 n += 1
 
-                # Soft penalty for field_spread
+                # Store for soft phase
+                self._cgs_shared[(club, week, day)] = {
+                    'gaps': gaps, 'has_multi': has_multi,
+                    'field_spread': field_spread, 'max_gaps': max_gaps,
+                    'n_all': n_all,
+                }
+            else:
+                self._cgs_shared[(club, week, day)] = {
+                    'gaps': gaps, 'has_multi': has_multi,
+                    'max_gaps': max_gaps,
+                }
+
+        return n
+
+    def _club_game_spread_soft(self):
+        """Soft: penalize gaps and field spread."""
+        n = 0
+        weights = self.data.get('penalty_weights', {})
+        self.data['penalties']['ClubGameSpread'] = {
+            'weight': weights.get('ClubGameSpread', 5000), 'penalties': []
+        }
+        self.data['penalties']['ClubFieldConcentration'] = {
+            'weight': weights.get('ClubFieldConcentration', 5000), 'penalties': []
+        }
+
+        for (club, week, day), shared in self._cgs_shared.items():
+            gaps = shared['gaps']
+            has_multi = shared['has_multi']
+            max_gaps = shared['max_gaps']
+
+            pen = self.model.NewIntVar(0, max_gaps, f'u_cgs_pen_{club}_w{week}_{day}')
+            self.model.Add(pen >= gaps).OnlyEnforceIf(has_multi)
+            self.model.Add(pen == 0).OnlyEnforceIf(has_multi.Not())
+            self.data['penalties']['ClubGameSpread']['penalties'].append(pen)
+            n += 1
+
+            if 'field_spread' in shared:
+                field_spread = shared['field_spread']
+                n_all = shared['n_all']
                 f_penalty = self.model.NewIntVar(0, n_all,
                                                   f'u_cgs_fpen_{club}_w{week}_{day}')
                 self.model.Add(f_penalty >= field_spread).OnlyEnforceIf(has_multi)
                 self.model.Add(f_penalty == 0).OnlyEnforceIf(has_multi.Not())
                 self.data['penalties']['ClubFieldConcentration']['penalties'].append(f_penalty)
-                n += 2
+                n += 1
+
         return n
+
+    # ================================================================
+    # ARCHIVED: Removed constraints (superseded by ClubGameSpread)
+    # MaximiseClubsPerTimeslotBroadmeadow and MinimiseClubsOnAFieldBroadmeadow
+    # are redundant with ClubGameSpread's field concentration + contiguity.
+    # ================================================================
 
     def _clubs_per_timeslot_soft(self):
         """Soft: diversity penalty (total_teams - num_clubs)."""
@@ -1403,9 +1400,8 @@ class UnifiedConstraintEngine:
     # ================================================================
 
     def apply_all(self):
-        """Apply all three phases at once (equivalent to all 19 AI constraints)."""
+        """Apply all constraints: Stage 1 (hard) + Stage 2 (soft)."""
         self.build_groupings()
-        a = self.apply_phase_a()
-        b = self.apply_phase_b()
-        c = self.apply_phase_c()
-        return a + b + c
+        h = self.apply_stage_1_hard()
+        s = self.apply_stage_2_soft()
+        return h + s
