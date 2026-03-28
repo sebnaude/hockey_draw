@@ -12,7 +12,7 @@ This module provides:
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Tuple, Optional, Set, TYPE_CHECKING
+from typing import Dict, List, Any, Tuple, Optional
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models import PlayingField, Team, Club, Grade, Timeslot, Game, Roster
+from models import Team, Club, Grade, Roster
 
 
 # ============== Pliable Draw Storage Format ==============
@@ -410,6 +410,181 @@ class DrawStorage(BaseModel):
                 'merged_at': datetime.now().isoformat()
             }
         )
+
+    # ============== Excel Export ==============
+
+    def export_schedule_xlsx(
+        self,
+        filename: str,
+        weeks: Optional[List[int]] = None,
+        sheet_title: Optional[str] = None,
+    ) -> None:
+        """Export draw to a nicely formatted Excel schedule.
+
+        Games are grouped by week → date → field with colour-coded headers,
+        field sub-headers, borders, and bye listings.  Works directly from
+        DrawStorage (no Roster / ``data`` dict needed).
+
+        Args:
+            filename: Output .xlsx path.
+            weeks: Optional list of week numbers to include.  ``None`` = all.
+            sheet_title: Worksheet title (default auto-generated).
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+
+        # --- filter games ---------------------------------------------------
+        games = list(self.games)
+        if weeks is not None:
+            week_set = set(weeks)
+            games = [g for g in games if g.week in week_set]
+
+        by_week: Dict[int, list] = defaultdict(list)
+        for g in games:
+            by_week[g.week].append(g)
+
+        # all teams (for byes) scoped to selected weeks' grades
+        all_teams_by_grade: Dict[str, set] = defaultdict(set)
+        source = self.games  # full draw for bye calculation
+        for g in source:
+            all_teams_by_grade[g.grade].add(g.team1)
+            all_teams_by_grade[g.grade].add(g.team2)
+
+        # --- styles ----------------------------------------------------------
+        WEEK_COLOURS = [
+            'D6E4F0',  # light blue
+            'E2EFDA',  # light green
+            'FCE4D6',  # light peach
+            'EDEDED',  # light grey
+            'FFF2CC',  # light yellow
+            'D9E2F3',  # periwinkle
+            'E2D9F3',  # light purple
+            'D6F0E4',  # light teal
+        ]
+        field_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        field_font = Font(bold=True, size=10, color='FFFFFF')
+        header_fill = PatternFill(start_color='2F5496', end_color='2F5496', fill_type='solid')
+        header_font = Font(bold=True, size=10, color='FFFFFF')
+        week_font = Font(bold=True, size=13)
+        bye_font = Font(bold=True, size=10, color='CC0000')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+        HEADERS = ['Week', 'Round', 'Date', 'Day', 'Time', 'Slot',
+                    'Team 1', 'Team 2', 'Grade', 'Field', 'Venue']
+        COL_WIDTHS = {
+            'A': 8, 'B': 8, 'C': 14, 'D': 10, 'E': 8, 'F': 6,
+            'G': 28, 'H': 28, 'I': 8, 'J': 8, 'K': 38,
+        }
+        FIELD_ORDER = {'EF': 0, 'WF': 1, 'SF': 2}
+        NUM_COLS = len(HEADERS)
+
+        # --- build workbook --------------------------------------------------
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        if sheet_title:
+            ws.title = sheet_title
+        elif weeks:
+            ws.title = f"Weeks {min(weeks)}-{max(weeks)}"
+        else:
+            ws.title = "Schedule"
+
+        row = 1
+        for idx, week in enumerate(sorted(by_week.keys())):
+            week_games = by_week[week]
+            week_colour = WEEK_COLOURS[idx % len(WEEK_COLOURS)]
+            week_bg = PatternFill(start_color=week_colour,
+                                  end_color=week_colour, fill_type='solid')
+
+            # Week title row
+            c = ws.cell(row=row, column=1, value=f'Week {week}')
+            c.font = week_font
+            for ci in range(1, NUM_COLS + 1):
+                ws.cell(row=row, column=ci).fill = week_bg
+            row += 1
+
+            # Column headers
+            for ci, h in enumerate(HEADERS, 1):
+                c = ws.cell(row=row, column=ci, value=h)
+                c.font = header_font
+                c.fill = header_fill
+                c.border = thin_border
+            row += 1
+
+            # Group by date → field
+            by_date: Dict[str, list] = defaultdict(list)
+            for g in week_games:
+                by_date[g.date].append(g)
+
+            for date in sorted(by_date.keys()):
+                date_games = by_date[date]
+                by_field: Dict[tuple, list] = defaultdict(list)
+                for g in date_games:
+                    by_field[(g.field_name, g.field_location)].append(g)
+
+                sorted_fields = sorted(
+                    by_field.keys(),
+                    key=lambda f: (
+                        0 if 'Newcastle' in f[1] else 1,
+                        FIELD_ORDER.get(f[0], 99),
+                        f[0],
+                    ),
+                )
+
+                for field_name, field_loc in sorted_fields:
+                    field_games = sorted(by_field[(field_name, field_loc)],
+                                         key=lambda g: g.time)
+                    # Field sub-header
+                    c = ws.cell(row=row, column=1,
+                                value=f'{field_name} - {field_loc}')
+                    c.font = field_font
+                    for ci in range(1, NUM_COLS + 1):
+                        ws.cell(row=row, column=ci).fill = field_fill
+                    row += 1
+
+                    # Game rows
+                    for g in field_games:
+                        vals = [g.week, g.round_no, g.date, g.day, g.time,
+                                g.day_slot, g.team1, g.team2, g.grade,
+                                g.field_name, g.field_location]
+                        for ci, v in enumerate(vals, 1):
+                            c = ws.cell(row=row, column=ci, value=v)
+                            c.border = thin_border
+                            c.fill = week_bg
+                        row += 1
+
+            # Byes
+            playing: Dict[str, set] = defaultdict(set)
+            for g in week_games:
+                playing[g.grade].add(g.team1)
+                playing[g.grade].add(g.team2)
+            bye_teams = []
+            for grade in ['PHL', '2nd', '3rd', '4th', '5th', '6th']:
+                for team in sorted(
+                    all_teams_by_grade.get(grade, set())
+                    - playing.get(grade, set())
+                ):
+                    bye_teams.append(team)
+
+            row += 1  # blank row
+            if bye_teams:
+                c = ws.cell(row=row, column=1, value='BYES')
+                c.font = bye_font
+                row += 1
+                for team in bye_teams:
+                    ws.cell(row=row, column=1, value=team).font = Font(
+                        italic=True)
+                    row += 1
+
+            row += 1  # gap between weeks
+
+        # Column widths
+        for col_letter, width in COL_WIDTHS.items():
+            ws.column_dimensions[col_letter].width = width
+
+        wb.save(filename)
+        print(f"Schedule exported to {filename}")
 
 
 # ============== Draw Analytics ==============
@@ -877,70 +1052,117 @@ def export_draw_to_revformat(
     }
     field_map = {'EF': 'EF', 'WF': 'WF', 'SF': 'SF', 'Maitland Main Field': '', 'Wyong Main Field': ''}
     
-    all_rows = []
+    # Revo full club name mapping: short club name -> full registered club name
+    revo_club_names = {
+        'Crusaders': 'Crusaders Hockey Club (Mens & Womens)',
+        'Gosford': 'Gosford City Hockey Club (Mens)',
+        'Maitland': 'Maitland District Hockey Club',
+        'Tigers': 'Newcastle Tigers Hockey Club',
+        'Souths': 'South Newcastle Mens Hockey Club',
+        'Norths': 'Phoenix North Hockey Club',
+        'Port Stephens': 'Port Stephens Hornets Hockey Club Inc (Mens)',
+        'University': 'University of Newcastle Men\'s Hockey Club',
+        'Wests': 'West Hockey Club',
+        'Colts': 'Colts Mens Hockey Club',
+        'Cardiff': 'Cardiff Hockey Club',
+    }
     
+    def to_revo_team_name(team_with_grade: str, grade: str) -> str:
+        """Convert internal team name to Revo format.
+        
+        e.g. 'Crusaders 4th' -> 'Crusaders Hockey Club (Mens & Womens) Crusaders'
+             'Tigers Black 6th' -> 'Newcastle Tigers Hockey Club Tigers Black'
+             'University Redhogs 4th' -> "University of Newcastle Men's Hockey Club University Redhogs"
+        """
+        # Strip grade suffix
+        suffix = f" {grade}"
+        short_name = team_with_grade[:-len(suffix)] if team_with_grade.endswith(suffix) else team_with_grade
+        
+        # Find the matching club by checking which club name the short_name starts with
+        # Sort by length descending so "Port Stephens" matches before a hypothetical "Port"
+        for club_short in sorted(revo_club_names.keys(), key=len, reverse=True):
+            if short_name == club_short or short_name.startswith(club_short + ' '):
+                return f"{revo_club_names[club_short]} {short_name}"
+        
+        # Fallback: use short name as-is with generic prefix
+        return f"Newcastle Hockey Association {short_name}"
+    
+    all_rows = []
+
     # Get all teams for bye tracking
     teams_by_grade = defaultdict(set)
     for team in data.get('teams', []):
         teams_by_grade[team.grade].add(team.name)
-    
+
     # Group games by week for bye calculation
     games_by_week = defaultdict(list)
     for game in draw.games:
         if week_limit and game.week > week_limit:
             continue
         games_by_week[game.week].append(game)
-    
+
+    default_venue = 'Newcastle International Hockey Centre'
+
     for week, games in sorted(games_by_week.items()):
         # Track teams playing this week by grade
         teams_playing = defaultdict(set)
-        
+
         for game in games:
             teams_playing[game.grade].add(game.team1)
             teams_playing[game.grade].add(game.team2)
-            
-            # Extract club name (remove grade suffix)
-            team1_club = 'Newcastle Hockey Association ' + game.team1.rsplit(" ", 1)[0]
-            team2_club = 'Newcastle Hockey Association ' + game.team2.rsplit(" ", 1)[0]
-            
-            all_rows.append([
-                dt.strptime(game.date, '%Y-%m-%d').strftime("%d/%m/%Y"),  # Australian format
-                game.time,
-                field_map.get(game.field_name, game.field_name),
-                game.field_location,
-                game.round_no,
-                grade_map.get(game.grade, game.grade),
-                team1_club,
-                team2_club
-            ])
-        
+
+            team1_revo = to_revo_team_name(game.team1, game.grade)
+            team2_revo = to_revo_team_name(game.team2, game.grade)
+
+            all_rows.append({
+                'Round': game.round_no,
+                'Round type': '',
+                'Grade': grade_map.get(game.grade, game.grade),
+                'Game date': game.date,
+                'Venue': game.field_location,
+                'Subvenue': field_map.get(game.field_name, game.field_name),
+                'Time': game.time,
+                'Pool': '',
+                'Team 1 ': team1_revo,
+                'Team 1 score': '',
+                'Team 2': team2_revo,
+                'Team 2 score': '',
+                'Duty team': '',
+                'Label': '',
+            })
+
         # Add bye entries
         for grade, playing in teams_playing.items():
             all_teams = teams_by_grade.get(grade, set())
             bye_teams = all_teams - playing
-            for team in bye_teams:
-                team_club = 'Newcastle Hockey Association ' + team.rsplit(" ", 1)[0]
-                # Use first game's date/round for the bye row
+            for team in sorted(bye_teams):
+                team_revo = to_revo_team_name(team, grade)
                 ref_game = games[0] if games else None
                 if ref_game:
-                    all_rows.append([
-                        dt.strptime(ref_game.date, '%Y-%m-%d').strftime("%d/%m/%Y"),
-                        '',
-                        '',
-                        '',
-                        ref_game.round_no,
-                        grade_map.get(grade, grade),
-                        team_club,
-                        'BYE'
-                    ])
-    
+                    all_rows.append({
+                        'Round': ref_game.round_no,
+                        'Round type': '',
+                        'Grade': grade_map.get(grade, grade),
+                        'Game date': ref_game.date,
+                        'Venue': default_venue,
+                        'Subvenue': '',
+                        'Time': '',
+                        'Pool': '',
+                        'Team 1 ': team_revo,
+                        'Team 1 score': '',
+                        'Team 2': 'BYE',
+                        'Team 2 score': '',
+                        'Duty team': '',
+                        'Label': '',
+                    })
+
     # Create DataFrame and sort
-    df = pd.DataFrame(
-        all_rows,
-        columns=["DATE", "TIME", "FIELD", "VENUE", "ROUND", "GRADE", "TEAM 1", "TEAM 2"]
-    )
-    df["IS_BYE"] = df["TEAM 2"] == "BYE"
-    df.sort_values(by=["ROUND", "IS_BYE", "GRADE"], inplace=True)
+    columns = ['Round', 'Round type', 'Grade', 'Game date', 'Venue', 'Subvenue',
+               'Time', 'Pool', 'Team 1 ', 'Team 1 score', 'Team 2', 'Team 2 score',
+               'Duty team', 'Label']
+    df = pd.DataFrame(all_rows, columns=columns)
+    df["IS_BYE"] = df["Team 2"] == "BYE"
+    df.sort_values(by=["Round", "IS_BYE", "Grade"], inplace=True)
     df.drop(columns="IS_BYE", inplace=True)
     df.to_csv(output_path, index=False)
     print(f"Rev format schedule exported to {output_path}")

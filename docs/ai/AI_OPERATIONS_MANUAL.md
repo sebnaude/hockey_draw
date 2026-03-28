@@ -61,8 +61,8 @@ project/
 │   ├── season_2026.py      # Season-specific config
 │   └── team_naming.py      # Team name helpers
 ├── constraints/
-│   ├── original.py         # Original human-written constraints
-│   ├── ai.py               # AI-enhanced constraints
+│   ├── original.py         # Original constraints (edit only when directed)
+│   ├── ai.py               # AI-enhanced constraints (default edit target)
 │   ├── soft.py             # Soft constraint versions
 │   ├── severity.py         # Severity-based grouping
 │   └── symmetry.py         # Symmetry breaking
@@ -161,15 +161,23 @@ version = manager.save_solver_output(solution, data, description, mode)
 ```
 
 **Output produced:**
-- `draws/{year}/current.json` — Latest draw (always up-to-date)
-- `draws/{year}/current.xlsx` — Latest schedule Excel 
+- `draws/{year}/current.json` — Latest draw with rich metadata (always up-to-date)
+- `draws/{year}/current.xlsx` — Latest schedule Excel
 - `draws/{year}/current_analytics.xlsx` — Latest analytics
 - `draws/{year}/versions/draw_v{X}.{Y}.json` — Versioned draw
 - `draws/{year}/versions/draw_v{X}.{Y}.xlsx` — Versioned schedule
 - `draws/{year}/CHANGELOG.md` — Auto-updated version history
 - `checkpoints/latest/` — Latest solver checkpoint
 
-**For AI: Always read `draws/{year}/current.json` to find the latest draw.**
+**Draw metadata:** Each draw JSON includes a `metadata` dict with full provenance:
+solver config (mode, workers, AI flag, relaxation), constraints applied (name + stage),
+forced/blocked game configs with outcome verification (`satisfied`/`respected` booleans),
+friday night config, penalty counts, and draw statistics (games by grade/venue, date range).
+
+**Checkpoint metadata:** Each `checkpoints/run_XX/stage/metadata.json` includes the same
+forced/blocked games, friday night config, locked weeks, year, and constraints applied.
+
+**For AI: Always read `draws/{year}/current.json` to find the latest draw. Check `.metadata` for provenance.**
 
 ---
 
@@ -272,8 +280,7 @@ version = manager.save_solver_output(solution, data, description, mode)
 SEASON_CONFIG = {
     'year': 2026,                             # Season year
     'start_date': datetime(2026, 3, 22),      # First playing Sunday
-    'last_round_date': datetime(2026, 8, 30), # Last regular round
-    'end_date': datetime(2026, 9, 19),        # Grand Final
+    'end_date': datetime(2026, 8, 30),        # Last club game before finals
     'max_rounds': 22,                         # Max weekends (default)
     'teams_data_path': 'data/2026/teams',     # Team CSV location
     'noplay_data_path': 'data/2026/noplay',   # Hard no-play XLSX
@@ -287,7 +294,6 @@ SEASON_CONFIG = {
     'club_days': CLUB_DAYS,
     'preference_no_play': PREFERENCE_NO_PLAY,
     'blocked_games': BLOCKED_GAMES,
-    'friday_night_config': FRIDAY_NIGHT_CONFIG,
     'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,
 }
 ```
@@ -398,13 +404,27 @@ FIELD_UNAVAILABILITIES = {
 
 ### Severity Levels
 
-| Level | Name | Examples | Can Relax? |
-|-------|------|----------|------------|
-| 1 | CRITICAL | Double-booking, equal games | ❌ Never |
-| 2 | HIGH | Club days, team conflicts, matchup spacing | ⚠️ With `--slack` |
-| 3 | MEDIUM | Grade adjacency, club alignment | ⚠️ With `--slack` |
-| 4 | LOW | Club density at Broadmeadow | ✅ Yes |
-| 5 | VERY LOW | Timeslot preferences | ✅ Yes |
+| Level | Name | Constraints | Can Relax? |
+|-------|------|------------|------------|
+| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalance, EqualMatchUpSpacing, FiftyFiftyHomeandAway, MaitlandHomeGrouping, MaxMaitlandHomeWeekends, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | ❌ Never |
+| 2 | HIGH | ClubDay, AwayAtMaitlandGrouping, TeamConflict | ⚠️ With `--relax` |
+| 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | ⚠️ With `--relax` |
+| 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | ✅ Yes |
+| 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | ✅ Yes |
+
+### Constraint Slack (`--slack N`)
+
+The `--slack` flag loosens specific constraints (different from `--relax` which drops entire severity groups):
+- `MaitlandHomeGrouping`: max consecutive home weeks = 1 + slack (sliding window)
+- `AwayAtMaitlandGrouping`: max away clubs at Maitland = 3 + slack
+- `EqualMatchUpSpacingConstraint`: widens spacing window
+- `ClubVsClubAlignment`, `MaximiseClubsPerTimeslotBroadmeadow`, `MinimiseClubsOnAFieldBroadmeadow`, `ClubGameSpread`: loosens limits
+
+### Key Constraint Details
+
+- **FiftyFiftyHomeandAway**: Per-PAIR balance (not aggregate). Each Maitland/Gosford team vs each opponent is individually balanced ±0.5, but total home/away can still be lopsided.
+- **MaitlandHomeGrouping**: Sliding window constraint — any window of (N+1) consecutive Maitland-game weeks must have at most N home weeks. Previously used broken pairwise BoolVar check (no-op with slack ≥ 1), fixed to sliding window.
+- **PHLAndSecondGradeAdjacency**: 180-minute time window + location rule — within 180 min must be same location, outside 180 min must be different location.
 
 ### Constraint Types
 
@@ -433,10 +453,13 @@ FIELD_UNAVAILABILITIES = {
 
 | Stage | Level | Constraints |
 |-------|-------|-------------|
-| severity_1 | 1 | Double-booking, equal games, adjacency |
-| severity_2 | 2 | Club days, Maitland grouping, matchup spacing |
-| severity_3 | 3 | Club alignment, grade adjacency |
-| severity_4 | 4 | Timeslot optimization |
+| severity_1 | CRITICAL | Double-booking, equal games, matchup spacing, adjacency, home/away balance |
+| severity_2 | HIGH | Club days, team conflicts, Maitland away grouping |
+| severity_3 | MEDIUM | Grade adjacency, club alignment, club game spread |
+| severity_4 | LOW | Club density at Broadmeadow |
+| severity_5 | VERY LOW | Timeslot preferences |
+
+Stage timing: config-driven via `max_time_per_stage` in `SEASON_CONFIG` (default: 2 days per stage).
 
 ---
 

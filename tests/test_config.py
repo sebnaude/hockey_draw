@@ -225,7 +225,7 @@ class TestLoadSeasonData:
         
         # Get unique weeks
         weeks = sorted({ts.week for ts in data['timeslots']})
-        
+
         # Weeks should be positive integers (may not be consecutive due to field unavailabilities)
         assert all(w > 0 for w in weeks)
         assert len(weeks) > 0

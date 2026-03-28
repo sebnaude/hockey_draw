@@ -144,7 +144,18 @@
 | Game | Teams | Grades | Date | Status |
 |------|-------|--------|------|--------|
 | Taree Game | Tigers vs Souths | PHL & 2nd | May (TBC) | ❓ Date needed |
-| Red & Blue Derby | Souths vs Norths | All | August (TBC) | ❓ Date needed |
+| Red & Blue Derby | Souths vs Norths | All | May 10 | ✅ In FORCED_GAMES |
+
+---
+
+## Umpire Requests (In Perpetuity)
+
+> These requests apply every season, not just 2026.
+
+| Request | Weeks Affected |
+|---------|---------------|
+| No Maitland home games | Week 1, Week 2 |
+| No Gosford home games | Week 1 |
 
 ---
 
@@ -161,7 +172,7 @@
 2. **Maitland** - Is your 1 Friday night game your away match vs Gosford?
 3. **All PHL clubs** - Are there specific Friday dates at NIHC you need?
 4. **Tigers/Souths** - What date in May for the Taree game?
-5. **Souths/Norths** - What date in August for the Red & Blue Derby?
+5. ~~**Souths/Norths** - What date in August for the Red & Blue Derby?~~ → Confirmed May 10
 
 ---
 

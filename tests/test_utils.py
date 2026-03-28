@@ -544,14 +544,14 @@ class TestMaxGamesPerGrade:
     def test_calculates_max_games(self):
         """Test max games calculation for various team counts."""
         from utils import max_games_per_grade
-        
+
         grades = [
             Grade(name='PHL', teams=['A', 'B', 'C', 'D']),  # 4 teams
             Grade(name='2nd', teams=['A', 'B', 'C', 'D', 'E']),  # 5 teams
         ]
-        
+
         result = max_games_per_grade(grades, max_rounds=15)
-        
+
         assert 'PHL' in result
         assert '2nd' in result
         assert result['PHL'] > 0
@@ -560,25 +560,131 @@ class TestMaxGamesPerGrade:
     def test_handles_single_team_grade(self):
         """Test that single-team grade returns 0 games."""
         from utils import max_games_per_grade
-        
+
         grades = [
             Grade(name='6th', teams=['A']),  # Only 1 team
         ]
-        
+
         result = max_games_per_grade(grades, max_rounds=15)
-        
+
         assert result['6th'] == 0
 
     def test_handles_empty_grade(self):
         """Test handling of empty grades (no teams)."""
         from utils import max_games_per_grade
-        
+
         # Create grade with empty teams list
         grades = [Grade(name='Empty', teams=[])]
-        
+
         # This should be handled gracefully
         result = max_games_per_grade(grades, max_rounds=15)
         assert result['Empty'] == 0
+
+    def test_method_1_balanced_round_robin(self):
+        """Method 1: games must be a multiple of (T-1) for equal matchups."""
+        from utils import max_games_per_grade
+
+        # 6 teams, 22 weekends: max possible is 22, but 22 % 5 != 0
+        # Largest multiple of 5 <= 22 is 20
+        grades = [Grade(name='A', teams=[f't{i}' for i in range(6)])]
+        result = max_games_per_grade(grades, max_rounds=22,
+                                     grade_scheduling_method={'A': 1})
+        assert result['A'] == 20
+        assert result['A'] % 5 == 0  # multiple of T-1
+
+    def test_method_1_is_default(self):
+        """Method 1 is the default when grade_scheduling_method not specified."""
+        from utils import max_games_per_grade
+
+        grades = [Grade(name='A', teams=[f't{i}' for i in range(6)])]
+        # No grade_scheduling_method passed — should default to method 1
+        result = max_games_per_grade(grades, max_rounds=22)
+        assert result['A'] == 20
+
+    def test_method_2_maximize_games(self):
+        """Method 2: maximize games, allow base/base+1 matchup frequency."""
+        from utils import max_games_per_grade
+
+        # 8 teams, 20 weekends: method 2 fills to 20, method 1 would give 14
+        grades = [Grade(name='A', teams=[f't{i}' for i in range(8)])]
+        result = max_games_per_grade(grades, max_rounds=20,
+                                     grade_scheduling_method={'A': 2})
+        assert result['A'] == 20
+
+    def test_method_1_vs_method_2_difference(self):
+        """Method 1 and 2 give different results when T-1 doesn't divide evenly."""
+        from utils import max_games_per_grade
+
+        # 8 teams, 20 weekends
+        grades = [Grade(name='A', teams=[f't{i}' for i in range(8)])]
+        m1 = max_games_per_grade(grades, max_rounds=20,
+                                  grade_scheduling_method={'A': 1})
+        m2 = max_games_per_grade(grades, max_rounds=20,
+                                  grade_scheduling_method={'A': 2})
+        assert m1['A'] == 14  # 2 complete round-robins of 7 opponents
+        assert m2['A'] == 20  # fills all weekends
+        assert m1['A'] < m2['A']
+
+    def test_method_1_already_balanced(self):
+        """Method 1 doesn't reduce games when already a multiple of T-1."""
+        from utils import max_games_per_grade
+
+        # 4 teams, 15 weekends: g0=15, T-1=3, 15 % 3 == 0 → stays 15
+        grades = [Grade(name='A', teams=[f't{i}' for i in range(4)])]
+        result = max_games_per_grade(grades, max_rounds=15,
+                                     grade_scheduling_method={'A': 1})
+        assert result['A'] == 15
+
+    def test_2026_config_game_counts(self):
+        """Verify actual 2026 season game counts match expected values."""
+        from config import load_season_data
+        data = load_season_data(2026)
+        num_rounds = data['num_rounds']
+
+        expected = {
+            'PHL': 20,
+            '2nd': 18,
+            '3rd': 18,
+            '4th': 18,
+            '5th': 16,
+            '6th': 18,
+        }
+        for grade_name, expected_games in expected.items():
+            actual = num_rounds[grade_name]
+            assert actual == expected_games, (
+                f"{grade_name}: expected {expected_games} games, got {actual}"
+            )
+
+    def test_2026_config_scheduling_methods(self):
+        """Verify 2026 scheduling methods are set correctly."""
+        from config import load_season_data
+        data = load_season_data(2026)
+        methods = data['num_rounds']['grade_scheduling_method']
+
+        # PHL and 2nd use method 1 (balanced round-robin)
+        assert methods['PHL'] == 1
+        assert methods['2nd'] == 1
+        # 3rd-5th use method 2 (maximize games), 6th uses method 1 (balanced)
+        assert methods['3rd'] == 2
+        assert methods['4th'] == 2
+        assert methods['5th'] == 2
+        assert methods['6th'] == 1
+
+    def test_2026_method_1_grades_are_balanced(self):
+        """All method 1 grades must have games divisible by (T-1)."""
+        from config import load_season_data
+        data = load_season_data(2026)
+        num_rounds = data['num_rounds']
+        methods = num_rounds['grade_scheduling_method']
+
+        for grade in data['grades']:
+            if methods.get(grade.name, 1) == 1:
+                games = num_rounds[grade.name]
+                opponents = grade.num_teams - 1
+                assert games % opponents == 0, (
+                    f"{grade.name} (method 1): {games} games not divisible "
+                    f"by {opponents} opponents (T={grade.num_teams})"
+                )
 
 
 # ============== generate_games Tests ==============

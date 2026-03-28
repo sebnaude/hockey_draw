@@ -409,7 +409,7 @@ def log_system_info(logger: logging.Logger = None):
     try:
         from ortools.sat.python import cp_model
         logger.info(f"OR-Tools version: {cp_model.__version__ if hasattr(cp_model, '__version__') else 'unknown'}")
-    except:
+    except ImportError:
         pass
     
     logger.info("=" * 60)

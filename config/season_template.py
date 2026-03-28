@@ -183,8 +183,8 @@ PHL_PREFERENCES = {
 SEASON_CONFIG = {
     # Basic season info
     'year': 9999,  # CHANGE THIS to actual year
-    'start_date': datetime(9999, 3, 22),   # First day of the season (Sunday)
-    'end_date': datetime(9999, 9, 19),     # Last day (often Grand Final Saturday)
+    'start_date': datetime(9999, 3, 22),   # First playing day (Sunday)
+    'end_date': datetime(9999, 9, 19),     # Last club game before finals
     
     # Schedule parameters
     'max_rounds': 20,  # Maximum number of rounds (4 rounds = 20 matches per team)
@@ -225,6 +225,16 @@ SEASON_CONFIG = {
     
     # Grade order (for adjacency constraints)
     'grade_order': ['PHL', '2nd', '3rd', '4th', '5th', '6th'],
+
+    # Base limits for slack-aware constraints (see CONSTRAINT_DEFAULTS in season_2026.py for docs)
+    'constraint_defaults': {
+        'spacing_base_slack': 0,
+        'maitland_max_consecutive_home': 1,
+        'away_maitland_max_clubs': 3,
+        'max_clubs_per_field': 5,
+        'club_game_spread_max_gap': 2,
+        'club_game_spread_max_overlap': 0,  # ClubGameSpread: max allowed double-ups (0 = no two games at same slot)
+    },
 }
 
 

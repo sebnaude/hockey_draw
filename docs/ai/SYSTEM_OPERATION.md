@@ -189,10 +189,11 @@ After a successful solve, ALL output is automatically saved to the versioned dir
 | File | Location | Content |
 |------|----------|---------|
 | **Latest checkpoint** | `checkpoints/latest/solution.pkl` | **Latest successful solver state** |
-| **Latest metadata** | `checkpoints/latest/metadata.json` | Latest solve statistics |
+| **Latest metadata** | `checkpoints/latest/metadata.json` | Solve stats + forced/blocked games, constraints, config |
+| **Latest penalties** | `checkpoints/latest/penalties.json` | Soft constraint penalty counts |
 | **Latest pointer** | `checkpoints/latest/pointer.json` | Which run/stage this came from |
 | **Run checkpoints** | `checkpoints/run_X/stage_Y/solution.pkl` | Per-run, per-stage checkpoints |
-| **Run metadata** | `checkpoints/run_X/stage_Y/metadata.json` | Per-stage solve statistics |
+| **Run metadata** | `checkpoints/run_X/stage_Y/metadata.json` | Per-stage solve stats + full provenance |
 
 ### Logs
 
@@ -230,9 +231,7 @@ The `run.py` commands support special aliases for draw paths:
 
 ## Timeout Configuration
 
-Default timeouts:
-- Stage 1: 3600 seconds (1 hour)
-- Stage 2: 259200 seconds (72 hours)
+Stage timing is now **config-driven** via `max_time_per_stage` in `SEASON_CONFIG` (default: 172800 seconds = 2 days per stage). Individual stages can override with `max_time_seconds` in their stage dict, but this is no longer required.
 
 Override with `--timeout`:
 

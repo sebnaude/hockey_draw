@@ -27,19 +27,13 @@ import pickle
 import json
 import logging
 import traceback
-from datetime import datetime, timedelta, time as tm
-from typing import Optional, List, Dict, Any, Tuple
+from datetime import datetime
+from typing import Optional
 from collections import defaultdict
 from pathlib import Path
 
 from ortools.sat.python import cp_model
-import pandas as pd
-
-from models import PlayingField, Club, Team, Grade, Timeslot
-from utils import (
-    convert_X_to_roster, export_roster_to_excel, get_teams_from_club,
-    generate_timeslots, max_games_per_grade, generate_X
-)
+from utils import generate_X
 from solver_diagnostics import (
     setup_logging, ResourceMonitor, SolverConfig, get_recommended_config,
     log_system_info, log_model_info, log_solve_result, PSUTIL_AVAILABLE
@@ -63,6 +57,7 @@ from constraints import (
     MaximiseClubsPerTimeslotBroadmeadow,
     MinimiseClubsOnAFieldBroadmeadow,
     PreferredTimesConstraint,
+    ClubGameSpread,
 )
 from constraints.ai import (
     NoDoubleBookingTeamsConstraintAI,
@@ -85,6 +80,67 @@ from constraints.ai import (
     PreferredTimesConstraintAI,
     ClubGameSpreadAI,
 )
+
+
+# ============== Metadata Helpers ==============
+
+def _serialize_config(obj):
+    """Make config objects JSON-serializable (datetime, time, etc.)."""
+    if isinstance(obj, dict):
+        return {k: _serialize_config(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_serialize_config(v) for v in obj]
+    elif hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    elif hasattr(obj, 'strftime'):
+        return obj.strftime('%H:%M')
+    elif isinstance(obj, set):
+        return sorted(obj)
+    return obj
+
+
+def _build_constraints_applied(constraint_classes, severity_map=None):
+    """Build a serializable list of constraint metadata from constraint classes."""
+    result = []
+    for cls in constraint_classes:
+        entry = {'name': cls.__name__}
+        if severity_map and cls.__name__ in severity_map:
+            entry['severity'] = severity_map[cls.__name__]
+        result.append(entry)
+    return result
+
+
+def _build_normalized_penalty(penalties_dict: dict) -> list:
+    """
+    Build a normalized penalty expression from the penalties dictionary.
+
+    Each soft constraint registers penalties as:
+        penalties_dict[name] = {'weight': W, 'penalties': [var1, var2, ...]}
+
+    Raw objective would be: sum(W_i * sum(vars_i)) — but a constraint with
+    4000 vars at weight 50K dominates one with 24 vars at weight 1M.
+
+    Normalization: divide each group's configured weight by its var count,
+    so the weight becomes a per-violation cost. The configured weights then
+    act as relative priorities independent of how many vars each constraint
+    creates.
+
+    Returns a list of (coefficient, var) pairs for the objective.
+    """
+    terms = []
+    for name, info in penalties_dict.items():
+        pen_vars = info.get('penalties', [])
+        if not pen_vars:
+            continue
+        raw_weight = info['weight']
+        n = len(pen_vars)
+        # Normalized weight = configured weight / var count
+        # This means: if you set weight=100_000, each violation costs 100_000/N
+        # and a full-violation scenario (all N vars = max) costs ~100_000 total.
+        normalized = max(1, raw_weight // n)
+        for var in pen_vars:
+            terms.append((normalized, var))
+    return terms
 
 
 # ============== Solution Callback for Intermediate Saves ==============
@@ -181,7 +237,6 @@ STAGES = {
             # Away at Maitland (hard limit of 3 away clubs)
             AwayAtMaitlandGrouping,
         ],
-        'max_time_seconds': 7200,  # 2 hours
         'required': True,
         'use_callback': True,
     },
@@ -197,10 +252,11 @@ STAGES = {
             MinimiseClubsOnAFieldBroadmeadow,
             # Preferred times / no-play constraints
             PreferredTimesConstraint,
+            # Club game closeness
+            ClubGameSpread,
         ],
-        'max_time_seconds': 259200,  # 72 hours (3 days)
         'required': False,
-        'use_callback': True,  # Save intermediate solutions
+        'use_callback': True,
     },
 }
 
@@ -237,7 +293,6 @@ STAGES_AI = {
             # Away at Maitland (hard limit of 3 away clubs)
             AwayAtMaitlandGroupingAI,
         ],
-        'max_time_seconds': 7200,
         'required': True,
         'use_callback': True,
     },
@@ -256,7 +311,31 @@ STAGES_AI = {
             # Club game closeness
             ClubGameSpreadAI,
         ],
-        'max_time_seconds': 259200,
+        'required': False,
+        'use_callback': True,
+    },
+}
+
+# Unified constraint engine stages (3-phase: hard → soft → intra-day)
+STAGES_UNIFIED = {
+    'phase_a_hard': {
+        'name': 'Hard Inter-week Constraints (Unified)',
+        'description': 'Feasibility: scheduling decisions, no penalties',
+        'phase': 'a',
+        'required': True,
+        'use_callback': True,
+    },
+    'phase_b_soft': {
+        'name': 'Soft Inter-week Penalties (Unified)',
+        'description': 'Quality: inter-week penalties on top of Phase A',
+        'phase': 'b',
+        'required': True,
+        'use_callback': True,
+    },
+    'phase_c_intraday': {
+        'name': 'Intra-day Optimization (Unified)',
+        'description': 'Field/slot assignment within each day',
+        'phase': 'c',
         'required': False,
         'use_callback': True,
     },
@@ -267,53 +346,50 @@ STAGES_AI = {
 STAGES_SEVERITY = {
     'severity_1': {
         'name': 'Critical Constraints',
-        'description': 'Double-booking prevention, equal games, home/away balance, PHL adjacency',
+        'description': 'Double-booking, equal games, home/away balance, PHL adjacency, matchup spacing',
         'constraints': [
             NoDoubleBookingTeamsConstraint,
             NoDoubleBookingFieldsConstraint,
             EnsureEqualGamesAndBalanceMatchUps,
+            EqualMatchUpSpacingConstraint,
             FiftyFiftyHomeandAway,
             MaitlandHomeGrouping,
             MaxMaitlandHomeWeekends,
             PHLAndSecondGradeAdjacency,
             PHLAndSecondGradeTimes,
         ],
-        'max_time_seconds': 7200,
         'required': True,
         'use_callback': True,
     },
     'severity_2': {
         'name': 'High Priority Constraints',
-        'description': 'Club days, team conflicts, Maitland away grouping, matchup spacing',
+        'description': 'Club days, team conflicts, Maitland away grouping',
         'constraints': [
             AwayAtMaitlandGrouping,
             ClubDayConstraint,
-            EqualMatchUpSpacingConstraint,
             TeamConflictConstraint,
         ],
-        'max_time_seconds': 7200,
         'required': True,
         'use_callback': True,
     },
     'severity_3': {
         'name': 'Medium Priority Constraints',
-        'description': 'Grade adjacency, club vs club alignment',
+        'description': 'Grade adjacency, club vs club alignment, club game spread',
         'constraints': [
             ClubGradeAdjacencyConstraint,
             ClubVsClubAlignment,
+            ClubGameSpread,
         ],
-        'max_time_seconds': 14400,
         'required': True,
         'use_callback': True,
     },
     'severity_4': {
         'name': 'Low Priority Constraints',
-        'description': 'Club density at Broadmeadow, club game spread',
+        'description': 'Club density at Broadmeadow',
         'constraints': [
             MaximiseClubsPerTimeslotBroadmeadow,
             MinimiseClubsOnAFieldBroadmeadow,
         ],
-        'max_time_seconds': 86400,
         'required': False,
         'use_callback': True,
     },
@@ -324,7 +400,6 @@ STAGES_SEVERITY = {
             EnsureBestTimeslotChoices,
             PreferredTimesConstraint,
         ],
-        'max_time_seconds': 259200,
         'required': False,
         'use_callback': True,
     },
@@ -333,53 +408,50 @@ STAGES_SEVERITY = {
 STAGES_SEVERITY_AI = {
     'severity_1': {
         'name': 'Critical Constraints (AI)',
-        'description': 'Double-booking prevention, equal games, home/away balance, PHL adjacency - AI',
+        'description': 'Double-booking, equal games, home/away balance, PHL adjacency, matchup spacing - AI',
         'constraints': [
             NoDoubleBookingTeamsConstraintAI,
             NoDoubleBookingFieldsConstraintAI,
             EnsureEqualGamesAndBalanceMatchUpsAI,
+            EqualMatchUpSpacingConstraintAI,
             FiftyFiftyHomeandAwayAI,
             MaitlandHomeGroupingAI,
             MaxMaitlandHomeWeekendsAI,
             PHLAndSecondGradeAdjacencyAI,
             PHLAndSecondGradeTimesAI,
         ],
-        'max_time_seconds': 7200,
         'required': True,
         'use_callback': True,
     },
     'severity_2': {
         'name': 'High Priority Constraints (AI)',
-        'description': 'Club days, team conflicts, Maitland away grouping, matchup spacing - AI',
+        'description': 'Club days, team conflicts, Maitland away grouping - AI',
         'constraints': [
             AwayAtMaitlandGroupingAI,
             ClubDayConstraintAI,
-            EqualMatchUpSpacingConstraintAI,
             TeamConflictConstraintAI,
         ],
-        'max_time_seconds': 7200,
         'required': True,
         'use_callback': True,
     },
     'severity_3': {
         'name': 'Medium Priority Constraints (AI)',
-        'description': 'Grade adjacency, club vs club alignment - AI',
+        'description': 'Grade adjacency, club vs club alignment, club game spread - AI',
         'constraints': [
             ClubGradeAdjacencyConstraintAI,
             ClubVsClubAlignmentAI,
+            ClubGameSpreadAI,
         ],
-        'max_time_seconds': 14400,
         'required': True,
         'use_callback': True,
     },
     'severity_4': {
         'name': 'Low Priority Constraints (AI)',
-        'description': 'Club density at Broadmeadow, club game spread - AI',
+        'description': 'Club density at Broadmeadow - AI',
         'constraints': [
             MaximiseClubsPerTimeslotBroadmeadowAI,
             MinimiseClubsOnAFieldBroadmeadowAI,
         ],
-        'max_time_seconds': 86400,
         'required': False,
         'use_callback': True,
     },
@@ -390,7 +462,6 @@ STAGES_SEVERITY_AI = {
             EnsureBestTimeslotChoicesAI,
             PreferredTimesConstraintAI,
         ],
-        'max_time_seconds': 259200,
         'required': False,
         'use_callback': True,
     },
@@ -423,10 +494,15 @@ class CheckpointManager:
     def get_run_dir(self, run_id: str = None) -> Path:
         """Get or create a run directory."""
         if run_id is None:
-            # Create new run
-            existing = [d for d in self.checkpoint_dir.iterdir() 
-                       if d.is_dir() and d.name.startswith('run_')]
-            run_num = len(existing) + 1
+            # Create new run - find highest existing run number and increment
+            existing_nums = []
+            for d in self.checkpoint_dir.iterdir():
+                if d.is_dir() and d.name.startswith('run_'):
+                    try:
+                        existing_nums.append(int(d.name.split('_', 1)[1]))
+                    except ValueError:
+                        pass
+            run_num = max(existing_nums, default=0) + 1
             run_id = f'run_{run_num}'
         
         run_dir = self.checkpoint_dir / run_id
@@ -451,7 +527,89 @@ class CheckpointManager:
         with open(latest_dir / 'pointer.json', 'w') as f:
             json.dump(pointer, f, indent=2)
     
-    def save_stage(self, run_dir: Path, stage_name: str, X_solution: dict, data: dict, 
+    def save_run_metadata(self, run_dir: Path, data: dict, solver_config: SolverConfig = None):
+        """Save run-level metadata at run start, before any solving.
+
+        This captures the intent and inputs so that every run directory
+        is self-documenting even if the solve never completes.
+        """
+        import platform
+
+        meta = {
+            'run_id': run_dir.name,
+            'started_at': datetime.now().isoformat(),
+            'status': 'started',
+
+            # User intent
+            'description': data.get('_user_description', ''),
+            'year': data.get('year'),
+            'mode': data.get('_solver_mode', 'unknown'),
+            'use_ai': data.get('_use_ai', False),
+
+            # Inputs
+            'locked_weeks': sorted(data.get('locked_weeks', set())),
+            'locked_source': data.get('_provenance', {}).get('locked_source', ''),
+            'locked_game_count': data.get('_provenance', {}).get('locked_game_count', 0),
+            'hint_source': data.get('_provenance', {}).get('hint_source', ''),
+            'excluded_constraints': data.get('_excluded_constraints', []),
+            'constraint_slack': _serialize_config(data.get('constraint_slack', {})),
+            'penalty_weights': data.get('penalty_weights', {}),
+            'forced_games': _serialize_config(data.get('forced_games', [])),
+            'blocked_games': _serialize_config(data.get('blocked_games', [])),
+            'field_unavailabilities': _serialize_config(data.get('field_unavailabilities', {})),
+
+            # Data shape
+            'num_teams': len(data.get('teams', [])),
+            'num_grades': len(data.get('grades', [])),
+            'num_timeslots': len(data.get('timeslots', [])),
+
+            # Solver config
+            'solver_config': {
+                'workers': solver_config.num_workers if solver_config else None,
+                'linearization_level': solver_config.linearization_level if solver_config else None,
+                'max_memory_mb': getattr(solver_config, 'max_memory_mb', None) if solver_config else None,
+            },
+
+            # Environment
+            'environment': {
+                'python_version': sys.version.split()[0],
+                'platform': platform.platform(),
+                'cpu_count': os.cpu_count(),
+            },
+        }
+
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            meta['environment']['total_memory_gb'] = round(mem.total / (1024**3), 1)
+            meta['environment']['available_memory_gb'] = round(mem.available / (1024**3), 1)
+        except ImportError:
+            pass
+
+        try:
+            from ortools.sat.python import cp_model
+            meta['environment']['ortools_version'] = getattr(cp_model, '__version__', 'unknown')
+        except ImportError:
+            pass
+
+        with open(run_dir / 'run_metadata.json', 'w') as f:
+            json.dump(meta, f, indent=2)
+
+    def update_run_status(self, run_dir: Path, status: str, extra: dict = None):
+        """Update the run-level metadata with final status and optional extra fields."""
+        meta_path = run_dir / 'run_metadata.json'
+        if not meta_path.exists():
+            return
+        with open(meta_path, 'r') as f:
+            meta = json.load(f)
+        meta['status'] = status
+        meta['finished_at'] = datetime.now().isoformat()
+        if extra:
+            meta.update(extra)
+        with open(meta_path, 'w') as f:
+            json.dump(meta, f, indent=2)
+
+    def save_stage(self, run_dir: Path, stage_name: str, X_solution: dict, data: dict,
                    status: str, solve_time: float):
         """Save stage results to checkpoint and update latest."""
         stage_dir = run_dir / stage_name
@@ -462,18 +620,35 @@ class CheckpointManager:
             pickle.dump(X_solution, f)
         
         # Save metadata
+        num_games = sum(1 for v in X_solution.values() if v == 1)
         metadata = {
             'stage': stage_name,
             'status': status,
             'solve_time': solve_time,
             'timestamp': datetime.now().isoformat(),
-            'num_scheduled_games': sum(1 for v in X_solution.values() if v == 1),
+            'num_scheduled_games': num_games,
+            'total_variables': len(X_solution),
             'run_id': run_dir.name,
+            'year': data.get('year'),
+            'description': data.get('_user_description', ''),
+            'mode': data.get('_solver_mode', 'unknown'),
+            'use_ai': data.get('_use_ai', False),
+            'locked_weeks': sorted(data.get('locked_weeks', set())),
+            'excluded_constraints': data.get('_excluded_constraints', []),
+            'constraint_slack': _serialize_config(data.get('constraint_slack', {})),
+            'penalty_weights': data.get('penalty_weights', {}),
+            'forced_games': data.get('forced_games', []),
+            'blocked_games': data.get('blocked_games', []),
+            'field_unavailabilities': _serialize_config(data.get('field_unavailabilities', {})),
         }
-        
+
+        # Include constraints applied if tracked in data
+        if 'constraints_applied' in data:
+            metadata['constraints_applied'] = data['constraints_applied']
+
         with open(stage_dir / 'metadata.json', 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         # Save penalties summary if available
         if 'penalties' in data:
             penalties_summary = {
@@ -579,18 +754,18 @@ class StagedScheduleSolver:
         self.model = cp_model.CpModel()
         
         # Generate decision variables
-        self.X, self.Y, conflicts, unavailable_games = generate_X(
+        self.X, self.Y, conflicts = generate_X(
             self.model, self.data
         )
-        
-        # Merge X and Y
+
+        # Merge dummy variables into X — constraints use key length and t.day checks
+        # to exclude them where needed, but game-count constraints need access
         self.X.update(self.Y)
-        
-        self.data['unavailable_games'] = unavailable_games
+
         self.data['team_conflicts'] = conflicts
         self.data['games'] = list(self.data['games'].keys()) if isinstance(self.data['games'], dict) else self.data['games']
-        
-        print(f"  Created {len(self.X)} decision variables")
+
+        print(f"  Created {len(self.X)} decision variables ({len(self.Y)} dummy)")
         
         return self.X
     
@@ -702,39 +877,50 @@ class StagedScheduleSolver:
         return problem_level
     
     def build_objective(self):
-        """Build the optimization objective."""
+        """Build the optimization objective with normalized penalty weights."""
         penalties_dict = self.data.get('penalties', {})
-        
-        print(f"  Penalties: {[(name, len(info.get('penalties', []))) for name, info in penalties_dict.items()]}")
-        
-        total_penalty = sum(
-            info['weight'] * sum(info['penalties'])
-            for info in penalties_dict.values() if 'penalties' in info
-        )
-        
-        # Objective: maximize games scheduled, minimize dummy variables, minimize penalties
+
+        # Log penalty summary
+        for name, info in penalties_dict.items():
+            n = len(info.get('penalties', []))
+            w = info['weight']
+            nw = max(1, w // n) if n > 0 else 0
+            print(f"  Penalty: {name}: {n} vars, weight {w:,} -> normalized {nw:,}/var")
+
+        # Build normalized penalty terms
+        penalty_terms = _build_normalized_penalty(penalties_dict)
+        total_penalty = sum(coeff * var for coeff, var in penalty_terms)
+
+        # Dummy slot penalty (configurable weight, defaults to 1 per dummy var used)
+        dummy_penalty_weight = self.data.get('penalty_weights', {}).get('dummy_slots', 1)
+        dummy_penalty = dummy_penalty_weight * sum(self.Y.values()) if self.Y else 0
+
+        # Objective: maximize games scheduled, minimize dummy slot usage, minimize penalties
         self.model.Maximize(
-            sum(self.X.values()) - sum(self.Y.values() if self.Y else []) - total_penalty
+            sum(self.X.values()) - dummy_penalty - total_penalty
         )
     
     def solve_stage(self, stage_config: dict, run_dir: Path = None, stage_name: str = None) -> tuple:
         """Solve a single stage with comprehensive logging and resource monitoring."""
+        # Use stage-specific time if set, otherwise fall back to config, then default 2 days
+        max_time = stage_config.get('max_time_seconds',
+                                    self.data.get('max_time_per_stage', 172800))
         self.logger.info(f"Starting solve for stage: {stage_name}")
-        self.logger.info(f"  Max time: {stage_config['max_time_seconds']}s ({stage_config['max_time_seconds']/3600:.1f}h)")
-        
+        self.logger.info(f"  Max time: {max_time}s ({max_time/3600:.1f}h)")
+
         # Log model info before solve
         log_model_info(self.model, self.X, self.logger)
-        
+
         # Log resource state before solve
         if self.resource_monitor:
             self.logger.info("Pre-solve resource snapshot:")
             self.resource_monitor.log_snapshot(prefix="PRE-SOLVE")
-        
+
         solver = cp_model.CpSolver()
-        
+
         # Apply solver configuration (includes num_workers, memory settings)
         stage_specific_config = SolverConfig(
-            max_time_seconds=stage_config['max_time_seconds'],
+            max_time_seconds=max_time,
             num_workers=self.solver_config.num_workers,
             linearization_level=self.solver_config.linearization_level,
             cp_model_probing_level=self.solver_config.cp_model_probing_level,
@@ -809,30 +995,61 @@ class StagedScheduleSolver:
             self.logger.warning(f"Stage {stage_name} did not find solution: {status_name}")
             return status_name, {}, solve_time
     
-    def run_staged_solve(self, run_id: str = None, resume_from: str = None, 
-                         stages_to_run: list = None, severity_staged: bool = False) -> dict:
+    def run_staged_solve(self, run_id: str = None, resume_from: str = None,
+                         stages_to_run: list = None, severity_staged: bool = False,
+                         use_ai: bool = False, exclude_constraints: list = None) -> dict:
         """
         Run the staged solving process.
-        
+
         Args:
             run_id: Identifier for this run (for checkpointing)
             resume_from: Stage name to resume from
             stages_to_run: List of stage names to run (default: all)
-        
+            severity_staged: If True, use severity-based staging.
+            use_ai: If True, use AI-enhanced constraint implementations.
+            exclude_constraints: Optional list of constraint class names to exclude.
+
         Returns:
             Final solution dictionary
         """
         run_dir = self.checkpoint_manager.get_run_dir(run_id)
         self.logger.info(f"Run directory: {run_dir}")
         print(f"Run directory: {run_dir}")
-        
-        # Select stage dictionary based on mode
+
+        # Save run-level metadata at start (before solving)
+        self.checkpoint_manager.save_run_metadata(run_dir, self.data, self.solver_config)
+
+        # Select stage dictionary based on mode and AI flag
         if severity_staged:
-            active_stages = STAGES_SEVERITY
-            mode_label = f"SEVERITY-BASED stages (Level 1 \u2192 2 \u2192 3 \u2192 4 \u2192 5)"
+            active_stages = STAGES_SEVERITY_AI if use_ai else STAGES_SEVERITY
+            mode_label = f"SEVERITY-BASED stages ({'AI' if use_ai else 'original'})"
         else:
-            active_stages = STAGES
-            mode_label = "DEFAULT stages (required + soft)"
+            active_stages = STAGES_AI if use_ai else STAGES
+            mode_label = f"DEFAULT stages ({'AI' if use_ai else 'original'})"
+
+        # Build exclusion set (normalize AI/non-AI suffixes)
+        exclude_set = set(exclude_constraints or [])
+        normalized_exclude = set()
+        for name in exclude_set:
+            normalized_exclude.add(name)
+            if name.endswith('AI'):
+                normalized_exclude.add(name[:-2])
+            else:
+                normalized_exclude.add(name + 'AI')
+
+        # Filter excluded constraints from each stage
+        if normalized_exclude:
+            filtered_stages = {}
+            for stage_id, stage_config in active_stages.items():
+                filtered_config = dict(stage_config)
+                filtered_config['constraints'] = [
+                    cls for cls in stage_config['constraints']
+                    if cls.__name__ not in normalized_exclude
+                ]
+                filtered_stages[stage_id] = filtered_config
+            active_stages = filtered_stages
+            self.logger.info(f"Excluding constraints: {', '.join(exclude_set)}")
+            print(f"  Excluding constraints: {', '.join(exclude_set)}")
         print(f"Mode: {mode_label}")
         self.logger.info(f"Using {mode_label}")
         stages_to_run = stages_to_run or list(active_stages.keys())
@@ -866,7 +1083,8 @@ class StagedScheduleSolver:
             self.logger.info(f"STARTING STAGE: {stage_name}")
             self.logger.info(f"  Name: {stage_config['name']}")
             self.logger.info(f"  Description: {stage_config['description']}")
-            self.logger.info(f"  Max time: {stage_config['max_time_seconds']}s")
+            max_time = stage_config.get('max_time_seconds', self.data.get('max_time_per_stage', 172800))
+            self.logger.info(f"  Max time: {max_time}s ({max_time/3600:.1f}h)")
             self.logger.info(f"  Required: {stage_config.get('required', False)}")
             self.logger.info("=" * 60)
             
@@ -893,6 +1111,15 @@ class StagedScheduleSolver:
             print("Applying constraints:")
             constraints_added = self.apply_constraints(stage_config['constraints'])
             constraint_names = [cls.__name__ for cls in stage_config['constraints']]
+
+            # Track cumulative constraints applied for metadata
+            if 'constraints_applied' not in self.data:
+                self.data['constraints_applied'] = []
+            for cls in stage_config['constraints']:
+                self.data['constraints_applied'].append({
+                    'name': cls.__name__,
+                    'stage': stage_name,
+                })
             self.logger.info(f"  Constraints added this stage: {constraints_added}")
             self.logger.info(f"  Model total constraints: {len(self.model.Proto().constraints)}")
             print(f"  Applying {len(stage_config['constraints'])} constraints from stage: {constraint_names}")
@@ -930,7 +1157,15 @@ class StagedScheduleSolver:
                     return None
                 else:
                     print(f"WARNING: Stage {stage_name} did not find solution, using previous")
-        
+
+        # Update run metadata with final status
+        final_status = 'completed' if self.current_solution else 'failed'
+        final_games = sum(1 for v in self.current_solution.values() if v == 1) if self.current_solution else 0
+        self.checkpoint_manager.update_run_status(run_dir, final_status, {
+            'stages_completed': stages_to_run,
+            'num_scheduled_games': final_games,
+        })
+
         return self.current_solution
 
 
@@ -962,10 +1197,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 locked_weeks: set = None, solver_config: SolverConfig = None, year: int = None,
                 stages_to_run: list = None, relax_config: dict = None,
                 fix_round_1: bool = False, constraint_slack: dict = None,
-                severity_staged: bool = False):
+                severity_staged: bool = False, hint_solution: dict = None,
+                use_ai: bool = False, exclude_constraints: list = None,
+                description: str = '', provenance: dict = None):
     """
     Main entry point for staged solving.
-    
+
     Args:
         run_id: Identifier for this run (auto-generated if None)
         resume_from: Stage name to resume from
@@ -979,7 +1216,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         constraint_slack: Optional dict mapping constraint names to slack values.
         severity_staged: If True, use severity-based staging (5 levels by severity).
-        
+        hint_solution: Optional dict of variable hints from a prior solution.
+        use_ai: If True, use AI-enhanced constraint implementations.
+        exclude_constraints: Optional list of constraint class names to exclude.
+        description: User-provided description for metadata.
+        provenance: Dict with locked_source, hint_source paths etc.
+
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
     """
@@ -987,12 +1229,13 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         raise ValueError("Year is required. Use --year YYYY to specify the season.")
     # Set up logging
     logger = setup_logging(run_id=run_id)
+    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     logger.info("=" * 60)
-    logger.info("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
+    logger.info(f"HOCKEY DRAW SCHEDULER - STAGED SOLVING ({mode_label})")
     logger.info("=" * 60)
-    
+
     print("="*60)
-    print("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
+    print(f"HOCKEY DRAW SCHEDULER - STAGED SOLVING ({mode_label})")
     print("="*60)
     
     # Log system info
@@ -1025,7 +1268,18 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     print(f"  {len(data['teams'])} teams")
     print(f"  {len(data['grades'])} grades")
     print(f"  {len(data['timeslots'])} timeslots")
-    
+
+    # Store solver provenance for metadata
+    data['_solver_mode'] = 'severity' if severity_staged else 'staged'
+    data['_use_ai'] = use_ai
+    data['_solver_workers'] = solver_config.num_workers if solver_config else None
+    data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
+    data['_excluded_constraints'] = list(exclude_constraints or [])
+    if description:
+        data['_user_description'] = description
+    if provenance:
+        data['_provenance'] = provenance
+
     # Initialize solver with config
     checkpoint_manager = CheckpointManager()
     solver = StagedScheduleSolver(
@@ -1054,10 +1308,18 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         locked_keys_set = set(locked_keys) if not isinstance(locked_keys, set) else locked_keys
         logger.info(f"Locking {len(locked_keys_set)} games from locked weeks...")
         print(f"  Locking {len(locked_keys_set)} games from locked weeks...")
+        matched = 0
         for key in locked_keys_set:
             if key in solver.X:
                 solver.model.Add(solver.X[key] == 1)
-        
+                matched += 1
+        if matched < len(locked_keys_set):
+            missed = len(locked_keys_set) - matched
+            logger.warning(f"  WARNING: {missed}/{len(locked_keys_set)} locked keys not found in model variables!")
+            print(f"  WARNING: {missed}/{len(locked_keys_set)} locked keys not found in model variables!")
+        else:
+            logger.info(f"  All {matched} locked keys matched model variables")
+
         # Zero out all other variables in locked weeks
         if locked_weeks:
             zeroed = 0
@@ -1068,9 +1330,20 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
             logger.info(f"  Zeroed {zeroed} non-locked variables in locked weeks")
             print(f"  Zeroed {zeroed} non-locked variables in locked weeks")
     
+    # Apply solution hints if provided
+    if hint_solution:
+        hints_added = 0
+        for key, value in hint_solution.items():
+            if key in solver.X:
+                solver.model.AddHint(solver.X[key], value)
+                if value == 1:
+                    hints_added += 1
+        logger.info(f"Added {hints_added} solution hints from prior solution")
+        print(f"  Added {hints_added} solution hints (solver will use as starting point)")
+
     # Run staged solve
     try:
-        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run, severity_staged=severity_staged)
+        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run, severity_staged=severity_staged, use_ai=use_ai, exclude_constraints=exclude_constraints)
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")
         logger.critical(traceback.format_exc())
@@ -1091,7 +1364,8 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         
         # Build description
         stages_desc = ', '.join(stages_to_run) if stages_to_run else 'all stages'
-        description = f"Season {year} draw - {stages_desc}"
+        auto_desc = f"Season {year} draw - {stages_desc}"
+        description = f"{data['_user_description']} | {auto_desc}" if data.get('_user_description') else auto_desc
         
         version = version_manager.save_solver_output(
             solution, data,
@@ -1108,11 +1382,117 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False, constraint_slack: dict = None):
+def _main_simple_unified(model, X, Y, data, solver_config, resource_monitor,
+                         checkpoint_manager, run_dir, logger):
+    """Run unified 3-phase constraint engine in simple mode."""
+    from constraints.unified import UnifiedConstraintEngine
+
+    engine = UnifiedConstraintEngine(model, X, data)
+    engine.build_groupings()
+
+    print("\nApplying unified constraints (Phase A + B + C)...")
+    a = engine.apply_phase_a()
+    print(f"  Phase A (hard inter-week): {a} constraints")
+    b = engine.apply_phase_b()
+    print(f"  Phase B (soft inter-week): {b} constraints")
+    c = engine.apply_phase_c()
+    print(f"  Phase C (intra-day): {c} constraints")
+    print(f"  Total: {a + b + c} engine constraints ({len(model.Proto().constraints)} model constraints)")
+
+    data['constraints_applied'] = [
+        {'name': 'UnifiedConstraintEngine', 'stage': 'unified_all'}
+    ]
+
+    # Build objective with normalized penalties
+    penalties_dict = data.get('penalties', {})
+    penalty_terms = _build_normalized_penalty(penalties_dict)
+    total_penalty = sum(coeff * var for coeff, var in penalty_terms)
+    model.Maximize(sum(X.values()) - sum(Y.values()) - total_penalty)
+
+    # Penalties summary
+    pen_summary = [(k, len(v.get('penalties', []))) for k, v in penalties_dict.items()]
+    if pen_summary:
+        print(f"  Penalties: {pen_summary}")
+
+    # Solve
+    print("\nSolving...")
+    solver = cp_model.CpSolver()
+    solver.parameters.log_search_progress = True
+    solver.parameters.max_time_in_seconds = 259200
+
+    if solver_config:
+        solver_config.apply_to_solver(solver)
+        print(f"  Solver configured: workers={solver_config.num_workers}")
+
+    log_model_info(model, X, logger)
+
+    if resource_monitor:
+        print("\n[*] Pre-solve resource snapshot:")
+        resource_monitor.log_snapshot(prefix="PRE-SOLVE")
+        resource_monitor.start_monitoring(interval=30.0)
+        logger.info("Started resource monitoring (interval: 30.0s)")
+
+    stage_name = "unified_solve"
+    callback = IntermediateSolutionCallback(
+        X=X, checkpoint_manager=checkpoint_manager,
+        run_dir=run_dir, stage_name=stage_name,
+        data=data, save_interval=60
+    )
+    logger.info("Using solution callback for intermediate saves...")
+    print("  Using solution callback for intermediate saves...")
+
+    start_time = datetime.now()
+    try:
+        status = solver.Solve(model, callback)
+    except Exception as e:
+        logger.critical(f"CRITICAL ERROR during solve: {e}")
+        raise
+    finally:
+        if resource_monitor:
+            resource_monitor.stop_monitoring()
+
+    solve_time = (datetime.now() - start_time).total_seconds()
+    logger.info(f"Callback found {callback.solution_count} intermediate solutions")
+    print(f"  Callback found {callback.solution_count} intermediate solutions")
+
+    if resource_monitor:
+        resource_monitor.log_snapshot(prefix="POST-SOLVE")
+
+    status_name = solver.status_name(status)
+    print(f"\nStatus: {status_name}")
+    print(f"Solve time: {solve_time:.1f}s")
+
+    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+        solution = {key: solver.Value(var) for key, var in X.items()}
+        objective = solver.ObjectiveValue()
+        games_scheduled = sum(1 for v in solution.values() if v == 1)
+
+        log_solve_result(status_name, objective, solve_time, games_scheduled, logger)
+        print(f"  Objective: {objective}")
+        print(f"  Games scheduled: {games_scheduled}")
+
+        checkpoint_manager.save_stage(run_dir, stage_name, solution, data, status_name, solve_time)
+
+        from analytics.versioning import DrawVersionManager
+        year = data.get('year', data.get('_year'))
+        version_manager = DrawVersionManager('draws', year=year)
+        version = version_manager.save_solver_output(
+            solution, data, description=f"Season {year} draw - unified mode",
+            mode="unified", is_major=True
+        )
+        logger.info(f"Saved as {version.version_string}")
+        return solution, data
+    else:
+        logger.warning(f"Unified solve did not find solution: {status_name}")
+        print("No valid solution found.")
+        return None, data
+
+
+def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False, constraint_slack: dict = None, hint_solution: dict = None, use_unified: bool = False, run_id: str = None, description: str = '', provenance: dict = None):
     """
     Simple (non-staged) main entry point.
     Uses all constraints in a single solve.
-    
+
     Args:
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         locked_weeks: Optional set of week numbers that are locked.
@@ -1123,16 +1503,19 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         constraint_slack: Optional dict mapping constraint names to slack values.
-        
+        hint_solution: Optional dict of variable hints from a prior solution.
+        use_unified: If True, use unified constraint engine.
+        run_id: Identifier for this run (default: "simple").
+
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
     """
     if year is None:
         raise ValueError("Year is required. Use --year YYYY to specify the season.")
     # Set up logging for single solve mode
-    logger = setup_logging(run_id="simple")
+    logger = setup_logging(run_id=run_id or "simple")
     
-    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
+    mode_label = "UNIFIED" if use_unified else ("AI-ENHANCED" if use_ai else "ORIGINAL")
     logger.info("=" * 60)
     logger.info(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
     logger.info("=" * 60)
@@ -1146,10 +1529,10 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     # Initialize resource monitoring
     resource_monitor = ResourceMonitor(logger=logger) if PSUTIL_AVAILABLE else None
     if resource_monitor:
-        print("\n📊 Resource monitoring enabled")
+        print("\n[*] Resource monitoring enabled")
         resource_monitor.log_snapshot(prefix="STARTUP")
     else:
-        print("\n⚠️  Resource monitoring unavailable (install psutil)")
+        print("\n[!] Resource monitoring unavailable (install psutil)")
     
     # Initialize checkpoint manager for intermediate saves
     checkpoint_manager = CheckpointManager()
@@ -1169,22 +1552,43 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     if constraint_slack:
         data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
         print(f"  Constraint slack overrides: {constraint_slack}")
-    
+
+    # Store solver provenance for metadata
+    data['_solver_mode'] = 'simple'
+    data['_use_ai'] = use_ai
+    data['_solver_workers'] = solver_config.num_workers if solver_config else None
+    data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
+    data['_excluded_constraints'] = list(exclude_constraints or [])
+    if description:
+        data['_user_description'] = description
+    if provenance:
+        data['_provenance'] = provenance
+
+    # Save run-level metadata at start (before solving)
+    checkpoint_manager.save_run_metadata(run_dir, data, solver_config)
+
     # Create model
     model = cp_model.CpModel()
     
     # Initialize variables
-    X, Y, conflicts, unavailable_games = generate_X(model, data)
+    X, Y, conflicts = generate_X(model, data)
     X.update(Y)
-    
+
     # Handle locked games
     if locked_keys:
         locked_keys_set = set(locked_keys) if not isinstance(locked_keys, set) else locked_keys
         print(f"  Locking {len(locked_keys_set)} games from locked weeks...")
+        matched = 0
         for key in locked_keys_set:
             if key in X:
                 model.Add(X[key] == 1)
-        
+                matched += 1
+        if matched < len(locked_keys_set):
+            missed = len(locked_keys_set) - matched
+            print(f"  WARNING: {missed}/{len(locked_keys_set)} locked keys not found in model variables!")
+        else:
+            print(f"  All {matched} locked keys matched model variables")
+
         # Zero out all other variables in locked weeks
         if locked_weeks:
             zeroed = 0
@@ -1193,13 +1597,22 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
                     model.Add(var == 0)
                     zeroed += 1
             print(f"  Zeroed {zeroed} non-locked variables in locked weeks")
-    
-    data['unavailable_games'] = unavailable_games
+
     data['team_conflicts'] = conflicts
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']
     
     print(f"  {len(X)} decision variables")
-    
+
+    # Apply solution hints if provided
+    if hint_solution:
+        hints_added = 0
+        for key, value in hint_solution.items():
+            if key in X:
+                model.AddHint(X[key], value)
+                if value == 1:
+                    hints_added += 1
+        print(f"  Added {hints_added} solution hints (solver will use as starting point)")
+
     # Apply Round 1 symmetry breaking if requested
     if fix_round_1:
         print("\nApplying Round 1 symmetry breaking...")
@@ -1207,7 +1620,12 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         symmetry_constraint = FixRound1SymmetryBreaking()
         num_constraints = symmetry_constraint.apply(model, X, data)
         print(f"  Added {num_constraints} symmetry breaking constraints")
-    
+
+    # === UNIFIED ENGINE PATH ===
+    if use_unified:
+        return _main_simple_unified(model, X, Y, data, solver_config, resource_monitor,
+                                     checkpoint_manager, run_dir, logger)
+
     # Get constraint classes (not instances yet)
     stages = STAGES_AI if use_ai else STAGES
     
@@ -1226,11 +1644,11 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         print(f"  Excluding constraints: {', '.join(exclude_set)}")
     
     all_constraint_classes = [
-        cls for stage in stages.values() 
+        cls for stage in stages.values()
         for cls in stage['constraints']
         if cls.__name__ not in normalized_exclude
     ]
-    
+
     # Relaxation: find problem severity group if enabled
     relaxed_groups = {}  # Dict[int, int] mapping severity level -> slack level
     
@@ -1262,7 +1680,10 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     
     # Apply all constraints (using soft versions for relaxed groups)
     print("\nApplying constraints...")
-    
+
+    # Track constraints for metadata
+    data['constraints_applied'] = _build_constraints_applied(all_constraint_classes)
+
     for cls in all_constraint_classes:
         # Check if this constraint's severity group is relaxed
         if relaxed_groups:
@@ -1287,15 +1708,21 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     
     print(f"  Total: {len(model.Proto().constraints)} constraints")
     
-    # Build objective
+    # Build objective with normalized penalties
     penalties_dict = data.get('penalties', {})
-    total_penalty = sum(
-        info['weight'] * sum(info['penalties'])
-        for info in penalties_dict.values() if 'penalties' in info
-    )
-    
+
+    print(f"\nPenalty weight normalization:")
+    for name, info in penalties_dict.items():
+        n = len(info.get('penalties', []))
+        w = info['weight']
+        nw = max(1, w // n) if n > 0 else 0
+        print(f"  {name}: {n} vars, weight {w:,} -> normalized {nw:,}/var")
+
+    penalty_terms = _build_normalized_penalty(penalties_dict)
+    total_penalty = sum(coeff * var for coeff, var in penalty_terms)
+
     model.Maximize(sum(X.values()) - sum(Y.values()) - total_penalty)
-    
+
     # Solve
     print("\nSolving...")
     solver = cp_model.CpSolver()
@@ -1312,7 +1739,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     
     # Log pre-solve resource state
     if resource_monitor:
-        print("\n📊 Pre-solve resource snapshot:")
+        print("\n[*] Pre-solve resource snapshot:")
         resource_monitor.log_snapshot(prefix="PRE-SOLVE")
     
     # Start background resource monitoring during solve
@@ -1349,7 +1776,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
             peak_memory = resource_monitor.get_peak_memory()
             if peak_memory:
                 logger.info(f"Peak process memory during solve: {peak_memory:.0f}MB")
-                print(f"\n📊 Peak process memory: {peak_memory:.0f}MB")
+                print(f"\n[*] Peak process memory: {peak_memory:.0f}MB")
     
     solve_time = (datetime.now() - start_time).total_seconds()
     logger.info(f"Callback found {callback.solution_count} intermediate solutions")
@@ -1357,7 +1784,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     
     # Log post-solve resource state
     if resource_monitor:
-        print("\n📊 Post-solve resource snapshot:")
+        print("\n[*] Post-solve resource snapshot:")
         resource_monitor.log_snapshot(prefix="POST-SOLVE")
     
     status_name = solver.status_name(status)
@@ -1391,7 +1818,8 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         version_manager = DrawVersionManager('draws', year=year)
         
         excluded_desc = f", excluded: {', '.join(exclude_set)}" if exclude_set else ""
-        description = f"Season {year} draw - simple mode{excluded_desc}"
+        auto_desc = f"Season {year} draw - simple mode{excluded_desc}"
+        description = f"{data['_user_description']} | {auto_desc}" if data.get('_user_description') else auto_desc
         
         version = version_manager.save_solver_output(
             solution, data,
@@ -1402,10 +1830,20 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         
         logger.info(f"Saved as {version.version_string}")
         logger.info("Simple solve completed successfully")
+        checkpoint_manager.update_run_status(run_dir, 'completed', {
+            'num_scheduled_games': games_scheduled,
+            'objective': objective,
+            'solve_time': solve_time,
+            'status': status_name,
+        })
         return solution, data
     else:
         logger.warning(f"Simple solve did not find solution: {status_name}")
         print("No valid solution found.")
+        checkpoint_manager.update_run_status(run_dir, 'failed', {
+            'solve_time': solve_time,
+            'status': status_name,
+        })
         return None, data
 
 

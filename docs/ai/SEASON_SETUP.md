@@ -12,8 +12,7 @@
 | Information | Source | Config Location |
 |-------------|--------|-----------------|
 | Season start date | HNH Committee | `SEASON_CONFIG['start_date']` |
-| Season end date | HNH Committee | `SEASON_CONFIG['last_round_date']` |
-| Grand final date | HNH Committee | `SEASON_CONFIG['end_date']` |
+| Season end date (last club game before finals) | HNH Committee | `SEASON_CONFIG['end_date']` |
 | Team nominations by club | Club submissions | `data/{year}/teams/*.csv` |
 | Blocked weekends | HNH Committee | `FIELD_UNAVAILABILITIES` |
 | Number of rounds | HNH Committee/AGM | `SEASON_CONFIG['max_rounds']` |
@@ -22,11 +21,13 @@
 
 | Information | Source | Config Location |
 |-------------|--------|-----------------|
-| Friday night games at Gosford (count) | AGM decision | `FRIDAY_NIGHT_CONFIG['gosford_friday_count']` |
-| Friday night dates at Gosford | Club agreements | `FRIDAY_NIGHT_CONFIG['friday_dates']` |
-| Which clubs play Friday at Gosford | Club agreements | `FRIDAY_NIGHT_CONFIG['friday_clubs']` |
-| Gosford Friday start time | AGM decision | `FRIDAY_NIGHT_CONFIG['gosford_friday_times']` |
-| NIHC Friday start time | HNH Committee | `FRIDAY_NIGHT_CONFIG['nihc_friday_times']` |
+| Friday night games at Gosford (count) | AGM decision | `CONSTRAINT_DEFAULTS['gosford_friday_games']` |
+| Friday night games at Maitland (count) | Committee | `CONSTRAINT_DEFAULTS['maitland_friday_games']` |
+| Friday night dates at Gosford | Club agreements | `FORCED_GAMES` (force dates) + `BLOCKED_GAMES` (block non-confirmed) |
+| Maitland Friday opponents | Committee | `BLOCKED_GAMES` blocks non-Gosford clubs at Maitland on Fridays |
+| Gosford Friday start time | AGM decision | `PHL_GAME_TIMES['Central Coast Hockey Park']['Friday']` (8pm) |
+| Maitland Friday start time | Committee | `PHL_GAME_TIMES['Maitland Park']['Friday']` (7pm) |
+| NIHC Friday start time | HNH Committee | `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']` (7pm) |
 
 ### Club Requests (Soft Constraints)
 
@@ -75,8 +76,7 @@ In `SEASON_CONFIG`:
 SEASON_CONFIG = {
     'year': 2026,
     'start_date': datetime(2026, 3, 22),      # First playing Sunday
-    'last_round_date': datetime(2026, 8, 30),  # Last regular round
-    'end_date': datetime(2026, 9, 19),         # Grand Final
+    'end_date': datetime(2026, 8, 30),         # Last club game before finals
     'max_rounds': 22,  # See "Understanding max_rounds" below
     ...
 }
@@ -225,7 +225,9 @@ Before generating:
 - [ ] `SEASON_CONFIG` dates set correctly
 - [ ] `FIELD_UNAVAILABILITIES` updated for blocked weekends
 - [ ] `PHL_GAME_TIMES` and `SECOND_GRADE_TIMES` reviewed
-- [ ] `FRIDAY_NIGHT_CONFIG` set for Gosford/NIHC Friday nights
+- [ ] `CONSTRAINT_DEFAULTS` set for Friday night counts (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`)
+- [ ] `FORCED_GAMES` configured for Friday night dates/matchups (supports `constraint` field for equality types)
+- [ ] `BLOCKED_GAMES` configured to block non-confirmed Friday dates and restrict Maitland Fridays to Gosford only
 - [ ] `BLOCKED_GAMES` includes all hard no-play requests
 - [ ] `PREFERENCE_NO_PLAY` includes all soft no-play requests
 - [ ] `CLUB_DAYS` includes all club day events

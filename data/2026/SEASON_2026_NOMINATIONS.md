@@ -64,14 +64,14 @@
 | Club | Team Name | Notes |
 |------|-----------|-------|
 | Tigers | Tigers | |
-| Port Stephens | Port Stephens | |
 | Colts | Colts Gold | |
 | Colts | Colts Green | |
 | Crusaders | Crusaders | |
 | University | University | |
 | Maitland | Maitland | |
-| Wests | Wests | Highlighted in image |
-| Norths | Norths | **⚠️ NEEDS CONFIRMATION** |
+| Wests | Wests Green | |
+| Wests | Wests Red | |
+| Norths | Norths | |
 
 ### 6th Grade - 9 Teams
 | Club | Team Name | Notes |
@@ -176,7 +176,7 @@
 | Club | Requested Date | Requirements |
 |------|---------------|--------------|
 | Crusaders | June 14, 2026 | All 4 teams play back-to-back on same field from first game |
-| Souths/Norths | August TBD | Red & Blue Derby Day - date to be confirmed between clubs |
+| Souths/Norths | May 10 | Red & Blue Derby Day - confirmed |
 | Tigers/Souths | May TBD | Taree game - PHL & 2nd Grade match in Taree |
 
 ---
@@ -201,7 +201,7 @@
 - May 29, 2026
 - June 12, 2026 (Norths 80th Anniversary)
 
-**Friday Night Times:** 6:30pm or 8:00pm
+**Friday Night Times:** 8:00pm (confirmed at AGM)
 
 ### PHL/2nd Grade Scheduling
 - PHL and 2nd Grade matches to run consecutively with aligned clubs
@@ -226,7 +226,7 @@
 2. Wests team count confirmation (doubles in grades?)
 3. University team names for 4th grade doubles
 4. Crusaders 4th grade final decision (may drop)
-5. Red & Blue Derby exact date (August)
+5. ~~Red & Blue Derby exact date (August)~~ → Confirmed May 10
 6. Tigers/Souths Taree game exact date (May)
 7. NSW Masters Men's State Training weekend (August)
 

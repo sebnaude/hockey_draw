@@ -71,31 +71,31 @@
 |------|-----------|-------|
 | Tigers | Tigers | |
 | Maitland | Maitland | |
-| Wests | Wests | |
+| Wests | Wests Green | |
 | Wests | Wests Red | |
 | Crusaders | Crusaders | |
 | University | Uni | |
-| Port Stephens | Port Stephens | |
 | Colts | Colts Gold | |
 | Colts | Colts Green | |
 | Norths | Norths | |
 
-**Total: 10 teams (including 2x Colts, 2x Wests)**
+**Total: 9 teams (including 2x Colts, 2x Wests)**
 
 ### 6th Grade
 | Club | Team Name | Notes |
 |------|-----------|-------|
-| Tigers | Tigers | |
+| Tigers | Tigers Yellow | |
 | Tigers | Tigers Black | |
 | Souths | Souths | |
 | Maitland | Maitland | |
 | Wests | Wests | |
 | Crusaders | Crusaders | |
-| University | Uni | |
-| University | Uni Seapigs | |
+| University | University Gentlemen | |
+| University | University Seapigs | |
+| Port Stephens | Port Stephens | |
 | Colts | Colts | |
 
-**Total: 9 teams (including 2x Tigers, 2x Uni)**
+**Total: 10 teams (including 2x Tigers, 2x Uni)**
 
 ---
 
@@ -119,7 +119,7 @@
 - **June 14:** Club Day - All 4 teams to play back-to-back on the same field from first game of the day
 
 #### Souths & Norths
-- **August (TBC):** Red & Blue Derby Day - Date to be confirmed between Souths & Norths
+- **May 10 (Sunday):** Red & Blue Derby Day - Norths vs Souths (confirmed)
 
 ### Friday Night Matches (Central Coast)
 
@@ -150,7 +150,7 @@ The following clubs have agreed to play Friday night matches at Gosford (8pm sta
 ### Central Coast (Gosford) Requirements
 
 - Gosford requesting 8 home matches on Friday nights
-- Friday night times: 6:30pm or 8:00pm
+- Friday night times: 8:00pm (confirmed at AGM)
 - Sunday match times: 12:00pm or 1:30pm only
 - PHL remains 4 rounds (20 matches) - confirmed at AGM
 - When playing Gosford in 2nd grade, the other team has the bye (no 2nd grade for Gosford)
@@ -220,7 +220,7 @@ Options during these weekends:
 | 2nd | 4 | - |
 | 3rd | 8 | - |
 | 4th | 11 | Uni x2, Wests x2 |
-| 5th | 10 | Colts x2, Wests x2 |
+| 5th | 9 | Colts x2, Wests x2 |
 | 6th | 9 | Tigers x2, Uni x2 |
 | **TOTAL** | **48** | |
 
@@ -244,16 +244,16 @@ Note: Gosford only competes in PHL.
 | Event | Details | Status |
 |-------|---------|--------|
 | Crusaders Club Day | June 14 - all teams back-to-back | ✅ In CLUB_DAYS |
-| Friday Night Dates | Mar 27, Apr 17, Apr 24, May 29, Jun 12 | ✅ In FRIDAY_NIGHT_CONFIG |
-| Friday Night Clubs | Wests x2, Souths x2, Norths x1, Tigers x2, Maitland x1 | ✅ In FRIDAY_NIGHT_CONFIG |
-| Norths 80th Anniversary | June 12 Friday night match | ✅ In friday_dates |
-| **NIHC Friday Matchups** | May 8: Souths/Maitland, Jun 19: Tigers/Wests, Jul 24: Norths/TBC | ✅ In nihc_friday_games |
+| Friday Night Dates | Mar 27, Apr 17, Apr 24, May 29, Jun 12 | ✅ In `PHL_GAME_TIMES` (timeslots) + `FORCED_GAMES`/`BLOCKED_GAMES` (date filtering) |
+| Friday Night Clubs | Wests x2, Souths x2, Norths x1, Tigers x2, Maitland x1 | Preference only (documented in nominations, not constraint-enforced) |
+| Norths 80th Anniversary | Jun 14 Sunday — Norths v Wests forced games weekend | ✅ In `FORCED_GAMES` |
+| **NIHC Friday Matchups** | May 8: Souths/Maitland, Jun 19: Tigers/Wests, Jul 24: Norths/TBC | ✅ In `FORCED_GAMES` |
 
 ### ✅ CONFIGURED - Game Times
 
 | Venue | Day | Times | Status |
 |-------|-----|-------|--------|
-| Gosford | Friday | 6:30pm, 8:00pm | ✅ In PHL_GAME_TIMES |
+| Gosford | Friday | 8:00pm | ✅ In PHL_GAME_TIMES (AGM confirmed) |
 | Gosford | Sunday | 12:00pm, 1:30pm | ✅ In DAY_TIME_MAP |
 | NIHC | Sunday | 8:30am - 7:00pm | ✅ In DAY_TIME_MAP |
 | Maitland | Sunday | 9:00am - 4:30pm | ✅ In DAY_TIME_MAP |
@@ -274,7 +274,7 @@ Note: Gosford only competes in PHL.
 
 | Item | Details | Action Required |
 |------|---------|-----------------|
-| **Red & Blue Derby** | Souths vs Norths | Get August date from clubs |
+| **Red & Blue Derby** | Souths vs Norths | ✅ May 10 confirmed, in FORCED_GAMES |
 | **Tigers/Souths Taree Game** | PHL & 2nd at Taree | Get May date |
 | **Masters Training Weekend** | August | Get date from HCPL |
 | **Club Days** | Wests, Uni, Tigers, Port Stephens | Get 2026 dates from clubs |

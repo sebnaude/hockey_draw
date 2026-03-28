@@ -18,7 +18,6 @@ Usage:
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
@@ -52,8 +51,7 @@ class PreSeasonReport:
         # Config values
         self.year = config.get('year', data.get('year'))
         self.start_date = config.get('start_date')
-        self.last_round_date = config.get('last_round_date')  # End of regular rounds
-        self.end_date = config.get('end_date')  # Grand final date
+        self.end_date = config.get('end_date')  # Last club game before finals
         self.max_rounds = config.get('max_rounds')
         
     def calculate_available_weekends(self) -> Tuple[int, List[datetime]]:
@@ -63,8 +61,7 @@ class PreSeasonReport:
         Returns:
             Tuple of (count, list_of_weekend_dates)
         """
-        # Use last_round_date if available, otherwise fall back to end_date
-        round_end_date = self.last_round_date or self.end_date
+        round_end_date = self.end_date
         if not self.start_date or not round_end_date:
             return 0, []
         
@@ -221,15 +218,22 @@ class PreSeasonReport:
                     'type': 'hard'
                 })
         
-        # Friday Night Configuration
-        friday_config = self.config.get('friday_night_config', {})
-        if friday_config:
+        # Friday Night Configuration (derived from constraint_defaults and forced_games)
+        defaults = self.config.get('constraint_defaults', {})
+        gosford_friday_games = defaults.get('gosford_friday_games', 0)
+        if gosford_friday_games:
+            # Extract forced Gosford Friday dates from forced_games
+            forced_friday_dates = []
+            for entry in self.config.get('forced_games', []):
+                if (entry.get('day') == 'Friday' and
+                    entry.get('field_location') == 'Central Coast Hockey Park'):
+                    forced_friday_dates.append(entry.get('date', 'TBC'))
             result['friday_night_allocations'] = {
-                'total_matches': friday_config.get('gosford_friday_count', 0),
-                'clubs': friday_config.get('friday_clubs', {}),
-                'dates': [d.strftime('%Y-%m-%d') for d in friday_config.get('friday_dates', [])],
+                'total_matches': gosford_friday_games,
+                'forced_dates': forced_friday_dates,
+                'max_friday_broadmeadow': defaults.get('max_friday_broadmeadow', 3),
             }
-        
+
         # Special Games
         special_games = self.config.get('special_games', {})
         for key, game in special_games.items():
@@ -262,16 +266,17 @@ class PreSeasonReport:
                     'type': 'club_day'
                 })
         
-        # Friday Night special dates
-        friday_config = self.config.get('friday_night_config', {})
-        for date in friday_config.get('friday_dates', []):
-            # Check if it's a special one (e.g., Norths 80th)
-            events.append({
-                'name': f'Friday Night PHL at Gosford',
-                'date': date.strftime('%Y-%m-%d'),
-                'type': 'friday_night'
-            })
-        
+        # Friday Night forced games
+        for entry in self.config.get('forced_games', []):
+            if entry.get('day') == 'Friday':
+                location = entry.get('field_location', '')
+                venue = 'Gosford' if 'Central Coast' in location else 'NIHC'
+                events.append({
+                    'name': f'Friday Night PHL at {venue}',
+                    'date': entry.get('date', 'TBC'),
+                    'type': 'friday_night'
+                })
+
         # Special Games
         special_games = self.config.get('special_games', {})
         for key, game in special_games.items():
@@ -467,10 +472,8 @@ class PreSeasonReport:
         lines.append("-" * 40)
         if self.start_date:
             lines.append(f"First Round:  {self.start_date.strftime('%A, %d %B %Y')}")
-        if self.last_round_date:
-            lines.append(f"Last Round:   {self.last_round_date.strftime('%A, %d %B %Y')}")
         if self.end_date:
-            lines.append(f"Grand Final:  {self.end_date.strftime('%A, %d %B %Y')}")
+            lines.append(f"Last Round:   {self.end_date.strftime('%A, %d %B %Y')}  (last club game before finals)")
         lines.append("")
         
         # Rounds Validation

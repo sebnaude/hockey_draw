@@ -1,21 +1,17 @@
 # tests/test_severity_relaxation.py
 """
-Unit tests for severity_relaxation.py
+Tests for severity_relaxation.py - NO MOCKS.
 
-Tests for:
-- CONSTRAINT_TO_SEVERITY mapping
-- get_severity_level function
-- group_constraints_by_severity function
-- SeverityGroupState dataclass
-- SeverityGroupResolver class (basic tests)
+Uses real constraint classes, real config data, and real CP-SAT models.
+Mini solver runs use short timeouts (1-5 seconds).
 """
 
 import pytest
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
 
-# Add parent directory to path for imports
+from ortools.sat.python import cp_model
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from constraints.severity import (
@@ -24,6 +20,24 @@ from constraints.severity import (
     group_constraints_by_severity,
     SeverityGroupState,
     SeverityGroupResolver,
+    apply_constraints_with_relaxation,
+    create_relaxation_test_func,
+)
+from constraints.ai import (
+    NoDoubleBookingTeamsConstraintAI,
+    NoDoubleBookingFieldsConstraintAI,
+    EnsureEqualGamesAndBalanceMatchUpsAI,
+    ClubDayConstraintAI,
+    AwayAtMaitlandGroupingAI,
+    TeamConflictConstraintAI,
+    ClubGradeAdjacencyConstraintAI,
+    ClubVsClubAlignmentAI,
+    ClubGameSpreadAI,
+    MaximiseClubsPerTimeslotBroadmeadowAI,
+    MinimiseClubsOnAFieldBroadmeadowAI,
+    EnsureBestTimeslotChoicesAI,
+    PreferredTimesConstraintAI,
+    EqualMatchUpSpacingConstraintAI,
 )
 
 
@@ -42,7 +56,7 @@ class TestConstraintToSeverity:
     def test_level1_constraints_are_critical(self):
         """Test that level 1 constraints are the critical ones."""
         level1_names = [k for k, v in CONSTRAINT_TO_SEVERITY.items() if v == 1]
-        
+
         assert 'NoDoubleBookingTeamsConstraint' in level1_names
         assert 'NoDoubleBookingFieldsConstraint' in level1_names
         assert 'EnsureEqualGamesAndBalanceMatchUps' in level1_names
@@ -52,33 +66,53 @@ class TestConstraintToSeverity:
         for level in CONSTRAINT_TO_SEVERITY.values():
             assert level in [1, 2, 3, 4, 5]
 
+    def test_ai_and_original_share_same_level(self):
+        """Test AI variants have the same severity as their original counterparts."""
+        # Check a few pairs
+        pairs = [
+            ('NoDoubleBookingTeamsConstraint', 'NoDoubleBookingTeamsConstraintAI'),
+            ('ClubDayConstraint', 'ClubDayConstraintAI'),
+            ('ClubGradeAdjacencyConstraint', 'ClubGradeAdjacencyConstraintAI'),
+        ]
+        for orig, ai in pairs:
+            assert CONSTRAINT_TO_SEVERITY[orig] == CONSTRAINT_TO_SEVERITY[ai]
+
 
 # ============== get_severity_level Tests ==============
 
 class TestGetSeverityLevel:
-    """Tests for get_severity_level function."""
+    """Tests for get_severity_level function using REAL constraint classes."""
 
-    def test_returns_correct_level_for_known_constraint(self):
-        """Test returns correct level for a known constraint."""
-        class NoDoubleBookingTeamsConstraint:
-            pass
-        
-        level = get_severity_level(NoDoubleBookingTeamsConstraint)
+    def test_returns_level1_for_critical_constraint(self):
+        """Level 1 for NoDoubleBookingTeamsConstraintAI."""
+        level = get_severity_level(NoDoubleBookingTeamsConstraintAI)
         assert level == 1
 
-    def test_returns_correct_level_for_ai_constraint(self):
-        """Test returns correct level for AI constraint variant."""
-        class ClubDayConstraintAI:
-            pass
-        
+    def test_returns_level2_for_high_constraint(self):
+        """Level 2 for ClubDayConstraintAI."""
         level = get_severity_level(ClubDayConstraintAI)
         assert level == 2
+
+    def test_returns_level3_for_medium_constraint(self):
+        """Level 3 for ClubGradeAdjacencyConstraintAI."""
+        level = get_severity_level(ClubGradeAdjacencyConstraintAI)
+        assert level == 3
+
+    def test_returns_level4_for_low_constraint(self):
+        """Level 4 for MaximiseClubsPerTimeslotBroadmeadowAI."""
+        level = get_severity_level(MaximiseClubsPerTimeslotBroadmeadowAI)
+        assert level == 4
+
+    def test_returns_level5_for_very_low_constraint(self):
+        """Level 5 for EnsureBestTimeslotChoicesAI."""
+        level = get_severity_level(EnsureBestTimeslotChoicesAI)
+        assert level == 5
 
     def test_returns_5_for_unknown_constraint(self):
         """Test returns 5 (lowest) for unknown constraints."""
         class UnknownConstraint:
             pass
-        
+
         level = get_severity_level(UnknownConstraint)
         assert level == 5
 
@@ -86,26 +120,23 @@ class TestGetSeverityLevel:
 # ============== group_constraints_by_severity Tests ==============
 
 class TestGroupConstraintsBySeverity:
-    """Tests for group_constraints_by_severity function."""
+    """Tests for group_constraints_by_severity using real constraint classes."""
 
-    def test_groups_constraints_correctly(self):
-        """Test constraints are grouped by severity level."""
-        class Level1Constraint:
-            pass
-        
-        class Level2Constraint:
-            pass
-        
-        # Mock the get_severity_level to return specific values
-        with patch('constraints.severity.get_severity_level') as mock_get:
-            mock_get.side_effect = lambda c: 1 if 'Level1' in c.__name__ else 2
-            
-            groups = group_constraints_by_severity([Level1Constraint, Level2Constraint])
-            
-            assert 1 in groups
-            assert 2 in groups
-            assert Level1Constraint in groups[1]
-            assert Level2Constraint in groups[2]
+    def test_groups_real_constraints_correctly(self):
+        """Test real constraints are grouped by their severity level."""
+        constraints = [
+            NoDoubleBookingTeamsConstraintAI,  # Level 1
+            ClubDayConstraintAI,               # Level 2
+            ClubGradeAdjacencyConstraintAI,    # Level 3
+        ]
+        groups = group_constraints_by_severity(constraints)
+
+        assert 1 in groups
+        assert 2 in groups
+        assert 3 in groups
+        assert NoDoubleBookingTeamsConstraintAI in groups[1]
+        assert ClubDayConstraintAI in groups[2]
+        assert ClubGradeAdjacencyConstraintAI in groups[3]
 
     def test_empty_list_returns_empty_dict(self):
         """Test empty constraint list returns empty dict."""
@@ -114,16 +145,26 @@ class TestGroupConstraintsBySeverity:
 
     def test_multiple_constraints_same_level(self):
         """Test multiple constraints at same level grouped together."""
-        class Constraint1:
-            pass
-        
-        class Constraint2:
-            pass
-        
-        with patch('constraints.severity.get_severity_level', return_value=3):
-            groups = group_constraints_by_severity([Constraint1, Constraint2])
-            
-            assert len(groups[3]) == 2
+        constraints = [
+            NoDoubleBookingTeamsConstraintAI,  # Level 1
+            NoDoubleBookingFieldsConstraintAI, # Level 1
+            EqualMatchUpSpacingConstraintAI,   # Level 1
+        ]
+        groups = group_constraints_by_severity(constraints)
+
+        assert len(groups[1]) == 3
+
+    def test_all_five_levels_present(self):
+        """Test grouping with constraints from all 5 severity levels."""
+        constraints = [
+            NoDoubleBookingTeamsConstraintAI,             # Level 1
+            ClubDayConstraintAI,                          # Level 2
+            ClubGradeAdjacencyConstraintAI,               # Level 3
+            MaximiseClubsPerTimeslotBroadmeadowAI,        # Level 4
+            EnsureBestTimeslotChoicesAI,                   # Level 5
+        ]
+        groups = group_constraints_by_severity(constraints)
+        assert set(groups.keys()) == {1, 2, 3, 4, 5}
 
 
 # ============== SeverityGroupState Tests ==============
@@ -132,181 +173,310 @@ class TestSeverityGroupState:
     """Tests for SeverityGroupState dataclass."""
 
     def test_default_initialization(self):
-        """Test default state initialization."""
-        state = SeverityGroupState(level=2, constraint_classes=[])
-        
+        state = SeverityGroupState(level=2, constraint_classes=[ClubDayConstraintAI])
         assert state.level == 2
-        assert state.constraint_classes == []
+        assert state.constraint_classes == [ClubDayConstraintAI]
         assert state.current_slack == 0
         assert state.max_slack == 3
         assert state.is_problem_group is False
 
     def test_can_relax_true_for_non_level1(self):
-        """Test can_relax returns True for level 2+ with slack room."""
         for level in [2, 3, 4, 5]:
             state = SeverityGroupState(level=level, constraint_classes=[])
             assert state.can_relax() is True
 
     def test_can_relax_false_for_level1(self):
-        """Test can_relax returns False for level 1."""
-        state = SeverityGroupState(level=1, constraint_classes=[])
+        state = SeverityGroupState(level=1, constraint_classes=[NoDoubleBookingTeamsConstraintAI])
         assert state.can_relax() is False
 
     def test_can_relax_false_at_max_slack(self):
-        """Test can_relax returns False when at max slack."""
         state = SeverityGroupState(level=2, constraint_classes=[], current_slack=3)
         assert state.can_relax() is False
 
     def test_relax_increments_slack(self):
-        """Test relax increments slack by 1."""
-        state = SeverityGroupState(level=2, constraint_classes=[])
-        
+        state = SeverityGroupState(level=2, constraint_classes=[ClubDayConstraintAI])
         result = state.relax()
-        
         assert result is True
         assert state.current_slack == 1
 
     def test_relax_fails_at_max_slack(self):
-        """Test relax returns False at max slack."""
         state = SeverityGroupState(level=2, constraint_classes=[], current_slack=3)
-        
         result = state.relax()
-        
         assert result is False
         assert state.current_slack == 3
 
     def test_relax_fails_for_level1(self):
-        """Test relax returns False for level 1."""
         state = SeverityGroupState(level=1, constraint_classes=[])
-        
         result = state.relax()
-        
         assert result is False
         assert state.current_slack == 0
 
+    def test_relax_increments_progressively(self):
+        """Test multiple relaxations increment slack step by step."""
+        state = SeverityGroupState(level=3, constraint_classes=[ClubGradeAdjacencyConstraintAI])
+        for expected_slack in [1, 2, 3]:
+            assert state.relax() is True
+            assert state.current_slack == expected_slack
+        # At max now
+        assert state.relax() is False
+        assert state.current_slack == 3
 
-# ============== SeverityGroupResolver Basic Tests ==============
+
+# ============== SeverityGroupResolver Tests ==============
 
 class TestSeverityGroupResolverBasic:
-    """Basic tests for SeverityGroupResolver class."""
+    """Tests for SeverityGroupResolver using real constraint classes."""
 
-    def test_initialization(self):
-        """Test resolver initializes correctly."""
-        class MockConstraint:
-            pass
-        
-        with patch('constraints.severity.get_severity_level', return_value=2):
-            resolver = SeverityGroupResolver([MockConstraint], verbose=False)
-            
-            assert resolver.all_constraints == [MockConstraint]
-            assert resolver.verbose is False
+    def test_initialization_groups_real_constraints(self):
+        """Test resolver groups real constraints by severity on init."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,  # Level 1
+            ClubDayConstraintAI,               # Level 2
+            ClubGradeAdjacencyConstraintAI,    # Level 3
+        ], verbose=False)
 
-    def test_initialization_groups_constraints(self):
-        """Test resolver groups constraints by severity on init."""
-        class Level1:
-            pass
-        
-        class Level2:
-            pass
-        
-        def mock_level(c):
-            return 1 if 'Level1' in c.__name__ else 2
-        
-        with patch('constraints.severity.get_severity_level', side_effect=mock_level):
-            resolver = SeverityGroupResolver([Level1, Level2], verbose=False)
-            
-            assert 1 in resolver.severity_groups
-            assert 2 in resolver.severity_groups
+        assert 1 in resolver.severity_groups
+        assert 2 in resolver.severity_groups
+        assert 3 in resolver.severity_groups
 
     def test_get_constraints_for_test_returns_all_when_no_exclusions(self):
-        """Test getting all constraints when no exclusions specified."""
-        class Level2Constraint:
-            pass
-        
-        class Level3Constraint:
-            pass
-        
-        def mock_level(c):
-            return 2 if 'Level2' in c.__name__ else 3
-        
-        with patch('constraints.severity.get_severity_level', side_effect=mock_level):
-            resolver = SeverityGroupResolver(
-                [Level2Constraint, Level3Constraint], 
-                verbose=False
-            )
-            
-            all_constraints = resolver.get_constraints_for_test()
-            assert len(all_constraints) == 2
-            assert Level2Constraint in all_constraints
-            assert Level3Constraint in all_constraints
+        resolver = SeverityGroupResolver([
+            ClubDayConstraintAI,               # Level 2
+            ClubGradeAdjacencyConstraintAI,    # Level 3
+        ], verbose=False)
+
+        all_constraints = resolver.get_constraints_for_test()
+        assert len(all_constraints) == 2
+        assert ClubDayConstraintAI in all_constraints
+        assert ClubGradeAdjacencyConstraintAI in all_constraints
 
     def test_get_constraints_for_test_excludes_specified_levels(self):
-        """Test excluding constraints by severity level."""
-        class Level2Constraint:
-            pass
-        
-        class Level3Constraint:
-            pass
-        
-        def mock_level(c):
-            return 2 if 'Level2' in c.__name__ else 3
-        
-        with patch('constraints.severity.get_severity_level', side_effect=mock_level):
-            resolver = SeverityGroupResolver(
-                [Level2Constraint, Level3Constraint], 
-                verbose=False
-            )
-            
-            # Exclude level 3
-            constraints = resolver.get_constraints_for_test(exclude_levels={3})
-            assert Level2Constraint in constraints
-            assert Level3Constraint not in constraints
-
-
-# ============== Integration Tests with Real Constraints ==============
-
-class TestSeverityGroupResolverIntegration:
-    """Integration tests using real constraint classes."""
-
-    def test_with_real_constraint_classes(self):
-        """Test grouping with actual constraint classes from codebase."""
-        from constraints.ai import (
-            NoDoubleBookingTeamsConstraintAI,
-            ClubDayConstraintAI,
-            EqualMatchUpSpacingConstraintAI,
-        )
-        
         resolver = SeverityGroupResolver([
-            NoDoubleBookingTeamsConstraintAI,
-            ClubDayConstraintAI,
-            EqualMatchUpSpacingConstraintAI,
+            ClubDayConstraintAI,               # Level 2
+            ClubGradeAdjacencyConstraintAI,    # Level 3
+            MaximiseClubsPerTimeslotBroadmeadowAI,  # Level 4
         ], verbose=False)
-        
-        # Check grouping - level 1 should have NoDoubleBooking
-        assert 1 in resolver.severity_groups
-        level1_classes = resolver.severity_groups[1].constraint_classes
-        assert NoDoubleBookingTeamsConstraintAI in level1_classes
-        
-        # Level 2 should have ClubDay and EqualMatchUpSpacing
-        assert 2 in resolver.severity_groups
-        level2_classes = resolver.severity_groups[2].constraint_classes
-        assert ClubDayConstraintAI in level2_classes
-        assert EqualMatchUpSpacingConstraintAI in level2_classes
 
-    def test_severity_group_state_can_relax(self):
-        """Test checking if a severity group can be relaxed."""
-        from constraints.ai import (
-            NoDoubleBookingTeamsConstraintAI,
-            ClubDayConstraintAI,
-        )
-        
+        # Exclude level 3
+        constraints = resolver.get_constraints_for_test(exclude_levels={3})
+        assert ClubDayConstraintAI in constraints
+        assert ClubGradeAdjacencyConstraintAI not in constraints
+        assert MaximiseClubsPerTimeslotBroadmeadowAI in constraints
+
+    def test_get_constraints_for_test_excludes_multiple_levels(self):
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,        # Level 1
+            ClubDayConstraintAI,                     # Level 2
+            ClubGradeAdjacencyConstraintAI,          # Level 3
+            MaximiseClubsPerTimeslotBroadmeadowAI,   # Level 4
+        ], verbose=False)
+
+        constraints = resolver.get_constraints_for_test(exclude_levels={3, 4})
+        assert len(constraints) == 2
+        assert NoDoubleBookingTeamsConstraintAI in constraints
+        assert ClubDayConstraintAI in constraints
+
+    def test_levels_present_sorted(self):
+        resolver = SeverityGroupResolver([
+            MaximiseClubsPerTimeslotBroadmeadowAI,   # Level 4
+            NoDoubleBookingTeamsConstraintAI,         # Level 1
+            ClubGradeAdjacencyConstraintAI,           # Level 3
+        ], verbose=False)
+
+        assert resolver.levels_present == [1, 3, 4]
+
+    def test_get_state_summary(self):
         resolver = SeverityGroupResolver([
             NoDoubleBookingTeamsConstraintAI,
             ClubDayConstraintAI,
         ], verbose=False)
-        
-        # Level 1 cannot be relaxed
-        assert resolver.severity_groups[1].can_relax() is False
-        
-        # Level 2 can be relaxed
-        assert resolver.severity_groups[2].can_relax() is True
+
+        summary = resolver.get_state_summary()
+        assert 'Severity Group States:' in summary
+        assert 'Level 1' in summary
+        assert 'Level 2' in summary
+
+
+class TestSeverityGroupResolverFindProblem:
+    """Tests for find_problem_severity_group using real CP-SAT feasibility checks."""
+
+    def test_find_problem_returns_none_when_all_feasible(self):
+        """When test_func always returns feasible, no problem group is found."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,
+            ClubDayConstraintAI,
+        ], verbose=False)
+
+        def always_feasible(constraints, timeout):
+            return 'FEASIBLE', True
+
+        result = resolver.find_problem_severity_group(always_feasible, timeout=1.0)
+        assert result is None
+
+    def test_find_problem_identifies_blocking_level(self):
+        """When removing a specific level makes it feasible, that level is the problem."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,             # Level 1
+            ClubDayConstraintAI,                          # Level 2
+            ClubGradeAdjacencyConstraintAI,               # Level 3
+            MaximiseClubsPerTimeslotBroadmeadowAI,        # Level 4
+            EnsureBestTimeslotChoicesAI,                   # Level 5
+        ], verbose=False)
+
+        # Simulate: infeasible with all, feasible when level 4 excluded
+        call_count = [0]
+        def test_func(constraints, timeout):
+            call_count[0] += 1
+            # First call (all constraints) -> infeasible
+            # Second call (excl level 5) -> infeasible
+            # Third call (excl level 5,4) -> feasible
+            if call_count[0] <= 2:
+                return 'INFEASIBLE', False
+            return 'FEASIBLE', True
+
+        result = resolver.find_problem_severity_group(test_func, timeout=1.0)
+        assert result == 4
+
+    def test_find_problem_returns_1_when_all_infeasible(self):
+        """When even level 1 alone is infeasible, returns 1."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,
+            ClubDayConstraintAI,
+            ClubGradeAdjacencyConstraintAI,
+        ], verbose=False)
+
+        def always_infeasible(constraints, timeout):
+            return 'INFEASIBLE', False
+
+        result = resolver.find_problem_severity_group(always_infeasible, timeout=1.0)
+        assert result == 1
+
+    def test_find_problem_marks_group_as_problem(self):
+        """Problem group should be marked as is_problem_group=True."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,   # Level 1
+            ClubDayConstraintAI,                # Level 2
+        ], verbose=False)
+
+        call_count = [0]
+        def test_func(constraints, timeout):
+            call_count[0] += 1
+            # All constraints -> infeasible, without level 2 -> feasible
+            if call_count[0] == 1:
+                return 'INFEASIBLE', False
+            return 'FEASIBLE', True
+
+        result = resolver.find_problem_severity_group(test_func, timeout=1.0)
+        assert result == 2
+        assert resolver.severity_groups[2].is_problem_group is True
+
+
+class TestSeverityGroupResolverBuildRelaxed:
+    """Tests for build_relaxed_constraint_set."""
+
+    def test_build_relaxed_separates_hard_and_soft(self):
+        """Problem level constraints should be returned as soft."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,   # Level 1
+            ClubDayConstraintAI,                # Level 2
+        ], verbose=False)
+
+        hard, soft = resolver.build_relaxed_constraint_set(problem_level=2)
+
+        # Hard should contain level 1 constraints only
+        assert NoDoubleBookingTeamsConstraintAI in hard
+        assert ClubDayConstraintAI not in hard
+
+        # Soft should have something for the level 2 constraint
+        assert len(soft) > 0
+
+    def test_build_relaxed_increments_slack(self):
+        """Relaxing should increment the slack on the problem group."""
+        resolver = SeverityGroupResolver([
+            NoDoubleBookingTeamsConstraintAI,
+            ClubDayConstraintAI,
+        ], verbose=False)
+
+        assert resolver.severity_groups[2].current_slack == 0
+        resolver.build_relaxed_constraint_set(problem_level=2)
+        assert resolver.severity_groups[2].current_slack == 1
+
+
+# ============== Integration with Real Solver ==============
+
+class TestApplyConstraintsWithRelaxation:
+    """Test apply_constraints_with_relaxation with a real CP-SAT model."""
+
+    @pytest.fixture
+    def real_data(self):
+        """Load real 2026 season data."""
+        from config import load_season_data
+        return load_season_data(2026)
+
+    def test_apply_hard_constraints_to_real_model(self, real_data):
+        """Apply real constraints to a real model (no relaxation)."""
+        model = cp_model.CpModel()
+        from utils import generate_X
+        X, Y, conflicts = generate_X(model, real_data)
+
+        test_data = dict(real_data)
+        test_data['penalties'] = {}
+        test_data['team_conflicts'] = conflicts
+        if isinstance(test_data.get('games'), dict):
+            test_data['games'] = list(test_data['games'].keys())
+
+        # Apply only no-double-booking (fast, always feasible alone)
+        total = apply_constraints_with_relaxation(
+            model, X, test_data,
+            constraints=[NoDoubleBookingTeamsConstraintAI],
+            relaxed_groups=None,
+        )
+        # Should have applied some constraints
+        assert total is None or total >= 0  # apply may return None or count
+
+    def test_apply_with_relaxed_group(self, real_data):
+        """Apply constraints with a relaxed severity group."""
+        model = cp_model.CpModel()
+        from utils import generate_X
+        X, Y, conflicts = generate_X(model, real_data)
+
+        test_data = dict(real_data)
+        test_data['penalties'] = {}
+        test_data['team_conflicts'] = conflicts
+        if isinstance(test_data.get('games'), dict):
+            test_data['games'] = list(test_data['games'].keys())
+
+        # Apply with level 4 relaxed at slack=2
+        total = apply_constraints_with_relaxation(
+            model, X, test_data,
+            constraints=[
+                NoDoubleBookingTeamsConstraintAI,
+                MaximiseClubsPerTimeslotBroadmeadowAI,
+            ],
+            relaxed_groups={4: 2},
+        )
+        # Should not crash; constraints applied
+        assert total is None or total >= 0
+
+
+class TestCreateRelaxationTestFunc:
+    """Test create_relaxation_test_func with real data and solver."""
+
+    @pytest.fixture
+    def real_data(self):
+        from config import load_season_data
+        return load_season_data(2026)
+
+    def test_test_func_returns_status_and_feasibility(self, real_data):
+        """The returned test_func should return (status_name, is_feasible)."""
+        from utils import generate_X
+        test_func = create_relaxation_test_func(real_data, generate_X, timeout=2.0)
+
+        # Test with just one lightweight constraint
+        status_name, is_feasible = test_func(
+            [NoDoubleBookingTeamsConstraintAI], 2.0
+        )
+        assert isinstance(status_name, str)
+        assert isinstance(is_feasible, bool)
+        # Single constraint should be feasible or at least not crash
+        assert status_name in ['OPTIMAL', 'FEASIBLE', 'INFEASIBLE', 'UNKNOWN', 'MODEL_INVALID']

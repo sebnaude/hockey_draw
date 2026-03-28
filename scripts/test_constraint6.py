@@ -25,11 +25,10 @@ def main():
     model = cp_model.CpModel()
     
     # Generate X
-    X, Y, conflicts, unavailable_games = generate_X(model, data)
-    
+    X, Y, conflicts = generate_X(model, data)
+
     # Prepare data
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']
-    data['unavailable_games'] = unavailable_games
     data['team_conflicts'] = conflicts
     
     constraints = [

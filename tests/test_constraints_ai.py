@@ -374,9 +374,12 @@ class TestClubGameSpreadAI:
             for s in day_slots
         ]
 
-    def _solve_with_constraint(self, games, timeslots, teams, locked_weeks=None, slack=0, extra_constraints=None):
+    def _solve_with_constraint(self, games, timeslots, teams, locked_weeks=None, slack=0, extra_constraints=None, max_overlap=None):
         """Build model, apply constraint, optionally add extra constraints, solve."""
         model, X = create_model_and_vars(games, timeslots)
+        constraint_defaults = {}
+        if max_overlap is not None:
+            constraint_defaults['club_game_spread_max_overlap'] = max_overlap
         data = {
             'games': games,
             'timeslots': timeslots,
@@ -385,6 +388,7 @@ class TestClubGameSpreadAI:
             'current_week': 0,
             'locked_weeks': locked_weeks or set(),
             'constraint_slack': {'ClubGameSpread': slack} if slack else {},
+            'constraint_defaults': constraint_defaults,
         }
         constraint = ClubGameSpreadAI()
         constraints_added = constraint.apply(model, X, data)
@@ -436,64 +440,65 @@ class TestClubGameSpreadAI:
         assert total_penalty == 0
 
     def test_gap_of_two_feasible(self):
-        """Club at slots 1 and 4 → gaps = (4-1+1)-2 = 2 → at HARD_LIMIT → FEASIBLE."""
+        """Club at slots 1 and 4 → gap = (4-1+1)-2 = 2 → at HARD_LIMIT → FEASIBLE.
+
+        Only slots 1 and 4 available, so solver must split games across them.
+        """
         field = self._make_field()
         clubs, teams = self._make_clubs_and_teams()
-        timeslots = self._make_timeslots(field, [1, 2, 3, 4])
+        # Only provide slots 1 and 4 — no intermediate slots to fill
+        timeslots = self._make_timeslots(field, [1, 4])
 
         games = [
             ('Tigers 3rd', 'Wests 3rd', '3rd'),
             ('Tigers 4th', 'Wests 4th', '4th'),
         ]
 
-        def force_end_slots(model, X):
-            # Force Tigers to play at slot 1 and slot 4
-            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
-            s4_vars = [v for k, v in X.items() if k[4] == 4 and k[2] == '4th']
-            model.Add(sum(s1_vars) == 1)
-            model.Add(sum(s4_vars) == 1)
-            # No other games
-            other_vars = [v for k, v in X.items() if k[4] not in (1, 4)]
-            model.Add(sum(other_vars) == 0)
+        def force_two_games(model, X):
+            model.Add(sum(X.values()) == 2)
 
         status, solver, X, data, _ = self._solve_with_constraint(
-            games, timeslots, teams, extra_constraints=force_end_slots
+            games, timeslots, teams, extra_constraints=force_two_games
         )
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
-        # Penalty should be 2 for Tigers (2 gaps)
+        # Each club: num_games=2, range=4, gap=2 → total penalty >= 2
         penalties = data['penalties']['ClubGameSpread']['penalties']
         tigers_penalty = sum(solver.Value(p) for p in penalties)
         assert tigers_penalty >= 2
 
     def test_gap_exceeds_hard_limit_infeasible(self):
-        """Club at slots 1 and 6 → gaps = (6-1+1)-2 = 4 > 2 → INFEASIBLE."""
+        """Only slots 1 and 6 available, 2 games required → no valid placement.
+
+        Split (1,6): gap = 6-1+1-2 = 4 > 2 (upper bound violation).
+        Doubled (both at 1 or 6): gap = 1-2 = -1 < 0 (lower bound violation, max_overlap=0).
+        """
         field = self._make_field()
         clubs, teams = self._make_clubs_and_teams()
-        timeslots = self._make_timeslots(field, [1, 2, 3, 4, 5, 6])
+        # Only far-apart slots — no way to satisfy both bounds
+        timeslots = self._make_timeslots(field, [1, 6])
 
         games = [
             ('Tigers 3rd', 'Wests 3rd', '3rd'),
             ('Tigers 4th', 'Wests 4th', '4th'),
         ]
 
-        def force_extreme_slots(model, X):
-            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
-            s6_vars = [v for k, v in X.items() if k[4] == 6 and k[2] == '4th']
-            model.Add(sum(s1_vars) == 1)
-            model.Add(sum(s6_vars) == 1)
-            other = [v for k, v in X.items() if k[4] not in (1, 6)]
-            model.Add(sum(other) == 0)
+        def force_two_games(model, X):
+            model.Add(sum(X.values()) == 2)
 
         status, *_ = self._solve_with_constraint(
-            games, timeslots, teams, extra_constraints=force_extreme_slots
+            games, timeslots, teams, extra_constraints=force_two_games
         )
         assert status == cp_model.INFEASIBLE
 
-    # ---------- Same-slot deduplication ----------
+    # ---------- Double-up handling ----------
 
-    def test_same_slot_two_teams_counts_as_one(self):
-        """Two teams at slot 2, one at slot 4 → timeslots_used=2, gaps = (4-2+1)-2 = 1."""
+    def test_same_slot_counts_as_two_games(self):
+        """Two games at slot 2 + one at slot 4 → num_games=3, range=3, gap=0.
+
+        With the updated formula (num_games not distinct slots), double-ups
+        reduce the gap. Here 3 games in range 3 = zero gap.
+        """
         field = self._make_field()
         wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
         clubs, teams = self._make_clubs_and_teams()
@@ -511,7 +516,6 @@ class TestClubGameSpreadAI:
         ]
 
         def force_layout(model, X):
-            # 3rd grade at slot 2 on EF
             for k, v in X.items():
                 if k[2] == '3rd' and k[4] == 2 and k[9] == 'EF':
                     model.Add(v == 1)
@@ -522,39 +526,204 @@ class TestClubGameSpreadAI:
                 else:
                     model.Add(v == 0)
 
+        # slack=1 needed: field_spread=1 (2 fields), hard cap for 3 games = 3//2-1=0
+        # With slack=1: 2*1 <= 3-2+2 = 3 → feasible
         status, solver, X, data, _ = self._solve_with_constraint(
-            games, timeslots, teams, extra_constraints=force_layout
+            games, timeslots, teams, slack=1, extra_constraints=force_layout
         )
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
-        # Both clubs span slots 2-4: range=3, used=2, gap=1 each → total=2
+        # Both clubs: num_games=3, range=(4-2+1)=3, gap=3-3=0 → gap penalty=0
         penalties = data['penalties']['ClubGameSpread']['penalties']
         total_pen = sum(solver.Value(p) for p in penalties)
-        assert total_pen == 2
+        assert total_pen == 0
+
+    def test_double_up_infeasible_with_zero_overlap(self):
+        """4 games forced into 3 slots → gap = 3-4 = -1 < 0 → INFEASIBLE with max_overlap=0."""
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        club_a = Club(name='Colts', home_field='Newcastle International Hockey Centre')
+        club_b = Club(name='Wests', home_field='Newcastle International Hockey Centre')
+        teams = [
+            Team(name='Colts 3rd', club=club_a, grade='3rd'),
+            Team(name='Colts 4th', club=club_a, grade='4th'),
+            Team(name='Colts 5th', club=club_a, grade='5th'),
+            Team(name='Colts 6th', club=club_a, grade='6th'),
+            Team(name='Wests 3rd', club=club_b, grade='3rd'),
+            Team(name='Wests 4th', club=club_b, grade='4th'),
+            Team(name='Wests 5th', club=club_b, grade='5th'),
+            Team(name='Wests 6th', club=club_b, grade='6th'),
+        ]
+        timeslots = [
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=wf, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='11:30', week=1, day_slot=2, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='13:00', week=1, day_slot=3, field=field, round_no=1),
+        ]
+        games = [
+            ('Colts 3rd', 'Wests 3rd', '3rd'),
+            ('Colts 4th', 'Wests 4th', '4th'),
+            ('Colts 5th', 'Wests 5th', '5th'),
+            ('Colts 6th', 'Wests 6th', '6th'),
+        ]
+
+        def force_all_four(model, X):
+            model.Add(sum(X.values()) == 4)
+
+        status, *_ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_all_four, max_overlap=0
+        )
+        # 4 games in 3 slots requires a double-up → gap=-1 < 0 → INFEASIBLE
+        assert status == cp_model.INFEASIBLE
+
+    def test_double_up_feasible_with_overlap(self):
+        """4 games in 3 slots → gap = -1, but max_overlap=1 allows it (lower bound = -1)."""
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        club_a = Club(name='Colts', home_field='Newcastle International Hockey Centre')
+        club_b = Club(name='Wests', home_field='Newcastle International Hockey Centre')
+        teams = [
+            Team(name='Colts 3rd', club=club_a, grade='3rd'),
+            Team(name='Colts 4th', club=club_a, grade='4th'),
+            Team(name='Colts 5th', club=club_a, grade='5th'),
+            Team(name='Colts 6th', club=club_a, grade='6th'),
+            Team(name='Wests 3rd', club=club_b, grade='3rd'),
+            Team(name='Wests 4th', club=club_b, grade='4th'),
+            Team(name='Wests 5th', club=club_b, grade='5th'),
+            Team(name='Wests 6th', club=club_b, grade='6th'),
+        ]
+        timeslots = [
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=wf, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='11:30', week=1, day_slot=2, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='13:00', week=1, day_slot=3, field=field, round_no=1),
+        ]
+        games = [
+            ('Colts 3rd', 'Wests 3rd', '3rd'),
+            ('Colts 4th', 'Wests 4th', '4th'),
+            ('Colts 5th', 'Wests 5th', '5th'),
+            ('Colts 6th', 'Wests 6th', '6th'),
+        ]
+
+        def force_all_four(model, X):
+            model.Add(sum(X.values()) == 4)
+
+        status, *_ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_all_four, max_overlap=1
+        )
+        # 4 games in 3 slots: gap=-1 >= -1 (max_overlap=1) → FEASIBLE
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    # ---------- Field concentration ----------
+
+    def test_field_concentration_penalizes_spread(self):
+        """4 games: 3 on EF, 1 on WF → field_spread=1, penalty=1.
+
+        Hard cap for 4 games = 4//2-1 = 1, so field_spread=1 is at limit.
+        """
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        club_a = Club(name='Colts', home_field='Newcastle International Hockey Centre')
+        club_b = Club(name='Wests', home_field='Newcastle International Hockey Centre')
+        teams = [
+            Team(name='Colts 3rd', club=club_a, grade='3rd'),
+            Team(name='Colts 4th', club=club_a, grade='4th'),
+            Team(name='Colts 5th', club=club_a, grade='5th'),
+            Team(name='Colts 6th', club=club_a, grade='6th'),
+            Team(name='Wests 3rd', club=club_b, grade='3rd'),
+            Team(name='Wests 4th', club=club_b, grade='4th'),
+            Team(name='Wests 5th', club=club_b, grade='5th'),
+            Team(name='Wests 6th', club=club_b, grade='6th'),
+        ]
+        timeslots = [
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=wf, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='11:30', week=1, day_slot=2, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='13:00', week=1, day_slot=3, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='14:30', week=1, day_slot=4, field=field, round_no=1),
+        ]
+        games = [
+            ('Colts 3rd', 'Wests 3rd', '3rd'),
+            ('Colts 4th', 'Wests 4th', '4th'),
+            ('Colts 5th', 'Wests 5th', '5th'),
+            ('Colts 6th', 'Wests 6th', '6th'),
+        ]
+
+        def force_layout(model, X):
+            for k, v in X.items():
+                if k[2] == '3rd' and k[4] == 1 and k[9] == 'EF':
+                    model.Add(v == 1)
+                elif k[2] == '4th' and k[4] == 1 and k[9] == 'WF':
+                    model.Add(v == 1)
+                elif k[2] == '5th' and k[4] == 2 and k[9] == 'EF':
+                    model.Add(v == 1)
+                elif k[2] == '6th' and k[4] == 3 and k[9] == 'EF':
+                    model.Add(v == 1)
+                else:
+                    model.Add(v == 0)
+
+        status, solver, X, data, _ = self._solve_with_constraint(
+            games, timeslots, teams, max_overlap=1, extra_constraints=force_layout
+        )
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        # Field concentration: Colts has 3 on EF, 1 on WF → spread=1, penalty=1
+        fc_penalties = data['penalties']['ClubFieldConcentration']['penalties']
+        total_fc_pen = sum(solver.Value(p) for p in fc_penalties)
+        assert total_fc_pen >= 1  # at least Colts has field_spread=1
+
+    def test_field_concentration_infeasible_too_spread(self):
+        """2 games on 2 different fields → field_spread=1. Hard cap = 2//2-1 = 0. INFEASIBLE."""
+        field = self._make_field()
+        wf = PlayingField(location='Newcastle International Hockey Centre', name='WF')
+        clubs, teams = self._make_clubs_and_teams()
+        timeslots = [
+            Timeslot(date='2025-03-23', day='Sunday', time='10:00', week=1, day_slot=1, field=field, round_no=1),
+            Timeslot(date='2025-03-23', day='Sunday', time='11:30', week=1, day_slot=2, field=wf, round_no=1),
+        ]
+        games = [
+            ('Tigers 3rd', 'Wests 3rd', '3rd'),
+            ('Tigers 4th', 'Wests 4th', '4th'),
+        ]
+
+        def force_diff_fields(model, X):
+            for k, v in X.items():
+                if k[2] == '3rd' and k[4] == 1 and k[9] == 'EF':
+                    model.Add(v == 1)
+                elif k[2] == '4th' and k[4] == 2 and k[9] == 'WF':
+                    model.Add(v == 1)
+                else:
+                    model.Add(v == 0)
+
+        status, *_ = self._solve_with_constraint(
+            games, timeslots, teams, extra_constraints=force_diff_fields
+        )
+        # field_spread=1 > hard cap 0 → INFEASIBLE
+        assert status == cp_model.INFEASIBLE
 
     # ---------- Slack ----------
 
     def test_slack_relaxes_hard_limit(self):
-        """With slack=2, gaps=4 (normally > limit 2) becomes feasible: 4 <= 2+2."""
+        """With slack=2, slots 1 and 6 become feasible: gap=4 <= 2+2=4.
+
+        Without slack this is infeasible (gap=4 > 2 or double-up needed).
+        Slack=2 raises upper to 4 AND lowers lower to -2, making split feasible.
+        """
         field = self._make_field()
         clubs, teams = self._make_clubs_and_teams()
-        timeslots = self._make_timeslots(field, [1, 2, 3, 4, 5, 6])
+        # Only slots 1 and 6 — forces gap=4 if split, or double-up if stacked
+        timeslots = self._make_timeslots(field, [1, 6])
 
         games = [
             ('Tigers 3rd', 'Wests 3rd', '3rd'),
             ('Tigers 4th', 'Wests 4th', '4th'),
         ]
 
-        def force_extreme_slots(model, X):
-            s1_vars = [v for k, v in X.items() if k[4] == 1 and k[2] == '3rd']
-            s6_vars = [v for k, v in X.items() if k[4] == 6 and k[2] == '4th']
-            model.Add(sum(s1_vars) == 1)
-            model.Add(sum(s6_vars) == 1)
-            other = [v for k, v in X.items() if k[4] not in (1, 6)]
-            model.Add(sum(other) == 0)
+        def force_two_games(model, X):
+            model.Add(sum(X.values()) == 2)
 
         status, *_ = self._solve_with_constraint(
-            games, timeslots, teams, slack=2, extra_constraints=force_extreme_slots
+            games, timeslots, teams, slack=2, extra_constraints=force_two_games
         )
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 

@@ -15,8 +15,8 @@ This is a constraint programming system for generating hockey competition draws 
 ├── utils.py                # Utility functions + build_season_data()
 ├── solver_diagnostics.py   # Logging and resource monitoring
 ├── constraints/            # Constraint modules
-│   ├── original.py         # Original constraints (READ-ONLY)
-│   ├── ai.py               # AI-enhanced constraints (edit this)
+│   ├── original.py         # Original constraints (edit only when directed)
+│   ├── ai.py               # AI-enhanced constraints (default edit target)
 │   ├── soft.py             # Soft constraint variants
 │   ├── severity.py         # Severity-based relaxation
 │   └── resolver.py         # Infeasibility resolver
@@ -38,15 +38,12 @@ This is a constraint programming system for generating hockey competition draws 
     └── {year}/teams/       # Team CSV files
 ```
 
-## ⚠️ CRITICAL RULE — DO NOT MODIFY ORIGINAL CONSTRAINTS
+## ⚠️ `constraints/original.py` — Only Edit When Directed
 
-**`constraints/original.py` is NEVER to be edited.**
-The original human-written constraints are the **source of truth**. All fixes, improvements, and refactoring MUST be done in `constraints/ai.py` only.
+The original human-written constraints are the **source of truth**. Do NOT edit `constraints/original.py` unless the user explicitly asks you to. By default, all fixes go to `constraints/ai.py` only.
 
-- ✅ Edit `constraints/ai.py`
-- ✅ Edit `tests/test_ai_constraints_comprehensive.py`
-- ❌ **NEVER** edit `constraints/original.py`
-- ❌ **NEVER** edit `test_constraints.py` or `test_constraints_equivalence.py`
+- ✅ Default edit targets: `constraints/ai.py`, `tests/test_ai_constraints_comprehensive.py`
+- ⚠️ Only edit when user directs: `constraints/original.py`, `tests/test_constraints.py`, `tests/test_constraints_equivalence.py`
 
 ## AI Constraints (`constraints/ai.py`)
 
@@ -204,7 +201,7 @@ CP-SAT can save model state and continue with additional constraints. Staged sol
 
 ### Why Separate `constraints/original.py` and `constraints/ai.py`?
 
-- `constraints/original.py`: Original implementations, **READ-ONLY source of truth** — never edit
+- `constraints/original.py`: Original implementations, **source of truth** — edit only when user directs
 - `constraints/ai.py`: AI-enhanced versions with:
   - Full parity with originals (18/18 constraints audited, 5 bugs fixed)
   - Better code organization and documentation
@@ -271,7 +268,7 @@ Adjacent grades (e.g., 3rd & 4th) have special constraints.
 The `DrawStorage` class provides a flexible JSON-based format for storing and manipulating draws:
 
 ```python
-from draw_analytics import DrawStorage, DrawAnalytics
+from analytics.storage import DrawStorage
 
 # Create from solver solution
 draw = DrawStorage.from_X_solution(X_solution, description="Season 2025")
@@ -287,6 +284,12 @@ filtered = draw.filter_games(team="Souths", grade="PHL", week=3)
 
 # Convert back to X dict for solving
 X_dict = draw.to_X_dict()
+
+# Check metadata (populated by save_solver_output)
+print(draw.metadata['forced_game_outcomes'])   # Were forced games satisfied?
+print(draw.metadata['blocked_game_outcomes'])   # Were blocked games respected?
+print(draw.metadata['constraints_applied'])     # Which constraints were active?
+print(draw.metadata['stats'])                   # Games by grade/venue, date range
 ```
 
 ### DrawAnalytics (Comprehensive Analytics)
