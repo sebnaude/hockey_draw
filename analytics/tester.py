@@ -31,6 +31,27 @@ from analytics.storage import DrawStorage, StoredGame
 from models import Team, Club, Grade
 
 
+def _registry_normalize(name):
+    """Lazy-import wrapper for normalize_constraint_name."""
+    from constraints.registry import normalize_constraint_name
+    return normalize_constraint_name(name)
+
+def _registry_canonical_for_solver(name):
+    """Lazy-import wrapper for get_canonical_for_solver_name."""
+    from constraints.registry import get_canonical_for_solver_name
+    return get_canonical_for_solver_name(name)
+
+def _registry_get_slack_key(name):
+    """Lazy-import wrapper for get_slack_key."""
+    from constraints.registry import get_slack_key
+    return get_slack_key(name)
+
+def _registry_get_info(canonical_name):
+    """Lazy-import wrapper to get ConstraintInfo from registry."""
+    from constraints.registry import CONSTRAINT_REGISTRY
+    return CONSTRAINT_REGISTRY.get(canonical_name)
+
+
 # Severity levels mapping - lower number = more severe
 # Level 1: Core constraints that must never be broken
 # Level 2: Important structural constraints (club days, team conflicts)
@@ -110,11 +131,23 @@ class Violation:
 
 
 @dataclass
+class ConstraintResult:
+    """Result of checking a single constraint."""
+    constraint: str
+    status: str  # 'PASSED', 'VIOLATED', 'SKIPPED'
+    skip_reason: str = ''
+    violations: List[Violation] = field(default_factory=list)
+    slack_value: int = 0
+
+
+@dataclass
 class ViolationReport:
     """Complete violation report for a draw."""
     draw_description: str
     total_games: int
     violations: List[Violation] = field(default_factory=list)
+    constraint_results: List[ConstraintResult] = field(default_factory=list)
+    metadata_source: str = ''  # 'draw_json', 'checkpoint', 'manual', 'none'
     
     @property
     def has_violations(self) -> bool:
@@ -204,7 +237,18 @@ class ViolationReport:
                             lines.append(f"    Games: {', '.join(v.affected_games[:5])}")
                             if len(v.affected_games) > 5:
                                 lines.append(f"    ... and {len(v.affected_games) - 5} more")
-        
+
+        # Constraint results summary (if available)
+        if self.constraint_results:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append(self.constraints_summary())
+            if self.metadata_source:
+                lines.append(f"Metadata source: {self.metadata_source}")
+            skipped = [r for r in self.constraint_results if r.status == 'SKIPPED']
+            if skipped:
+                lines.append(f"Skipped: {', '.join(r.constraint for r in skipped)}")
+
         lines.append("=" * 60)
         return "\n".join(lines)
     
@@ -253,19 +297,30 @@ class ViolationReport:
         
         return 0, 0, "Equal"
 
+    def constraints_summary(self) -> str:
+        """Summary of passed/violated/skipped constraints."""
+        passed = sum(1 for r in self.constraint_results if r.status == 'PASSED')
+        violated = sum(1 for r in self.constraint_results if r.status == 'VIOLATED')
+        skipped = sum(1 for r in self.constraint_results if r.status == 'SKIPPED')
+        return f"Constraints: {passed} passed, {violated} violated, {skipped} skipped"
+
 
 class DrawTester:
     """Main class for testing and modifying draws."""
     
     GRADE_ORDER = ["PHL", "2nd", "3rd", "4th", "5th", "6th"]
     
-    def __init__(self, draw: DrawStorage, data: Dict):
+    def __init__(self, draw: DrawStorage, data: Dict,
+                 constraints_applied=None, excluded_constraints=None):
         """
         Initialize tester with a draw and data.
-        
+
         Args:
             draw: DrawStorage object (will be copied for modification)
             data: Data dict containing teams, grades, clubs, etc.
+            constraints_applied: Optional list of solver constraint names that were applied.
+                If provided, only matching tester checks will run. None = run all (legacy).
+            excluded_constraints: Optional list of constraint names to skip.
         """
         # Deep copy to avoid modifying original
         self.original_draw = draw
@@ -274,13 +329,38 @@ class DrawTester:
         self.teams: List[Team] = data.get('teams', [])
         self.grades: List[Grade] = data.get('grades', [])
         self.clubs: List[Club] = data.get('clubs', [])
-        
+
         # Build lookups
         self._team_to_club = {t.name: t.club.name for t in self.teams}
         self._team_to_grade = {t.name: t.grade for t in self.teams}
 
         # Constraint slack - loaded from data dict (set by solver via --slack flag)
-        self.constraint_slack = data.get('constraint_slack', {})
+        self.constraint_slack = dict(data.get('constraint_slack', {}))
+
+        # Merge metadata slack from draw (caller overrides metadata)
+        if hasattr(draw, 'metadata') and draw.metadata:
+            meta_slack = draw.metadata.get('solver_config', {}).get('constraint_slack', {})
+            if meta_slack:
+                merged = dict(meta_slack)
+                merged.update(self.constraint_slack)  # caller overrides metadata
+                self.constraint_slack = merged
+
+        # Constraint filtering: which constraints to run/skip
+        self._constraints_applied = None  # None = run all (legacy mode)
+        self._excluded_constraints = set()
+
+        if constraints_applied is not None:
+            self._constraints_applied = set()
+            for name in constraints_applied:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    self._constraints_applied.add(canonical)
+
+        if excluded_constraints:
+            for name in excluded_constraints:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    self._excluded_constraints.add(canonical)
 
         # Build playable-week sets from timeslots (accounts for no-play weekends)
         # sunday_weeks: weeks with Sunday games (all grades play)
@@ -296,10 +376,49 @@ class DrawTester:
         # Modification log
         self.modifications: List[str] = []
     
+    def _should_check(self, canonical_name: str) -> tuple:
+        """Return (should_run: bool, skip_reason: str)."""
+        if canonical_name in self._excluded_constraints:
+            return False, 'excluded'
+        if self._constraints_applied is not None:
+            # Tester-only diagnostics always run (they have no solver equivalent)
+            info = _registry_get_info(canonical_name)
+            if info and info.tester_only:
+                return True, ''
+            if canonical_name not in self._constraints_applied:
+                return False, 'not in constraints_applied'
+        return True, ''
+
     @classmethod
-    def from_file(cls, path: str, data: Dict) -> "DrawTester":
-        """Create tester from a saved draw file."""
+    def _extract_metadata(cls, draw):
+        """Extract tester-relevant config from draw metadata."""
+        meta = getattr(draw, 'metadata', None) or {}
+        solver_config = meta.get('solver_config', {})
+        applied = meta.get('constraints_applied', [])
+        applied_names = [c['name'] if isinstance(c, dict) else c for c in applied]
+        return {
+            'constraints_applied': applied_names or None,
+            'excluded_constraints': solver_config.get('excluded_constraints', []),
+            'constraint_slack': solver_config.get('constraint_slack', {}),
+            'mode': meta.get('mode', ''),
+        }
+
+    @classmethod
+    def from_file(cls, path: str, data: Dict, use_metadata: bool = False) -> "DrawTester":
+        """Create tester from a saved draw file.
+
+        Args:
+            path: Path to draw JSON file.
+            data: Season data dict.
+            use_metadata: If True, extract constraints_applied/excluded/slack from
+                draw metadata and pass them to the tester.
+        """
         draw = DrawStorage.load(path)
+        if use_metadata:
+            meta = cls._extract_metadata(draw)
+            return cls(draw, data,
+                       constraints_applied=meta['constraints_applied'],
+                       excluded_constraints=meta['excluded_constraints'])
         return cls(draw, data)
     
     @classmethod
@@ -307,6 +426,60 @@ class DrawTester:
         """Create tester from X solution dict."""
         draw = DrawStorage.from_X_solution(X_solution, description)
         return cls(draw, data)
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint_dir, data, description='Checkpoint'):
+        """Load solution + metadata from checkpoint directory.
+
+        Args:
+            checkpoint_dir: Path to checkpoint directory containing solution.pkl
+                and optionally metadata.json.
+            data: Season data dict.
+            description: Description for the tester.
+        """
+        import pickle
+        import json
+        from pathlib import Path as _Path
+
+        cp = _Path(checkpoint_dir)
+
+        pkl_path = cp / 'solution.pkl'
+        if not pkl_path.exists():
+            raise FileNotFoundError(f"No solution.pkl in {checkpoint_dir}")
+        with open(pkl_path, 'rb') as f:
+            solution = pickle.load(f)
+
+        tester = cls.from_X_solution(solution, data, description=description)
+
+        # Load metadata and apply constraint info
+        meta_path = cp / 'metadata.json'
+        if meta_path.exists():
+            with open(meta_path) as f:
+                meta = json.load(f)
+
+            applied = meta.get('constraints_applied', [])
+            applied_names = [c['name'] if isinstance(c, dict) else c for c in applied]
+            if applied_names:
+                tester._constraints_applied = set()
+                for name in applied_names:
+                    canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                    if canonical:
+                        tester._constraints_applied.add(canonical)
+
+            excluded = meta.get('excluded_constraints', [])
+            for name in excluded:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    tester._excluded_constraints.add(canonical)
+
+            # Merge slack
+            meta_slack = meta.get('constraint_slack', {})
+            if meta_slack:
+                merged = dict(meta_slack)
+                merged.update(tester.constraint_slack)
+                tester.constraint_slack = merged
+
+        return tester
     
     def reset(self) -> None:
         """Reset to original draw, discarding modifications."""
@@ -887,44 +1060,89 @@ class DrawTester:
     # ============== Constraint Checking ==============
     
     def run_violation_check(self) -> ViolationReport:
-        """Run all constraint checks and return violation report."""
+        """Run constraint checks, respecting metadata if available.
+
+        When constraints_applied is set (from draw metadata or explicit param),
+        only those constraints will be checked. Excluded constraints are skipped.
+        Tester-only diagnostics (e.g., ClubFieldConcentration) always run unless
+        explicitly excluded.
+        """
         violations = []
-        
-        # Run all checks
-        # Level 1 - CRITICAL
-        violations.extend(self._check_no_double_booking_teams())
-        violations.extend(self._check_no_double_booking_fields())
-        violations.extend(self._check_equal_games())
-        violations.extend(self._check_balanced_matchups())
-        violations.extend(self._check_fifty_fifty_home_away())
-        violations.extend(self._check_maitland_back_to_back())
-        violations.extend(self._check_phl_second_grade_adjacency())
-        violations.extend(self._check_phl_second_grade_times())
-        violations.extend(self._check_equal_matchup_spacing())
+        constraint_results = []
 
-        # Level 2 - HIGH
-        violations.extend(self._check_maitland_away_clubs_limit())
-        violations.extend(self._check_club_day())
-        violations.extend(self._check_team_conflict())
+        # Define the check mapping: (canonical_name, check_method)
+        # Order matches the original flat list for consistent output
+        checks = [
+            # Level 1 - CRITICAL
+            ('NoDoubleBookingTeams', self._check_no_double_booking_teams),
+            ('NoDoubleBookingFields', self._check_no_double_booking_fields),
+            ('EqualGamesAndBalanceMatchUps', self._check_equal_games),
+            ('EqualGamesAndBalanceMatchUps', self._check_balanced_matchups),
+            ('FiftyFiftyHomeandAway', self._check_fifty_fifty_home_away),
+            ('MaitlandHomeGrouping', self._check_maitland_back_to_back),
+            ('PHLAndSecondGradeAdjacency', self._check_phl_second_grade_adjacency),
+            ('PHLAndSecondGradeTimes', self._check_phl_second_grade_times),
+            ('EqualMatchUpSpacing', self._check_equal_matchup_spacing),
+            # Level 2 - HIGH
+            ('AwayAtMaitlandGrouping', self._check_maitland_away_clubs_limit),
+            ('ClubDay', self._check_club_day),
+            ('TeamConflict', self._check_team_conflict),
+            # Level 3 - MEDIUM
+            ('ClubGradeAdjacency', self._check_club_grade_adjacency),
+            ('ClubVsClubAlignment', self._check_club_vs_club_alignment),
+            ('ClubGameSpread', self._check_club_game_spread),
+            ('ClubFieldConcentration', self._check_club_field_concentration),
+            # Level 4 - LOW
+            ('MaximiseClubsPerTimeslotBroadmeadow', self._check_maximise_clubs_per_timeslot_broadmeadow),
+            ('MinimiseClubsOnAFieldBroadmeadow', self._check_minimise_clubs_on_a_field_broadmeadow),
+            # Level 5 - VERY LOW
+            ('EnsureBestTimeslotChoices', self._check_ensure_best_timeslot_choices),
+            ('PreferredTimes', self._check_preferred_times),
+        ]
 
-        # Level 3 - MEDIUM
-        violations.extend(self._check_club_grade_adjacency())
-        violations.extend(self._check_club_vs_club_alignment())
-        violations.extend(self._check_club_game_spread())
-        violations.extend(self._check_club_field_concentration())
+        checked_canonicals = set()
+        for canonical_name, check_method in checks:
+            should_run, skip_reason = self._should_check(canonical_name)
 
-        # Level 4 - LOW
-        violations.extend(self._check_maximise_clubs_per_timeslot_broadmeadow())
-        violations.extend(self._check_minimise_clubs_on_a_field_broadmeadow())
+            if not should_run:
+                if canonical_name not in checked_canonicals:
+                    constraint_results.append(ConstraintResult(
+                        constraint=canonical_name, status='SKIPPED',
+                        skip_reason=skip_reason
+                    ))
+                    checked_canonicals.add(canonical_name)
+                continue
 
-        # Level 5 - VERY LOW
-        violations.extend(self._check_ensure_best_timeslot_choices())
-        violations.extend(self._check_preferred_times())
+            check_violations = check_method()
+            violations.extend(check_violations)
+
+            if canonical_name not in checked_canonicals:
+                slack_val = self.constraint_slack.get(
+                    _registry_get_slack_key(canonical_name) or canonical_name, 0)
+                constraint_results.append(ConstraintResult(
+                    constraint=canonical_name,
+                    status='VIOLATED' if check_violations else 'PASSED',
+                    violations=check_violations,
+                    slack_value=slack_val
+                ))
+                checked_canonicals.add(canonical_name)
+            elif check_violations:
+                # Update existing result (e.g., BalancedMatchups after EqualGames)
+                for r in constraint_results:
+                    if r.constraint == canonical_name:
+                        r.violations.extend(check_violations)
+                        r.status = 'VIOLATED'
+
+        metadata_source = 'none'
+        if self._constraints_applied is not None:
+            metadata_source = 'draw_json'
 
         return ViolationReport(
             draw_description=self.draw.description or "Modified Draw",
             total_games=len(self.draw.games),
-            violations=violations
+            violations=violations,
+            constraint_results=constraint_results,
+            metadata_source=metadata_source,
         )
     
     def _check_no_double_booking_teams(self) -> List[Violation]:
@@ -1308,7 +1526,7 @@ class DrawTester:
 
         Hard check: For each (team1, team2, grade) pair, the gap between consecutive
         meetings must be >= min_gap.
-        min_gap = max(T//2+1, T-2 - spacing_base_slack - config_slack)
+        min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - config_slack)
 
         Also reports soft penalty info: sliding window density.
         """
@@ -1334,7 +1552,7 @@ class DrawTester:
                 continue
 
             ideal = T - 2
-            floor_val = T // 2 + 1
+            floor_val = min(T // 2, T - 2)
             min_gap = max(floor_val, ideal - base_slack - config_slack)
 
             sorted_rounds = sorted(rounds)
