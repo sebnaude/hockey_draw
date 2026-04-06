@@ -181,6 +181,9 @@ FIELD_UNAVAILABILITIES = {
 }
 
 # ============== Club Days (Special Events) ==============
+# Two formats supported:
+#   'ClubName': datetime(YYYY, M, D)                                   # derby (intra-club matchups)
+#   'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'}  # force host vs opponent matchups
 
 CLUB_DAYS = {
     'Crusaders': datetime(2026, 6, 14),  # All 4 teams back-to-back on same field
