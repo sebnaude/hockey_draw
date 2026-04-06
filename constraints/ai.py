@@ -154,10 +154,9 @@ class NoDoubleBookingFieldsConstraintAI(ConstraintAI):
 class EnsureEqualGamesAndBalanceMatchUpsAI(ConstraintAI):
     """
     Ensure balanced games and matchups.
-    
+
     Enhanced version:
     - Cleaner base/extra calculation
-    - Unified dummy slot handling
     - Better bounds computation
     """
     PRIORITY = "required"
@@ -166,31 +165,20 @@ class EnsureEqualGamesAndBalanceMatchUpsAI(ConstraintAI):
         games = data['games']
         timeslots = data['timeslots']
         num_rounds = data['num_rounds']
-        num_dummy = data.get('num_dummy_timeslots', 0)
         teams = data['teams']
-        
+
         constraints_added = 0
-        
+
         # Collect vars per team and per pair, grouped by grade
         team_vars = defaultdict(lambda: defaultdict(list))
         pair_vars = defaultdict(lambda: defaultdict(list))
-        
+
         for (t1, t2, grade) in games:
-            # Real timeslots
             for t in timeslots:
-                key = (t1, t2, grade, t.day, t.day_slot, t.time, 
+                key = (t1, t2, grade, t.day, t.day_slot, t.time,
                        t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key in X:
                     var = X[key]
-                    team_vars[grade][t1].append(var)
-                    team_vars[grade][t2].append(var)
-                    pair_vars[grade][tuple(sorted((t1, t2)))].append(var)
-            
-            # Dummy slots
-            for i in range(num_dummy):
-                dummy_key = (t1, t2, grade, i)
-                if dummy_key in X:
-                    var = X[dummy_key]
                     team_vars[grade][t1].append(var)
                     team_vars[grade][t2].append(var)
                     pair_vars[grade][tuple(sorted((t1, t2)))].append(var)
@@ -530,7 +518,34 @@ class FiftyFiftyHomeandAwayAI(ConstraintAI):
             model.Add(home_count * 2 >= total_count - 1)
             model.Add(home_count * 2 <= total_count + 1)
             constraints_added += 2
-        
+
+        # Aggregate balance per team: total home games across all opponents ≈ 50%
+        # Per-pair balance allows ±1 per pair, but with odd meeting counts other
+        # constraints can systematically push toward fewer home games. This ensures
+        # each team's TOTAL home games stay at ~50%.
+        team_home_vars = defaultdict(list)
+        team_all_vars = defaultdict(list)
+
+        for pair_key, ha_vars in home_away_vars.items():
+            team = pair_key[0]  # The Maitland/Gosford team
+            team_home_vars[team].extend(ha_vars['home'])
+            team_all_vars[team].extend(ha_vars['home'])
+            team_all_vars[team].extend(ha_vars['away'])
+
+        for team, home_vars in team_home_vars.items():
+            all_vars = team_all_vars[team]
+            if not home_vars or not all_vars:
+                continue
+
+            agg_home = model.NewIntVar(0, len(home_vars), f'agg_home_{team}')
+            agg_total = model.NewIntVar(0, len(all_vars), f'agg_total_{team}')
+            model.Add(agg_home == sum(home_vars))
+            model.Add(agg_total == sum(all_vars))
+
+            model.Add(agg_home * 2 >= agg_total - 1)
+            model.Add(agg_home * 2 <= agg_total + 1)
+            constraints_added += 2
+
         return constraints_added
 
 
@@ -559,7 +574,7 @@ class TeamConflictConstraintAI(ConstraintAI):
         slot_team_vars = defaultdict(lambda: defaultdict(list))
         
         for key, var in X.items():
-            if len(key) < 11 or not key[3] or key[6] in locked_weeks:
+            if not key[3] or key[6] in locked_weeks:
                 continue
             
             slot = (key[6], key[4])  # (week, day_slot)
@@ -743,7 +758,7 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
         }
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue
@@ -797,7 +812,7 @@ class ClubDayConstraintAI(ConstraintAI):
             # Find all games for this club on this date
             club_game_vars = {}
             for key, var in X.items():
-                if len(key) < 11 or key[7] != date_str:
+                if key[7] != date_str:
                     continue
                 
                 t1, t2 = key[0], key[1]
@@ -1046,7 +1061,7 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
         club_dup_games = defaultdict(list)
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
 
             # Skip locked weeks
@@ -1157,7 +1172,7 @@ class ClubVsClubAlignmentAI(ConstraintAI):
         fields_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue
@@ -1479,7 +1494,7 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
         slot_club_vars = defaultdict(lambda: defaultdict(list))
         
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             
             if key[6] in locked_weeks:
@@ -1576,7 +1591,7 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
         field_club_vars = defaultdict(lambda: defaultdict(list))
         
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             
             if key[6] in locked_weeks:
@@ -1769,7 +1784,7 @@ class ClubGameSpreadAI(ConstraintAI):
         club_week_day_field_vars = defaultdict(list)
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             week = key[6]
             if week in locked_weeks:

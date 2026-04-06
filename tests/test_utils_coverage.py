@@ -129,7 +129,6 @@ def base_data(teams, grades, fields, all_timeslots):
         'home_field_map': {},
         'forced_games': [],
         'blocked_games': [],
-        'num_dummy_timeslots': 0,
     }
 
 
@@ -148,7 +147,7 @@ class TestConvertXToRosterCoverage:
         assert len(roster.weeks) == 0
 
     def test_skips_short_keys(self, teams, fields, grades):
-        """Line 96-97: len(key) < 11 -> skip dummy keys."""
+        """Line 96-97: len(key) < 11 -> skip malformed keys."""
         data = {'teams': teams, 'fields': fields, 'grades': grades}
         short_key = ('Norths PHL', 'Tigers PHL', 'PHL', 0)
         X = {short_key: 1}
@@ -263,7 +262,7 @@ class TestGenerateX:
         model = cp_model.CpModel()
         # Without phl_game_times, PHL vars will be skipped (no valid slots)
         # So set empty phl_game_times = all PHL vars skipped
-        X, Y, conflicts = generate_X(model, base_data)
+        X, conflicts = generate_X(model, base_data)
         # Should create some variables (at least for 3rd grade on Sunday)
         assert len(X) > 0
 
@@ -279,7 +278,7 @@ class TestGenerateX:
                 }
             }
         }
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         # PHL vars should only exist for EF Sunday 11:30 at NIHC
         phl_keys = [k for k in X if len(k) >= 11 and k[2] == 'PHL']
         for k in phl_keys:
@@ -297,7 +296,7 @@ class TestGenerateX:
                 'Sunday': [tm(11, 30)],
             }
         }
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         phl_keys = [k for k in X if len(k) >= 11 and k[2] == 'PHL']
         for k in phl_keys:
             assert k[5] == '11:30'
@@ -315,7 +314,7 @@ class TestGenerateX:
                 }
             }
         }
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         second_keys = [k for k in X if len(k) >= 11 and k[2] == '2nd']
         for k in second_keys:
             assert k[5] == '13:00'
@@ -325,7 +324,7 @@ class TestGenerateX:
         """Lines 858-861, 920-922: 3rd grade cannot play at Gosford."""
         from ortools.sat.python import cp_model
         model = cp_model.CpModel()
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         third_keys = [k for k in X if len(k) >= 11 and k[2] == '3rd']
         for k in third_keys:
             assert k[10] != 'Central Coast Hockey Park'
@@ -334,7 +333,7 @@ class TestGenerateX:
         """Lines 861, 923-925: 3rd grade cannot play on Friday."""
         from ortools.sat.python import cp_model
         model = cp_model.CpModel()
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         third_keys = [k for k in X if len(k) >= 11 and k[2] == '3rd']
         for k in third_keys:
             assert k[3] != 'Friday'
@@ -347,7 +346,7 @@ class TestGenerateX:
             'Maitland': 'Maitland Park',
             'Gosford': 'Central Coast Hockey Park',
         }
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         for k in X:
             if len(k) < 11:
                 continue
@@ -359,25 +358,6 @@ class TestGenerateX:
             if venue == 'Central Coast Hockey Park':
                 assert 'Gosford' in t1 or 'Gosford' in t2, \
                     f"Game at Gosford without Gosford team: {t1} vs {t2}"
-
-    def test_dummy_timeslots(self, base_data):
-        """Lines 884-887: dummy timeslot generation (Y variables)."""
-        from ortools.sat.python import cp_model
-        model = cp_model.CpModel()
-        base_data['num_dummy_timeslots'] = 2
-        X, Y, _ = generate_X(model, base_data)
-        assert len(Y) > 0
-        # Each dummy key is a 4-tuple
-        for k in Y:
-            assert len(k) == 4
-
-    def test_no_dummy_timeslots(self, base_data):
-        """num_dummy_timeslots=0 means no Y variables."""
-        from ortools.sat.python import cp_model
-        model = cp_model.CpModel()
-        base_data['num_dummy_timeslots'] = 0
-        X, Y, _ = generate_X(model, base_data)
-        assert len(Y) == 0
 
     def test_forced_games(self, base_data):
         """Lines 943-951: forced game rules track matching vars."""
@@ -398,7 +378,7 @@ class TestGenerateX:
                 'EF': {'Sunday': [tm(11, 30)]},
             }
         }
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         # The forced game vars should be in X
         forced_keys = [k for k in X if len(k) >= 11 and k[0] == 'Norths PHL'
                        and k[1] == 'Tigers PHL' and k[6] == 1]
@@ -415,7 +395,7 @@ class TestGenerateX:
                 'description': 'Block Norths 3rd on week 1',
             }
         ]
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         # No Norths 3rd game on date 2026-03-21
         blocked = [k for k in X if len(k) >= 11 and
                    ('Norths 3rd' in (k[0], k[1])) and k[7] == '2026-03-21']
@@ -426,11 +406,11 @@ class TestGenerateX:
         from ortools.sat.python import cp_model
         model = cp_model.CpModel()
         # Add a timeslot with empty day
-        dummy_ts = Timeslot(date='2026-03-21', day='', time='11:30',
+        empty_day_ts = Timeslot(date='2026-03-21', day='', time='11:30',
                             week=1, day_slot=1, field=nihc_field, round_no=1)
-        base_data['timeslots'].append(dummy_ts)
-        X, Y, _ = generate_X(model, base_data)
-        # Should still work without error; dummy ts skipped
+        base_data['timeslots'].append(empty_day_ts)
+        X, _ = generate_X(model, base_data)
+        # Should still work without error; empty-day ts skipped
         assert isinstance(X, dict)
 
 
@@ -845,7 +825,7 @@ class TestBuildSeasonDataIntegration:
         from ortools.sat.python import cp_model
         data = load_season_data(2026)
         model = cp_model.CpModel()
-        X, Y, conflicts = generate_X(model, data)
+        X, conflicts = generate_X(model, data)
         assert len(X) > 10000  # Should be many variables
         # PHL should not be at South Field
         phl_keys = [k for k in X if len(k) >= 11 and k[2] == 'PHL']
@@ -858,7 +838,7 @@ class TestBuildSeasonDataIntegration:
         from ortools.sat.python import cp_model
         data = load_season_data(2026)
         model = cp_model.CpModel()
-        X, _, _ = generate_X(model, data)
+        X, _ = generate_X(model, data)
         # Games at Maitland Park must involve a Maitland team
         team_to_club = {t.name: t.club.name for t in data['teams']}
         for k in X:
@@ -881,7 +861,7 @@ class TestGenerateXWithPrePopulatedGames:
         model = cp_model.CpModel()
         games = generate_games(base_data['teams'])
         base_data['games'] = games
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         assert len(X) > 0
 
     def test_games_as_list_in_data(self, base_data):
@@ -890,5 +870,5 @@ class TestGenerateXWithPrePopulatedGames:
         model = cp_model.CpModel()
         games = generate_games(base_data['teams'])
         base_data['games'] = list(games.keys())
-        X, Y, _ = generate_X(model, base_data)
+        X, _ = generate_X(model, base_data)
         assert len(X) > 0

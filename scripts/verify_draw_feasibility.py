@@ -89,8 +89,7 @@ def verify_draw_feasibility(
         print(f"\n[3/5] Building model and generating variables...")
     
     model = cp_model.CpModel()
-    X, Y, conflicts = generate_X(model, data)
-    X.update(Y)
+    X, conflicts = generate_X(model, data)
 
     data['team_conflicts'] = conflicts
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']

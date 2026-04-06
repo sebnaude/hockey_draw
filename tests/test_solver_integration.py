@@ -217,7 +217,6 @@ class TestStagedScheduleSolver:
 
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         constraints_before = len(model.Proto().constraints)
         n_added = solver.apply_constraints([
@@ -240,7 +239,6 @@ class TestStagedScheduleSolver:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Build a filtered constraint list (simulating what run_staged_solve does)
         full_list = [
@@ -259,7 +257,7 @@ class TestStagedScheduleSolver:
         assert n_added > 0
 
     def test_add_solution_hints_no_crash(self, mini_data_with_extras, tmp_checkpoint_dir):
-        """add_solution_hints does not crash with a dummy hint dict."""
+        """add_solution_hints does not crash with an empty hint dict."""
         cm = CheckpointManager(tmp_checkpoint_dir)
         config = SolverConfig(max_time_seconds=2, num_workers=1)
         solver = StagedScheduleSolver(mini_data_with_extras, cm, solver_config=config)
@@ -270,7 +268,6 @@ class TestStagedScheduleSolver:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Build a hint dict: a few keys set to 1, rest implicitly 0
         hint = {}
@@ -291,7 +288,6 @@ class TestStagedScheduleSolver:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Should not raise
         solver.add_solution_hints({})
@@ -389,7 +385,6 @@ class TestConstraintExclusionMetadata:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Simulate the exclusion logic from run_staged_solve
         stage_constraints = [
@@ -506,7 +501,7 @@ class TestIntermediateSolutionCallback:
         # Create a trivial model
         model = cp_model.CpModel()
         x = model.NewBoolVar("x")
-        X = {("dummy",): x}
+        X = {("placeholder",): x}
 
         callback = IntermediateSolutionCallback(
             X=X,
@@ -656,7 +651,6 @@ class TestBuildObjective:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Should not raise
         solver.build_objective()
@@ -672,7 +666,6 @@ class TestBuildObjective:
         )
         solver.model = model
         solver.X = X
-        solver.Y = {}
 
         # Add a mock penalty
         pen_var = model.NewBoolVar("penalty_1")

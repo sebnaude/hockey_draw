@@ -276,7 +276,6 @@ class TestEnsureEqualGamesAndBalanceMatchUps:
             'teams': teams,
             'grades': grades,
             'num_rounds': {'3rd': 2},
-            'num_dummy_timeslots': 0,
         }
         
         constraint = EnsureEqualGamesAndBalanceMatchUps()
@@ -323,7 +322,6 @@ class TestEnsureEqualGamesAndBalanceMatchUps:
             'teams': teams,
             'grades': grades,
             'num_rounds': {'3rd': 4},
-            'num_dummy_timeslots': 0,
         }
         
         constraint = EnsureEqualGamesAndBalanceMatchUps()

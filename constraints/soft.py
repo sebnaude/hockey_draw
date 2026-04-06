@@ -854,7 +854,7 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
             'penalties': []
         }
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue

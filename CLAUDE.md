@@ -123,18 +123,6 @@ X[key] = BoolVar  # 1 = game scheduled, 0 = not
 
 Note: `team1` is always alphabetically before `team2`. Home/away is determined by venue (field_location), NOT by position in the key.
 
-### Dummy Slots (Y variables)
-
-Dummy timeslots are overflow slots not attached to a real time or venue. They ease solver burden by providing extra scheduling capacity. Controlled by:
-- `SEASON_CONFIG['num_dummy_timeslots']` — how many dummy slots to create (default 3)
-- `PENALTY_WEIGHTS['dummy_slots']` — penalty per dummy slot used (0 = free, higher = discouraged)
-
-Dummy variables use short 4-tuple keys `(t1, t2, grade, index)` and are merged into X. Constraints exclude them via two mechanisms:
-- `len(key) < 11` — skips short dummy keys
-- `and t.day` / `not key[3]` — skips when iterating timeslots
-
-Game-count constraints (e.g. `EqualGamesAndBalanceMatchUps`) explicitly include dummy vars so the solver can use them as overflow. The objective penalises their use: `Maximize(sum(X) - dummy_penalty - soft_penalties)`.
-
 ## Season Dates
 
 Only two date fields:

@@ -109,7 +109,6 @@ SEASON_CONFIG = {
     'start_date': datetime(2025, 3, 21),
     'end_date': datetime(2025, 9, 2),
     'max_rounds': 21,
-    'num_dummy_timeslots': 3,
     
     # Data paths
     'teams_data_path': 'data/2025/teams',

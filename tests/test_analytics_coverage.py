@@ -274,11 +274,11 @@ class TestDrawStorageExportScheduleXlsx:
 
 class TestDrawStorageFromXSolution:
     def test_from_x_solution_with_short_keys_skipped(self):
-        """Dummy (short) keys should be ignored."""
+        """Short keys should be ignored."""
         X = {
             ('A', 'B', 'PHL', 'Sunday', 1, '10:00', 1, '2026-03-22', 1, 'EF',
              'Newcastle International Hockey Centre'): 1,
-            ('A', 'B', 'PHL', 0): 1,  # dummy key
+            ('A', 'B', 'PHL', 0): 1,  # short key
         }
         draw = DrawStorage.from_X_solution(X, 'Test')
         assert draw.num_games == 1

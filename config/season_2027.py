@@ -139,7 +139,6 @@ SEASON_CONFIG = {
     
     # CRITICAL: Verify rounds calculation matches available weekends
     'max_rounds': 0,              # Must match: (Sundays between start and last_round) - blocked_weekends
-    'num_dummy_timeslots': 3,
     
     # Confirm at AGM
     'play_anzac_sunday': False,   # Set to True if playing ANZAC weekend

@@ -240,7 +240,6 @@ def mini_season_data(mini_season_games, mini_season_timeslots, mini_season_teams
         'current_week': 0,
         'locked_weeks': set(),
         'num_rounds': {'3rd': 4, '4th': 4},
-        'num_dummy_timeslots': 0,
     }
 
 
@@ -360,28 +359,6 @@ def create_model_and_vars(games: List[Tuple], timeslots: List[Timeslot],
     return model, X
 
 
-def create_model_with_dummies(games: List[Tuple], timeslots: List[Timeslot], 
-                               num_dummy: int = 5) -> Tuple[cp_model.CpModel, Dict]:
-    """
-    Create model with dummy timeslots for handling byes.
-    
-    Args:
-        games: List of (team1, team2, grade) tuples
-        timeslots: List of Timeslot objects
-        num_dummy: Number of dummy slots to create per game
-    
-    Returns:
-        Tuple of (CpModel, X dict of decision variables)
-    """
-    model, X = create_model_and_vars(games, timeslots)
-    
-    # Add dummy variables
-    for (t1, t2, grade) in games:
-        for i in range(num_dummy):
-            dummy_key = (t1, t2, grade, i)
-            X[dummy_key] = model.NewBoolVar(f'X_dummy_{t1}_{t2}_{i}')
-    
-    return model, X
 
 
 def generate_round_robin_games(teams: List[Team]) -> List[Tuple[str, str, str]]:

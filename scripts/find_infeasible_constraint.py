@@ -63,7 +63,7 @@ def test_constraints(constraint_list, data_template):
     data = dict(data_template)
     
     # Generate X
-    X, Y, conflicts = generate_X(model, data)
+    X, conflicts = generate_X(model, data)
 
     # Prepare data
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']

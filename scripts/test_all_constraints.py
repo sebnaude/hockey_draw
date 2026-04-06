@@ -58,7 +58,7 @@ def main():
     model = cp_model.CpModel()
     
     # Generate X
-    X, Y, conflicts = generate_X(model, data)
+    X, conflicts = generate_X(model, data)
 
     # Prepare data
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']

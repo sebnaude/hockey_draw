@@ -190,9 +190,8 @@ See `severity_relaxation.py` for implementation.
 model + constraints ──▶ CP-SAT Solver ──▶ X_solution
 ```
 
-The solver maximizes: `Σ(X) - Σ(Y) - penalties`
+The solver maximizes: `Σ(X) - penalties`
 - Σ(X): Total scheduled games
-- Σ(Y): Dummy games (penalized)
 - penalties: Soft constraint violations
 
 ### 5. Output Phase

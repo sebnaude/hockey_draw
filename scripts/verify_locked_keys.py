@@ -35,7 +35,7 @@ data = build_season_data(season_2026.SEASON_CONFIG)
 # Generate X dictionary (same as solver)
 print("\nGenerating X dictionary...")
 model = cp_model.CpModel()
-X, Y, conflicts = generate_X(model, data)
+X, conflicts = generate_X(model, data)
 
 print(f"\nX dictionary has {len(X)} keys")
 print("Sample X key format:")

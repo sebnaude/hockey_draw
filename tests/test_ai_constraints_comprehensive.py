@@ -213,7 +213,6 @@ def make_standard_data(clubs=None, grade_names=None, num_weeks=4,
         'fields': fields,
         'current_week': 0, 'locked_weeks': set(),
         'num_rounds': num_rounds,
-        'num_dummy_timeslots': 0,
         'penalties': {},
         'team_conflicts': [],
     }
@@ -382,8 +381,7 @@ class TestAIConstraintsRejectViolations:
         model, X = create_model_and_vars(games, timeslots)
         data = {
             'games': games, 'timeslots': timeslots, 'teams': teams,
-            'grades': grades, 'num_rounds': {'3rd': 2}, 'num_dummy_timeslots': 0,
-        }
+            'grades': grades, 'num_rounds': {'3rd': 2},        }
 
         EnsureEqualGamesAndBalanceMatchUpsAI().apply(model, X, data)
         # Force 4 games when only 2 are allowed
@@ -991,7 +989,7 @@ class TestClubVsClubAlignmentAI:
             'games': games, 'timeslots': timeslots, 'teams': teams,
             'grades': grades, 'clubs': clubs_5, 'fields': fields,
             'current_week': 0, 'locked_weeks': set(), 'num_rounds': num_rounds,
-            'num_dummy_timeslots': 0, 'penalties': {},
+            'penalties': {},
         }
         model, X = create_model_and_vars(data['games'], data['timeslots'])
         count = ClubVsClubAlignmentAI().apply(model, X, data)

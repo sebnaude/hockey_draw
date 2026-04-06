@@ -417,7 +417,7 @@ class TestApplyConstraintsWithRelaxation:
         """Apply real constraints to a real model (no relaxation)."""
         model = cp_model.CpModel()
         from utils import generate_X
-        X, Y, conflicts = generate_X(model, real_data)
+        X, conflicts = generate_X(model, real_data)
 
         test_data = dict(real_data)
         test_data['penalties'] = {}
@@ -438,7 +438,7 @@ class TestApplyConstraintsWithRelaxation:
         """Apply constraints with a relaxed severity group."""
         model = cp_model.CpModel()
         from utils import generate_X
-        X, Y, conflicts = generate_X(model, real_data)
+        X, conflicts = generate_X(model, real_data)
 
         test_data = dict(real_data)
         test_data['penalties'] = {}

@@ -368,7 +368,7 @@ class DrawTester:
         self._sunday_weeks = set()
         self._all_play_weeks = set()
         for t in data.get('timeslots', []):
-            if t.day:  # skip dummy timeslots
+            if t.day:
                 self._all_play_weeks.add(t.week)
                 if t.day == 'Sunday':
                     self._sunday_weeks.add(t.week)
@@ -1276,6 +1276,21 @@ class DrawTester:
                     violations.append(Violation.create(
                         constraint="FiftyFiftyHomeAway",
                         message=f"'{team}' vs '{opponent}': {home}H/{away}A out of {total} (not balanced)"
+                    ))
+
+            # Aggregate check: total home games per team ≈ 50%
+            team_totals = defaultdict(lambda: {'home': 0, 'away': 0})
+            for (team, opponent), counts in pair_balance.items():
+                team_totals[team]['home'] += counts['home']
+                team_totals[team]['away'] += counts['away']
+
+            for team, totals in team_totals.items():
+                home = totals['home']
+                total = home + totals['away']
+                if total > 0 and not (home * 2 >= total - 1 and home * 2 <= total + 1):
+                    violations.append(Violation.create(
+                        constraint="FiftyFiftyHomeAway",
+                        message=f"'{team}' aggregate: {home}H/{totals['away']}A of {total} (not ~50% home)"
                     ))
 
         return violations

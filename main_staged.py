@@ -728,7 +728,6 @@ class StagedScheduleSolver:
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
         self.model = None
         self.X = None
-        self.Y = None
         self.current_solution = None
         
         # Diagnostics
@@ -754,18 +753,14 @@ class StagedScheduleSolver:
         self.model = cp_model.CpModel()
         
         # Generate decision variables
-        self.X, self.Y, conflicts = generate_X(
+        self.X, conflicts = generate_X(
             self.model, self.data
         )
-
-        # Merge dummy variables into X — constraints use key length and t.day checks
-        # to exclude them where needed, but game-count constraints need access
-        self.X.update(self.Y)
 
         self.data['team_conflicts'] = conflicts
         self.data['games'] = list(self.data['games'].keys()) if isinstance(self.data['games'], dict) else self.data['games']
 
-        print(f"  Created {len(self.X)} decision variables ({len(self.Y)} dummy)")
+        print(f"  Created {len(self.X)} decision variables")
         
         return self.X
     
@@ -891,13 +886,9 @@ class StagedScheduleSolver:
         penalty_terms = _build_normalized_penalty(penalties_dict)
         total_penalty = sum(coeff * var for coeff, var in penalty_terms)
 
-        # Dummy slot penalty (configurable weight, defaults to 1 per dummy var used)
-        dummy_penalty_weight = self.data.get('penalty_weights', {}).get('dummy_slots', 1)
-        dummy_penalty = dummy_penalty_weight * sum(self.Y.values()) if self.Y else 0
-
-        # Objective: maximize games scheduled, minimize dummy slot usage, minimize penalties
+        # Objective: maximize games scheduled, minimize penalties
         self.model.Maximize(
-            sum(self.X.values()) - dummy_penalty - total_penalty
+            sum(self.X.values()) - total_penalty
         )
     
     def solve_stage(self, stage_config: dict, run_dir: Path = None, stage_name: str = None) -> tuple:
@@ -1382,7 +1373,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         return None, data
 
 
-def _main_simple_unified(model, X, Y, data, solver_config, resource_monitor,
+def _main_simple_unified(model, X, data, solver_config, resource_monitor,
                          checkpoint_manager, run_dir, logger):
     """Run unified 3-phase constraint engine in simple mode."""
     from constraints.unified import UnifiedConstraintEngine
@@ -1407,7 +1398,7 @@ def _main_simple_unified(model, X, Y, data, solver_config, resource_monitor,
     penalties_dict = data.get('penalties', {})
     penalty_terms = _build_normalized_penalty(penalties_dict)
     total_penalty = sum(coeff * var for coeff, var in penalty_terms)
-    model.Maximize(sum(X.values()) - sum(Y.values()) - total_penalty)
+    model.Maximize(sum(X.values()) - total_penalty)
 
     # Penalties summary
     pen_summary = [(k, len(v.get('penalties', []))) for k, v in penalties_dict.items()]
@@ -1571,8 +1562,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     model = cp_model.CpModel()
     
     # Initialize variables
-    X, Y, conflicts = generate_X(model, data)
-    X.update(Y)
+    X, conflicts = generate_X(model, data)
 
     # Handle locked games
     if locked_keys:
@@ -1623,7 +1613,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
 
     # === UNIFIED ENGINE PATH ===
     if use_unified:
-        return _main_simple_unified(model, X, Y, data, solver_config, resource_monitor,
+        return _main_simple_unified(model, X, data, solver_config, resource_monitor,
                                      checkpoint_manager, run_dir, logger)
 
     # Get constraint classes (not instances yet)
@@ -1721,7 +1711,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     penalty_terms = _build_normalized_penalty(penalties_dict)
     total_penalty = sum(coeff * var for coeff, var in penalty_terms)
 
-    model.Maximize(sum(X.values()) - sum(Y.values()) - total_penalty)
+    model.Maximize(sum(X.values()) - total_penalty)
 
     # Solve
     print("\nSolving...")

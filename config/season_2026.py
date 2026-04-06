@@ -689,9 +689,6 @@ PENALTY_WEIGHTS = {
     'phl_preferences':                     10_000,
     'MaximiseClubsPerTimeslotBroadmeadow':  5_000,
     'MinimiseClubsOnAFieldBroadmeadow':     5_000,
-    # Penalty per dummy slot used. Higher = solver avoids dummy slots more strongly.
-    # Set to 0 to allow free use of dummy slots (no penalty).
-    'dummy_slots':                      1_000_000,
 }
 
 # ============== Season Configuration ==============
@@ -704,9 +701,6 @@ SEASON_CONFIG = {
     # Default max rounds (used as fallback if grade not in MAX_WEEKENDS_PER_GRADE)
     # This is the default MAXIMUM weekends any grade can play
     'max_rounds': 20,
-    # Dummy overflow slots: not attached to a real time/venue, eases solver burden.
-    # Adjust count as needed. Penalty for using them is set in PENALTY_WEIGHTS['dummy_slots'].
-    'num_dummy_timeslots': 0,
     
     # Confirmed: Playing ANZAC weekend Sunday
     'play_anzac_sunday': True,

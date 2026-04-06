@@ -924,7 +924,7 @@ def _diagnose_missing_forced_game(entry: dict, forced_rules: dict, scope_key, da
     return reasons
 
 
-def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
+def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
     """
     Generate decision variables for all possible games and timeslots.
     
@@ -952,9 +952,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
         data: Data dictionary containing teams, timeslots, etc.
         
     Returns:
-        Tuple of (X, Y, conflicts)
+        Tuple of (X, conflicts)
         - X: Dict of decision variables for real timeslots
-        - Y: Dict of decision variables for dummy timeslots
         - conflicts: Dict of team conflicts
     """
     teams = data['teams']
@@ -1023,7 +1022,6 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
             games = {g: g for g in games}
     
     X = {}
-    Y = {}
     conflicts = {}
 
     # Handle both dict and list formats for games
@@ -1073,15 +1071,9 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
         is_phl = (grade_name == 'PHL')
         is_second = (grade_name == '2nd')
             
-        # Create dummy variables (short 4-tuple keys: t1, t2, grade, index)
-        num_dummy = data.get('num_dummy_timeslots', 0)
-        for i in range(num_dummy):
-            dummy_key = (t1_name, t2_name, grade_name, i)
-            Y[dummy_key] = model.NewBoolVar(f"y_{t1_name}_{t2_name}_{grade_name}_dummy_{i}")
-
         for t in timeslots:
             if not t.day:
-                continue  # skip dummy timeslots
+                continue
             
             # For PHL games, only create variables for valid timeslots
             if is_phl:
@@ -1230,7 +1222,7 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict, Dict]:
             print(f"    scope({scope_desc}): {len(vars_list)} decision vars -> sum {op} 1")
     if blocked_vars_skipped:
         print(f"  - Blocked games: {blocked_vars_skipped} vars eliminated by {len(data.get('blocked_games', []))} no-play rules")
-    return X, Y, conflicts
+    return X, conflicts
 
 
 # ============== Season Data Builder ==============
@@ -1435,7 +1427,6 @@ def build_season_data(config: dict) -> dict:
     club_days = config.get('club_days', {})
     preference_no_play = config.get('preference_no_play', {})
     phl_preferences = config.get('phl_preferences', {'preferred_dates': []})
-    num_dummy_timeslots = config.get('num_dummy_timeslots', 3)
     
     return {
         'year': year,
@@ -1455,7 +1446,6 @@ def build_season_data(config: dict) -> dict:
         'field_unavailabilities': field_unavailabilities,
         'club_days': club_days,
         'preference_no_play': preference_no_play,
-        'num_dummy_timeslots': num_dummy_timeslots,
         'grade_order': grade_order,
         # Include any extra config values that constraints might need
         'home_field_map': home_field_map,

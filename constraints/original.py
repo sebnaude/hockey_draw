@@ -34,7 +34,7 @@ class NoDoubleBookingTeamsConstraint(Constraint):
         for t in timeslots:
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day: # Ensure dummy timeslots not counted
+                if key in X and t.day:
                     weekly_games[(t.week, t1)].append(X[key])
                     weekly_games[(t.week, t2)].append(X[key])
 
@@ -55,7 +55,7 @@ class NoDoubleBookingFieldsConstraint(Constraint):
         for t in timeslots:
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day: # Ensure dummy timeslots not counted
+                if key in X and t.day:
                     field_usage[(t.day, t.day_slot, t.week, t.field.name)].append(X[key])
 
         for slot, game_vars in field_usage.items():
@@ -73,17 +73,14 @@ class EnsureEqualGamesAndBalanceMatchUps(Constraint):
         games = data['games']                    # list of (t1, t2, grade)
         timeslots = data['timeslots']
         num_rounds = data['num_rounds']          # dict: grade -> max games per team
-        num_dummy = data.get('num_dummy_timeslots', 0)
         teams = data['teams']                    # list of Team objects
 
         # collect per‐team and per‐pair vars
         team_games  = defaultdict(lambda: defaultdict(list))
         pair_games  = defaultdict(lambda: defaultdict(list))
 
-        # bucket real + dummy slots 
         for (t1, t2, grade) in games:
             key_base = (t1, t2, grade)
-            # real timeslots
             for t in timeslots:
                 key = (*key_base,
                        t.day, t.day_slot, t.time,
@@ -91,14 +88,6 @@ class EnsureEqualGamesAndBalanceMatchUps(Constraint):
                        t.field.name, t.field.location)
                 if key in X:
                     v = X[key]
-                    team_games[grade][t1].append(v)
-                    team_games[grade][t2].append(v)
-                    pair_games[grade][tuple(sorted((t1, t2)))].append(v)
-            # dummy slots
-            for i in range(num_dummy):
-                dummy_key = (*key_base, i)
-                if dummy_key in X:
-                    v = X[dummy_key]
                     team_games[grade][t1].append(v)
                     team_games[grade][t2].append(v)
                     pair_games[grade][tuple(sorted((t1, t2)))].append(v)
@@ -145,7 +134,7 @@ class PHLAndSecondGradeAdjacency(Constraint):
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
 
-                if grade == 'PHL' and key in X and t.day: # Ensure dummy timeslots not counted
+                if grade == 'PHL' and key in X and t.day:
                     club = get_club(t1, data['teams'])
                     dup_2nds = get_duplicated_graded_teams(club, '2nd', data['teams'])
                     for team in dup_2nds:
@@ -162,7 +151,7 @@ class PHLAndSecondGradeAdjacency(Constraint):
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
 
-                if grade == '2nd' and key in X and t.day: # Ensure dummy timeslots not counted
+                if grade == '2nd' and key in X and t.day:
                     club = get_club(t1, data['teams'])
                     for identifier in phl_games[(club, t1, t.week, t.day)]:
                         if identifier[0] != '':
@@ -246,7 +235,7 @@ class PHLAndSecondGradeTimes(Constraint):
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
 
-                if grade in ['PHL', '2nd'] and key in X and t.day: # Ensure dummy timeslots not counted
+                if grade in ['PHL', '2nd'] and key in X and t.day:
                     if grade == 'PHL':
                         # Stop PHL games across clubs from being played at the same time
                         team_games[(t.week, t.day)][(t.day_slot, t.field.location)].append(X[key])
@@ -358,7 +347,7 @@ class FiftyFiftyHomeandAway(Constraint):
         for t in timeslots:
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if ('Maitland' in t1 or 'Maitland' in t2) and key in X and t.day: # Ensure dummy timeslots not counted
+                if ('Maitland' in t1 or 'Maitland' in t2) and key in X and t.day:
                     relevant_team = t1 if 'Maitland' in t1 else t2
                     other_team = t2 if relevant_team == t1 else t1
                     if 'Maitland' in other_team:
@@ -368,7 +357,7 @@ class FiftyFiftyHomeandAway(Constraint):
                     else:
                         away_games[(relevant_team, other_team)].append(X[key])
 
-                if ('Gosford' in t1 or 'Gosford' in t2) and key in X and t.day: # Ensure dummy timeslots not counted
+                if ('Gosford' in t1 or 'Gosford' in t2) and key in X and t.day:
                     relevant_team = t1 if 'Gosford' in t1 else t2
                     other_team = t2 if relevant_team == t1 else t1
                     if 'Gosford' in other_team:
@@ -393,7 +382,30 @@ class FiftyFiftyHomeandAway(Constraint):
 
             # Ensure aim_games is as close to 50% as possible
             model.Add(home_games_count * 2 >= total_games_count - 1)  # Ensure aim_games is at least half floor
-            model.Add(home_games_count * 2 <= total_games_count + 1) 
+            model.Add(home_games_count * 2 <= total_games_count + 1)
+
+        # Aggregate balance per team: total home games across all opponents ≈ 50%
+        team_home_vars = defaultdict(list)
+        team_all_vars = defaultdict(list)
+
+        for pair_key, pair_home_vars in home_games.items():
+            team = pair_key[0]  # The Maitland/Gosford team
+            team_home_vars[team].extend(pair_home_vars)
+            team_all_vars[team].extend(pair_home_vars)
+            team_all_vars[team].extend(away_games[pair_key])
+
+        for team, h_vars in team_home_vars.items():
+            a_vars = team_all_vars[team]
+            if not h_vars or not a_vars:
+                continue
+
+            agg_home = model.NewIntVar(0, len(h_vars), f'agg_home_{team}')
+            agg_total = model.NewIntVar(0, len(a_vars), f'agg_total_{team}')
+            model.Add(agg_home == sum(h_vars))
+            model.Add(agg_total == sum(a_vars))
+
+            model.Add(agg_home * 2 >= agg_total - 1)
+            model.Add(agg_home * 2 <= agg_total + 1)
 
 class TeamConflictConstraint(Constraint):
     ''' Ensure that when clubs specify two teams cannot play at the same time, they do not.'''
@@ -440,7 +452,7 @@ class MaxMaitlandHomeWeekends(Constraint):
         for t in timeslots:
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day: # Ensure dummy timeslots not counted
+                if key in X and t.day:
                         if t.field.location != 'Newcastle International Hockey Centre':
                             weeks[(t.week, t.field.location)].append(X[key])
                             
@@ -569,7 +581,7 @@ class EnsureBestTimeslotChoices(Constraint):
         }
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue
@@ -930,7 +942,7 @@ class ClubVsClubAlignment(Constraint):
                 if t.week in locked_weeks:
                     continue
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day: # Ensure dummy timeslots not counted
+                if key in X and t.day:
                     playing_clubs = tuple(sorted((get_club(t1, data['teams']), get_club(t2, data['teams']))))
                     grades_dict[grade][playing_clubs][t.round_no].append(X[key])
                     if t.day == 'Sunday':
@@ -1032,7 +1044,7 @@ class MaitlandHomeGrouping(Constraint):
             for (t1, t2, grade) in data['games']:
                 if "Maitland" in t1 or "Maitland" in t2:
                     key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                    if key in X and t.day: # Ensure dummy timeslots not counted
+                    if key in X and t.day:
                         week = t.week
                         if week not in maitland_games_per_week:
                             maitland_games_per_week[week] = []
@@ -1112,7 +1124,7 @@ class AwayAtMaitlandGrouping(Constraint):
                 if "Maitland Park" in t.field.location:
                     key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
 
-                    if key in X and t.day: # Ensure dummy timeslots not counted 
+                    if key in X and t.day:
                         away_club = get_club(t1, data['teams']) if "Maitland" in t2 else get_club(t2, data['teams'])  
                         away_clubs_per_week[t.week][away_club].append(X[key]) 
 
@@ -1256,7 +1268,7 @@ class MinimiseClubsOnAFieldBroadmeadow(Constraint):
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
                 
-                if key in X and t.field.location == 'Newcastle International Hockey Centre' and t.day in ['Saturday', 'Sunday']: # Ensure dummy timeslots not counted
+                if key in X and t.field.location == 'Newcastle International Hockey Centre' and t.day in ['Saturday', 'Sunday']:
                     club1 = get_club(t1, data['teams'])
                     club2 = get_club(t2, data['teams'])
 
@@ -1464,7 +1476,7 @@ class ClubGameSpread(Constraint):
         club_week_day_slot_vars = defaultdict(list)
 
         for key, var in X.items():
-            if len(key) < 11 or not key[3]:
+            if not key[3]:
                 continue
             week = key[6]
             if week in locked_weeks:

@@ -560,14 +560,6 @@ class TestMiniSeasonIntegration:
         NoDoubleBookingTeamsConstraint().apply(model, X, mini_season_data)
         NoDoubleBookingFieldsConstraint().apply(model, X, mini_season_data)
         
-        # Add dummy variables for EnsureEqualGamesAndBalanceMatchUps
-        num_dummy = 5
-        for (t1, t2, grade) in games:
-            for i in range(num_dummy):
-                dummy_key = (t1, t2, grade, i)
-                X[dummy_key] = model.NewBoolVar(f'X_dummy_{t1}_{t2}_{i}')
-        
-        mini_season_data['num_dummy_timeslots'] = num_dummy
         EnsureEqualGamesAndBalanceMatchUps().apply(model, X, mini_season_data)
         
         # Solve

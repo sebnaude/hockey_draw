@@ -16,9 +16,9 @@ from ortools.sat.python import cp_model
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from constraints.unified import UnifiedConstraintEngine, BROADMEADOW, MAITLAND, GOSFORD
+from constraints.unified import UnifiedConstraintEngine, SharedVariablePool, BROADMEADOW, MAITLAND, GOSFORD
 from models import PlayingField, Team, Club, Grade, Timeslot
-from tests.conftest import create_model_and_vars, solve_with_timeout, create_model_with_dummies
+from tests.conftest import create_model_and_vars, solve_with_timeout
 
 
 # ============== Fixtures ==============
@@ -88,7 +88,6 @@ def mini_unified_data():
         'current_week': 0,
         'locked_weeks': set(),
         'num_rounds': {'3rd': 4, '4th': 4, 'max': 4},
-        'num_dummy_timeslots': 0,
         'constraint_slack': {},
         'penalty_weights': {},
         'forced_games': [],
@@ -114,17 +113,6 @@ def mini_engine(mini_unified_data):
     return engine
 
 
-@pytest.fixture
-def mini_engine_with_dummies(mini_unified_data):
-    """Engine with dummy variables included."""
-    model, X = create_model_with_dummies(
-        mini_unified_data['games'],
-        mini_unified_data['timeslots'],
-        num_dummy=2,
-    )
-    mini_unified_data['num_dummy_timeslots'] = 2
-    engine = UnifiedConstraintEngine(model, X, mini_unified_data)
-    return engine
 
 
 # ============== TestUnifiedEngineInit ==============
@@ -266,15 +254,6 @@ class TestBuildGroupings:
 
         # But grade_team_vars SHOULD still include locked weeks (for equal games)
         assert len(engine.grade_team_vars['3rd']) > 0
-
-    def test_dummy_vars_handled(self, mini_engine_with_dummies):
-        """Dummy variables (4-tuple keys) are routed to grade_team_vars only."""
-        engine = mini_engine_with_dummies
-        engine.build_groupings()
-        # grade_team_vars should include dummy var contributions
-        total_vars = sum(len(v) for v in engine.grade_team_vars['3rd'].values())
-        # Should be more than zero
-        assert total_vars > 0
 
     def test_club_alignment_groupings_for_lower_grades(self, mini_engine):
         """by_grade_clubpair_round populated for 3rd/4th (non-PHL/2nd)."""
@@ -517,17 +496,6 @@ class TestApplyAll:
         assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), \
             f"Expected FEASIBLE/OPTIMAL, got {solver.status_name(status)}"
 
-    def test_apply_all_with_dummies(self, mini_engine_with_dummies):
-        """apply_all works with dummy variables in the X dict."""
-        engine = mini_engine_with_dummies
-        total = engine.apply_all()
-        assert total > 0
-
-        # Verify dummy vars were incorporated into equal games
-        for grade in ['3rd', '4th']:
-            for team, vars_list in engine.grade_team_vars[grade].items():
-                assert len(vars_list) > 0
-
 
 # ============== TestSharedIndicators ==============
 
@@ -537,7 +505,7 @@ class TestSharedIndicators:
         """Stage 1 creates shared indicator variables."""
         mini_engine.build_groupings()
         mini_engine.apply_stage_1_hard()
-        assert len(mini_engine._shared_indicators) > 0
+        assert len(mini_engine.pool._cache) > 0
 
     def test_indicators_reused_across_stages(self, mini_unified_data):
         """Indicators created in stage 1 are reused by stage 2 (not recreated)."""
@@ -548,28 +516,28 @@ class TestSharedIndicators:
         engine.build_groupings()
         engine.apply_stage_1_hard()
 
-        count_after_1 = len(engine._shared_indicators)
+        count_after_1 = len(engine.pool._cache)
         assert count_after_1 > 0
 
         engine.apply_stage_2_soft()
-        count_after_2 = len(engine._shared_indicators)
+        count_after_2 = len(engine.pool._cache)
 
         # Stage 2 may add some new indicators but should also reuse existing ones.
         assert count_after_2 >= count_after_1
 
     def test_get_or_create_bool_caching(self, mini_engine):
-        """_get_or_create_bool returns same var for same cache_key."""
+        """pool.get_or_create_bool returns same var for same cache_key."""
         mini_engine.build_groupings()
         # Create a test indicator
         test_var = mini_engine.model.NewBoolVar('test_var')
-        ind1 = mini_engine._get_or_create_bool('test_key', [test_var], 'label1')
-        ind2 = mini_engine._get_or_create_bool('test_key', [test_var], 'label2')
+        ind1 = mini_engine.pool.get_or_create_bool('test_key', [test_var], 'label1')
+        ind2 = mini_engine.pool.get_or_create_bool('test_key', [test_var], 'label2')
         assert ind1 is ind2
 
     def test_get_or_create_bool_empty_list(self, mini_engine):
-        """_get_or_create_bool with empty list creates indicator == 0."""
+        """pool.get_or_create_bool with empty list creates indicator == 0."""
         mini_engine.build_groupings()
-        ind = mini_engine._get_or_create_bool('empty_test', [], 'empty_label')
+        ind = mini_engine.pool.get_or_create_bool('empty_test', [], 'empty_label')
         assert ind is not None
         # Solve to verify it's forced to 0
         mini_engine.model.Maximize(ind)
@@ -578,15 +546,15 @@ class TestSharedIndicators:
             assert solver.Value(ind) == 0
 
     def test_get_or_create_presence_caching(self, mini_engine):
-        """_get_or_create_presence returns same var for same cache_key."""
+        """pool.get_or_create_presence returns same var for same cache_key."""
         mini_engine.build_groupings()
         test_var = mini_engine.model.NewBoolVar('pres_test')
-        ind1 = mini_engine._get_or_create_presence('pres_key', [test_var], 'label1')
-        ind2 = mini_engine._get_or_create_presence('pres_key', [test_var], 'label2')
+        ind1 = mini_engine.pool.get_or_create_presence('pres_key', [test_var], 'label1')
+        ind2 = mini_engine.pool.get_or_create_presence('pres_key', [test_var], 'label2')
         assert ind1 is ind2
 
     def test_coincidence_indicators_stored(self, mini_unified_data):
-        """Coincidence indicators from _club_alignment_hard are stored in _shared_indicators."""
+        """Coincidence indicators from _club_alignment_hard are stored in pool._cache."""
         model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -594,7 +562,7 @@ class TestSharedIndicators:
         engine.build_groupings()
         engine._club_alignment_hard()
         # Check that at least one coincidence indicator was stored
-        coin_keys = [k for k in engine._shared_indicators if isinstance(k, tuple) and k[0] == 'coin']
+        coin_keys = [k for k in engine.pool._cache if isinstance(k, tuple) and k[0] == 'coin']
         assert len(coin_keys) > 0, "No coincidence indicators stored in _shared_indicators"
 
 
@@ -671,7 +639,7 @@ class TestConstraintCoverage:
             '_away_maitland_hard',
             '_club_day_scheduling',
             '_club_game_spread_hard',
-            '_best_timeslot_choices',
+            '_best_timeslot_choices_hard',
         ]
 
         # Stage 2 methods (soft penalties + optimization)
@@ -683,11 +651,14 @@ class TestConstraintCoverage:
             '_away_maitland_soft',
             '_phl_times_soft',
             '_preferred_times',
-            '_club_day_field_contiguity',
+            '_best_timeslot_choices_soft',
             '_club_game_spread_soft',
         ]
 
-        all_methods = stage_1_methods + stage_2_methods
+        # Methods that moved to stage 1 (still exist, just not in stage 2)
+        stage_1_extras = ['_club_day_field_contiguity']
+
+        all_methods = stage_1_methods + stage_2_methods + stage_1_extras
         for method_name in all_methods:
             assert hasattr(engine, method_name), f"Missing method: {method_name}"
             assert callable(getattr(engine, method_name)), f"Not callable: {method_name}"
@@ -1040,9 +1011,9 @@ class TestHardConstraintEnforcement:
         data['penalties'] = {}
         engine = UnifiedConstraintEngine(model, X, data)
         engine.build_groupings()
-        count = engine._best_timeslot_choices()
+        count = engine._best_timeslot_choices_hard()
 
-        # The constraint adds stacking and last-slot-WF logic
+        # The constraint adds stacking logic (WF preference moved to soft)
         assert count > 0
 
         # Solve and check no gaps in slot usage at Broadmeadow
@@ -1067,7 +1038,7 @@ class TestHardConstraintEnforcement:
                                 f"Gap found at {loc_key}: slots {sorted_slots}"
 
     def test_best_timeslot_last_slot_wf(self, mini_unified_data):
-        """Last-slot-WF: if only 1 field active on last slot at Broadmeadow, it must be WF."""
+        """Last-slot-WF: if only 1 field active on last slot at Broadmeadow, prefer WF (soft)."""
         model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -1075,10 +1046,17 @@ class TestHardConstraintEnforcement:
         data['penalties'] = {}
         engine = UnifiedConstraintEngine(model, X, data)
         engine.build_groupings()
-        engine._best_timeslot_choices()
+        engine._best_timeslot_choices_hard()
+        engine._best_timeslot_choices_soft()
 
+        # Include penalty in objective so solver optimizes for WF preference
         real_vars = [v for k, v in X.items() if len(k) >= 11]
-        model.Maximize(sum(real_vars))
+        penalty_terms = []
+        for name, info in data['penalties'].items():
+            w = info['weight']
+            for pv in info['penalties']:
+                penalty_terms.append(w * pv)
+        model.Maximize(sum(real_vars) * 1000 - sum(penalty_terms))
 
         status, solver = solve_with_timeout(model, timeout_seconds=5.0)
         if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
@@ -1103,3 +1081,243 @@ class TestHardConstraintEnforcement:
                 if len(fields_on_last) == 1:
                     assert fields_on_last[0] == 'WF', \
                         f"Week {week}: single field on last slot {max_slot} is {fields_on_last[0]}, expected WF"
+
+
+# ============== TestSharedVariablePool ==============
+
+class TestSharedVariablePool:
+    """Tests for the SharedVariablePool class."""
+
+    def test_pool_bool_caching(self):
+        """Same key returns same BoolVar."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        v = model.NewBoolVar('x')
+        ind1 = pool.get_or_create_bool('k1', [v], 'label1')
+        ind2 = pool.get_or_create_bool('k1', [v], 'label2')
+        assert ind1 is ind2
+
+    def test_pool_bool_different_keys(self):
+        """Different keys return different BoolVars."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        v = model.NewBoolVar('x')
+        ind1 = pool.get_or_create_bool('k1', [v], 'label1')
+        ind2 = pool.get_or_create_bool('k2', [v], 'label2')
+        assert ind1 is not ind2
+
+    def test_pool_register(self):
+        """Manually registered vars are retrievable via get()."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        v = model.NewBoolVar('manual')
+        pool.register('manual_key', v)
+        assert pool.get('manual_key') is v
+
+    def test_pool_get_returns_none(self):
+        """Missing key returns None."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        assert pool.get('nonexistent') is None
+
+    def test_pool_diagnostics(self):
+        """Diagnostics reports correct creation and hit counts."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        v = model.NewBoolVar('x')
+        pool.get_or_create_bool('k1', [v], 'label1')  # create
+        pool.get_or_create_bool('k1', [v], 'label2')  # hit
+        pool.get_or_create_bool('k2', [v], 'label3')  # create
+        d = pool.diagnostics()
+        assert d['created'] == 2
+        assert d['hits'] == 1
+        assert d['pool_size'] == 2
+
+    def test_pool_empty_vars_list(self):
+        """BoolVar with empty list is forced to 0."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        ind = pool.get_or_create_bool('empty', [], 'empty_ind')
+        model.Maximize(ind)
+        status, solver = solve_with_timeout(model, timeout_seconds=1.0)
+        if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
+            assert solver.Value(ind) == 0
+
+    def test_pool_presence_caching(self):
+        """Presence indicators are cached by key."""
+        model = cp_model.CpModel()
+        pool = SharedVariablePool(model)
+        v = model.NewBoolVar('x')
+        ind1 = pool.get_or_create_presence('pk', [v], 'pres1')
+        ind2 = pool.get_or_create_presence('pk', [v], 'pres2')
+        assert ind1 is ind2
+
+
+# ============== TestStageCorrectness ==============
+
+class TestStageCorrectness:
+    """Verify hard stage has no penalties, soft stage populates penalties."""
+
+    def test_hard_stage_no_penalties(self, mini_unified_data):
+        """Stage 1 does not populate data['penalties'] with any entries."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+
+        # Hard stage should NOT have created any penalty entries
+        assert len(data['penalties']) == 0, \
+            f"Hard stage created penalty entries: {list(data['penalties'].keys())}"
+
+    def test_soft_stage_populates_penalties(self, mini_unified_data):
+        """After both stages, penalties dict has entries with weight and penalties keys."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        # Soft stage should have created at least some penalty entries
+        assert len(data['penalties']) > 0, "Soft stage created no penalty entries"
+        for name, info in data['penalties'].items():
+            assert 'weight' in info, f"Penalty '{name}' missing 'weight' key"
+            assert 'penalties' in info, f"Penalty '{name}' missing 'penalties' key"
+            assert isinstance(info['weight'], int), f"Penalty '{name}' weight not int"
+
+    def test_club_day_contiguity_in_stage_1(self, mini_unified_data):
+        """_club_day_field_contiguity is called from stage 1 (hard), not stage 2."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+
+        # Verify _club_day_field_contiguity is no longer in stage 2 dispatch
+        # by checking that stage 2 source doesn't contain it
+        import inspect
+        stage2_source = inspect.getsource(engine.apply_stage_2_soft)
+        assert '_club_day_field_contiguity' not in stage2_source, \
+            "_club_day_field_contiguity should not be called from stage 2"
+
+        stage1_source = inspect.getsource(engine.apply_stage_1_hard)
+        assert '_club_day_field_contiguity' in stage1_source, \
+            "_club_day_field_contiguity should be called from stage 1"
+
+    def test_phase_c_exists(self, mini_engine):
+        """apply_phase_c exists and returns 0."""
+        mini_engine.build_groupings()
+        result = mini_engine.apply_phase_c()
+        assert result == 0
+
+
+# ============== TestPenaltyWeightsConfig ==============
+
+class TestPenaltyWeightsConfig:
+    """Verify penalty weights are read from config when available."""
+
+    def test_default_weights_without_config(self, mini_unified_data):
+        """Without penalty_weights in data, defaults are used."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        # Ensure no penalty_weights key
+        data.pop('penalty_weights', None)
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        # EqualMatchUpSpacing default is 5000
+        if 'EqualMatchUpSpacing' in data['penalties']:
+            assert data['penalties']['EqualMatchUpSpacing']['weight'] == 5000
+
+    def test_config_overrides_defaults(self, mini_unified_data):
+        """penalty_weights in data override hard-coded defaults."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        data['penalty_weights'] = {'EqualMatchUpSpacing': 99999}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        if 'EqualMatchUpSpacing' in data['penalties']:
+            assert data['penalties']['EqualMatchUpSpacing']['weight'] == 99999
+
+    def test_missing_config_key_uses_default(self, mini_unified_data):
+        """Partial config — unspecified keys use defaults."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        data['penalty_weights'] = {'MaitlandHomeGrouping': 42}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        # MaitlandHomeGrouping overridden
+        if 'MaitlandHomeGrouping' in data['penalties']:
+            assert data['penalties']['MaitlandHomeGrouping']['weight'] == 42
+        # EqualMatchUpSpacing should be default
+        if 'EqualMatchUpSpacing' in data['penalties']:
+            assert data['penalties']['EqualMatchUpSpacing']['weight'] == 5000
+
+
+# ============== TestNoOrphanVars ==============
+
+class TestNoOrphanVars:
+    """Verify skipping a constraint doesn't create its helper vars."""
+
+    def test_skip_alignment_no_coin_vars(self, mini_unified_data):
+        """Skipping ClubVsClubAlignment creates no coincide indicators."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data,
+            skip_constraints={'ClubVsClubAlignment'})
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        coin_keys = [k for k in engine.pool._cache
+                     if isinstance(k, tuple) and k[0] == 'coin']
+        assert len(coin_keys) == 0, \
+            f"Skipped ClubVsClubAlignment but found coin keys: {coin_keys}"
+
+    def test_skip_cgs_no_cgs_vars(self, mini_unified_data):
+        """Skipping ClubGameSpread creates no CGS variables."""
+        model, X = create_model_and_vars(
+            mini_unified_data['games'], mini_unified_data['timeslots'],
+        )
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data,
+            skip_constraints={'ClubGameSpread'})
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        engine.apply_stage_2_soft()
+
+        cgs_keys = [k for k in engine.pool._cache
+                    if isinstance(k, tuple) and len(k) >= 1 and
+                    isinstance(k[0], str) and k[0].startswith('cgs_')]
+        assert len(cgs_keys) == 0, \
+            f"Skipped ClubGameSpread but found CGS keys: {cgs_keys}"

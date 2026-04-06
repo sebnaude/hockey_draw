@@ -367,7 +367,7 @@ def create_relaxation_test_func(data: dict, generate_X_func, timeout: float = 10
         test_data['penalties'] = {}
         
         # Generate X
-        X, Y, conflicts = generate_X_func(model, test_data)
+        X, conflicts = generate_X_func(model, test_data)
 
         # Prepare data
         if isinstance(test_data.get('games'), dict):

@@ -188,7 +188,6 @@ SEASON_CONFIG = {
     
     # Schedule parameters
     'max_rounds': 20,  # Maximum number of rounds (4 rounds = 20 matches per team)
-    'num_dummy_timeslots': 3,  # For solver flexibility
     
     # Special settings
     'play_anzac_sunday': True,  # Whether to schedule games on ANZAC Sunday

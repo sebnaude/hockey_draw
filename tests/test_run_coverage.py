@@ -342,9 +342,9 @@ class TestLoadLockedKeys:
             run._load_locked_keys(txt_path, locked_weeks={1})
 
     def test_load_pickle_skips_short_keys(self, tmp_path):
-        """Pickle with short (dummy) keys should skip them."""
+        """Pickle with short keys should skip them."""
         solution = {
-            ("A", "B", "PHL", 0): 1,  # 4-tuple dummy key, len < 7
+            ("A", "B", "PHL", 0): 1,  # 4-tuple key, len < 7
             ("A", "B", "PHL", "Sunday", 3, "11:30", 1, "2026-04-05", 1, "EF", "NIHC"): 1,
         }
         pkl_path = str(tmp_path / "solution.pkl")

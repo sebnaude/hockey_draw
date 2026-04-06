@@ -172,8 +172,7 @@ def solve_and_get_status(model):
 
 # ============== NoDoubleBookingTeams Tests ==============
 # EDGE CASES:
-# 1. Dummy timeslots (no day) should be excluded
-# 2. current_week filtering - past weeks should be ignored
+# 1. current_week filtering - past weeks should be ignored
 # 3. Team appears in both t1 and t2 positions
 
 class TestNoDoubleBookingTeamsEquivalence:
@@ -277,8 +276,7 @@ class TestNoDoubleBookingTeamsEquivalence:
 # ============== NoDoubleBookingFields Tests ==============
 # EDGE CASES:
 # 1. Same timeslot but different fields should be allowed
-# 2. Dummy timeslots should be excluded
-# 3. Same field, different day_slot should be allowed
+# 2. Same field, different day_slot should be allowed
 
 class TestNoDoubleBookingFieldsEquivalence:
     """Tests that both implementations prevent field double booking equally."""

@@ -45,7 +45,7 @@ print(f"Stage: {stage1['name']}")
 print(f"Constraints ({len(stage1['constraints'])} classes):")
 
 model = cp_model.CpModel()
-X, Y, conflicts = generate_X(model, data)
+X, conflicts = generate_X(model, data)
 data['team_conflicts'] = conflicts
 data['penalties'] = {}
 
@@ -73,7 +73,7 @@ print(f"Stage: {stage1_ai['name']}")
 print(f"Constraints ({len(stage1_ai['constraints'])} classes):")
 
 model_ai = cp_model.CpModel()
-X_ai, Y_ai, conflicts_ai = generate_X(model_ai, data)
+X_ai, conflicts_ai = generate_X(model_ai, data)
 data['team_conflicts'] = conflicts_ai
 data['penalties'] = {}
 

@@ -265,7 +265,7 @@ class TestFromCheckpointLoadsMetadata:
 
         # Build a minimal X solution
         games = _minimal_games()
-        # X_solution needs real variable keys -- use short dummy keys
+        # X_solution needs real variable keys -- use 11-tuple format
         X_solution = {}
         for i, g in enumerate(games):
             # Use the 11-tuple format that from_X_solution expects

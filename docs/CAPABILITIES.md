@@ -18,13 +18,6 @@ A precise list of every capability implemented in the Hockey Draw Scheduling Sys
 ### 1.2 Timeslot Management
 | Capability | Location | Description |
 |------------|----------|-------------|
-| Dummy/overflow slots | `constraints/original.py` | N configurable slots without field/time constraints |
-| Dummy slot penalty | Objective function | Heavy penalty (in `Maximize`) for using dummy slots |
-| Dummy in game counting | `EnsureEqualGamesAndBalanceMatchUps` | Dummies count toward team's total games |
-| Dummy in matchup balance | `EnsureEqualGamesAndBalanceMatchUps` | Dummies count toward pair matchup totals |
-
-**Config:** `data['num_dummy_timeslots'] = 3` (default)
-
 ### 1.3 Game Distribution
 | Capability | Location | Description |
 |------------|----------|-------------|
@@ -253,7 +246,6 @@ python run.py swap draws/v1.json G00001 G00050
 
 | Setting | Location | Default |
 |---------|----------|---------|
-| `num_dummy_timeslots` | `config/season_*.py` | 3 |
 | `num_rounds` | `config/season_*.py` | Per-grade game counts |
 | `max_rounds` | `config/season_*.py` | Season length |
 | Penalty weights | Constraint classes | Varies (100-50000) |
