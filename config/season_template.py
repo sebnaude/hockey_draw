@@ -103,9 +103,13 @@ FIELD_UNAVAILABILITIES = {
 # ============== Club Days (Special Events) ==============
 # Each club may have a "club day" where all their teams play back-to-back
 # at the same venue. Specify the date of each club's event.
+# Two formats supported:
+#   'ClubName': datetime(YYYY, M, D)                                   # derby (intra-club matchups)
+#   'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'}  # force host vs opponent matchups
 
 CLUB_DAYS = {
     # 'ClubName': datetime(YYYY, M, D),
+    # 'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'},
 }
 
 # ============== Blocked Games (Hard No-Play) ==============

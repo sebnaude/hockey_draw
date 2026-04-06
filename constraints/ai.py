@@ -24,7 +24,7 @@ from dataclasses import dataclass
 # Import utility functions
 from utils import (
     get_club, get_duplicated_graded_teams, get_teams_from_club,
-    get_club_from_clubname, get_nearest_week_by_date
+    get_club_from_clubname, get_nearest_week_by_date, normalize_club_day
 )
 
 
@@ -791,62 +791,92 @@ class ClubDayConstraintAI(ConstraintAI):
         club_days = data.get('club_days', {})
         if not club_days:
             return 0
-        
+
         teams = data['teams']
         clubs = data['clubs']
         timeslots = data['timeslots']
         locked_weeks = data.get('locked_weeks', set())
-        
+
         constraints_added = 0
-        
-        for club_name, desired_date in club_days.items():
+
+        for club_name, raw_value in club_days.items():
+            desired_date, opponent = normalize_club_day(raw_value)
+
             # Validate club exists
             club = get_club_from_clubname(club_name, clubs)
             club_teams = get_teams_from_club(club_name, teams)
             date_str = desired_date.date().strftime('%Y-%m-%d')
-            
+
+            # Validate opponent club exists
+            if opponent is not None:
+                if opponent.lower() not in [c.name.lower() for c in clubs]:
+                    raise ValueError(f'Invalid opponent club name {opponent} in ClubDay Dictionary for {club_name}')
+
             closest_week = get_nearest_week_by_date(date_str, timeslots)
             if closest_week in locked_weeks:
                 continue
-            
+
             # Find all games for this club on this date
             club_game_vars = {}
             for key, var in X.items():
                 if key[7] != date_str:
                     continue
-                
+
                 t1, t2 = key[0], key[1]
                 if t1 in club_teams or t2 in club_teams:
                     club_game_vars[key] = var
-            
+
             if not club_game_vars:
                 continue
-            
+
             # Constraint 1: Every club team must play
             for team in club_teams:
                 team_vars = [v for k, v in club_game_vars.items() if team in (k[0], k[1])]
                 if team_vars:
                     model.Add(sum(team_vars) >= 1)
                     constraints_added += 1
-            
-            # Constraint 2: Intra-club matchups for same-grade teams
+
+            # Constraint 2: Matchup logic (derby or opponent)
             teams_by_grade = defaultdict(list)
             for team in club_teams:
                 grade = team.rsplit(' ', 1)[1]
                 teams_by_grade[grade].append(team)
-            
-            for grade, grade_teams in teams_by_grade.items():
-                if len(grade_teams) > 1:
-                    intra_pairs = list(combinations(grade_teams, 2))
+
+            opp_by_grade = defaultdict(list)
+            if opponent is not None:
+                opp_teams = get_teams_from_club(opponent, teams)
+                for team in opp_teams:
+                    grade = team.rsplit(' ', 1)[1]
+                    opp_by_grade[grade].append(team)
+
+            for grade, host_grade_teams in teams_by_grade.items():
+                if opponent is not None and grade in opp_by_grade:
+                    # Opponent has teams in this grade: force cross-club matchups
+                    opp_grade_teams = opp_by_grade[grade]
+                    cross_vars = []
+                    for key, var in club_game_vars.items():
+                        if key[2] != grade:
+                            continue
+                        if ((key[0] in host_grade_teams and key[1] in opp_grade_teams)
+                                or (key[0] in opp_grade_teams and key[1] in host_grade_teams)):
+                            cross_vars.append(var)
+
+                    if cross_vars:
+                        required = min(len(host_grade_teams), len(opp_grade_teams))
+                        model.Add(sum(cross_vars) >= required)
+                        constraints_added += 1
+                elif len(host_grade_teams) > 1:
+                    # No opponent or opponent has no teams in this grade: derby (intra-club)
+                    intra_pairs = list(combinations(host_grade_teams, 2))
                     intra_vars = []
-                    
+
                     for key, var in club_game_vars.items():
                         pair = (key[0], key[1])
                         if pair in intra_pairs or (pair[1], pair[0]) in intra_pairs:
                             intra_vars.append(var)
-                    
+
                     if intra_vars:
-                        expected_pairs = len(grade_teams) // 2
+                        expected_pairs = len(host_grade_teams) // 2
                         model.Add(sum(intra_vars) >= expected_pairs)
                         constraints_added += 1
             

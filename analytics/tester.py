@@ -1609,16 +1609,17 @@ class DrawTester:
 
     def _check_club_day(self) -> List[Violation]:
         """Check club day constraints: on a club's designated day, all club teams must play,
-        intra-club matchups should occur where possible, all on the same field, contiguous slots.
+        matchup requirements (derby or opponent) are met, all on the same field, contiguous slots.
         """
         violations = []
         club_days = self.data.get('club_days', {})
         if not club_days:
             return violations
 
-        from utils import get_teams_from_club
+        from utils import get_teams_from_club, normalize_club_day
 
-        for club_name, desired_date in club_days.items():
+        for club_name, raw_value in club_days.items():
+            desired_date, opponent = normalize_club_day(raw_value)
             date_str = desired_date.strftime('%Y-%m-%d') if hasattr(desired_date, 'strftime') else str(desired_date)
 
             # Get all club teams
@@ -1629,6 +1630,13 @@ class DrawTester:
 
             if not club_teams:
                 continue
+
+            # Get opponent teams if specified
+            opp_teams = set()
+            if opponent is not None:
+                for t in self.teams:
+                    if t.club.name.lower() == opponent.lower():
+                        opp_teams.add(t.name)
 
             # Find games on this date involving the club
             club_games_on_date = []
@@ -1660,6 +1668,52 @@ class DrawTester:
                 ))
                 continue
 
+            # Check matchup requirements (derby or opponent)
+            teams_by_grade = defaultdict(set)
+            for team in club_teams:
+                grade = team.rsplit(' ', 1)[1]
+                teams_by_grade[grade].add(team)
+
+            opp_by_grade = defaultdict(set)
+            if opponent is not None:
+                for team in opp_teams:
+                    grade = team.rsplit(' ', 1)[1]
+                    opp_by_grade[grade].add(team)
+
+            for grade, host_grade_teams in teams_by_grade.items():
+                if opponent is not None and grade in opp_by_grade:
+                    # Opponent matchup: check cross-club games in this grade
+                    opp_grade_teams = opp_by_grade[grade]
+                    cross_count = 0
+                    for game in club_games_on_date:
+                        if game.grade != grade:
+                            continue
+                        if ((game.team1 in host_grade_teams and game.team2 in opp_grade_teams)
+                                or (game.team1 in opp_grade_teams and game.team2 in host_grade_teams)):
+                            cross_count += 1
+                    required = min(len(host_grade_teams), len(opp_grade_teams))
+                    if cross_count < required:
+                        violations.append(Violation.create(
+                            constraint="ClubDayConstraint",
+                            message=f"Club day '{club_name}' ({date_str}): grade {grade} has {cross_count} cross-club matchup(s) vs {opponent}, expected >= {required}",
+                            affected_games=[g.game_id for g in club_games_on_date if g.grade == grade]
+                        ))
+                elif len(host_grade_teams) > 1:
+                    # Derby: check intra-club matchups
+                    derby_count = 0
+                    for game in club_games_on_date:
+                        if game.grade != grade:
+                            continue
+                        if game.team1 in host_grade_teams and game.team2 in host_grade_teams:
+                            derby_count += 1
+                    expected = len(host_grade_teams) // 2
+                    if derby_count < expected:
+                        violations.append(Violation.create(
+                            constraint="ClubDayConstraint",
+                            message=f"Club day '{club_name}' ({date_str}): grade {grade} has {derby_count} intra-club derby(s), expected >= {expected}",
+                            affected_games=[g.game_id for g in club_games_on_date if g.grade == grade]
+                        ))
+
             # Check all games on same field
             fields_used = set(g.field_name for g in club_games_on_date)
             if len(fields_used) > 1:
@@ -1674,7 +1728,6 @@ class DrawTester:
             if len(slots_used) >= 2:
                 for i in range(len(slots_used) - 1):
                     if slots_used[i + 1] - slots_used[i] > 1:
-                        # Gap in slots - check if it's a real gap (non-contiguous)
                         violations.append(Violation.create(
                             constraint="ClubDayConstraint",
                             message=f"Club day '{club_name}' ({date_str}): non-contiguous slots {slots_used}",

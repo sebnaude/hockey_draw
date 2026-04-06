@@ -85,11 +85,14 @@ FIELD_UNAVAILABILITIES = {
 
 # ============== Club Days (Special Events) ==============
 # MUST BE EXPLICITLY SET - Do not inherit from previous year
+# Two formats supported:
+#   'ClubName': datetime(YYYY, M, D)                                   # derby (intra-club matchups)
+#   'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'}  # force host vs opponent matchups
 
 CLUB_DAYS = {
     # Example format - DELETE and replace with actual 2027 club days:
     # 'Crusaders': datetime(2027, 6, 13),
-    # 'Wests': datetime(2027, 7, 11),
+    # 'Wests': {'date': datetime(2027, 7, 11), 'opponent': 'Souths'},
 }
 
 # ============== No-Play Preferences (Soft Constraints) ==============

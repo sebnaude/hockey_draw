@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 from itertools import combinations
 
 from utils import (
-    get_club, get_duplicated_graded_teams, get_teams_from_club, get_club_from_clubname, get_nearest_week_by_date
+    get_club, get_duplicated_graded_teams, get_teams_from_club, get_club_from_clubname, get_nearest_week_by_date,
+    normalize_club_day
 )
 
 
@@ -601,11 +602,17 @@ class ClubDayConstraint(Constraint):
         locked_weeks = data.get('locked_weeks', set())
 
         allowed_keys = ['team1', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
-        for club_name in club_days:   
+        for club_name in club_days:
             if club_name.lower() not in [c.name.lower() for c in clubs]:
-                raise ValueError(f'Invalid team name {club_name} in ClubDay Dictionary')   
+                raise ValueError(f'Invalid team name {club_name} in ClubDay Dictionary')
 
-            desired_date = club_days[club_name]
+            desired_date, opponent = normalize_club_day(club_days[club_name])
+
+            # Validate opponent club exists
+            if opponent is not None:
+                if opponent.lower() not in [c.name.lower() for c in clubs]:
+                    raise ValueError(f'Invalid opponent club name {opponent} in ClubDay Dictionary for {club_name}')
+
             closest_week = get_nearest_week_by_date(desired_date.strftime("%Y-%m-%d"), data['timeslots'])
 
             if closest_week in locked_weeks:
@@ -615,43 +622,59 @@ class ClubDayConstraint(Constraint):
             club = get_club_from_clubname(club_name, data['clubs'])
             club_teams = get_teams_from_club(club_name, teams)
             home_field = club.home_field
-            
+
             # Locate all games for the club on the desired date
-            club_games = [key for key in X if len(key) > 5 and key[allowed_keys.index('date')] == desired_date.date().strftime('%Y-%m-%d')  
-                          and (key[allowed_keys.index('team1')] in club_teams 
+            club_games = [key for key in X if len(key) > 5 and key[allowed_keys.index('date')] == desired_date.date().strftime('%Y-%m-%d')
+                          and (key[allowed_keys.index('team1')] in club_teams
                                or key[allowed_keys.index('team2')] in club_teams)]
-            
+
             if not club_games:
                 raise ValueError(f"No games found for club {club_name} on {desired_date.date()}")
-            
+
             teams_by_grade = {}
             for team in club_teams:
                 grade = team.rsplit(' ', 1)[1]
-                teams_by_grade.setdefault(grade, []).append(team) 
-                
+                teams_by_grade.setdefault(grade, []).append(team)
+
            # Constraint: Every club team must play
             for team in club_teams:
                 model.Add(sum(X[game_key] for game_key in club_games
-                              if team in [game_key[allowed_keys.index('team1')], game_key[allowed_keys.index('team2')]]) >= 1) 
+                              if team in [game_key[allowed_keys.index('team1')], game_key[allowed_keys.index('team2')]]) >= 1)
 
-            # Constraint: Intra-club matchups for teams in the same grade
-            for grade, teams_in_grade in teams_by_grade.items():
-                if len(teams_in_grade) > 1:
-                    # Create constraints to ensure intra-club matchups
-                    intra_club_pairs = list(combinations(teams_in_grade, 2))
+            # Constraint: Matchup logic (derby or opponent)
+            opp_by_grade = {}
+            if opponent is not None:
+                opp_teams = get_teams_from_club(opponent, teams)
+                for team in opp_teams:
+                    grade = team.rsplit(' ', 1)[1]
+                    opp_by_grade.setdefault(grade, []).append(team)
+
+            for grade, host_grade_teams in teams_by_grade.items():
+                if opponent is not None and grade in opp_by_grade:
+                    # Opponent has teams in this grade: force cross-club matchups
+                    opp_grade_teams = opp_by_grade[grade]
+                    cross_vars = [X[key] for key in club_games
+                                  if key[allowed_keys.index('grade')] == grade
+                                  and ((key[allowed_keys.index('team1')] in host_grade_teams and key[allowed_keys.index('team2')] in opp_grade_teams)
+                                       or (key[allowed_keys.index('team1')] in opp_grade_teams and key[allowed_keys.index('team2')] in host_grade_teams))]
+                    if cross_vars:
+                        required = min(len(host_grade_teams), len(opp_grade_teams))
+                        model.Add(sum(cross_vars) >= required)
+                elif len(host_grade_teams) > 1:
+                    # No opponent or opponent has no teams in this grade: derby (intra-club)
+                    intra_club_pairs = list(combinations(host_grade_teams, 2))
                     intra_club_games = [key for key in club_games if
                                         (key[allowed_keys.index('team1')], key[allowed_keys.index('team2')]) in intra_club_pairs or
                                         (key[allowed_keys.index('team2')], key[allowed_keys.index('team1')]) in intra_club_pairs]
-                    
 
-                    no_potential_pairs = len(teams_in_grade) // 2
+                    no_potential_pairs = len(host_grade_teams) // 2
                     game_vars = []
                     for pair in intra_club_pairs:
                         team1, team2 = pair
                         pair2 = (team2, team1)
                         game_vars.extend([X[game_key] for game_key in intra_club_games
                                             if ((game_key[allowed_keys.index('team1')], game_key[allowed_keys.index('team2')]) == pair or (game_key[allowed_keys.index('team1')], game_key[allowed_keys.index('team2')]) == pair2)])
-                        
+
                     model.Add(sum(game_vars) >= no_potential_pairs)
                     
             # Constraint: Ensure that all games are played at the same field

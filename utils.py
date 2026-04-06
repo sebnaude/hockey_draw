@@ -32,6 +32,18 @@ def get_club_from_clubname(club: str, clubs: List[Club]) -> Club:
             return c
     raise ValueError(f"Club {club} not found in CLUBS when calling get_club_from_clubname")
 
+def normalize_club_day(value):
+    """Normalize CLUB_DAYS entry to (date, opponent) tuple.
+
+    Supports these formats:
+        datetime(2026, 6, 22)                                   -> (datetime, None)
+        '2026-06-22'                                            -> (str, None)
+        {'date': datetime(2026, 7, 13), 'opponent': 'Souths'}  -> (datetime, 'Souths')
+    """
+    if isinstance(value, dict):
+        return value['date'], value.get('opponent')
+    return value, None
+
 def get_duplicated_graded_teams(club: str, grade: str, teams: List[Team]) -> List[str]:
     dup_teams = []
     for team in teams:
