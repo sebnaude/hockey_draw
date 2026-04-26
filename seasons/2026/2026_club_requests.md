@@ -43,12 +43,13 @@ This document tracks all requests received from clubs, their implementation stat
 | NIHC Friday night max 3 games | HCPL | **Hard Constraint** | `PHLAndSecondGradeTimes` → `model.Add(sum(friday_broadmeadow_vars) <= 3)` | Operational limit |
 | NIHC Friday time: 7:00pm | HCPL | **Variable Filtering** | `PHL_GAME_TIMES['NIHC']['EF/WF']['Friday'] = [tm(19, 0)]` | Junior Boys program alignment |
 | Norths 80th Anniversary — Norths v Wests weekend Jun 14 | Norths | **Matchup Filtering** | `FORCED_GAMES`: Norths v Wests on 2026-06-14 (Sunday) | Jun 12 is a regular Gosford Friday; the 80th is the Sunday |
-| NIHC Friday games: specific matchups only | HCPL | **Matchup Filtering** | `FORCED_GAMES` list + `_is_blocked_by_forced_games()` in `generate_X()` | Only allowed matchups get variables |
-| NIHC Friday: May 8 = Souths vs Maitland | HCPL | **Matchup Filtering** | `FORCED_GAMES[0]`: teams=['Maitland','Souths'], grade='PHL', date='2026-05-08' | Locked matchup |
-| NIHC Friday: Jun 19 = Tigers vs Wests | HCPL | **Matchup Filtering** | `FORCED_GAMES[1]`: teams=['Tigers','Wests'], grade='PHL', date='2026-06-19' | ⚠️ Date blocked by U16 Girls SC unavailability — needs part_days fix |
-| NIHC Friday: Jul 24 = Norths vs TBC | HCPL | **Matchup Filtering** | `FORCED_GAMES[2]`: teams=['Norths'], grade='PHL', date='2026-07-24' | Any opponent OK |
+| NIHC Friday: blocked before May | HCPL | **Variable Removal** | `BLOCKED_GAMES`: PHL Friday at NIHC on Mar 27, Apr 10, Apr 17, Apr 24 | No Friday nights at Broadmeadow before May |
+| NIHC Friday: blocked during school holidays | HCPL | **Variable Removal** | `BLOCKED_GAMES`: PHL Friday at NIHC on Jul 10, Jul 17 | NSW winter school holidays Jul 6-17 |
+| NIHC Friday: Jun 12 = Norths vs Wests | Norths | **Matchup Filtering** | `FORCED_GAMES`: teams=['Norths','Wests'], grade='PHL', date='2026-06-12' | 80th Anniversary Friday |
+| Norths vs Gosford exactly 1 Friday PHL game | Norths | **Matchup Filtering** | `FORCED_GAMES`: teams=['Norths','Gosford'], grade='PHL', day='Friday' | Exactly 1 Friday meeting enforced |
+| Blue v Red Derby PHL on May 10 | Norths/Souths | **Matchup Filtering** | `FORCED_GAMES`: teams=['Norths','Souths'], grade='PHL', date='2026-05-10' | PHL aligned with other derby grades |
 | Friday night clubs: Wests x2, Tigers x2, Souths x2, Norths x1, Maitland x1 | Various | **Preference Only** | Documented in nominations (not constraint-enforced) | Club allocations are preferences, not hard constraints |
-| Souths no PHL/2nd on May 24 (U18 SC) | Souths | **Variable Removal** | `BLOCKED_GAMES` entry: Souths PHL/2nd on 2026-05-24 | Hard — variables eliminated from game dictionary |
+| Souths no PHL on May 22-24 weekend (U18 SC) | Souths | **Variable Removal** | `BLOCKED_GAMES`: Souths PHL on 2026-05-22 (Fri) + Souths PHL/2nd on 2026-05-24 (Sun) | Full weekend blocked |
 | Gosford ANZAC Friday night home game (Apr 24) | Gosford | **Matchup Filtering** | `FORCED_GAMES` entry: Gosford PHL on 2026-04-24 at CCHP | Gosford home game locked to ANZAC long weekend Friday |
 | Gosford no match weekend after Men's SC (Jun 21) | Gosford | **Variable Removal** | `BLOCKED_GAMES` entry: Gosford on 2026-06-21 | Hard — variables eliminated from game dictionary |
 

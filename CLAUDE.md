@@ -49,7 +49,7 @@ Two lists control variable filtering:
 
 | Config | Purpose |
 |--------|---------|
-| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc.) |
+| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc. and `count` to change the threshold, e.g. `'constraint': 'lesse', 'count': 2` for sum <= 2) |
 | `BLOCKED_GAMES` | Eliminate variables matching scope + team matchers (or ALL vars in scope if no teams specified) |
 
 ### 4. Friday Night Limits
@@ -79,8 +79,9 @@ solver_diagnostics.py     # Logging and resource monitoring
 
 config/
   __init__.py             # Config loader (load_season_data)
+  defaults.py             # Perennial defaults (fields, game times, home maps, perennial blocked games)
   season_2026.py          # Active season config
-  season_template.py      # Template for new seasons
+  season_template.py      # Template for new seasons (imports from defaults.py)
   team_naming.py          # Team name helpers
 
 constraints/
@@ -103,6 +104,10 @@ draws/{year}/             # Output draws (versioned)
   current.json            # Latest draw (always check here first)
   current.xlsx            # Latest schedule
   versions/               # All versioned draws (draw_v*.json + .xlsx)
+                          # Versioning: MAJOR.MINOR (e.g. v20.0, v20.1).
+                          # Solver runs bump MAJOR (v20.0 -> v21.0).
+                          # Hand edits / manual changes bump MINOR (v20.0 -> v20.1).
+                          # Never assign a new MAJOR for a manual edit.
 checkpoints/              # Solver checkpoints
   run_XX/                 # Per-run directories
     stage_name/           # Per-stage: solution.pkl, metadata.json, penalties.json
@@ -435,12 +440,14 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 - **Week vs date** - a single week can have both Friday and Sunday games; always use `date` not `week` when comparing game slots
 - **Per-pair vs aggregate** - FiftyFiftyHomeAway is per-pair; aggregate home/away can be imbalanced even when all pairs are balanced
 - **Slack >= 1 effects** - MaitlandHomeGrouping uses sliding window (correct); check constraint docstrings for slack semantics
+- **Bastardised constraints (2026 locked-week workarounds)**: `EqualMatchUpSpacingConstraint` in `original.py` — only applies to PHL/2nd when locked_weeks active (conditional, safe for normal runs). `ClubVsClubAlignment` — hacked to only apply to PHL/2nd. `PHLAndSecondGradeTimes` — skips locked weeks for Friday counting (totals adjusted by subtracting locked counts) and round 1 enforcement. `PHLAndSecondGradeAdjacency` — must be EXCLUDED via `--exclude` when running with locked weeks (causes infeasibility due to Gosford PHL having zero margin). `locked_keys_set` is stored in `data` by `main_staged.py`/`main_simple`. The AI versions in `ai.py` were NOT changed. Revert hacks if running a full unconstrained solve.
 
 ## Draw Review Checklist
 
 When reviewing, testing, or publishing a draw, always check:
 
-- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case.
+- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case. (Perennial rule — see `docs/PERENNIAL_RULES.md`)
+- **Rounds 1-2 at Broadmeadow only**: All games in rounds 1 and 2 must be at NIHC. No Maitland Park or Central Coast games. Enforced via `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`. (Perennial rule)
 - **7pm (19:00) games**: These are the worst timeslot. Flag any non-PHL-Friday games scheduled at 7pm — they should be minimised.
 
 ## Skills
@@ -456,6 +463,7 @@ Custom Claude Code skills are available in `.claude/commands/`:
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
+| `docs/PERENNIAL_RULES.md` | Standing rules that apply every season | New season setup, draw review |
 | `docs/ai/AI_OPERATIONS_MANUAL.md` | Complete technical reference | Deep dives |
 | `docs/ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing config |
 | `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |

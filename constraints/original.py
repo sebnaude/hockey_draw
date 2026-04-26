@@ -242,15 +242,34 @@ class PHLAndSecondGradeTimes(Constraint):
         preferred_dates = defaultdict(list)
         phl_round1_games = defaultdict(list)  # Track PHL team games in round 1
 
+        # HACK: Count locked PHL Friday games from locked_keys_set so
+        # Friday total constraints are adjusted for already-decided games.
+        locked_gosford_fridays = 0
+        locked_maitland_fridays = 0
+        locked_broadmeadow_fridays = 0
+        if locked_weeks:
+            for key in data.get('locked_keys_set', set()):
+                if len(key) >= 11 and key[2] == 'PHL' and key[3] == 'Friday':
+                    loc = key[10]
+                    if 'Central Coast' in loc:
+                        locked_gosford_fridays += 1
+                    elif 'Maitland' in loc:
+                        locked_maitland_fridays += 1
+                    elif 'Newcastle' in loc:
+                        locked_broadmeadow_fridays += 1
+
         for t in timeslots:
             for (t1, t2, grade) in games:
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
 
                 if grade in ['PHL', '2nd'] and key in X and t.day: # Ensure dummy timeslots not counted
+                    # HACK: Skip locked weeks for Friday totals and round 1 tracking
+                    in_locked = locked_weeks and t.week in locked_weeks
+
                     if grade == 'PHL':
                         # Stop PHL games across clubs from being played at the same time
                         team_games[(t.week, t.day)][(t.day_slot, t.field.location)].append(X[key])
-                        
+
                         # Stop PHL and 2nd grade from being played at the same time, within the same club
                         club = get_club(t1, data['teams'])
                         dup_2nds = get_duplicated_graded_teams(club, '2nd', data['teams'])
@@ -262,26 +281,27 @@ class PHLAndSecondGradeTimes(Constraint):
                         for extra_team in dup_2nds:
                             club_games[(t.week, t.day, t.field.location)][(t.day_slot, club, extra_team)].append(X[key])
 
-                        # Max 3 Friday night games at Newcastle International Hockey Centre
-                        if t.day == 'Friday' and t.field.location == 'Newcastle International Hockey Centre':
-                            friday_games['Friday'].append(X[key])
-                        
-                        # Enforce preferred dates
+                        if not in_locked:
+                            # Max 3 Friday night games at Newcastle International Hockey Centre
+                            if t.day == 'Friday' and t.field.location == 'Newcastle International Hockey Centre':
+                                friday_games['Friday'].append(X[key])
+
+                            # Enforce Gosford Home game number on a Friday Night
+                            if t.day == 'Friday' and t.field.location == 'Central Coast Hockey Park':
+                                friday_games_gosford[t.round_no].append(X[key])
+
+                            # Friday at Maitland (Gosford vs Maitland only)
+                            if t.day == 'Friday' and t.field.location == 'Maitland Park':
+                                friday_games_maitland.append(X[key])
+
+                            # Track PHL teams playing in round 1
+                            if t.round_no == 1:
+                                phl_round1_games[t1].append(X[key])
+                                phl_round1_games[t2].append(X[key])
+
+                        # Enforce preferred dates (regardless of locked)
                         if t.date in [d.date().strftime('%Y-%m-%d') for d in phl_preferences['preferred_dates']]:
-                            preferred_dates[t.date].append(X[key])
-
-                        # Enforce Gosford Home game number on a Friday Night
-                        if t.day == 'Friday' and t.field.location == 'Central Coast Hockey Park':
-                            friday_games_gosford[t.round_no].append(X[key])
-
-                        # Friday at Maitland (Gosford vs Maitland only)
-                        if t.day == 'Friday' and t.field.location == 'Maitland Park':
-                            friday_games_maitland.append(X[key])
-                        
-                        # Track PHL teams playing in round 1
-                        if t.round_no == 1:
-                            phl_round1_games[t1].append(X[key])
-                            phl_round1_games[t2].append(X[key])                     
+                            preferred_dates[t.date].append(X[key])                     
 
                     else:
                         club = get_club(t1, data['teams'])
@@ -291,18 +311,18 @@ class PHLAndSecondGradeTimes(Constraint):
                         club_games[(t.week, t.day, t.field.location)][(t.day_slot, club, t2)].append(X[key])
 
         for date, day_slots in team_games.items():
-            if date[0] in locked_weeks: 
+            if date[0] in locked_weeks:
                 continue
 
             for day_slot, game_vars in day_slots.items():
                 if day_slot[1] == 'Newcastle International Hockey Centre': # Stop concurrent PHL games only at Broadmeadow
-                    model.Add(sum(game_vars) <= 1)    
-     
+                    model.Add(sum(game_vars) <= 1)
+
         for date, day_slots in club_games.items():
-            if date[0] in locked_weeks: 
+            if date[0] in locked_weeks:
                 continue
 
-            if date[2] == 'Newcastle International Hockey Centre': # Stop concurrent 2nd grade and PHL only at Broadmeadow 
+            if date[2] == 'Newcastle International Hockey Centre': # Stop concurrent 2nd grade and PHL only at Broadmeadow
                 for day_slot, game_vars in day_slots.items():
                         model.Add(sum(game_vars) <= 1)
 
@@ -311,28 +331,32 @@ class PHLAndSecondGradeTimes(Constraint):
         gosford_friday_games = defaults.get('gosford_friday_games', 8)
         maitland_friday_games = defaults.get('maitland_friday_games', 2)
 
-        for day, game_vars in friday_games.items(): # Ensure that only N Broadmeadow games on a Friday are held
-            model.Add(sum(game_vars) <= max_friday_broadmeadow)
+        # HACK: Adjust Friday targets to account for locked-week games already decided
+        adjusted_broadmeadow = max(0, max_friday_broadmeadow - locked_broadmeadow_fridays)
+        adjusted_gosford = max(0, gosford_friday_games - locked_gosford_fridays)
+        adjusted_maitland = max(0, maitland_friday_games - locked_maitland_fridays)
 
-        # Ensure exactly N PHL games at Gosford home on Friday nights (AGM decision)
-        # Only add constraint if there are Gosford Friday games in the variables
+        # Friday totals — adjusted for locked weeks
         gosford_vars = [v for vs in friday_games_gosford.values() for v in vs]
-        if gosford_vars:
-            model.Add(sum(gosford_vars) == gosford_friday_games)
-
-        # Ensure exactly N PHL games at Maitland on Friday nights (Gosford vs Maitland only)
+        print(f"  [PHLAndSecondGradeTimes] Locked Friday counts: Gosford={locked_gosford_fridays}, Maitland={locked_maitland_fridays}, Broadmeadow={locked_broadmeadow_fridays}")
+        print(f"  [PHLAndSecondGradeTimes] Adjusted targets: Gosford=={adjusted_gosford}, Maitland=={adjusted_maitland}, Broadmeadow<={adjusted_broadmeadow}")
+        print(f"  [PHLAndSecondGradeTimes] Gosford Friday vars: {len(gosford_vars)} across {len(friday_games_gosford)} rounds: {sorted(friday_games_gosford.keys())}")
+        print(f"  [PHLAndSecondGradeTimes] Maitland Friday vars: {len(friday_games_maitland)}")
+        print(f"  [PHLAndSecondGradeTimes] Broadmeadow Friday vars: {sum(len(v) for v in friday_games.values())}")
+        # Testing: Broadmeadow and Maitland enabled, Gosford disabled
+        for day, game_vars in friday_games.items():
+            model.Add(sum(game_vars) <= adjusted_broadmeadow)
         if friday_games_maitland:
-            model.Add(sum(friday_games_maitland) == maitland_friday_games)
+            model.Add(sum(friday_games_maitland) == adjusted_maitland)
+        # if gosford_vars:
+        #     model.Add(sum(gosford_vars) == adjusted_gosford)
 
-        for round_, game_vars in friday_games_gosford.items():
-            if round_ in [2, 4, 5, 9, 10]:
-                model.Add(sum(game_vars) == 1) # Set them to playing at CC for set rounds
-
-        # Ensure every PHL team plays in round 1
-        phl_teams = [team.name for team in data['teams'] if team.grade == 'PHL']
-        for phl_team in phl_teams:
-            if phl_team in phl_round1_games:
-                model.Add(sum(phl_round1_games[phl_team]) >= 1)
+        # Round 1 enforcement — skip when locked (round 1 games already decided)
+        if not locked_weeks:
+            phl_teams = [team.name for team in data['teams'] if team.grade == 'PHL']
+            for phl_team in phl_teams:
+                if phl_team in phl_round1_games and phl_round1_games[phl_team]:
+                    model.Add(sum(phl_round1_games[phl_team]) >= 1)
 
         for date, game_vars in preferred_dates.items():
             week_no = get_nearest_week_by_date(date, data['timeslots'])
@@ -588,7 +612,7 @@ class ClubDayConstraint(Constraint):
         clubs = data['clubs']
         locked_weeks = data.get('locked_weeks', set())
 
-        allowed_keys = ['team1', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
+        allowed_keys = ['team1', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'round_no', 'field_name', 'field_location']
         for club_name in club_days:   
             if club_name.lower() not in [c.name.lower() for c in clubs]:
                 raise ValueError(f'Invalid team name {club_name} in ClubDay Dictionary')   
@@ -662,19 +686,20 @@ class ClubDayConstraint(Constraint):
             for game in club_games:
                 timeslot_groups[game[allowed_keys.index('day_slot')]].append(X[game])
 
-            timeslot_indicators = defaultdict(list)
+            slot_indicators = {}
             for day_slot, game_vars in timeslot_groups.items():
                 if len(game_vars) > 1:
-                    timeslot_indicator = model.NewBoolVar(f'timeslot_indicator_{club_name}_{day_slot}')
-                    timeslot_indicators[day_slot] = timeslot_indicator
-                    model.AddMaxEquality(timeslot_indicator, game_vars)
+                    indicator = model.NewBoolVar(f'timeslot_indicator_{club_name}_{day_slot}')
+                    slot_indicators[day_slot] = indicator
+                    model.AddMaxEquality(indicator, game_vars)
 
-            for i in range(2, len(timeslot_indicators) - 1):
-                prior_slot = timeslot_indicators[i - 1]
-                relevant_slot = timeslot_indicators[i]
-                following_slot = timeslot_indicators[i + 1]
+            sorted_slots = sorted(slot_indicators.keys())
+            for i in range(1, len(sorted_slots) - 1):
+                prev_slot = sorted_slots[i - 1]
+                curr_slot = sorted_slots[i]
+                next_slot = sorted_slots[i + 1]
 
-                model.Add(prior_slot + following_slot <= 1).OnlyEnforceIf(relevant_slot.Not())    
+                model.Add(slot_indicators[prev_slot] + slot_indicators[next_slot] <= 1).OnlyEnforceIf(slot_indicators[curr_slot].Not())    
 
 
 class EqualMatchUpSpacingConstraint(Constraint):
@@ -728,11 +753,21 @@ class EqualMatchUpSpacingConstraint(Constraint):
             space_per_grade[name] = ideal
 
         # Gather game-vars by (t1, t2, grade, round_no)
+        locked_weeks = data.get('locked_weeks', set())
+
+        # HACK: When locked weeks are active, only apply to PHL and 2nd grade.
+        # 3rd-6th grade matchups are forced and spacing constraints conflict
+        # with forced game sum==1 constraints. Without locked weeks, apply to all.
+        spacing_grades = {'PHL', '2nd'} if locked_weeks else set(grades.keys())
         meetings = defaultdict(lambda: defaultdict(list))
         for t in timeslots:
             if not t.day:
                 continue
+            if locked_weeks and t.week in locked_weeks:
+                continue
             for (t1, t2, grade) in games:
+                if grade not in spacing_grades:
+                    continue
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
                 if key in X:
                     meetings[(t1, t2, grade)][t.round_no].append(X[key])
@@ -887,128 +922,135 @@ class ClubGradeAdjacencyConstraint(Constraint):
 
                 
 class ClubVsClubAlignment(Constraint):
-    """ This is designed to ensure that each team in a club should play only one club on a weekend. So if 2nd grade plays Tigers twice, and minimally so does every other grade, there will be two weekends where that club only plays Tigers.
-    
+    """ Ensures PHL and 2nd grade games for the same club pair coincide on Sundays,
+    scheduled back-to-back on the same field.
+
     Hard constraints:
-    - When grades coincide (same club-pair same round), use at most 2 fields
+    - When grades coincide (same club-pair same Sunday round), must be on the same
+      field AND in adjacent timeslots (back-to-back)
     - Minimum coincidences = num_games - slack
-    
+
     Soft constraints (penalties):
-    - Prefer 1 field when coinciding (penalize 2-field usage)
     - Prefer maximum coincidences (penalize each miss below num_games)
     """
     def apply(self, model, X, data):
         # Initialize penalty tracking
         weights = data.get('penalty_weights', {})
         COINCIDE_PENALTY_WEIGHT = weights.get('ClubVsClubAlignment', 100000)
-        FIELD_PENALTY_WEIGHT = weights.get('ClubVsClubAlignmentField', 50000)
 
         if 'penalties' not in data:
             data['penalties'] = {}
         data['penalties']['ClubVsClubAlignment'] = {'weight': COINCIDE_PENALTY_WEIGHT, 'penalties': []}
-        data['penalties']['ClubVsClubAlignmentField'] = {'weight': FIELD_PENALTY_WEIGHT, 'penalties': []}
-        
-        # Get slack from config (--slack flag)
-        config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0)
-        
-        # Get relevant clubs
+
+        # Get slack from config (--slack flag + base slack from CONSTRAINT_DEFAULTS)
+        base_slack = data.get('constraint_defaults', {}).get('club_vs_club_alignment_base_slack', 0)
+        config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0) + base_slack
+
         num_rounds = data['num_rounds']
         per_team_games = {grade.name: (num_rounds['max'] // (grade.num_teams - 1) )  if grade.num_teams % 2 == 0 else (num_rounds['max'] //grade.num_teams) for grade in data['grades']}
 
-
         ordered_games = dict(sorted(per_team_games.items(), key=lambda item: item[1]))
-        # print(f"Reverse order games: {ordered_games}")
         locked_weeks = data.get('locked_weeks', set())
-        grades_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        fields_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
+        # Track Sunday games with field and day_slot metadata
+        # grade -> club_pair -> round_no -> list of (var, field_name, day_slot)
+        sunday_games = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         for t1, t2, grade in data['games']:
-            if grade in ['PHL', '2nd']:
+            if grade not in ['PHL', '2nd']:
                 continue
 
             for t in data['timeslots']:
                 if t.week in locked_weeks:
                     continue
+                if t.day != 'Sunday':
+                    continue
                 key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                if key in X and t.day: # Ensure dummy timeslots not counted
+                if key in X:
                     playing_clubs = tuple(sorted((get_club(t1, data['teams']), get_club(t2, data['teams']))))
-                    grades_dict[grade][playing_clubs][t.round_no].append(X[key])
-                    if t.day == 'Sunday':
-                        fields_dict[playing_clubs][t.round_no][t.field.name].append(X[key])            
+                    sunday_games[grade][playing_clubs][t.round_no].append((X[key], t.field.name, t.day_slot))
 
         used_grades = []
         ini_num = 0
-        field_penalty_idx = 0
+        btb_idx = 0
         for grade, num_games in ordered_games.items():
-            original_grade = grades_dict[grade]
+            if grade not in ['PHL', '2nd']:
+                continue
 
+            original_grade = sunday_games[grade]
             used_grades.append(grade)
             if num_games <= ini_num:
                 continue
             ini_num = num_games
 
-            for grade2, club_dict in grades_dict.items():
+            for grade2 in sunday_games:
                 if grade2 in used_grades:
                     continue
+                club_dict = sunday_games[grade2]
+
                 for clubs, rounds in original_grade.items():
-                    if clubs in club_dict:
+                    if clubs not in club_dict:
+                        continue
 
-                        coincide_vars = []
-                        for round_no, game_vars in rounds.items():
-                            if round_no in club_dict[clubs]:
-                                game_indicator = model.NewBoolVar(f"game_played_{clubs}_{round_no}")
-                                model.AddMaxEquality(game_indicator, game_vars)
-                                
-                                second_game_vars = club_dict[clubs][round_no]
-                                second_indicator = model.NewBoolVar(f"second_played_{clubs}_{round_no}")
-                                model.AddMaxEquality(second_indicator, second_game_vars)
-                                
-                                coincide = model.NewBoolVar(f"coincide_{clubs}_{round_no}")
-                                model.Add(coincide <= game_indicator)
-                                model.Add(coincide <= second_indicator)
-                                model.Add(coincide >= game_indicator + second_indicator - 1)
-                                
-                                coincide_vars.append(coincide)
+                    coincide_vars = []
+                    for round_no, game_info_list in rounds.items():
+                        if round_no not in club_dict[clubs]:
+                            continue
 
-                                field_usage_vars = defaultdict(list)
+                        other_game_info = club_dict[clubs][round_no]
 
-                                for field, game_vars in fields_dict[clubs][round_no].items():
-                                    field_indicator = model.NewBoolVar(f"field_games_{clubs}_{round_no}_{field}")
-                                    model.AddMaxEquality(field_indicator, game_vars)
-                                    
-                                    field_usage_vars[field].append(field_indicator)
-                                
-                                # Count fields used
-                                num_fields_used = model.NewIntVar(0, len(field_usage_vars), f"num_fields_{clubs}_{round_no}_{field_penalty_idx}")
-                                model.Add(num_fields_used == sum([v for var in field_usage_vars.values() for v in var]))
-                                
-                                # HARD: Max 2 fields when coinciding
-                                model.Add(num_fields_used <= 2).OnlyEnforceIf(coincide)
-                                
-                                # SOFT: Penalize using 2 fields (prefer 1)
-                                # penalty = max(0, num_fields_used - 1) when coinciding
-                                field_excess = model.NewIntVar(0, len(field_usage_vars), f"field_excess_{clubs}_{round_no}_{field_penalty_idx}")
-                                model.Add(field_excess >= num_fields_used - 1).OnlyEnforceIf(coincide)
-                                model.Add(field_excess == 0).OnlyEnforceIf(coincide.Not())
-                                data['penalties']['ClubVsClubAlignmentField']['penalties'].append(field_excess)
-                                field_penalty_idx += 1
+                        # Create grade indicators from just the vars
+                        vars1 = [gi[0] for gi in game_info_list]
+                        vars2 = [gi[0] for gi in other_game_info]
 
+                        game_indicator = model.NewBoolVar(f"game_played_{clubs}_{round_no}")
+                        model.AddMaxEquality(game_indicator, vars1)
 
-                        if coincide_vars:
-                            # Calculate required minimum with slack
-                            min_required = max(0, num_games - config_slack)
-                            
-                            # HARD: At least min_required coincidences
-                            model.Add(sum(coincide_vars) >= min_required)
-                            
-                            # SOFT: Penalize each miss below num_games target
-                            # penalty = num_games - actual_coincidences (clamped to 0)
-                            actual_coincidences = model.NewIntVar(0, len(coincide_vars), f"actual_coincide_{clubs}_{grade}_{grade2}")
-                            model.Add(actual_coincidences == sum(coincide_vars))
-                            
-                            coincide_deficit = model.NewIntVar(0, num_games, f"coincide_deficit_{clubs}_{grade}_{grade2}")
-                            model.Add(coincide_deficit >= num_games - actual_coincidences)
-                            data['penalties']['ClubVsClubAlignment']['penalties'].append(coincide_deficit)
+                        second_indicator = model.NewBoolVar(f"second_played_{clubs}_{round_no}")
+                        model.AddMaxEquality(second_indicator, vars2)
+
+                        coincide = model.NewBoolVar(f"coincide_{clubs}_{round_no}")
+                        model.Add(coincide <= game_indicator)
+                        model.Add(coincide <= second_indicator)
+                        model.Add(coincide >= game_indicator + second_indicator - 1)
+
+                        coincide_vars.append(coincide)
+
+                        # HARD: back-to-back on the same field when coinciding
+                        # Find all valid pairs: same field AND adjacent day_slot
+                        btb_pairs = []
+                        for var1, field1, slot1 in game_info_list:
+                            for var2, field2, slot2 in other_game_info:
+                                if field1 == field2 and abs(slot1 - slot2) == 1:
+                                    pair_ind = model.NewBoolVar(
+                                        f"btb_{clubs}_{round_no}_{field1}_{slot1}_{slot2}_{btb_idx}")
+                                    model.Add(pair_ind <= var1)
+                                    model.Add(pair_ind <= var2)
+                                    model.Add(pair_ind >= var1 + var2 - 1)
+                                    btb_pairs.append(pair_ind)
+                                    btb_idx += 1
+
+                        if btb_pairs:
+                            # When coinciding, at least one back-to-back same-field pair
+                            model.Add(sum(btb_pairs) >= 1).OnlyEnforceIf(coincide)
+                        else:
+                            # No valid back-to-back pairs exist — cannot coincide
+                            model.Add(coincide == 0)
+
+                    if coincide_vars:
+                        # Calculate required minimum with slack
+                        min_required = max(0, num_games - config_slack)
+
+                        # HARD: At least min_required coincidences
+                        model.Add(sum(coincide_vars) >= min_required)
+
+                        # SOFT: Penalize each miss below num_games target
+                        actual_coincidences = model.NewIntVar(0, len(coincide_vars), f"actual_coincide_{clubs}_{grade}_{grade2}")
+                        model.Add(actual_coincidences == sum(coincide_vars))
+
+                        coincide_deficit = model.NewIntVar(0, num_games, f"coincide_deficit_{clubs}_{grade}_{grade2}")
+                        model.Add(coincide_deficit >= num_games - actual_coincidences)
+                        data['penalties']['ClubVsClubAlignment']['penalties'].append(coincide_deficit)
 
 # SOFT CONSTRAINTS
 
@@ -1426,26 +1468,40 @@ class PreferredTimesConstraint(Constraint):
 
 
 class ClubGameSpread(Constraint):
-    """Minimize gaps between a club's games on a given day.
+    """Minimize gaps between a club's games on a given day, and limit double-ups.
 
     For each (club, week, day):
-    1. Count distinct timeslots the club occupies (two teams at the same
-       day_slot counts as ONE timeslot used, not two)
+    1. Count total games the club has scheduled (num_games)
     2. Find min and max day_slot used
-    3. gaps = (max_slot - min_slot + 1) - timeslots_used
+    3. gap = (max_slot - min_slot + 1) - num_games
+       Positive gap = unused slots in the range (games are spread out).
+       Negative gap = double-ups (more games than slots in the range).
+       Zero = games perfectly fill consecutive slots.
 
-    Hard constraint:
-        gaps <= HARD_LIMIT + slack (default HARD_LIMIT = 2)
+    Hard constraints (only when club has >= 2 games on that day):
+        UPPER: gap <= max_gap + slack          (limits spread, default max_gap=2)
+        LOWER: gap >= -(max_overlap + slack)   (limits double-ups, default max_overlap=0)
+
+    With max_overlap=0 and slack=0:
+        gap >= 0 means range >= num_games, so no double-ups allowed.
+
+    Config params (in constraint_defaults):
+        club_game_spread_max_gap:     upper bound base (default 2)
+        club_game_spread_max_overlap: lower bound base (default 0, no double-ups)
 
     Soft constraint:
-        Penalize gaps — ideal is 0 (all games in consecutive slots).
+        Penalize |gap| — ideal is 0 (all games in consecutive slots).
+        Both spread (positive gap) and double-ups (negative gap) are penalized.
+
+    Intra-club matches (e.g. Maitland A vs Maitland B) count as 1 game
+    for that club — one timeslot is consumed for both teams.
     """
 
     def apply(self, model, X, data):
         teams = data['teams']
         locked_weeks = data.get('locked_weeks', set())
         defaults = data.get('constraint_defaults', {})
-        base_limit = defaults.get('club_game_spread_max_gap', 2)
+        max_gap_base = defaults.get('club_game_spread_max_gap', 2)
         config_slack = data.get('constraint_slack', {}).get('ClubGameSpread', 0)
         weights = data.get('penalty_weights', {})
 
@@ -1455,7 +1511,10 @@ class ClubGameSpread(Constraint):
             'weight': weights.get('ClubGameSpread', 5000), 'penalties': []
         }
 
-        hard_limit = base_limit + config_slack
+        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
+
+        hard_upper = max_gap_base + config_slack
+        hard_lower = -(max_overlap_base + config_slack)
 
         # Build team-to-club mapping
         team_club = {t.name: t.club.name for t in teams}
@@ -1465,6 +1524,9 @@ class ClubGameSpread(Constraint):
 
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
+                continue
+            # Only Broadmeadow — away venues have 1 field so gap/overlap is irrelevant
+            if key[10] != 'Newcastle International Hockey Centre':
                 continue
             week = key[6]
             if week in locked_weeks:
@@ -1482,7 +1544,7 @@ class ClubGameSpread(Constraint):
             if t2_club and t2_club != t1_club:
                 club_week_day_slot_vars[(t2_club, week, day, day_slot)].append(var)
 
-        # Regroup: (club, week, day) -> sorted list of unique day_slots with their vars
+        # Regroup: (club, week, day) -> {day_slot: [vars]}
         club_week_day_groups = defaultdict(dict)
         for (club, week, day, day_slot), vars_list in club_week_day_slot_vars.items():
             club_week_day_groups[(club, week, day)][day_slot] = vars_list
@@ -1491,10 +1553,32 @@ class ClubGameSpread(Constraint):
             unique_slots = sorted(slots_dict.keys())
 
             if len(unique_slots) <= 1:
+                # Single slot: range=1, gap=1-num_games.
+                # Still enforce lower bound to prevent excessive double-ups.
+                all_vars = slots_dict[unique_slots[0]]
+                if len(all_vars) < 2:
+                    continue
+
+                num_games = model.NewIntVar(0, len(all_vars),
+                                            f'cgs_ng_{club}_w{week}_{day}')
+                model.Add(num_games == sum(all_vars))
+
+                has_multiple = model.NewBoolVar(f'cgs_multi_{club}_w{week}_{day}')
+                model.Add(num_games >= 2).OnlyEnforceIf(has_multiple)
+                model.Add(num_games <= 1).OnlyEnforceIf(has_multiple.Not())
+
+                # gap = 1 - num_games >= hard_lower => num_games <= 1 - hard_lower
+                max_allowed = 1 - hard_lower
+                model.Add(num_games <= max_allowed).OnlyEnforceIf(has_multiple)
                 continue
 
             min_slot = unique_slots[0]
             max_slot = unique_slots[-1]
+
+            # Collect ALL vars for the club on this (week, day)
+            all_vars_for_day = []
+            for s in unique_slots:
+                all_vars_for_day.extend(slots_dict[s])
 
             # is_active[s] = 1 iff club has at least one game at slot s
             is_active = {}
@@ -1503,44 +1587,67 @@ class ClubGameSpread(Constraint):
                 model.AddMaxEquality(indicator, slots_dict[s])
                 is_active[s] = indicator
 
-            # num_timeslots_used = sum of active indicators
-            num_used = model.NewIntVar(0, len(unique_slots),
-                                       f'cgs_used_{club}_w{week}_{day}')
-            model.Add(num_used == sum(is_active[s] for s in unique_slots))
+            # num_games = total games for this club on this day
+            num_games = model.NewIntVar(0, len(all_vars_for_day),
+                                        f'cgs_ng_{club}_w{week}_{day}')
+            model.Add(num_games == sum(all_vars_for_day))
 
-            # min_active and max_active day_slots
+            # min_active and max_active day_slots (exact via sentinel values)
             min_active = model.NewIntVar(min_slot, max_slot,
                                           f'cgs_min_{club}_w{week}_{day}')
             max_active = model.NewIntVar(min_slot, max_slot,
                                           f'cgs_max_{club}_w{week}_{day}')
 
+            min_candidates = []
+            max_candidates = []
             for s in unique_slots:
-                model.Add(min_active <= s).OnlyEnforceIf(is_active[s])
-                model.Add(max_active >= s).OnlyEnforceIf(is_active[s])
+                # min candidate: s if active, else max_slot (high sentinel)
+                mc = model.NewIntVar(min_slot, max_slot,
+                                      f'cgs_minc_{club}_w{week}_{day}_s{s}')
+                model.Add(mc == s).OnlyEnforceIf(is_active[s])
+                model.Add(mc == max_slot).OnlyEnforceIf(is_active[s].Not())
+                min_candidates.append(mc)
+
+                # max candidate: s if active, else min_slot (low sentinel)
+                xc = model.NewIntVar(min_slot, max_slot,
+                                      f'cgs_maxc_{club}_w{week}_{day}_s{s}')
+                model.Add(xc == s).OnlyEnforceIf(is_active[s])
+                model.Add(xc == min_slot).OnlyEnforceIf(is_active[s].Not())
+                max_candidates.append(xc)
+
+            model.AddMinEquality(min_active, min_candidates)
+            model.AddMaxEquality(max_active, max_candidates)
 
             # range_size = max_active - min_active + 1
-            range_size = model.NewIntVar(1, max_slot - min_slot + 1,
+            # Lower bound accommodates all-inactive case (sentinels: min=max_slot, max=min_slot)
+            range_size = model.NewIntVar(min_slot - max_slot + 1, max_slot - min_slot + 1,
                                           f'cgs_range_{club}_w{week}_{day}')
             model.Add(range_size == max_active - min_active + 1)
 
-            # gaps = range_size - num_timeslots_used
-            max_gaps = max_slot - min_slot  # theoretical maximum
-            gaps = model.NewIntVar(0, max_gaps,
-                                    f'cgs_gaps_{club}_w{week}_{day}')
-            model.Add(gaps == range_size - num_used)
+            # gap = range_size - num_games (can be negative = double-ups)
+            max_gap_possible = max_slot - min_slot
+            min_gap_possible = min(1 - len(all_vars_for_day), min_slot - max_slot + 1)
+            gap = model.NewIntVar(min_gap_possible, max_gap_possible,
+                                   f'cgs_gap_{club}_w{week}_{day}')
+            model.Add(gap == range_size - num_games)
 
-            # Only enforce when club uses >= 2 timeslots
+            # Only enforce when club has >= 2 games
             has_multiple = model.NewBoolVar(f'cgs_multi_{club}_w{week}_{day}')
-            model.Add(num_used >= 2).OnlyEnforceIf(has_multiple)
-            model.Add(num_used <= 1).OnlyEnforceIf(has_multiple.Not())
+            model.Add(num_games >= 2).OnlyEnforceIf(has_multiple)
+            model.Add(num_games <= 1).OnlyEnforceIf(has_multiple.Not())
 
-            # HARD: gaps <= hard_limit (only when multiple timeslots used)
-            model.Add(gaps <= hard_limit).OnlyEnforceIf(has_multiple)
+            # HARD UPPER: gap <= hard_upper (limits spread)
+            model.Add(gap <= hard_upper).OnlyEnforceIf(has_multiple)
 
-            # SOFT: penalize gaps
-            penalty = model.NewIntVar(0, max_gaps,
+            # HARD LOWER: gap >= hard_lower (limits double-ups)
+            model.Add(gap >= hard_lower).OnlyEnforceIf(has_multiple)
+
+            # SOFT: penalize |gap| — both spread and double-ups
+            max_abs = max(max_gap_possible, -min_gap_possible)
+            penalty = model.NewIntVar(0, max_abs,
                                        f'cgs_pen_{club}_w{week}_{day}')
-            model.Add(penalty >= gaps).OnlyEnforceIf(has_multiple)
+            model.Add(penalty >= gap).OnlyEnforceIf(has_multiple)
+            model.Add(penalty >= -gap).OnlyEnforceIf(has_multiple)
             model.Add(penalty == 0).OnlyEnforceIf(has_multiple.Not())
             data['penalties']['ClubGameSpread']['penalties'].append(penalty)
 

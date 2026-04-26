@@ -7,6 +7,7 @@ NOTE: Some values are TBC pending AGM decisions and further information.
 """
 
 from datetime import datetime, time as tm
+from config.defaults import PERENNIAL_BLOCKED_GAMES
 
 # ============== Playing Fields ==============
 # Same as 2025 unless otherwise specified
@@ -71,7 +72,7 @@ PHL_GAME_TIMES = {
     'Maitland Park': {
         'Maitland Main Field': {
             'Friday': [tm(19, 0)],  # 7pm - Gosford vs Maitland only (other clubs blocked)
-            'Sunday': [tm(12, 0), tm(13, 0), tm(15, 0), tm(16, 30)]
+            'Sunday': [tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
         },
     },
 }
@@ -102,9 +103,9 @@ SECOND_GRADE_TIMES = {
     # Gosford not listed - PHL-only venue
     'Maitland Park': {
         'Maitland Main Field': {
-            # PHL: 12:00, 13:00, 15:00, 16:30
+            # PHL: 12:00, 13:30, 15:00, 16:30
             # +10:30 (before 12:00), no slot after 16:30 exists in DAY_TIME_MAP
-            'Sunday': [tm(10, 30), tm(12, 0), tm(13, 0), tm(15, 0), tm(16, 30)]
+            'Sunday': [tm(10, 30), tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
         },
     },
 }
@@ -139,32 +140,25 @@ FIELD_UNAVAILABILITIES = {
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             # May 15-17 (Masters SC) - moved to selective blocking, Sunday open for PHL
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
-            # Jun 19-21 (U16 Girls SC) - NOT in weekends so Friday 7pm PHL game allowed
+            # Jun 19-21 (U16 Girls SC) - no matches at Newcastle on Friday or Saturday
         ],
         'whole_days': [
             datetime(2026, 4, 25),  # ANZAC Day (Saturday)
             datetime(2026, 5, 15),  # Masters SC Friday - blocked at NIHC
             datetime(2026, 5, 16),  # Masters SC Saturday - blocked at NIHC
             # May 17 (Sunday) OPEN for PHL at NIHC (non-PHL blocked via BLOCKED_GAMES)
-            datetime(2026, 6, 20),  # U16 Girls SC Saturday
+            datetime(2026, 6, 19),  # U16 Girls SC Friday - fully blocked at NIHC
+            datetime(2026, 6, 20),  # U16 Girls SC Saturday - blocked at NIHC
             # Jun 21 (Sunday) OPEN for PHL at NIHC (non-PHL blocked via BLOCKED_GAMES)
         ],
-        'part_days': [
-            # U16 Girls SC Friday Jun 19 - block daytime, allow 7pm PHL
-            datetime(2026, 6, 19, 8, 30),
-            datetime(2026, 6, 19, 10, 0),
-            datetime(2026, 6, 19, 11, 30),
-            datetime(2026, 6, 19, 13, 0),
-            datetime(2026, 6, 19, 14, 30),
-            datetime(2026, 6, 19, 16, 0),
-            datetime(2026, 6, 19, 17, 30),  # Block up to 5:30pm, allow 7pm
-        ],
+        'part_days': [],
     },
     'Central Coast Hockey Park': {
         'weekends': [
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             # May 15-17 (Masters SC) - moved to whole_days, Friday open for PHL
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
+            datetime(2026, 6, 13),  # Jun 12-14 - Gosford unavailable entire weekend
             # Jun 19-21 (U16 Girls SC) - moved to whole_days, Friday open for PHL
         ],
         'whole_days': [
@@ -204,6 +198,10 @@ PREFERENCE_NO_PLAY = {
 # Supported fields: same as FORCED_GAMES — club, teams, grade, grades, date, day, etc.
 
 BLOCKED_GAMES = [
+    # --- Perennial rules (from config/defaults.py) ---
+    # Rounds 1-2 at Broadmeadow only, etc. See docs/PERENNIAL_RULES.md.
+    *PERENNIAL_BLOCKED_GAMES,
+
     # === NSW Masters at Moorebank/Illawarra (Apr 17-19) ===
     # Crusaders 6th blocked
     {
@@ -235,6 +233,12 @@ BLOCKED_GAMES = [
         'description': 'Colts 6th - NSW Masters at Moorebank',
         'reason': 'NSW Masters Men\'s at Moorebank',
     },
+    # === Gosford unavailable weekend Jun 12-14 ===
+    {'club': 'Gosford', 'date': '2026-06-12', 'day': 'Friday',
+     'description': 'Gosford unavailable - Jun 12 Friday', 'reason': 'Gosford unavailable entire weekend Jun 12-14'},
+    {'club': 'Gosford', 'date': '2026-06-14', 'day': 'Sunday',
+     'description': 'Gosford unavailable - Jun 14 Sunday', 'reason': 'Gosford unavailable entire weekend Jun 12-14'},
+
     # === NSW Masters at Tamworth (Jun 26-28) ===
     # Crusaders 6th blocked
     {
@@ -266,14 +270,22 @@ BLOCKED_GAMES = [
         'description': 'Colts 6th - NSW Masters at Tamworth',
         'reason': 'NSW Masters Men\'s at Tamworth',
     },
-    # Souths PHL & 2nd Grade - U18 State Championships (May 24)
-    # Both Souths PHL and Souths 2nd affected
+    # Souths PHL & 2nd Grade - U18 State Championships (May 22-24 weekend)
+    # Both Souths PHL and Souths 2nd affected. Block full weekend (Fri + Sun).
+    {
+        'club': 'Souths',
+        'grade': 'PHL',
+        'date': '2026-05-22',
+        'day': 'Friday',
+        'description': 'Souths PHL - U18 State Championships weekend (Friday)',
+        'reason': 'U18 State Championships',
+    },
     {
         'club': 'Souths',
         'grades': ['PHL', '2nd'],
         'date': '2026-05-24',
-        'description': 'Souths PHL/2nd - U18 State Championships',
-        'reason': 'U18\'s State Championships',
+        'description': 'Souths PHL/2nd - U18 State Championships (Sunday)',
+        'reason': 'U18 State Championships',
     },
     # Gosford - Recovery weekend after Men's SC (Jun 21)
     # All Gosford teams affected (only PHL exists for Gosford)
@@ -283,23 +295,60 @@ BLOCKED_GAMES = [
         'description': 'Gosford - Recovery after Men\'s State Championships',
         'reason': 'Recovery weekend after Men\'s State Championships',
     },
-    # === Gosford Friday nights - block next two non-confirmed Fridays only ===
-    # Confirmed dates (in FORCED_GAMES): Mar 27, Apr 17, Apr 24, May 15, May 29.
-    # Only blocking the immediate upcoming non-confirmed Fridays.
-    {
-        'club': 'Gosford',
-        'date': '2026-04-03',
-        'day': 'Friday',
-        'description': 'Gosford Friday blocked - not a confirmed Friday night date',
-        'reason': 'Only confirmed dates allowed at Gosford',
-    },
-    {
-        'club': 'Gosford',
-        'date': '2026-04-10',
-        'day': 'Friday',
-        'description': 'Gosford Friday blocked - not a confirmed Friday night date',
-        'reason': 'Only confirmed dates allowed at Gosford',
-    },
+    # === NIHC Friday nights — block all except allowed dates ===
+    # Allowed NIHC Friday dates: May 8, Jun 5, Jun 12, Jun 26, Jul 24, Jul 31
+    # Apr 3 already blocked via Easter FIELD_UNAVAILABILITIES.
+    # Before May
+    {'grade': 'PHL', 'date': '2026-03-27', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-04-10', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-04-17', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-04-24', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    # May (only May 8 allowed)
+    {'grade': 'PHL', 'date': '2026-05-01', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-05-15', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-05-22', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-05-29', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    # June (only Jun 5, 12, 26 allowed)
+    {'grade': 'PHL', 'date': '2026-06-19', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    # July (only Jul 24, 31 allowed)
+    {'grade': 'PHL', 'date': '2026-07-03', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-07-10', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-07-17', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    # August (none allowed)
+    {'grade': 'PHL', 'date': '2026-08-07', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-08-14', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-08-21', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    {'grade': 'PHL', 'date': '2026-08-28', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'description': 'NIHC Friday blocked', 'reason': 'Not an allowed NIHC Friday date'},
+    # === Gosford Friday nights - block non-game Fridays ===
+    # All 8 Gosford Friday dates are now forced in FORCED_GAMES.
+    # Block remaining Fridays where Gosford should NOT play.
+    # Apr 3 = Easter (already blocked via FIELD_UNAVAILABILITIES).
+    {'club': 'Gosford', 'date': '2026-04-10', 'day': 'Friday',
+     'description': 'Gosford Friday blocked', 'reason': 'Not a Gosford Friday night date'},
+    {'club': 'Gosford', 'date': '2026-04-24', 'day': 'Friday',
+     'description': 'Gosford Friday blocked - ANZAC', 'reason': 'PHL bye weekend (published in revo)'},
+    {'club': 'Gosford', 'date': '2026-05-01', 'day': 'Friday',
+     'description': 'Gosford Friday blocked', 'reason': 'Not a Gosford Friday night date'},
+    {'club': 'Gosford', 'date': '2026-05-08', 'day': 'Friday',
+     'description': 'Gosford Friday blocked', 'reason': 'Not a Gosford Friday night date'},
+    {'club': 'Gosford', 'date': '2026-05-22', 'day': 'Friday',
+     'description': 'Gosford Friday blocked', 'reason': 'Not a Gosford Friday night date'},
     # === Maitland Friday nights - only Gosford vs Maitland allowed ===
     # PHL_GAME_TIMES adds Friday 7pm at Maitland Park. home_field_map ensures only
     # Maitland-involved games exist there. These blocks remove all non-Gosford opponents.
@@ -364,6 +413,24 @@ BLOCKED_GAMES = [
      'description': 'U16 Girls SC weekend - NIHC PHL only'},
     {'grade': '6th', 'date': '2026-06-21', 'field_location': 'Newcastle International Hockey Centre',
      'description': 'U16 Girls SC weekend - NIHC PHL only'},
+    # === Aug 16 (week 22, State Masters) — no morning games at Broadmeadow ===
+    # Games only from 1pm onwards. Block 8:30, 10:00, 11:30.
+    {'date': '2026-08-16', 'time': ['08:30', '10:00', '11:30'],
+     'field_location': 'Newcastle International Hockey Centre',
+     'description': 'Week 22 State Masters - no games before 1pm at NIHC',
+     'reason': 'State Masters weekend - fields unavailable until ~12:30'},
+    # === May 24 — no late games at Broadmeadow ===
+    # Block 4pm, 5:30pm, 7pm. Allow up to 2:30pm.
+    {'date': '2026-05-24', 'time': ['16:00', '17:30', '19:00'],
+     'field_location': 'Newcastle International Hockey Centre',
+     'description': 'May 24 - no late games at NIHC',
+     'reason': 'Restricted day - no games past 2:30pm slot'},
+    # === Gosford no late games at Broadmeadow ===
+    # Gosford teams must not play at NIHC past the 2:30pm slot (no 4pm, 5:30pm, 7pm).
+    {'club': 'Gosford', 'time': ['16:00', '17:30', '19:00'],
+     'field_location': 'Newcastle International Hockey Centre',
+     'description': 'Gosford - no late Broadmeadow games',
+     'reason': 'Gosford teams cannot play at NIHC past 2:30pm slot'},
 ]
 
 # ============== PHL Preferences ==============
@@ -386,11 +453,15 @@ PHL_PREFERENCES = {
 #   - Times: 8:00pm (confirmed at AGM, set in PHL_GAME_TIMES)
 #   - Confirmed dates: Mar 27, Apr 17, Apr 24, May 29, Jun 12
 #     (non-confirmed Fridays blocked via BLOCKED_GAMES)
+#   - Norths plays Gosford on exactly 1 Friday (via FORCED_GAMES)
 #
 # FRIDAY NIGHTS AT NIHC (Newcastle):
 #   - Time: 7:00pm (set in PHL_GAME_TIMES)
-#   - Max games: CONSTRAINT_DEFAULTS['max_friday_broadmeadow']
-#   - Specific matchups forced via FORCED_GAMES
+#   - Max games: CONSTRAINT_DEFAULTS['max_friday_broadmeadow'] (3)
+#   - Allowed dates: May 8, Jun 5, Jun 12, Jun 26, Jul 24, Jul 31 (all others blocked)
+#   - Jun 12: Norths vs Wests (80th Anniversary, forced date via FORCED_GAMES)
+#   - Maitland vs Souths: exactly 1 NIHC Friday (solver picks date)
+#   - Wests vs Tigers: exactly 1 NIHC Friday (solver picks date)
 #
 # SUNDAY AT GOSFORD:
 #   - Times: 12:00pm or 1:30pm ONLY
@@ -426,35 +497,48 @@ PHL_PREFERENCES = {
 #    'field_location': 'Newcastle International Hockey Centre'}
 
 FORCED_GAMES = [
-    # === NIHC Friday Nights (3 games at Broadmeadow) ===
-    # May 8: Changed to Norths vs Maitland (was Souths vs Maitland, conflicted with derby)
+    # === NIHC Friday Nights ===
+    # Jun 12: Norths vs Wests PHL (Norths 80th Anniversary Friday) — fixed date
     {
-        'teams': ['Norths', 'Maitland'],
+        'teams': ['Norths', 'Wests'],
         'grade': 'PHL',
-        'date': '2026-05-08',
+        'date': '2026-06-12',
         'day': 'Friday',
         'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Norths vs Maitland',
+        'description': 'NIHC Friday Night - Norths vs Wests (80th Anniversary)',
     },
-    # Jun 19: Tigers vs Wests PHL (State Champ weekend - 7pm allowed)
+    # Maitland vs Souths PHL — exactly 1 NIHC Friday night (solver picks date)
     {
-        'teams': ['Tigers', 'Wests'],
+        'teams': ['Maitland', 'Souths'],
         'grade': 'PHL',
-        'date': '2026-06-19',
         'day': 'Friday',
         'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Tigers vs Wests (State Champ weekend)',
+        'description': 'NIHC Friday Night - Maitland vs Souths (exactly 1)',
     },
-    # Jul 24: Norths vs TBC PHL (any opponent)
+    # Wests vs Tigers PHL — exactly 1 NIHC Friday night (solver picks date)
     {
-        'teams': ['Norths'],
+        'teams': ['Wests', 'Tigers'],
         'grade': 'PHL',
-        'date': '2026-07-24',
         'day': 'Friday',
         'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Norths home (opponent TBC)',
+        'description': 'NIHC Friday Night - Wests vs Tigers (exactly 1)',
     },
-    # === Blue v Red Derby - Sunday May 10 (PHL removed: Norths plays Friday May 8) ===
+    # === Norths vs Gosford - exactly 1 Friday PHL game at Gosford ===
+    {
+        'teams': ['Norths', 'Gosford'],
+        'grade': 'PHL',
+        'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Norths vs Gosford - exactly 1 Friday night at Gosford',
+    },
+    # === Blue v Red Derby - Sunday May 10 (all grades including PHL) ===
+    {
+        'teams': ['Norths', 'Souths'],
+        'grade': 'PHL',
+        'date': '2026-05-10',
+        'day': 'Sunday',
+        'description': 'Blue v Red Derby - PHL',
+    },
     {
         'teams': ['Norths', 'Souths'],
         'grade': '2nd',
@@ -462,43 +546,19 @@ FORCED_GAMES = [
         'day': 'Sunday',
         'description': 'Blue v Red Derby - 2nd Grade',
     },
-    {
-        'teams': ['Norths', 'Souths'],
-        'grade': '3rd',
-        'date': '2026-05-10',
-        'day': 'Sunday',
-        'description': 'Blue v Red Derby - 3rd Grade',
-    },
-    {
-        'teams': ['Norths', 'Souths'],
-        'grade': '4th',
-        'date': '2026-05-10',
-        'day': 'Sunday',
-        'description': 'Blue v Red Derby - 4th Grade',
-    },
-    # === Gosford Friday Nights (5 forced dates) ===
+    # 3rd/4th Derby already covered by locked wk8 entries below
+    # === Gosford Friday Nights (7 forced dates; 8th chosen by solver) ===
     # PHL_GAME_TIMES already restricts Gosford variables to Gosford-involved games,
     # so no team specification needed — just date + venue forces a game there.
-    {
-        'grade': 'PHL',
-        'date': '2026-03-27',
-        'day': 'Friday',
-        'field_location': 'Central Coast Hockey Park',
-        'description': 'Gosford Friday Night - Mar 27',
-    },
+    # Apr 24 (ANZAC) removed — all PHL have bye that weekend (published in revo).
+    # NOTE: Mar 27 removed — falls in round 1 which is blocked at Gosford
+    # by PERENNIAL_BLOCKED_GAMES (rounds 1-2 at Broadmeadow only).
     {
         'grade': 'PHL',
         'date': '2026-04-17',
         'day': 'Friday',
         'field_location': 'Central Coast Hockey Park',
         'description': 'Gosford Friday Night - Apr 17',
-    },
-    {
-        'grade': 'PHL',
-        'date': '2026-04-24',
-        'day': 'Friday',
-        'field_location': 'Central Coast Hockey Park',
-        'description': 'Gosford Friday Night - Apr 24 (ANZAC)',
     },
     {
         'grade': 'PHL',
@@ -514,17 +574,50 @@ FORCED_GAMES = [
         'field_location': 'Central Coast Hockey Park',
         'description': 'Gosford Friday Night - May 29',
     },
-    # Jun 19 at Gosford is OPEN (not forced) — unblocked via FIELD_UNAVAILABILITIES
-    # === State Championship Sundays at NIHC - max 1 PHL game ===
+    {
+        'grade': 'PHL',
+        'date': '2026-06-19',
+        'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Gosford Friday Night - Jun 19',
+    },
+    {
+        'grade': 'PHL',
+        'date': '2026-07-10',
+        'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Gosford Friday Night - Jul 10',
+    },
+    {
+        'grade': 'PHL',
+        'date': '2026-08-14',
+        'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Gosford Friday Night - Aug 14',
+    },
+    {
+        'grade': 'PHL',
+        'date': '2026-08-28',
+        'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'description': 'Gosford Friday Night - Aug 28',
+    },
+    # === State Championship Sundays at NIHC - max 2 PHL games ===
     # These Sundays are open for PHL only (non-PHL blocked via BLOCKED_GAMES).
-    # Use 'lesse' constraint: sum <= 1 (at most 1 game, solver may choose 0).
+    # Use 'lesse' constraint: sum <= 2 (at most 2 games, solver may choose fewer).
+    # HACK: Changed from 1 to 2 to give PHL teams enough weeks to reach 20 games
+    # when combined with locked weeks. With sum<=1, teams without a Friday game
+    # on these weekends lose the week entirely, dropping below 20 capacity.
+    # TODO: Move this limit to CONSTRAINT_DEFAULTS (e.g. 'max_phl_sc_weekend_games')
+    # instead of hardcoding in FORCED_GAMES. That way it's configurable per season.
     {
         'grade': 'PHL',
         'date': '2026-05-17',
         'day': 'Sunday',
         'field_location': 'Newcastle International Hockey Centre',
         'constraint': 'lesse',
-        'description': 'Masters SC weekend - max 1 PHL game at NIHC',
+        'count': 2,
+        'description': 'Masters SC weekend - max 2 PHL games at NIHC',
     },
     {
         'grade': 'PHL',
@@ -532,47 +625,260 @@ FORCED_GAMES = [
         'day': 'Sunday',
         'field_location': 'Newcastle International Hockey Centre',
         'constraint': 'lesse',
-        'description': 'U16 Girls SC weekend - max 1 PHL game at NIHC',
+        'count': 2,
+        'description': 'U16 Girls SC weekend - max 2 PHL games at NIHC',
     },
-    # === Norths v Wests Weekend - June 14 (week 13) ===
-    # From Norths request: all grades Norths v Wests play that weekend.
-    # Pairing forced, timeslot/field left open for solver.
-    # No Norths 6th grade team exists, so 6th excluded.
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': 'PHL',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - PHL',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '2nd',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 2nd Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '3rd',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 3rd Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '4th',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 4th Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '5th',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 5th Grade',
-    },
+    # Norths v Wests Weekend Jun 14: 2nd-5th already covered by locked wk13 entries below
+    # PHL is on Friday Jun 12 at NIHC (above)
+    # === Locked draw pairings (3rd-6th grade, week 7+) ===
+    # Lock team pairings + dates from current draw v10.6. Solver picks field/time.
+    # 246 games locked.
+    {'teams': ['Crusaders 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-05-03', 'description': 'Locked wk7: Crusaders 3rd vs Souths 3rd'},
+    {'teams': ['Maitland 3rd', 'Port Stephens 3rd'], 'grade': '3rd', 'date': '2026-05-03', 'description': 'Locked wk7: Maitland 3rd vs Port Stephens 3rd'},
+    {'teams': ['Norths 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-05-03', 'description': 'Locked wk7: Norths 3rd vs University 3rd'},
+    {'teams': ['Tigers 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-05-03', 'description': 'Locked wk7: Tigers 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-05-03', 'description': 'Locked wk7: Colts 4th vs Souths 4th'},
+    {'teams': ['Maitland 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-05-03', 'description': 'Locked wk7: Maitland 4th vs Tigers 4th'},
+    {'teams': ['Norths 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-05-03', 'description': 'Locked wk7: Norths 4th vs University Seapigs 4th'},
+    {'teams': ['Port Stephens 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-05-03', 'description': 'Locked wk7: Port Stephens 4th vs University Redhogs 4th'},
+    {'teams': ['Wests Green 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-05-03', 'description': 'Locked wk7: Wests Green 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-05-03', 'description': 'Locked wk7: Colts Gold 5th vs Tigers 5th'},
+    {'teams': ['Colts Green 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-05-03', 'description': 'Locked wk7: Colts Green 5th vs Wests Red 5th'},
+    {'teams': ['Crusaders 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-05-03', 'description': 'Locked wk7: Crusaders 5th vs Norths 5th'},
+    {'teams': ['Maitland 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-05-03', 'description': 'Locked wk7: Maitland 5th vs Wests Green 5th'},
+    {'teams': ['Colts 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-05-03', 'description': 'Locked wk7: Colts 6th vs University Seapigs 6th'},
+    {'teams': ['Crusaders 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-05-03', 'description': 'Locked wk7: Crusaders 6th vs Souths 6th'},
+    {'teams': ['Maitland 6th', 'Port Stephens 6th'], 'grade': '6th', 'date': '2026-05-03', 'description': 'Locked wk7: Maitland 6th vs Port Stephens 6th'},
+    {'teams': ['Tigers Black 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-05-03', 'description': 'Locked wk7: Tigers Black 6th vs Wests 6th'},
+    {'teams': ['Tigers Yellow 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-05-03', 'description': 'Locked wk7: Tigers Yellow 6th vs University Gentlemen 6th'},
+    {'teams': ['Maitland 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-05-10', 'description': 'Locked wk8: Maitland 3rd vs Tigers 3rd'},
+    {'teams': ['Norths 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-05-10', 'description': 'Locked wk8: Norths 3rd vs Souths 3rd'},
+    {'teams': ['Port Stephens 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-05-10', 'description': 'Locked wk8: Port Stephens 3rd vs University 3rd'},
+    {'teams': ['Colts 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-05-10', 'description': 'Locked wk8: Colts 4th vs University Seapigs 4th'},
+    {'teams': ['Crusaders 4th', 'Maitland 4th'], 'grade': '4th', 'date': '2026-05-10', 'description': 'Locked wk8: Crusaders 4th vs Maitland 4th'},
+    {'teams': ['Norths 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-05-10', 'description': 'Locked wk8: Norths 4th vs Souths 4th'},
+    {'teams': ['Tigers 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-05-10', 'description': 'Locked wk8: Tigers 4th vs Wests Green 4th'},
+    {'teams': ['University Redhogs 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-05-10', 'description': 'Locked wk8: University Redhogs 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-05-10', 'description': 'Locked wk8: Colts Gold 5th vs Wests Green 5th'},
+    {'teams': ['Colts Green 5th', 'Crusaders 5th'], 'grade': '5th', 'date': '2026-05-10', 'description': 'Locked wk8: Colts Green 5th vs Crusaders 5th'},
+    {'teams': ['Norths 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-05-10', 'description': 'Locked wk8: Norths 5th vs Wests Red 5th'},
+    {'teams': ['Tigers 5th', 'University 5th'], 'grade': '5th', 'date': '2026-05-10', 'description': 'Locked wk8: Tigers 5th vs University 5th'},
+    {'teams': ['Colts 6th', 'Port Stephens 6th'], 'grade': '6th', 'date': '2026-05-10', 'description': 'Locked wk8: Colts 6th vs Port Stephens 6th'},
+    {'teams': ['Crusaders 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-05-10', 'description': 'Locked wk8: Crusaders 6th vs University Gentlemen 6th'},
+    {'teams': ['Maitland 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-05-10', 'description': 'Locked wk8: Maitland 6th vs Souths 6th'},
+    {'teams': ['Tigers Yellow 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-05-10', 'description': 'Locked wk8: Tigers Yellow 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'Port Stephens 3rd'], 'grade': '3rd', 'date': '2026-05-24', 'description': 'Locked wk10: Crusaders 3rd vs Port Stephens 3rd'},
+    {'teams': ['Maitland 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-05-24', 'description': 'Locked wk10: Maitland 3rd vs Wests 3rd'},
+    {'teams': ['Norths 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-05-24', 'description': 'Locked wk10: Norths 3rd vs Tigers 3rd'},
+    {'teams': ['Souths 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-05-24', 'description': 'Locked wk10: Souths 3rd vs University 3rd'},
+    {'teams': ['Colts 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-05-24', 'description': 'Locked wk10: Colts 4th vs Port Stephens 4th'},
+    {'teams': ['Crusaders 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-05-24', 'description': 'Locked wk10: Crusaders 4th vs Wests Red 4th'},
+    {'teams': ['Maitland 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-05-24', 'description': 'Locked wk10: Maitland 4th vs Wests Green 4th'},
+    {'teams': ['Norths 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-05-24', 'description': 'Locked wk10: Norths 4th vs Tigers 4th'},
+    {'teams': ['Souths 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-05-24', 'description': 'Locked wk10: Souths 4th vs University Seapigs 4th'},
+    {'teams': ['Colts Gold 5th', 'Maitland 5th'], 'grade': '5th', 'date': '2026-05-24', 'description': 'Locked wk10: Colts Gold 5th vs Maitland 5th'},
+    {'teams': ['Colts Green 5th', 'University 5th'], 'grade': '5th', 'date': '2026-05-24', 'description': 'Locked wk10: Colts Green 5th vs University 5th'},
+    {'teams': ['Wests Green 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-05-24', 'description': 'Locked wk10: Wests Green 5th vs Wests Red 5th'},
+    {'teams': ['Colts 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-05-24', 'description': 'Locked wk10: Colts 6th vs University Gentlemen 6th'},
+    {'teams': ['Crusaders 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-05-24', 'description': 'Locked wk10: Crusaders 6th vs Tigers Black 6th'},
+    {'teams': ['Maitland 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-05-24', 'description': 'Locked wk10: Maitland 6th vs Tigers Yellow 6th'},
+    {'teams': ['Port Stephens 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-05-24', 'description': 'Locked wk10: Port Stephens 6th vs University Seapigs 6th'},
+    {'teams': ['Souths 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-05-24', 'description': 'Locked wk10: Souths 6th vs Wests 6th'},
+    {'teams': ['Maitland 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-05-31', 'description': 'Locked wk11: Maitland 3rd vs Souths 3rd'},
+    {'teams': ['Port Stephens 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-05-31', 'description': 'Locked wk11: Port Stephens 3rd vs Tigers 3rd'},
+    {'teams': ['University 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-05-31', 'description': 'Locked wk11: University 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-05-31', 'description': 'Locked wk11: Colts 4th vs Tigers 4th'},
+    {'teams': ['Crusaders 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-05-31', 'description': 'Locked wk11: Crusaders 4th vs Wests Green 4th'},
+    {'teams': ['Maitland 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-05-31', 'description': 'Locked wk11: Maitland 4th vs Souths 4th'},
+    {'teams': ['Norths 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-05-31', 'description': 'Locked wk11: Norths 4th vs University Redhogs 4th'},
+    {'teams': ['University Seapigs 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-05-31', 'description': 'Locked wk11: University Seapigs 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Colts Green 5th'], 'grade': '5th', 'date': '2026-05-31', 'description': 'Locked wk11: Colts Gold 5th vs Colts Green 5th'},
+    {'teams': ['Maitland 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-05-31', 'description': 'Locked wk11: Maitland 5th vs Norths 5th'},
+    {'teams': ['Colts 6th', 'Crusaders 6th'], 'grade': '6th', 'date': '2026-05-31', 'description': 'Locked wk11: Colts 6th vs Crusaders 6th'},
+    {'teams': ['Maitland 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-05-31', 'description': 'Locked wk11: Maitland 6th vs University Seapigs 6th'},
+    {'teams': ['Port Stephens 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-05-31', 'description': 'Locked wk11: Port Stephens 6th vs Tigers Black 6th'},
+    {'teams': ['Tigers Yellow 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-05-31', 'description': 'Locked wk11: Tigers Yellow 6th vs University Gentlemen 6th'},
+    {'teams': ['Crusaders 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-06-14', 'description': 'Locked wk13: Crusaders 3rd vs Tigers 3rd'},
+    {'teams': ['Norths 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-06-14', 'description': 'Locked wk13: Norths 3rd vs Wests 3rd'},
+    {'teams': ['Port Stephens 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-06-14', 'description': 'Locked wk13: Port Stephens 3rd vs Souths 3rd'},
+    {'teams': ['Colts 4th', 'Crusaders 4th'], 'grade': '4th', 'date': '2026-06-14', 'description': 'Locked wk13: Colts 4th vs Crusaders 4th'},
+    {'teams': ['Maitland 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-06-14', 'description': 'Locked wk13: Maitland 4th vs Port Stephens 4th'},
+    {'teams': ['Norths 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-06-14', 'description': 'Locked wk13: Norths 4th vs Wests Green 4th'},
+    {'teams': ['Souths 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-06-14', 'description': 'Locked wk13: Souths 4th vs University Redhogs 4th'},
+    {'teams': ['University Seapigs 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-06-14', 'description': 'Locked wk13: University Seapigs 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Crusaders 5th'], 'grade': '5th', 'date': '2026-06-14', 'description': 'Locked wk13: Colts Gold 5th vs Crusaders 5th'},
+    {'teams': ['Maitland 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-06-14', 'description': 'Locked wk13: Maitland 5th vs Wests Red 5th'},
+    {'teams': ['Norths 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-06-14', 'description': 'Locked wk13: Norths 5th vs Wests Green 5th'},
+    {'teams': ['Tigers 5th', 'University 5th'], 'grade': '5th', 'date': '2026-06-14', 'description': 'Locked wk13: Tigers 5th vs University 5th'},
+    {'teams': ['Colts 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-06-14', 'description': 'Locked wk13: Colts 6th vs Tigers Black 6th'},
+    {'teams': ['Crusaders 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-06-14', 'description': 'Locked wk13: Crusaders 6th vs University Seapigs 6th'},
+    {'teams': ['Maitland 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-06-14', 'description': 'Locked wk13: Maitland 6th vs Wests 6th'},
+    {'teams': ['Port Stephens 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-06-14', 'description': 'Locked wk13: Port Stephens 6th vs University Gentlemen 6th'},
+    {'teams': ['Souths 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-06-14', 'description': 'Locked wk13: Souths 6th vs Tigers Yellow 6th'},
+    {'teams': ['Crusaders 3rd', 'Norths 3rd'], 'grade': '3rd', 'date': '2026-06-28', 'description': 'Locked wk15: Crusaders 3rd vs Norths 3rd'},
+    {'teams': ['Maitland 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-06-28', 'description': 'Locked wk15: Maitland 3rd vs Tigers 3rd'},
+    {'teams': ['Port Stephens 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-06-28', 'description': 'Locked wk15: Port Stephens 3rd vs University 3rd'},
+    {'teams': ['Souths 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-06-28', 'description': 'Locked wk15: Souths 3rd vs Wests 3rd'},
+    {'teams': ['Crusaders 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-06-28', 'description': 'Locked wk15: Crusaders 4th vs Souths 4th'},
+    {'teams': ['Maitland 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-06-28', 'description': 'Locked wk15: Maitland 4th vs University Seapigs 4th'},
+    {'teams': ['Norths 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-06-28', 'description': 'Locked wk15: Norths 4th vs Port Stephens 4th'},
+    {'teams': ['Tigers 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-06-28', 'description': 'Locked wk15: Tigers 4th vs University Redhogs 4th'},
+    {'teams': ['Wests Green 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-06-28', 'description': 'Locked wk15: Wests Green 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-06-28', 'description': 'Locked wk15: Colts Gold 5th vs Norths 5th'},
+    {'teams': ['Crusaders 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-06-28', 'description': 'Locked wk15: Crusaders 5th vs Wests Green 5th'},
+    {'teams': ['Tigers 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-06-28', 'description': 'Locked wk15: Tigers 5th vs Wests Red 5th'},
+    {'teams': ['Maitland 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-06-28', 'description': 'Locked wk15: Maitland 6th vs Tigers Black 6th'},
+    {'teams': ['Port Stephens 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-06-28', 'description': 'Locked wk15: Port Stephens 6th vs Wests 6th'},
+    {'teams': ['Souths 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-06-28', 'description': 'Locked wk15: Souths 6th vs University Gentlemen 6th'},
+    {'teams': ['Tigers Yellow 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-06-28', 'description': 'Locked wk15: Tigers Yellow 6th vs University Seapigs 6th'},
+    {'teams': ['Crusaders 3rd', 'Maitland 3rd'], 'grade': '3rd', 'date': '2026-07-05', 'description': 'Locked wk16: Crusaders 3rd vs Maitland 3rd'},
+    {'teams': ['Norths 3rd', 'Port Stephens 3rd'], 'grade': '3rd', 'date': '2026-07-05', 'description': 'Locked wk16: Norths 3rd vs Port Stephens 3rd'},
+    {'teams': ['Souths 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-07-05', 'description': 'Locked wk16: Souths 3rd vs University 3rd'},
+    {'teams': ['Tigers 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-07-05', 'description': 'Locked wk16: Tigers 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-07-05', 'description': 'Locked wk16: Colts 4th vs University Redhogs 4th'},
+    {'teams': ['Crusaders 4th', 'Maitland 4th'], 'grade': '4th', 'date': '2026-07-05', 'description': 'Locked wk16: Crusaders 4th vs Maitland 4th'},
+    {'teams': ['Norths 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-07-05', 'description': 'Locked wk16: Norths 4th vs Souths 4th'},
+    {'teams': ['Port Stephens 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-07-05', 'description': 'Locked wk16: Port Stephens 4th vs Wests Green 4th'},
+    {'teams': ['Tigers 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-07-05', 'description': 'Locked wk16: Tigers 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-07-05', 'description': 'Locked wk16: Colts Gold 5th vs Wests Red 5th'},
+    {'teams': ['Colts Green 5th', 'Maitland 5th'], 'grade': '5th', 'date': '2026-07-05', 'description': 'Locked wk16: Colts Green 5th vs Maitland 5th'},
+    {'teams': ['Crusaders 5th', 'University 5th'], 'grade': '5th', 'date': '2026-07-05', 'description': 'Locked wk16: Crusaders 5th vs University 5th'},
+    {'teams': ['Norths 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-07-05', 'description': 'Locked wk16: Norths 5th vs Tigers 5th'},
+    {'teams': ['Colts 6th', 'Maitland 6th'], 'grade': '6th', 'date': '2026-07-05', 'description': 'Locked wk16: Colts 6th vs Maitland 6th'},
+    {'teams': ['Crusaders 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-07-05', 'description': 'Locked wk16: Crusaders 6th vs Souths 6th'},
+    {'teams': ['Port Stephens 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-07-05', 'description': 'Locked wk16: Port Stephens 6th vs University Seapigs 6th'},
+    {'teams': ['Tigers Black 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-07-05', 'description': 'Locked wk16: Tigers Black 6th vs University Gentlemen 6th'},
+    {'teams': ['Tigers Yellow 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-07-05', 'description': 'Locked wk16: Tigers Yellow 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-07-12', 'description': 'Locked wk17: Crusaders 3rd vs Souths 3rd'},
+    {'teams': ['Maitland 3rd', 'Norths 3rd'], 'grade': '3rd', 'date': '2026-07-12', 'description': 'Locked wk17: Maitland 3rd vs Norths 3rd'},
+    {'teams': ['Port Stephens 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-07-12', 'description': 'Locked wk17: Port Stephens 3rd vs Wests 3rd'},
+    {'teams': ['Tigers 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-07-12', 'description': 'Locked wk17: Tigers 3rd vs University 3rd'},
+    {'teams': ['Colts 4th', 'Norths 4th'], 'grade': '4th', 'date': '2026-07-12', 'description': 'Locked wk17: Colts 4th vs Norths 4th'},
+    {'teams': ['Crusaders 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-07-12', 'description': 'Locked wk17: Crusaders 4th vs Port Stephens 4th'},
+    {'teams': ['Maitland 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-07-12', 'description': 'Locked wk17: Maitland 4th vs Wests Red 4th'},
+    {'teams': ['Tigers 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-07-12', 'description': 'Locked wk17: Tigers 4th vs University Seapigs 4th'},
+    {'teams': ['University Redhogs 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-07-12', 'description': 'Locked wk17: University Redhogs 4th vs Wests Green 4th'},
+    {'teams': ['Colts Gold 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-07-12', 'description': 'Locked wk17: Colts Gold 5th vs Tigers 5th'},
+    {'teams': ['Colts Green 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-07-12', 'description': 'Locked wk17: Colts Green 5th vs Wests Red 5th'},
+    {'teams': ['Maitland 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-07-12', 'description': 'Locked wk17: Maitland 5th vs Wests Green 5th'},
+    {'teams': ['Norths 5th', 'University 5th'], 'grade': '5th', 'date': '2026-07-12', 'description': 'Locked wk17: Norths 5th vs University 5th'},
+    {'teams': ['Colts 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-07-12', 'description': 'Locked wk17: Colts 6th vs Souths 6th'},
+    {'teams': ['Crusaders 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-07-12', 'description': 'Locked wk17: Crusaders 6th vs Wests 6th'},
+    {'teams': ['Maitland 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-07-12', 'description': 'Locked wk17: Maitland 6th vs University Gentlemen 6th'},
+    {'teams': ['Port Stephens 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-07-12', 'description': 'Locked wk17: Port Stephens 6th vs Tigers Yellow 6th'},
+    {'teams': ['Tigers Black 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-07-12', 'description': 'Locked wk17: Tigers Black 6th vs University Seapigs 6th'},
+    {'teams': ['Crusaders 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-07-19', 'description': 'Locked wk18: Crusaders 3rd vs Wests 3rd'},
+    {'teams': ['Maitland 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-07-19', 'description': 'Locked wk18: Maitland 3rd vs Souths 3rd'},
+    {'teams': ['Norths 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-07-19', 'description': 'Locked wk18: Norths 3rd vs University 3rd'},
+    {'teams': ['Port Stephens 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-07-19', 'description': 'Locked wk18: Port Stephens 3rd vs Tigers 3rd'},
+    {'teams': ['Colts 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-07-19', 'description': 'Locked wk18: Colts 4th vs Wests Green 4th'},
+    {'teams': ['Crusaders 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-07-19', 'description': 'Locked wk18: Crusaders 4th vs University Seapigs 4th'},
+    {'teams': ['Maitland 4th', 'Norths 4th'], 'grade': '4th', 'date': '2026-07-19', 'description': 'Locked wk18: Maitland 4th vs Norths 4th'},
+    {'teams': ['Port Stephens 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-07-19', 'description': 'Locked wk18: Port Stephens 4th vs University Redhogs 4th'},
+    {'teams': ['Souths 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-07-19', 'description': 'Locked wk18: Souths 4th vs Tigers 4th'},
+    {'teams': ['Colts Green 5th', 'University 5th'], 'grade': '5th', 'date': '2026-07-19', 'description': 'Locked wk18: Colts Green 5th vs University 5th'},
+    {'teams': ['Crusaders 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-07-19', 'description': 'Locked wk18: Crusaders 5th vs Wests Red 5th'},
+    {'teams': ['Maitland 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-07-19', 'description': 'Locked wk18: Maitland 5th vs Norths 5th'},
+    {'teams': ['Tigers 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-07-19', 'description': 'Locked wk18: Tigers 5th vs Wests Green 5th'},
+    {'teams': ['Colts 6th', 'Port Stephens 6th'], 'grade': '6th', 'date': '2026-07-19', 'description': 'Locked wk18: Colts 6th vs Port Stephens 6th'},
+    {'teams': ['Crusaders 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-07-19', 'description': 'Locked wk18: Crusaders 6th vs Tigers Yellow 6th'},
+    {'teams': ['Maitland 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-07-19', 'description': 'Locked wk18: Maitland 6th vs Souths 6th'},
+    {'teams': ['University Seapigs 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-07-19', 'description': 'Locked wk18: University Seapigs 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-07-26', 'description': 'Locked wk19: Crusaders 3rd vs University 3rd'},
+    {'teams': ['Maitland 3rd', 'Port Stephens 3rd'], 'grade': '3rd', 'date': '2026-07-26', 'description': 'Locked wk19: Maitland 3rd vs Port Stephens 3rd'},
+    {'teams': ['Norths 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-07-26', 'description': 'Locked wk19: Norths 3rd vs Wests 3rd'},
+    {'teams': ['Souths 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-07-26', 'description': 'Locked wk19: Souths 3rd vs Tigers 3rd'},
+    {'teams': ['Colts 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-07-26', 'description': 'Locked wk19: Colts 4th vs Port Stephens 4th'},
+    {'teams': ['Crusaders 4th', 'Norths 4th'], 'grade': '4th', 'date': '2026-07-26', 'description': 'Locked wk19: Crusaders 4th vs Norths 4th'},
+    {'teams': ['Maitland 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-07-26', 'description': 'Locked wk19: Maitland 4th vs Tigers 4th'},
+    {'teams': ['Souths 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-07-26', 'description': 'Locked wk19: Souths 4th vs Wests Red 4th'},
+    {'teams': ['University Redhogs 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-07-26', 'description': 'Locked wk19: University Redhogs 4th vs University Seapigs 4th'},
+    {'teams': ['Colts Gold 5th', 'Maitland 5th'], 'grade': '5th', 'date': '2026-07-26', 'description': 'Locked wk19: Colts Gold 5th vs Maitland 5th'},
+    {'teams': ['Crusaders 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-07-26', 'description': 'Locked wk19: Crusaders 5th vs Tigers 5th'},
+    {'teams': ['University 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-07-26', 'description': 'Locked wk19: University 5th vs Wests Green 5th'},
+    {'teams': ['Colts 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-07-26', 'description': 'Locked wk19: Colts 6th vs Wests 6th'},
+    {'teams': ['Crusaders 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-07-26', 'description': 'Locked wk19: Crusaders 6th vs Tigers Black 6th'},
+    {'teams': ['Souths 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-07-26', 'description': 'Locked wk19: Souths 6th vs Tigers Yellow 6th'},
+    {'teams': ['University Gentlemen 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-07-26', 'description': 'Locked wk19: University Gentlemen 6th vs University Seapigs 6th'},
+    {'teams': ['Crusaders 3rd', 'Maitland 3rd'], 'grade': '3rd', 'date': '2026-08-02', 'description': 'Locked wk20: Crusaders 3rd vs Maitland 3rd'},
+    {'teams': ['Norths 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-08-02', 'description': 'Locked wk20: Norths 3rd vs Souths 3rd'},
+    {'teams': ['University 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-08-02', 'description': 'Locked wk20: University 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-08-02', 'description': 'Locked wk20: Colts 4th vs University Seapigs 4th'},
+    {'teams': ['Crusaders 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-08-02', 'description': 'Locked wk20: Crusaders 4th vs Tigers 4th'},
+    {'teams': ['Maitland 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-08-02', 'description': 'Locked wk20: Maitland 4th vs Wests Green 4th'},
+    {'teams': ['Port Stephens 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-08-02', 'description': 'Locked wk20: Port Stephens 4th vs Souths 4th'},
+    {'teams': ['University Redhogs 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-08-02', 'description': 'Locked wk20: University Redhogs 4th vs Wests Red 4th'},
+    {'teams': ['Colts Gold 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-08-02', 'description': 'Locked wk20: Colts Gold 5th vs Wests Green 5th'},
+    {'teams': ['Colts Green 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-08-02', 'description': 'Locked wk20: Colts Green 5th vs Tigers 5th'},
+    {'teams': ['Crusaders 5th', 'Maitland 5th'], 'grade': '5th', 'date': '2026-08-02', 'description': 'Locked wk20: Crusaders 5th vs Maitland 5th'},
+    {'teams': ['University 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-08-02', 'description': 'Locked wk20: University 5th vs Wests Red 5th'},
+    {'teams': ['Colts 6th', 'Crusaders 6th'], 'grade': '6th', 'date': '2026-08-02', 'description': 'Locked wk20: Colts 6th vs Crusaders 6th'},
+    {'teams': ['Maitland 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-08-02', 'description': 'Locked wk20: Maitland 6th vs Tigers Black 6th'},
+    {'teams': ['Port Stephens 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-08-02', 'description': 'Locked wk20: Port Stephens 6th vs Souths 6th'},
+    {'teams': ['Tigers Yellow 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-08-02', 'description': 'Locked wk20: Tigers Yellow 6th vs University Seapigs 6th'},
+    {'teams': ['University Gentlemen 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-08-02', 'description': 'Locked wk20: University Gentlemen 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'Norths 3rd'], 'grade': '3rd', 'date': '2026-08-09', 'description': 'Locked wk21: Crusaders 3rd vs Norths 3rd'},
+    {'teams': ['Maitland 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-08-09', 'description': 'Locked wk21: Maitland 3rd vs Tigers 3rd'},
+    {'teams': ['Port Stephens 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-08-09', 'description': 'Locked wk21: Port Stephens 3rd vs University 3rd'},
+    {'teams': ['Souths 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-08-09', 'description': 'Locked wk21: Souths 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'Maitland 4th'], 'grade': '4th', 'date': '2026-08-09', 'description': 'Locked wk21: Colts 4th vs Maitland 4th'},
+    {'teams': ['Crusaders 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-08-09', 'description': 'Locked wk21: Crusaders 4th vs Wests Red 4th'},
+    {'teams': ['Norths 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-08-09', 'description': 'Locked wk21: Norths 4th vs Tigers 4th'},
+    {'teams': ['Port Stephens 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-08-09', 'description': 'Locked wk21: Port Stephens 4th vs University Seapigs 4th'},
+    {'teams': ['Souths 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-08-09', 'description': 'Locked wk21: Souths 4th vs Wests Green 4th'},
+    {'teams': ['Colts Gold 5th', 'University 5th'], 'grade': '5th', 'date': '2026-08-09', 'description': 'Locked wk21: Colts Gold 5th vs University 5th'},
+    {'teams': ['Crusaders 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-08-09', 'description': 'Locked wk21: Crusaders 5th vs Norths 5th'},
+    {'teams': ['Maitland 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-08-09', 'description': 'Locked wk21: Maitland 5th vs Tigers 5th'},
+    {'teams': ['Colts 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-08-09', 'description': 'Locked wk21: Colts 6th vs Tigers Yellow 6th'},
+    {'teams': ['Crusaders 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-08-09', 'description': 'Locked wk21: Crusaders 6th vs University Gentlemen 6th'},
+    {'teams': ['Maitland 6th', 'Port Stephens 6th'], 'grade': '6th', 'date': '2026-08-09', 'description': 'Locked wk21: Maitland 6th vs Port Stephens 6th'},
+    {'teams': ['Souths 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-08-09', 'description': 'Locked wk21: Souths 6th vs University Seapigs 6th'},
+    {'teams': ['Tigers Black 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-08-09', 'description': 'Locked wk21: Tigers Black 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'Port Stephens 3rd'], 'grade': '3rd', 'date': '2026-08-16', 'description': 'Locked wk22: Crusaders 3rd vs Port Stephens 3rd'},
+    {'teams': ['Norths 3rd', 'Tigers 3rd'], 'grade': '3rd', 'date': '2026-08-16', 'description': 'Locked wk22: Norths 3rd vs Tigers 3rd'},
+    {'teams': ['Colts 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-08-16', 'description': 'Locked wk22: Colts 4th vs Souths 4th'},
+    {'teams': ['Maitland 4th', 'Port Stephens 4th'], 'grade': '4th', 'date': '2026-08-16', 'description': 'Locked wk22: Maitland 4th vs Port Stephens 4th'},
+    {'teams': ['Norths 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-08-16', 'description': 'Locked wk22: Norths 4th vs University Redhogs 4th'},
+    {'teams': ['Tigers 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-08-16', 'description': 'Locked wk22: Tigers 4th vs Wests Green 4th'},
+    {'teams': ['Colts Gold 5th', 'Colts Green 5th'], 'grade': '5th', 'date': '2026-08-16', 'description': 'Locked wk22: Colts Gold 5th vs Colts Green 5th'},
+    {'teams': ['Crusaders 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-08-16', 'description': 'Locked wk22: Crusaders 5th vs Wests Green 5th'},
+    {'teams': ['Norths 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-08-16', 'description': 'Locked wk22: Norths 5th vs Wests Red 5th'},
+    {'teams': ['Crusaders 6th', 'Maitland 6th'], 'grade': '6th', 'date': '2026-08-16', 'description': 'Locked wk22: Crusaders 6th vs Maitland 6th'},
+    {'teams': ['Souths 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-08-16', 'description': 'Locked wk22: Souths 6th vs Tigers Black 6th'},
+    {'teams': ['Crusaders 3rd', 'Souths 3rd'], 'grade': '3rd', 'date': '2026-08-23', 'description': 'Locked wk23: Crusaders 3rd vs Souths 3rd'},
+    {'teams': ['Maitland 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-08-23', 'description': 'Locked wk23: Maitland 3rd vs University 3rd'},
+    {'teams': ['Tigers 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-08-23', 'description': 'Locked wk23: Tigers 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-08-23', 'description': 'Locked wk23: Colts 4th vs Tigers 4th'},
+    {'teams': ['Crusaders 4th', 'Souths 4th'], 'grade': '4th', 'date': '2026-08-23', 'description': 'Locked wk23: Crusaders 4th vs Souths 4th'},
+    {'teams': ['Maitland 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-08-23', 'description': 'Locked wk23: Maitland 4th vs University Redhogs 4th'},
+    {'teams': ['Port Stephens 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-08-23', 'description': 'Locked wk23: Port Stephens 4th vs Wests Red 4th'},
+    {'teams': ['University Seapigs 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-08-23', 'description': 'Locked wk23: University Seapigs 4th vs Wests Green 4th'},
+    {'teams': ['Colts Gold 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-08-23', 'description': 'Locked wk23: Colts Gold 5th vs Norths 5th'},
+    {'teams': ['Colts Green 5th', 'Wests Green 5th'], 'grade': '5th', 'date': '2026-08-23', 'description': 'Locked wk23: Colts Green 5th vs Wests Green 5th'},
+    {'teams': ['Crusaders 5th', 'University 5th'], 'grade': '5th', 'date': '2026-08-23', 'description': 'Locked wk23: Crusaders 5th vs University 5th'},
+    {'teams': ['Tigers 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-08-23', 'description': 'Locked wk23: Tigers 5th vs Wests Red 5th'},
+    {'teams': ['Colts 6th', 'Souths 6th'], 'grade': '6th', 'date': '2026-08-23', 'description': 'Locked wk23: Colts 6th vs Souths 6th'},
+    {'teams': ['Crusaders 6th', 'Port Stephens 6th'], 'grade': '6th', 'date': '2026-08-23', 'description': 'Locked wk23: Crusaders 6th vs Port Stephens 6th'},
+    {'teams': ['Maitland 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-08-23', 'description': 'Locked wk23: Maitland 6th vs University Gentlemen 6th'},
+    {'teams': ['Tigers Black 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-08-23', 'description': 'Locked wk23: Tigers Black 6th vs Tigers Yellow 6th'},
+    {'teams': ['University Seapigs 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-08-23', 'description': 'Locked wk23: University Seapigs 6th vs Wests 6th'},
+    {'teams': ['Crusaders 3rd', 'University 3rd'], 'grade': '3rd', 'date': '2026-08-30', 'description': 'Locked wk24: Crusaders 3rd vs University 3rd'},
+    {'teams': ['Maitland 3rd', 'Norths 3rd'], 'grade': '3rd', 'date': '2026-08-30', 'description': 'Locked wk24: Maitland 3rd vs Norths 3rd'},
+    {'teams': ['Port Stephens 3rd', 'Wests 3rd'], 'grade': '3rd', 'date': '2026-08-30', 'description': 'Locked wk24: Port Stephens 3rd vs Wests 3rd'},
+    {'teams': ['Colts 4th', 'Wests Red 4th'], 'grade': '4th', 'date': '2026-08-30', 'description': 'Locked wk24: Colts 4th vs Wests Red 4th'},
+    {'teams': ['Crusaders 4th', 'Wests Green 4th'], 'grade': '4th', 'date': '2026-08-30', 'description': 'Locked wk24: Crusaders 4th vs Wests Green 4th'},
+    {'teams': ['Norths 4th', 'University Seapigs 4th'], 'grade': '4th', 'date': '2026-08-30', 'description': 'Locked wk24: Norths 4th vs University Seapigs 4th'},
+    {'teams': ['Port Stephens 4th', 'Tigers 4th'], 'grade': '4th', 'date': '2026-08-30', 'description': 'Locked wk24: Port Stephens 4th vs Tigers 4th'},
+    {'teams': ['Souths 4th', 'University Redhogs 4th'], 'grade': '4th', 'date': '2026-08-30', 'description': 'Locked wk24: Souths 4th vs University Redhogs 4th'},
+    {'teams': ['Colts Green 5th', 'Norths 5th'], 'grade': '5th', 'date': '2026-08-30', 'description': 'Locked wk24: Colts Green 5th vs Norths 5th'},
+    {'teams': ['Crusaders 5th', 'Tigers 5th'], 'grade': '5th', 'date': '2026-08-30', 'description': 'Locked wk24: Crusaders 5th vs Tigers 5th'},
+    {'teams': ['Maitland 5th', 'University 5th'], 'grade': '5th', 'date': '2026-08-30', 'description': 'Locked wk24: Maitland 5th vs University 5th'},
+    {'teams': ['Wests Green 5th', 'Wests Red 5th'], 'grade': '5th', 'date': '2026-08-30', 'description': 'Locked wk24: Wests Green 5th vs Wests Red 5th'},
+    {'teams': ['Colts 6th', 'Tigers Black 6th'], 'grade': '6th', 'date': '2026-08-30', 'description': 'Locked wk24: Colts 6th vs Tigers Black 6th'},
+    {'teams': ['Crusaders 6th', 'Tigers Yellow 6th'], 'grade': '6th', 'date': '2026-08-30', 'description': 'Locked wk24: Crusaders 6th vs Tigers Yellow 6th'},
+    {'teams': ['Maitland 6th', 'University Seapigs 6th'], 'grade': '6th', 'date': '2026-08-30', 'description': 'Locked wk24: Maitland 6th vs University Seapigs 6th'},
+    {'teams': ['Port Stephens 6th', 'University Gentlemen 6th'], 'grade': '6th', 'date': '2026-08-30', 'description': 'Locked wk24: Port Stephens 6th vs University Gentlemen 6th'},
+    {'teams': ['Souths 6th', 'Wests 6th'], 'grade': '6th', 'date': '2026-08-30', 'description': 'Locked wk24: Souths 6th vs Wests 6th'},
 ]
 
 # ============== Special Games ==============
@@ -594,12 +900,15 @@ SPECIAL_GAMES = {
 
 MAX_WEEKENDS_PER_GRADE = {
     'PHL': 21,   # 20 Sundays + 1 Friday-only week (season ends Aug 30)
-    '2nd': 20,   # 20 Sundays only
+    '2nd': 20,   # 20 Sundays only (22 calendar Sundays minus 2 PHL-only weekends)
     '3rd': 20,   # 20 Sundays only
     '4th': 20,   # 20 Sundays only
     '5th': 20,   # 20 Sundays only
     '6th': 20,   # 20 Sundays only
 }
+# PHL-only Sundays (non-PHL blocked via BLOCKED_GAMES):
+#   - May 17 (week 9)  — Masters State Championship
+#   - Jun 21 (week 14) — U16 Girls State Championship
 
 # ============== Grade Rounds Override ==============
 # Set EXACT number of rounds for specific grades.
@@ -649,15 +958,16 @@ GRADE_SCHEDULING_METHOD = {
 #   ClubVsClubAlignment:  (no base limit config — slack reduces required coincidences)
 #   MaximiseClubsPerTimeslotBroadmeadow: min_clubs = floor(games/2) - slack
 #   MinimiseClubsOnAFieldBroadmeadow: max_clubs = max_clubs_per_field + slack
-#   ClubGameSpread: upper = club_game_spread_max_gap + slack, lower = -(club_game_spread_max_overlap + slack)
+#   ClubGameSpread: upper = max_gap + slack, lower = -min(max_overlap_base + slack, T//2 - 1) per club
 
 CONSTRAINT_DEFAULTS = {
     'spacing_base_slack': 2,               # EqualMatchUpSpacing: additional base slack (0 = start at ideal)
     'maitland_max_consecutive_home': 3,    # MaitlandHomeGrouping: max consecutive home weeks (1 = no back-to-back)
     'away_maitland_max_clubs': 2,          # AwayAtMaitlandGrouping: max away clubs at Maitland per week
     'max_clubs_per_field': 5,              # MinimiseClubsOnAFieldBroadmeadow: max clubs sharing a field per day
-    'club_game_spread_max_gap': 2,         # ClubGameSpread: max allowed gap (spread) per club per day
-    'club_game_spread_max_overlap': 1,     # ClubGameSpread: max allowed double-ups (0 = no two games at same slot)
+    'club_game_spread_max_gap': 1,         # ClubGameSpread: max allowed gap (spread) per club per day (+ slack at runtime)
+    'club_game_spread_max_overlap': 0,     # ClubGameSpread: max allowed double-ups (+ slack at runtime; 0 = no overlap)
+    'club_vs_club_alignment_base_slack': 1, # ClubVsClubAlignment: with --slack 1, effective slack = 2, min_required = num_games - 2
     'gosford_friday_games': 8,             # PHLAndSecondGradeTimes: exact number of Friday PHL games at Gosford (AGM decision)
     'maitland_friday_games': 2,            # PHLAndSecondGradeTimes: exact number of Friday PHL games at Maitland (Gosford vs Maitland only)
     'max_friday_broadmeadow': 3,           # PHLAndSecondGradeTimes: max Friday PHL games at NIHC (Broadmeadow)
@@ -766,6 +1076,11 @@ SEASON_CONFIG = {
 
     # Solver timing
     'max_time_per_stage': 172800,  # 2 days per stage (seconds)
+
+    # Objective lower bound: prune any branch with objective below this value.
+    # Speeds up proving optimality by cutting off clearly bad search space.
+    # Set to None to disable. Typical value: -400000 (based on observed solver runs).
+    'objective_lower_bound': -500_000,
 }
 
 

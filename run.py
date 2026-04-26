@@ -25,6 +25,7 @@ See docs/README.md for full documentation.
 
 import sys
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 # Add refactored directory to path
@@ -73,6 +74,9 @@ Examples:
                                  'or solution pickle (.pkl). Use with --lock-weeks.')
     gen_parser.add_argument('--lock-weeks', type=str, default='',
                             help='Comma-separated list of weeks to lock (e.g. 1,2,3 or 1,5,7). Use with --locked')
+    gen_parser.add_argument('--repair-locked', action='store_true',
+                            help='Auto-repair locked keys that have stale round_no, day_slot, etc. '
+                                 'Matches on (date, field, time) and fixes ancillary fields.')
     gen_parser.add_argument('--hint', type=str, metavar='FILE',
                             help='Path to a prior solution to use as solver hints (speeds up search). '
                                  'Accepts draw JSON (.json) or checkpoint pickle (.pkl). '
@@ -99,7 +103,7 @@ Examples:
     gen_parser.add_argument('--staged', action='store_true',
                             help='Use severity-based staging instead of default. '
                                  'Runs 5 stages by severity level: '
-                                 'Level 1 (CRITICAL) → Level 2 (HIGH) → Level 3 (MEDIUM) → Level 4 (LOW) → Level 5 (VERY LOW). '
+                                 'Level 1 (CRITICAL) -> Level 2 (HIGH) -> Level 3 (MEDIUM) -> Level 4 (LOW) -> Level 5 (VERY LOW). '
                                  'Each stage uses the prior solution as a HINT.')
     gen_parser.add_argument('--relax', action='store_true',
                             help='Enable severity-based constraint relaxation. If infeasible, '
@@ -187,8 +191,18 @@ Examples:
     diagnose_parser.add_argument('--ai', action='store_true',
                                  help='Use AI constraint implementations')
     
+    # Validate command - check draw keys against current timeslot data
+    validate_parser = subparsers.add_parser('validate',
+        help='Validate draw game keys against current season timeslot data')
+    validate_parser.add_argument('source', type=str,
+                                  help='Draw source: "current", path to JSON, or checkpoint dir')
+    validate_parser.add_argument('--year', type=int, required=True,
+                                  help='Season year (e.g., 2026). Required.')
+    validate_parser.add_argument('--repair', action='store_true',
+                                  help='Show suggested repairs for mismatched keys')
+
     # Migrate command - one-time migration to new directory structure
-    migrate_parser = subparsers.add_parser('migrate', 
+    migrate_parser = subparsers.add_parser('migrate',
         help='Migrate draws to new versioned directory structure')
     migrate_parser.add_argument('--year', type=int, required=True,
                                 help='Season year to migrate')
@@ -218,6 +232,8 @@ Examples:
         run_preseason(args)
     elif args.command == 'diagnose':
         run_diagnose(args)
+    elif args.command == 'validate':
+        run_validate(args)
     elif args.command == 'migrate':
         run_migrate(args)
 
@@ -330,6 +346,9 @@ def run_generate(args):
         weeks_label = ','.join(str(w) for w in sorted(locked_weeks))
         print(f"\nLoading locked games from {locked_path} (weeks {weeks_label})...")
         locked_keys = _load_locked_keys(locked_path, locked_weeks)
+        # Pass source info and repair flag to solver for locked key validation
+        solver_config.locked_source = locked_path
+        solver_config.repair_locked = getattr(args, 'repair_locked', False)
     
     # Load hint solution if provided
     # If --locked is a pickle/checkpoint and no --hint given, use locked source as hint too
@@ -857,6 +876,94 @@ def run_diagnose(args):
         else:
             print("\n[OK] All constraints are feasible together!")
             sys.exit(0)
+
+
+def run_validate(args):
+    """Validate draw game keys against current season timeslot data."""
+    from config import load_season_data
+    from analytics.storage import DrawStorage
+    from utils import validate_draw_keys, repair_locked_keys
+
+    print("="*60)
+    print(f"DRAW KEY VALIDATION - {args.year} SEASON")
+    print("="*60)
+
+    data = load_season_data(args.year)
+    timeslots = data['timeslots']
+
+    # Resolve source
+    source = args.source
+    if source == 'current':
+        source = f'draws/{args.year}/current.json'
+
+    p = Path(source)
+    if not p.exists():
+        print(f"ERROR: Source not found: {source}")
+        sys.exit(1)
+
+    # Load draw
+    if p.suffix == '.json':
+        draw = DrawStorage.load(source)
+        keys = [game.to_key() for game in draw.games]
+        print(f"Loaded {len(keys)} games from {source}")
+    elif p.suffix == '.pkl':
+        import pickle
+        with open(source, 'rb') as f:
+            solution = pickle.load(f)
+        keys = [key for key, val in solution.items() if val == 1 and len(key) >= 11]
+        print(f"Loaded {len(keys)} scheduled games from pickle {source}")
+    elif p.is_dir():
+        import pickle
+        pkl_path = p / 'solution.pkl'
+        if not pkl_path.exists():
+            print(f"ERROR: No solution.pkl in {source}")
+            sys.exit(1)
+        with open(pkl_path, 'rb') as f:
+            solution = pickle.load(f)
+        keys = [key for key, val in solution.items() if val == 1 and len(key) >= 11]
+        print(f"Loaded {len(keys)} scheduled games from checkpoint {source}")
+    else:
+        print(f"ERROR: Unknown format: {source}")
+        sys.exit(1)
+
+    valid_keys, issues = validate_draw_keys(keys, timeslots, label=source)
+
+    if not issues:
+        print(f"\nAll {len(valid_keys)} game keys match current timeslot data.")
+        sys.exit(0)
+
+    print(f"\n{len(issues)} game(s) have mismatched keys:")
+
+    # Group by mismatch type
+    by_field = defaultdict(list)
+    for issue in issues:
+        fields = list(issue['field_diffs'].keys())
+        key_label = ', '.join(fields) if fields else 'unknown'
+        by_field[key_label].append(issue)
+
+    for field_label, field_issues in sorted(by_field.items()):
+        print(f"\n  --- {field_label} ({len(field_issues)} games) ---")
+        for issue in field_issues[:10]:
+            print(f"    {issue['reason']}")
+        if len(field_issues) > 10:
+            print(f"    ... and {len(field_issues) - 10} more")
+
+    if args.repair:
+        print(f"\n--- Repair suggestions ---")
+        repaired, log = repair_locked_keys(keys, timeslots)
+        repairable = sum(1 for r in log if r.get('repaired'))
+        unrepairable = sum(1 for r in log if not r.get('repaired'))
+        print(f"  Repairable: {repairable}, Unrepairable: {unrepairable}")
+        for r in log[:10]:
+            if r.get('repaired'):
+                orig = r['original']
+                fixed = r['repaired']
+                diffs = ', '.join(f"{k}: {v['draw']}->{v['timeslot']}"
+                                 for k, v in r['field_diffs'].items())
+                print(f"    {orig[0]} vs {orig[1]} ({orig[2]}) {orig[7]}: {diffs}")
+
+    print(f"\nValid: {len(valid_keys)}, Mismatched: {len(issues)}")
+    sys.exit(1 if issues else 0)
 
 
 def run_migrate(args):

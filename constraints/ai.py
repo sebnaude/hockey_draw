@@ -1245,8 +1245,9 @@ class ClubVsClubAlignmentAI(ConstraintAI):
                                 field_penalty_idx += 1
 
                     if coincide_vars:
-                        # Get slack from config (--slack flag)
-                        config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0)
+                        # Get slack from config (--slack flag + base slack from CONSTRAINT_DEFAULTS)
+                        base_slack = data.get('constraint_defaults', {}).get('club_vs_club_alignment_base_slack', 0)
+                        config_slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0) + base_slack
                         min_required = max(0, num_games - config_slack)
 
                         # HARD: at least min_required coincidences
@@ -1713,7 +1714,6 @@ class ClubGameSpreadAI(ConstraintAI):
 
     With max_overlap=0 and slack=0:
         gap >= 0 means range >= num_games, so no double-ups allowed.
-        A 4-team club needs at least 4 distinct slots.
 
     Config params (in constraint_defaults):
         club_game_spread_max_gap:     upper bound base (default 2)
@@ -1730,8 +1730,8 @@ class ClubGameSpreadAI(ConstraintAI):
 
     EDGE CASES:
     - Clubs with <= 1 game on a day are skipped
-    - Two teams from the same club at the same day_slot counts as 2 games
-      (not 1), making gap more negative — penalized by lower bound
+    - Intra-club matches (e.g. Maitland A vs Maitland B) count as 1 game
+      for that club — one timeslot is consumed for both teams
     - Friday PHL games are a different day — gaps computed per (week, day)
     - Single-slot case: if all possible games are at one slot, range=1,
       gap=1-num_games; lower bound still enforced
@@ -1743,7 +1743,6 @@ class ClubGameSpreadAI(ConstraintAI):
         locked_weeks = data.get('locked_weeks', set())
         defaults = data.get('constraint_defaults', {})
         max_gap_base = defaults.get('club_game_spread_max_gap', 2)
-        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
         config_slack = data.get('constraint_slack', {}).get('ClubGameSpread', 0)
         weights = data.get('penalty_weights', {})
 
@@ -1757,6 +1756,7 @@ class ClubGameSpreadAI(ConstraintAI):
         }
 
         constraints_added = 0
+        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
         hard_upper = max_gap_base + config_slack
         hard_lower = -(max_overlap_base + config_slack)
 
@@ -1770,6 +1770,9 @@ class ClubGameSpreadAI(ConstraintAI):
 
         for key, var in X.items():
             if len(key) < 11 or not key[3]:
+                continue
+            # Only Broadmeadow — away venues have 1 field so gap/overlap is irrelevant
+            if key[10] != 'Newcastle International Hockey Centre':
                 continue
             week = key[6]
             if week in locked_weeks:
@@ -1879,14 +1882,15 @@ class ClubGameSpreadAI(ConstraintAI):
             constraints_added += 2
 
             # range_size = max_active - min_active + 1
-            range_size = model.NewIntVar(1, max_slot - min_slot + 1,
+            # Lower bound accommodates all-inactive case (sentinels: min=max_slot, max=min_slot)
+            range_size = model.NewIntVar(min_slot - max_slot + 1, max_slot - min_slot + 1,
                                           f'cgs_range_{club}_w{week}_{day}')
             model.Add(range_size == max_active - min_active + 1)
             constraints_added += 1
 
             # gap = range_size - num_games (can be negative = double-ups)
             max_gap_possible = max_slot - min_slot
-            min_gap_possible = 1 - len(all_vars_for_day)
+            min_gap_possible = min(1 - len(all_vars_for_day), min_slot - max_slot + 1)
             gap = model.NewIntVar(min_gap_possible, max_gap_possible,
                                    f'cgs_gap_{club}_w{week}_{day}')
             model.Add(gap == range_size - num_games)

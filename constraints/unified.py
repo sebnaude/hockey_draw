@@ -5,14 +5,13 @@ Unified Constraint Engine for hockey draw scheduling.
 Replaces the 19 individual AI constraint classes with a single engine that:
 1. Makes ONE pass over X to build all grouping dicts
 2. Creates shared indicator variables (consumed by multiple constraints)
-3. Splits constraints into 3 phases: hard inter-week → soft inter-week → intra-day
+3. Splits constraints into 2 stages: hard (feasibility) → soft (penalties + optimization)
 
 Usage:
     engine = UnifiedConstraintEngine(model, X, data)
     engine.build_groupings()
-    engine.apply_phase_a()  # Hard inter-week (feasibility)
-    engine.apply_phase_b()  # Soft inter-week penalties
-    engine.apply_phase_c()  # Intra-day optimization
+    engine.apply_stage_1_hard()  # Hard constraints (feasibility)
+    engine.apply_stage_2_soft()  # Soft penalties + optimization
 """
 
 from ortools.sat.python import cp_model
@@ -48,10 +47,11 @@ class UnifiedConstraintEngine:
     CLUBS_ON_FIELD_HARD_LIMIT = 5
     CLUB_GAME_SPREAD_HARD_LIMIT = 2
 
-    def __init__(self, model: cp_model.CpModel, X: dict, data: dict):
+    def __init__(self, model: cp_model.CpModel, X: dict, data: dict, skip_constraints=None):
         self.model = model
         self.X = X
         self.data = data
+        self.skip_constraints = skip_constraints or set()
         self.locked_weeks = data.get('locked_weeks', set())
         self.teams = data['teams']
         self.clubs = data['clubs']
@@ -69,6 +69,9 @@ class UnifiedConstraintEngine:
         # Slack config
         self.slack = data.get('constraint_slack', {})
 
+        # Config-driven constraint defaults
+        defaults = data.get('constraint_defaults', {})
+
         # O(1) lookups (replacing O(N) get_club calls)
         self.team_club = {}
         self.club_teams_map = defaultdict(list)
@@ -83,6 +86,9 @@ class UnifiedConstraintEngine:
 
         # Shared indicators (populated lazily during constraint application)
         self._shared_indicators = {}
+
+        # Club game spread shared vars (populated by _club_game_spread_hard)
+        self._cgs_shared = {}
 
     # ================================================================
     # LOOKUPS
@@ -166,6 +172,7 @@ class UnifiedConstraintEngine:
 
         # --- Timeslot optimization ---
         self.slot_vars_by_location = defaultdict(list)
+        self.slot_field_vars = defaultdict(list)
         self.games_per_location = defaultdict(lambda: defaultdict(list))
 
         # --- Club day ---
@@ -286,11 +293,12 @@ class UnifiedConstraintEngine:
                 if t2_club:
                     self.bm_field_club[(week, date_str, field_name)][t2_club].append(var)
 
-            # --- ClubGameSpread ---
-            if t1_club:
-                self.by_club_week_day_slot[(t1_club, week, day, day_slot)].append(var)
-            if t2_club and t2_club != t1_club:
-                self.by_club_week_day_slot[(t2_club, week, day, day_slot)].append(var)
+            # --- ClubGameSpread (Broadmeadow only — away venues have 1 field) ---
+            if location == BROADMEADOW:
+                if t1_club:
+                    self.by_club_week_day_slot[(t1_club, week, day, day_slot)].append(var)
+                if t2_club and t2_club != t1_club:
+                    self.by_club_week_day_slot[(t2_club, week, day, day_slot)].append(var)
 
             # --- PHL/2nd grade specific ---
             if grade == 'PHL':
@@ -336,6 +344,7 @@ class UnifiedConstraintEngine:
             # --- EnsureBestTimeslotChoices ---
             slot_key = (week, day, location, day_slot)
             self.slot_vars_by_location[slot_key].append(var)
+            self.slot_field_vars[(week, day, location, field_name, day_slot)].append(var)
             self.games_per_location[(week, day)][location].append(var)
 
             # --- ClubDay ---
@@ -374,31 +383,53 @@ class UnifiedConstraintEngine:
         return indicator
 
     # ================================================================
-    # PHASE A: HARD INTER-WEEK CONSTRAINTS
+    # STAGE 1: HARD CONSTRAINTS (feasibility)
     # ================================================================
 
-    def apply_phase_a(self):
-        """Apply all hard inter-week constraints (minimal model for feasibility)."""
+    def apply_stage_1_hard(self):
+        """Apply all hard constraints (feasibility). Respects skip_constraints."""
         assert self._groupings_built, "Call build_groupings() first"
         c = 0
-        c += self._no_double_booking_teams()
-        c += self._no_double_booking_fields()
-        c += self._equal_games_balanced_matchups()
-        c += self._fifty_fifty_home_away()
-        c += self._team_conflict()
-        c += self._max_venue_weekends()
-        c += self._phl_adjacency_hard()
-        c += self._phl_times_hard()
-        c += self._matchup_spacing_hard()
-        c += self._grade_adjacency_hard()
-        c += self._club_alignment_hard()
-        c += self._maitland_grouping_hard()
-        c += self._away_maitland_hard()
-        c += self._club_day_scheduling()
-        c += self._clubs_per_timeslot_hard()
-        c += self._clubs_on_field_hard()
+        _skip = self.skip_constraints
+        if 'NoDoubleBookingTeams' not in _skip:
+            c += self._no_double_booking_teams()
+        if 'NoDoubleBookingFields' not in _skip:
+            c += self._no_double_booking_fields()
+        if 'EqualGamesAndBalanceMatchUps' not in _skip:
+            c += self._equal_games_balanced_matchups()
+        if 'FiftyFiftyHomeandAway' not in _skip:
+            c += self._fifty_fifty_home_away()
+        if 'TeamConflict' not in _skip:
+            c += self._team_conflict()
+        if 'MaxMaitlandHomeWeekends' not in _skip:
+            c += self._max_venue_weekends()
+        if 'PHLAndSecondGradeAdjacency' not in _skip:
+            c += self._phl_adjacency_hard()
+        if 'PHLAndSecondGradeTimes' not in _skip:
+            c += self._phl_times_hard()
+        if 'EqualMatchUpSpacing' not in _skip:
+            c += self._matchup_spacing_hard()
+        if 'ClubGradeAdjacency' not in _skip:
+            c += self._grade_adjacency_hard()
+        if 'ClubVsClubAlignment' not in _skip:
+            c += self._club_alignment_hard()
+        if 'MaitlandHomeGrouping' not in _skip:
+            c += self._maitland_grouping_hard()
+        if 'AwayAtMaitlandGrouping' not in _skip:
+            c += self._away_maitland_hard()
+        if 'ClubDay' not in _skip:
+            c += self._club_day_scheduling()
+        if 'ClubGameSpread' not in _skip:
+            c += self._club_game_spread_hard()
+        if 'EnsureBestTimeslotChoices' not in _skip:
+            c += self._best_timeslot_choices()
         self.constraints_added += c
         return c
+
+    # Backward-compatible alias
+    def apply_phase_a(self):
+        """Alias for apply_stage_1_hard()."""
+        return self.apply_stage_1_hard()
 
     def _no_double_booking_teams(self):
         n = 0
@@ -616,7 +647,8 @@ class UnifiedConstraintEngine:
             for g in self.grades
         }
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        config_slack = self.slack.get('ClubVsClubAlignment', 0)
+        base_slack = self.data.get('constraint_defaults', {}).get('club_vs_club_alignment_base_slack', 0)
+        config_slack = self.slack.get('ClubVsClubAlignment', 0) + base_slack
 
         processed = []
         prev_num = 0
@@ -643,6 +675,7 @@ class UnifiedConstraintEngine:
                         self.model.Add(coincide <= ind1)
                         self.model.Add(coincide <= ind2)
                         self.model.Add(coincide >= ind1 + ind2 - 1)
+                        self._shared_indicators[('coin', grade, other_grade, club_pair, round_no)] = coincide
                         coincide_vars.append(coincide)
 
                         # Max 2 fields when coinciding
@@ -688,10 +721,11 @@ class UnifiedConstraintEngine:
         return n
 
     def _away_maitland_hard(self):
-        """Hard: max 3 away clubs per weekend at Maitland."""
+        """Hard: max away clubs per weekend at Maitland (config-driven)."""
         n = 0
         slack = self.slack.get('AwayAtMaitlandGrouping', 0)
-        hard_limit = self.MAITLAND_AWAY_HARD_LIMIT + slack
+        base_limit = self.data.get('constraint_defaults', {}).get('away_maitland_max_clubs', 3)
+        hard_limit = base_limit + slack
 
         for week, club_vars in self.maitland_away_club_week.items():
             club_indicators = []
@@ -752,80 +786,40 @@ class UnifiedConstraintEngine:
                         n += 1
         return n
 
-    def _clubs_per_timeslot_hard(self):
-        """Hard: dynamic minimum clubs per timeslot at Broadmeadow."""
-        n = 0
-        slack = self.slack.get('MaximiseClubsPerTimeslotBroadmeadow', 0)
-        hard_limit_offset = -slack
-
-        for slot, club_vars in self.bm_slot_club.items():
-            presence_vars = []
-            all_game_vars = []
-            for club, vars_list in club_vars.items():
-                ind = self._get_or_create_presence(
-                    ('bm_club_presence', club, slot), vars_list,
-                    f'u_bm_club_{club}_{slot}')
-                presence_vars.append(ind)
-                all_game_vars.extend(vars_list)
-
-            if not presence_vars:
-                continue
-
-            nc = self.model.NewIntVar(0, len(presence_vars), f'u_bm_nclubs_{slot}')
-            self.model.Add(nc == sum(presence_vars))
-
-            tt = self.model.NewIntVar(0, len(all_game_vars), f'u_bm_nteams_{slot}')
-            self.model.Add(tt == sum(all_game_vars))
-
-            hmin_base = self.model.NewIntVar(0, len(presence_vars), f'u_bm_hmin_base_{slot}')
-            self.model.AddDivisionEquality(hmin_base, tt, 2)
-
-            raw_min = self.model.NewIntVar(-10, len(presence_vars), f'u_bm_raw_min_{slot}')
-            self.model.Add(raw_min == hmin_base + hard_limit_offset)
-            hard_min = self.model.NewIntVar(0, len(presence_vars), f'u_bm_hmin_{slot}')
-            self.model.AddMaxEquality(hard_min, [raw_min, self.model.NewConstant(0)])
-
-            self.model.Add(nc >= hard_min)
-            n += 1
-        return n
-
-    def _clubs_on_field_hard(self):
-        """Hard: max 5 clubs per field per day at Broadmeadow."""
-        n = 0
-        slack = self.slack.get('MinimiseClubsOnAFieldBroadmeadow', 0)
-        hard_limit = self.CLUBS_ON_FIELD_HARD_LIMIT + slack
-
-        for field_key, club_vars in self.bm_field_club.items():
-            presence_vars = []
-            for club, vars_list in club_vars.items():
-                ind = self._get_or_create_presence(
-                    ('bm_field_club', club, field_key), vars_list,
-                    f'u_fld_club_{club}_{field_key}')
-                presence_vars.append(ind)
-            if presence_vars:
-                nc = self.model.NewIntVar(0, len(presence_vars), f'u_fld_nclubs_{field_key}')
-                self.model.Add(nc == sum(presence_vars))
-                self.model.Add(nc <= hard_limit)
-                n += 1
-        return n
-
     # ================================================================
-    # PHASE B: SOFT INTER-WEEK PENALTIES
+    # STAGE 2: SOFT CONSTRAINTS (penalties + optimization)
     # ================================================================
 
-    def apply_phase_b(self):
-        """Add soft inter-week penalties on top of Phase A."""
+    def apply_stage_2_soft(self):
+        """Add soft penalties + optimization constraints. Respects skip_constraints."""
         assert self._groupings_built, "Call build_groupings() first"
         c = 0
-        c += self._matchup_spacing_soft()
-        c += self._grade_adjacency_soft()
-        c += self._club_alignment_soft()
-        c += self._maitland_grouping_soft()
-        c += self._away_maitland_soft()
-        c += self._phl_times_soft()
-        c += self._preferred_times()
+        _skip = self.skip_constraints
+        if 'EqualMatchUpSpacing' not in _skip:
+            c += self._matchup_spacing_soft()
+        if 'ClubGradeAdjacency' not in _skip:
+            c += self._grade_adjacency_soft()
+        if 'ClubVsClubAlignment' not in _skip:
+            c += self._club_alignment_soft()
+        if 'MaitlandHomeGrouping' not in _skip:
+            c += self._maitland_grouping_soft()
+        if 'AwayAtMaitlandGrouping' not in _skip:
+            c += self._away_maitland_soft()
+        if 'PHLAndSecondGradeTimes' not in _skip:
+            c += self._phl_times_soft()
+        if 'PreferredTimesConstraint' not in _skip:
+            c += self._preferred_times()
+        if 'ClubDay' not in _skip:
+            c += self._club_day_field_contiguity()
+        if 'ClubGameSpread' not in _skip:
+            c += self._club_game_spread_soft()
         self.constraints_added += c
         return c
+
+    # Backward-compatible alias
+    def apply_phase_b(self):
+        """Alias for apply_stage_2_soft()."""
+        return self.apply_stage_2_soft()
 
     def _matchup_spacing_soft(self):
         """Sliding window density penalties."""
@@ -896,7 +890,8 @@ class UnifiedConstraintEngine:
             for g in self.grades
         }
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        config_slack = self.slack.get('ClubVsClubAlignment', 0)
+        base_slack = self.data.get('constraint_defaults', {}).get('club_vs_club_alignment_base_slack', 0)
+        config_slack = self.slack.get('ClubVsClubAlignment', 0) + base_slack
         fidx = 0
 
         processed = []
@@ -1064,22 +1059,6 @@ class UnifiedConstraintEngine:
                     n += 1
         return n
 
-    # ================================================================
-    # PHASE C: INTRA-DAY OPTIMIZATION
-    # ================================================================
-
-    def apply_phase_c(self):
-        """Add intra-day optimization constraints."""
-        assert self._groupings_built, "Call build_groupings() first"
-        c = 0
-        c += self._best_timeslot_choices()
-        c += self._club_day_field_contiguity()
-        c += self._club_game_spread()
-        c += self._clubs_per_timeslot_soft()
-        c += self._clubs_on_field_soft()
-        self.constraints_added += c
-        return c
-
     def _best_timeslot_choices(self):
         """No-gap constraint + slot-number bounding."""
         n = 0
@@ -1140,6 +1119,79 @@ class UnifiedConstraintEngine:
                     else:
                         self.model.Add(nv <= nts).OnlyEnforceIf(ind)
                     n += 1
+
+        # Stacking: if any field uses slot N+1, all fields must use slot N
+        # Build per-field indicators at each location
+        loc_fields = defaultdict(lambda: defaultdict(dict))  # (week,day,loc) -> field_name -> slot -> ind
+        for sfk, vars_list in self.slot_field_vars.items():
+            week, day, location, field_name, day_slot = sfk
+            if vars_list:
+                ind = self._get_or_create_bool(
+                    ('slot_field_used', week, day, location, field_name, day_slot),
+                    vars_list,
+                    f'u_sf_used_{week}_{day}_{location}_{field_name}_{day_slot}')
+                loc_fields[(week, day, location)][field_name][day_slot] = ind
+
+        for (week, day, location), fields_dict in loc_fields.items():
+            all_field_names = sorted(fields_dict.keys())
+            all_slots = set()
+            for field_slots in fields_dict.values():
+                all_slots.update(field_slots.keys())
+            if not all_slots:
+                continue
+            sorted_all_slots = sorted(all_slots)
+
+            # Stacking: if any field uses slot s, all other fields must use slot s-1
+            for i, s in enumerate(sorted_all_slots):
+                if i == 0:
+                    continue
+                prev_s = sorted_all_slots[i - 1]
+                for fn in all_field_names:
+                    if s in fields_dict.get(fn, {}) and prev_s in fields_dict.get(fn, {}):
+                        # For each OTHER field that has slot s
+                        for other_fn in all_field_names:
+                            if other_fn == fn:
+                                continue
+                            if s in fields_dict.get(other_fn, {}) and prev_s in fields_dict.get(other_fn, {}):
+                                # If other_fn uses slot s, fn must use slot s-1
+                                self.model.AddImplication(
+                                    fields_dict[other_fn][s],
+                                    fields_dict[fn][prev_s])
+                                n += 1
+
+        # Last-slot West Field preference at Broadmeadow
+        for (week, day, location), fields_dict in loc_fields.items():
+            if location != BROADMEADOW:
+                continue
+            all_slots = set()
+            for field_slots in fields_dict.values():
+                all_slots.update(field_slots.keys())
+            if not all_slots:
+                continue
+            max_slot = max(all_slots)
+
+            # Count fields active on the last slot
+            last_slot_fields = []
+            for fn, slots in fields_dict.items():
+                if max_slot in slots:
+                    last_slot_fields.append((fn, slots[max_slot]))
+
+            if len(last_slot_fields) >= 2:
+                # Multiple fields on last slot - check if only 1 is active
+                field_inds = {fn: ind for fn, ind in last_slot_fields}
+                total_active = self.model.NewIntVar(0, len(last_slot_fields), f'u_ls_total_{week}_{day}_{max_slot}')
+                self.model.Add(total_active == sum(ind for _, ind in last_slot_fields))
+
+                single_field = self.model.NewBoolVar(f'u_ls_single_{week}_{day}_{max_slot}')
+                self.model.Add(total_active == 1).OnlyEnforceIf(single_field)
+                self.model.Add(total_active != 1).OnlyEnforceIf(single_field.Not())
+
+                # If only 1 field active on last slot, it must be WF
+                if 'WF' in field_inds:
+                    wf_ind = field_inds['WF']
+                    self.model.AddImplication(single_field, wf_ind)
+                    n += 1
+
         return n
 
     def _club_day_field_contiguity(self):
@@ -1185,22 +1237,52 @@ class UnifiedConstraintEngine:
                 n += 1
         return n
 
-    def _club_game_spread(self):
-        """Minimize gaps between a club's games on a given day."""
+    def _club_game_spread_hard(self):
+        """Hard: limit gap and double-ups between a club's games on a given day.
+
+        gap = range_size - num_games
+        Positive = spread (unused slots), Negative = double-ups.
+        UPPER: gap <= max_gap + slack
+        LOWER: gap >= -(T//2 - 1 + slack)  where T = club team count
+        """
         n = 0
-        PENALTY_WEIGHT = 5000
-        self.data['penalties']['ClubGameSpread'] = {'weight': PENALTY_WEIGHT, 'penalties': []}
+        defaults = self.data.get('constraint_defaults', {})
         config_slack = self.slack.get('ClubGameSpread', 0)
-        hard_limit = self.CLUB_GAME_SPREAD_HARD_LIMIT + config_slack
+        max_gap_base = defaults.get('club_game_spread_max_gap', 2)
+        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
+        hard_upper = max_gap_base + config_slack
+        hard_lower = -(max_overlap_base + config_slack)
 
         # Regroup by (club, week, day)
         club_week_day_groups = defaultdict(dict)
         for (club, week, day, day_slot), vars_list in self.by_club_week_day_slot.items():
             club_week_day_groups[(club, week, day)][day_slot] = vars_list
 
+        # Store shared vars for soft phase
+        self._cgs_shared = {}
+
         for (club, week, day), slots_dict in club_week_day_groups.items():
             unique_slots = sorted(slots_dict.keys())
+
             if len(unique_slots) <= 1:
+                # Single slot: range=1, gap=1-num_games.
+                # Still enforce lower bound to prevent excessive double-ups.
+                all_vars = slots_dict[unique_slots[0]]
+                if len(all_vars) < 2:
+                    continue
+
+                num_games = self.model.NewIntVar(0, len(all_vars),
+                                                  f'u_cgs_ng_{club}_w{week}_{day}')
+                self.model.Add(num_games == sum(all_vars))
+
+                has_multi = self.model.NewBoolVar(f'u_cgs_multi_{club}_w{week}_{day}')
+                self.model.Add(num_games >= 2).OnlyEnforceIf(has_multi)
+                self.model.Add(num_games <= 1).OnlyEnforceIf(has_multi.Not())
+
+                # gap = 1 - num_games >= hard_lower => num_games <= 1 - hard_lower
+                max_allowed = 1 - hard_lower
+                self.model.Add(num_games <= max_allowed).OnlyEnforceIf(has_multi)
+                n += 1
                 continue
 
             min_slot, max_slot = unique_slots[0], unique_slots[-1]
@@ -1211,97 +1293,90 @@ class UnifiedConstraintEngine:
                     f'u_cgs_act_{club}_w{week}_{day}_s{s}')
                 is_active[s] = ia
 
-            num_used = self.model.NewIntVar(0, len(unique_slots), f'u_cgs_used_{club}_w{week}_{day}')
-            self.model.Add(num_used == sum(is_active[s] for s in unique_slots))
+            # num_games counts total games (can be > num distinct slots for double-ups)
+            all_vars_flat = []
+            for s in unique_slots:
+                all_vars_flat.extend(slots_dict[s])
+            num_games = self.model.NewIntVar(0, len(all_vars_flat), f'u_cgs_ngames_{club}_w{week}_{day}')
+            self.model.Add(num_games == sum(all_vars_flat))
 
             min_active = self.model.NewIntVar(min_slot, max_slot, f'u_cgs_min_{club}_w{week}_{day}')
             max_active = self.model.NewIntVar(min_slot, max_slot, f'u_cgs_max_{club}_w{week}_{day}')
-            for s in unique_slots:
-                self.model.Add(min_active <= s).OnlyEnforceIf(is_active[s])
-                self.model.Add(max_active >= s).OnlyEnforceIf(is_active[s])
 
-            range_size = self.model.NewIntVar(1, max_slot - min_slot + 1, f'u_cgs_range_{club}_w{week}_{day}')
+            min_candidates = []
+            max_candidates = []
+            for s in unique_slots:
+                mc = self.model.NewIntVar(min_slot, max_slot,
+                                           f'u_cgs_minc_{club}_w{week}_{day}_s{s}')
+                self.model.Add(mc == s).OnlyEnforceIf(is_active[s])
+                self.model.Add(mc == max_slot).OnlyEnforceIf(is_active[s].Not())
+                min_candidates.append(mc)
+
+                xc = self.model.NewIntVar(min_slot, max_slot,
+                                           f'u_cgs_maxc_{club}_w{week}_{day}_s{s}')
+                self.model.Add(xc == s).OnlyEnforceIf(is_active[s])
+                self.model.Add(xc == min_slot).OnlyEnforceIf(is_active[s].Not())
+                max_candidates.append(xc)
+
+            self.model.AddMinEquality(min_active, min_candidates)
+            self.model.AddMaxEquality(max_active, max_candidates)
+
+            # Lower bound accommodates all-inactive case (sentinels: min=max_slot, max=min_slot)
+            range_size = self.model.NewIntVar(min_slot - max_slot + 1, max_slot - min_slot + 1, f'u_cgs_range_{club}_w{week}_{day}')
             self.model.Add(range_size == max_active - min_active + 1)
 
-            max_gaps = max_slot - min_slot
-            gaps = self.model.NewIntVar(0, max_gaps, f'u_cgs_gaps_{club}_w{week}_{day}')
-            self.model.Add(gaps == range_size - num_used)
+            # gap = range_size - num_games (can be negative for double-ups)
+            max_gap_val = max_slot - min_slot
+            min_gap_val = min(1 - len(all_vars_flat), min_slot - max_slot + 1)
+            gap = self.model.NewIntVar(min_gap_val, max_gap_val, f'u_cgs_gap_{club}_w{week}_{day}')
+            self.model.Add(gap == range_size - num_games)
 
             has_multi = self.model.NewBoolVar(f'u_cgs_multi_{club}_w{week}_{day}')
-            self.model.Add(num_used >= 2).OnlyEnforceIf(has_multi)
-            self.model.Add(num_used <= 1).OnlyEnforceIf(has_multi.Not())
+            self.model.Add(num_games >= 2).OnlyEnforceIf(has_multi)
+            self.model.Add(num_games <= 1).OnlyEnforceIf(has_multi.Not())
 
-            self.model.Add(gaps <= hard_limit).OnlyEnforceIf(has_multi)
+            # HARD UPPER: gap <= hard_upper (limits spread)
+            self.model.Add(gap <= hard_upper).OnlyEnforceIf(has_multi)
 
-            pen = self.model.NewIntVar(0, max_gaps, f'u_cgs_pen_{club}_w{week}_{day}')
-            self.model.Add(pen >= gaps).OnlyEnforceIf(has_multi)
+            # HARD LOWER: gap >= hard_lower (limits double-ups)
+            self.model.Add(gap >= hard_lower).OnlyEnforceIf(has_multi)
+
+            n += 1
+
+            # Store for soft phase reuse
+            self._cgs_shared[(club, week, day)] = {
+                'gap': gap, 'has_multi': has_multi,
+                'max_gap_val': max(max_gap_val, -min_gap_val),
+            }
+        return n
+
+    def _club_game_spread_soft(self):
+        """Soft: penalize |gap| between a club's games on a given day."""
+        n = 0
+        PENALTY_WEIGHT = 5000
+        self.data['penalties']['ClubGameSpread'] = {'weight': PENALTY_WEIGHT, 'penalties': []}
+
+        for (club, week, day), shared in self._cgs_shared.items():
+            gap = shared['gap']
+            has_multi = shared['has_multi']
+            max_abs = shared['max_gap_val']
+
+            # Penalty on |gap| — both spread (positive) and double-ups (negative)
+            pen = self.model.NewIntVar(0, max_abs, f'u_cgs_pen_{club}_w{week}_{day}')
+            self.model.Add(pen >= gap).OnlyEnforceIf(has_multi)
+            self.model.Add(pen >= -gap).OnlyEnforceIf(has_multi)
             self.model.Add(pen == 0).OnlyEnforceIf(has_multi.Not())
             self.data['penalties']['ClubGameSpread']['penalties'].append(pen)
             n += 1
         return n
 
-    def _clubs_per_timeslot_soft(self):
-        """Soft: diversity penalty (total_teams - num_clubs)."""
-        n = 0
-        self.data['penalties']['MaximiseClubsPerTimeslotBroadmeadow'] = {'weight': 5000, 'penalties': []}
-
-        for slot, club_vars in self.bm_slot_club.items():
-            presence_vars = []
-            all_game_vars = []
-            for club, vars_list in club_vars.items():
-                ind = self._get_or_create_presence(
-                    ('bm_club_presence', club, slot), vars_list,
-                    f'u_bm_club_{club}_{slot}')
-                presence_vars.append(ind)
-                all_game_vars.extend(vars_list)
-            if not presence_vars:
-                continue
-
-            nc = self.model.NewIntVar(0, len(presence_vars), f'u_sbm_nc_{slot}')
-            self.model.Add(nc == sum(presence_vars))
-            tt = self.model.NewIntVar(0, len(all_game_vars), f'u_sbm_tt_{slot}')
-            self.model.Add(tt == sum(all_game_vars))
-            su = self.model.NewBoolVar(f'u_sbm_su_{slot}')
-            self.model.Add(tt >= 1).OnlyEnforceIf(su)
-            self.model.Add(tt == 0).OnlyEnforceIf(su.Not())
-
-            pen = self.model.NewIntVar(0, len(all_game_vars), f'u_sbm_pen_{slot}')
-            self.model.Add(pen >= tt - nc).OnlyEnforceIf(su)
-            self.model.Add(pen == 0).OnlyEnforceIf(su.Not())
-            self.data['penalties']['MaximiseClubsPerTimeslotBroadmeadow']['penalties'].append(pen)
-            n += 1
-        return n
-
-    def _clubs_on_field_soft(self):
-        """Soft: |num_clubs - 2| penalty per field per day."""
-        n = 0
-        self.data['penalties']['MinimiseClubsOnAFieldBroadmeadow'] = {'weight': 5000, 'penalties': []}
-
-        for field_key, club_vars in self.bm_field_club.items():
-            presence_vars = []
-            for club, vars_list in club_vars.items():
-                ind = self._get_or_create_presence(
-                    ('bm_field_club', club, field_key), vars_list,
-                    f'u_fld_club_{club}_{field_key}')
-                presence_vars.append(ind)
-            if not presence_vars:
-                continue
-            nc = self.model.NewIntVar(0, len(presence_vars), f'u_sfld_nc_{field_key}')
-            self.model.Add(nc == sum(presence_vars))
-            pen = self.model.NewIntVar(0, len(presence_vars), f'u_sfld_pen_{field_key}')
-            self.model.AddAbsEquality(pen, nc - 2)
-            self.data['penalties']['MinimiseClubsOnAFieldBroadmeadow']['penalties'].append(pen)
-            n += 1
-        return n
-
     # ================================================================
-    # CONVENIENCE: APPLY ALL PHASES
+    # CONVENIENCE: APPLY ALL
     # ================================================================
 
     def apply_all(self):
-        """Apply all three phases at once (equivalent to all 19 AI constraints)."""
+        """Apply all constraints (equivalent to all 19 AI constraints)."""
         self.build_groupings()
-        a = self.apply_phase_a()
-        b = self.apply_phase_b()
-        c = self.apply_phase_c()
-        return a + b + c
+        a = self.apply_stage_1_hard()
+        b = self.apply_stage_2_soft()
+        return a + b

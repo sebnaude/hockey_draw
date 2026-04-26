@@ -13,21 +13,22 @@ def main():
     games = d['games']
     print(f"Loaded {len(games)} games")
     
-    # Group by field/week/slot
+    # Group by field/date/slot — a single week can have games on different dates
+    # (Friday + Sunday) with the same day_slot index, which is not a real conflict.
     by_slot = defaultdict(list)
     for g in games:
-        key = (g['field_name'], g['field_location'], g['week'], g['day_slot'])
+        key = (g['field_name'], g['field_location'], g['date'], g['day_slot'])
         by_slot[key].append(g)
-    
+
     print("\nDouble-booked slots:")
     count = 0
     for k, v in sorted(by_slot.items()):
         if len(v) > 1:
             count += 1
-            field, loc, week, slot = k
-            print(f"\n  {field} at {loc} - Week {week}, Slot {slot}: {len(v)} games")
+            field, loc, date, slot = k
+            print(f"\n  {field} at {loc} - {date}, Slot {slot}: {len(v)} games")
             for g in v:
-                print(f"    {g['team1']} vs {g['team2']} ({g['grade']}) - {g['date']} {g['time']}")
+                print(f"    {g['team1']} vs {g['team2']} ({g['grade']}) - week {g['week']} {g['time']}")
     
     print(f"\nTotal double-booked slots: {count}")
 

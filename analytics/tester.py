@@ -31,6 +31,27 @@ from analytics.storage import DrawStorage, StoredGame
 from models import Team, Club, Grade
 
 
+def _registry_normalize(name):
+    """Lazy-import wrapper for normalize_constraint_name."""
+    from constraints.registry import normalize_constraint_name
+    return normalize_constraint_name(name)
+
+def _registry_canonical_for_solver(name):
+    """Lazy-import wrapper for get_canonical_for_solver_name."""
+    from constraints.registry import get_canonical_for_solver_name
+    return get_canonical_for_solver_name(name)
+
+def _registry_get_slack_key(name):
+    """Lazy-import wrapper for get_slack_key."""
+    from constraints.registry import get_slack_key
+    return get_slack_key(name)
+
+def _registry_get_info(canonical_name):
+    """Lazy-import wrapper to get ConstraintInfo from registry."""
+    from constraints.registry import CONSTRAINT_REGISTRY
+    return CONSTRAINT_REGISTRY.get(canonical_name)
+
+
 # Severity levels mapping - lower number = more severe
 # Level 1: Core constraints that must never be broken
 # Level 2: Important structural constraints (club days, team conflicts)
@@ -67,6 +88,10 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # Level 5 - VERY LOW (timeslot preferences)
     'EnsureBestTimeslotChoices': 5,
     'PreferredTimesConstraint': 5,
+
+    # Config-driven checks
+    'ForcedGames': 1,   # CRITICAL - forced games must happen
+    'BlockedGames': 1,  # CRITICAL - blocked games must not happen
 }
 
 # Mapping from severity level to label
@@ -110,11 +135,23 @@ class Violation:
 
 
 @dataclass
+class ConstraintResult:
+    """Result of checking a single constraint."""
+    constraint: str
+    status: str  # 'PASSED', 'VIOLATED', 'SKIPPED'
+    skip_reason: str = ''
+    violations: List[Violation] = field(default_factory=list)
+    slack_value: int = 0
+
+
+@dataclass
 class ViolationReport:
     """Complete violation report for a draw."""
     draw_description: str
     total_games: int
     violations: List[Violation] = field(default_factory=list)
+    constraint_results: List[ConstraintResult] = field(default_factory=list)
+    metadata_source: str = ''  # 'draw_json', 'checkpoint', 'manual', 'none'
     
     @property
     def has_violations(self) -> bool:
@@ -204,7 +241,18 @@ class ViolationReport:
                             lines.append(f"    Games: {', '.join(v.affected_games[:5])}")
                             if len(v.affected_games) > 5:
                                 lines.append(f"    ... and {len(v.affected_games) - 5} more")
-        
+
+        # Constraint results summary (if available)
+        if self.constraint_results:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append(self.constraints_summary())
+            if self.metadata_source:
+                lines.append(f"Metadata source: {self.metadata_source}")
+            skipped = [r for r in self.constraint_results if r.status == 'SKIPPED']
+            if skipped:
+                lines.append(f"Skipped: {', '.join(r.constraint for r in skipped)}")
+
         lines.append("=" * 60)
         return "\n".join(lines)
     
@@ -253,19 +301,30 @@ class ViolationReport:
         
         return 0, 0, "Equal"
 
+    def constraints_summary(self) -> str:
+        """Summary of passed/violated/skipped constraints."""
+        passed = sum(1 for r in self.constraint_results if r.status == 'PASSED')
+        violated = sum(1 for r in self.constraint_results if r.status == 'VIOLATED')
+        skipped = sum(1 for r in self.constraint_results if r.status == 'SKIPPED')
+        return f"Constraints: {passed} passed, {violated} violated, {skipped} skipped"
+
 
 class DrawTester:
     """Main class for testing and modifying draws."""
     
     GRADE_ORDER = ["PHL", "2nd", "3rd", "4th", "5th", "6th"]
     
-    def __init__(self, draw: DrawStorage, data: Dict):
+    def __init__(self, draw: DrawStorage, data: Dict,
+                 constraints_applied=None, excluded_constraints=None):
         """
         Initialize tester with a draw and data.
-        
+
         Args:
             draw: DrawStorage object (will be copied for modification)
             data: Data dict containing teams, grades, clubs, etc.
+            constraints_applied: Optional list of solver constraint names that were applied.
+                If provided, only matching tester checks will run. None = run all (legacy).
+            excluded_constraints: Optional list of constraint names to skip.
         """
         # Deep copy to avoid modifying original
         self.original_draw = draw
@@ -274,13 +333,38 @@ class DrawTester:
         self.teams: List[Team] = data.get('teams', [])
         self.grades: List[Grade] = data.get('grades', [])
         self.clubs: List[Club] = data.get('clubs', [])
-        
+
         # Build lookups
         self._team_to_club = {t.name: t.club.name for t in self.teams}
         self._team_to_grade = {t.name: t.grade for t in self.teams}
 
         # Constraint slack - loaded from data dict (set by solver via --slack flag)
-        self.constraint_slack = data.get('constraint_slack', {})
+        self.constraint_slack = dict(data.get('constraint_slack', {}))
+
+        # Merge metadata slack from draw (caller overrides metadata)
+        if hasattr(draw, 'metadata') and draw.metadata:
+            meta_slack = draw.metadata.get('solver_config', {}).get('constraint_slack', {})
+            if meta_slack:
+                merged = dict(meta_slack)
+                merged.update(self.constraint_slack)  # caller overrides metadata
+                self.constraint_slack = merged
+
+        # Constraint filtering: which constraints to run/skip
+        self._constraints_applied = None  # None = run all (legacy mode)
+        self._excluded_constraints = set()
+
+        if constraints_applied is not None:
+            self._constraints_applied = set()
+            for name in constraints_applied:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    self._constraints_applied.add(canonical)
+
+        if excluded_constraints:
+            for name in excluded_constraints:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    self._excluded_constraints.add(canonical)
 
         # Build playable-week sets from timeslots (accounts for no-play weekends)
         # sunday_weeks: weeks with Sunday games (all grades play)
@@ -296,10 +380,49 @@ class DrawTester:
         # Modification log
         self.modifications: List[str] = []
     
+    def _should_check(self, canonical_name: str) -> tuple:
+        """Return (should_run: bool, skip_reason: str)."""
+        if canonical_name in self._excluded_constraints:
+            return False, 'excluded'
+        if self._constraints_applied is not None:
+            # Tester-only diagnostics always run (they have no solver equivalent)
+            info = _registry_get_info(canonical_name)
+            if info and info.tester_only:
+                return True, ''
+            if canonical_name not in self._constraints_applied:
+                return False, 'not in constraints_applied'
+        return True, ''
+
     @classmethod
-    def from_file(cls, path: str, data: Dict) -> "DrawTester":
-        """Create tester from a saved draw file."""
+    def _extract_metadata(cls, draw):
+        """Extract tester-relevant config from draw metadata."""
+        meta = getattr(draw, 'metadata', None) or {}
+        solver_config = meta.get('solver_config', {})
+        applied = meta.get('constraints_applied', [])
+        applied_names = [c['name'] if isinstance(c, dict) else c for c in applied]
+        return {
+            'constraints_applied': applied_names or None,
+            'excluded_constraints': solver_config.get('excluded_constraints', []),
+            'constraint_slack': solver_config.get('constraint_slack', {}),
+            'mode': meta.get('mode', ''),
+        }
+
+    @classmethod
+    def from_file(cls, path: str, data: Dict, use_metadata: bool = False) -> "DrawTester":
+        """Create tester from a saved draw file.
+
+        Args:
+            path: Path to draw JSON file.
+            data: Season data dict.
+            use_metadata: If True, extract constraints_applied/excluded/slack from
+                draw metadata and pass them to the tester.
+        """
         draw = DrawStorage.load(path)
+        if use_metadata:
+            meta = cls._extract_metadata(draw)
+            return cls(draw, data,
+                       constraints_applied=meta['constraints_applied'],
+                       excluded_constraints=meta['excluded_constraints'])
         return cls(draw, data)
     
     @classmethod
@@ -307,6 +430,60 @@ class DrawTester:
         """Create tester from X solution dict."""
         draw = DrawStorage.from_X_solution(X_solution, description)
         return cls(draw, data)
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint_dir, data, description='Checkpoint'):
+        """Load solution + metadata from checkpoint directory.
+
+        Args:
+            checkpoint_dir: Path to checkpoint directory containing solution.pkl
+                and optionally metadata.json.
+            data: Season data dict.
+            description: Description for the tester.
+        """
+        import pickle
+        import json
+        from pathlib import Path as _Path
+
+        cp = _Path(checkpoint_dir)
+
+        pkl_path = cp / 'solution.pkl'
+        if not pkl_path.exists():
+            raise FileNotFoundError(f"No solution.pkl in {checkpoint_dir}")
+        with open(pkl_path, 'rb') as f:
+            solution = pickle.load(f)
+
+        tester = cls.from_X_solution(solution, data, description=description)
+
+        # Load metadata and apply constraint info
+        meta_path = cp / 'metadata.json'
+        if meta_path.exists():
+            with open(meta_path) as f:
+                meta = json.load(f)
+
+            applied = meta.get('constraints_applied', [])
+            applied_names = [c['name'] if isinstance(c, dict) else c for c in applied]
+            if applied_names:
+                tester._constraints_applied = set()
+                for name in applied_names:
+                    canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                    if canonical:
+                        tester._constraints_applied.add(canonical)
+
+            excluded = meta.get('excluded_constraints', [])
+            for name in excluded:
+                canonical = _registry_canonical_for_solver(name) or _registry_normalize(name)
+                if canonical:
+                    tester._excluded_constraints.add(canonical)
+
+            # Merge slack
+            meta_slack = meta.get('constraint_slack', {})
+            if meta_slack:
+                merged = dict(meta_slack)
+                merged.update(tester.constraint_slack)
+                tester.constraint_slack = merged
+
+        return tester
     
     def reset(self) -> None:
         """Reset to original draw, discarding modifications."""
@@ -887,44 +1064,92 @@ class DrawTester:
     # ============== Constraint Checking ==============
     
     def run_violation_check(self) -> ViolationReport:
-        """Run all constraint checks and return violation report."""
+        """Run constraint checks, respecting metadata if available.
+
+        When constraints_applied is set (from draw metadata or explicit param),
+        only those constraints will be checked. Excluded constraints are skipped.
+        Tester-only diagnostics (e.g., ClubFieldConcentration) always run unless
+        explicitly excluded.
+        """
         violations = []
-        
-        # Run all checks
-        # Level 1 - CRITICAL
-        violations.extend(self._check_no_double_booking_teams())
-        violations.extend(self._check_no_double_booking_fields())
-        violations.extend(self._check_equal_games())
-        violations.extend(self._check_balanced_matchups())
-        violations.extend(self._check_fifty_fifty_home_away())
-        violations.extend(self._check_maitland_back_to_back())
-        violations.extend(self._check_phl_second_grade_adjacency())
-        violations.extend(self._check_phl_second_grade_times())
-        violations.extend(self._check_equal_matchup_spacing())
+        constraint_results = []
 
-        # Level 2 - HIGH
-        violations.extend(self._check_maitland_away_clubs_limit())
-        violations.extend(self._check_club_day())
-        violations.extend(self._check_team_conflict())
+        # Define the check mapping: (canonical_name, check_method)
+        # Order matches the original flat list for consistent output
+        checks = [
+            # Level 1 - CRITICAL
+            ('NoDoubleBookingTeams', self._check_no_double_booking_teams),
+            ('NoDoubleBookingFields', self._check_no_double_booking_fields),
+            ('EqualGamesAndBalanceMatchUps', self._check_equal_games),
+            ('EqualGamesAndBalanceMatchUps', self._check_balanced_matchups),
+            ('FiftyFiftyHomeandAway', self._check_fifty_fifty_home_away),
+            ('MaitlandHomeGrouping', self._check_maitland_back_to_back),
+            ('PHLAndSecondGradeAdjacency', self._check_phl_second_grade_adjacency),
+            ('PHLAndSecondGradeTimes', self._check_phl_second_grade_times),
+            ('EqualMatchUpSpacing', self._check_equal_matchup_spacing),
+            # Level 2 - HIGH
+            ('AwayAtMaitlandGrouping', self._check_maitland_away_clubs_limit),
+            ('ClubDay', self._check_club_day),
+            ('TeamConflict', self._check_team_conflict),
+            # Level 3 - MEDIUM
+            ('ClubGradeAdjacency', self._check_club_grade_adjacency),
+            ('ClubVsClubAlignment', self._check_club_vs_club_alignment),
+            ('ClubGameSpread', self._check_club_game_spread),
+            ('ClubFieldConcentration', self._check_club_field_concentration),
+            # Level 4 - LOW
+            ('MaximiseClubsPerTimeslotBroadmeadow', self._check_maximise_clubs_per_timeslot_broadmeadow),
+            ('MinimiseClubsOnAFieldBroadmeadow', self._check_minimise_clubs_on_a_field_broadmeadow),
+            # Level 5 - VERY LOW
+            ('EnsureBestTimeslotChoices', self._check_ensure_best_timeslot_choices),
+            ('PreferredTimes', self._check_preferred_times),
+            # Config-driven checks (forced/blocked games)
+            ('ForcedGames', self._check_forced_games),
+            ('BlockedGames', self._check_blocked_games),
+        ]
 
-        # Level 3 - MEDIUM
-        violations.extend(self._check_club_grade_adjacency())
-        violations.extend(self._check_club_vs_club_alignment())
-        violations.extend(self._check_club_game_spread())
-        violations.extend(self._check_club_field_concentration())
+        checked_canonicals = set()
+        for canonical_name, check_method in checks:
+            should_run, skip_reason = self._should_check(canonical_name)
 
-        # Level 4 - LOW
-        violations.extend(self._check_maximise_clubs_per_timeslot_broadmeadow())
-        violations.extend(self._check_minimise_clubs_on_a_field_broadmeadow())
+            if not should_run:
+                if canonical_name not in checked_canonicals:
+                    constraint_results.append(ConstraintResult(
+                        constraint=canonical_name, status='SKIPPED',
+                        skip_reason=skip_reason
+                    ))
+                    checked_canonicals.add(canonical_name)
+                continue
 
-        # Level 5 - VERY LOW
-        violations.extend(self._check_ensure_best_timeslot_choices())
-        violations.extend(self._check_preferred_times())
+            check_violations = check_method()
+            violations.extend(check_violations)
+
+            if canonical_name not in checked_canonicals:
+                slack_val = self.constraint_slack.get(
+                    _registry_get_slack_key(canonical_name) or canonical_name, 0)
+                constraint_results.append(ConstraintResult(
+                    constraint=canonical_name,
+                    status='VIOLATED' if check_violations else 'PASSED',
+                    violations=check_violations,
+                    slack_value=slack_val
+                ))
+                checked_canonicals.add(canonical_name)
+            elif check_violations:
+                # Update existing result (e.g., BalancedMatchups after EqualGames)
+                for r in constraint_results:
+                    if r.constraint == canonical_name:
+                        r.violations.extend(check_violations)
+                        r.status = 'VIOLATED'
+
+        metadata_source = 'none'
+        if self._constraints_applied is not None:
+            metadata_source = 'draw_json'
 
         return ViolationReport(
             draw_description=self.draw.description or "Modified Draw",
             total_games=len(self.draw.games),
-            violations=violations
+            violations=violations,
+            constraint_results=constraint_results,
+            metadata_source=metadata_source,
         )
     
     def _check_no_double_booking_teams(self) -> List[Violation]:
@@ -1138,25 +1363,50 @@ class DrawTester:
         
         games_per_slot = defaultdict(list)
         for game in self.draw.games:
-            games_per_slot[(game.date, game.day_slot, game.field_name)].append(game)
+            games_per_slot[(game.date, game.day_slot)].append(game)
 
-        for (date, slot, field), games in games_per_slot.items():
+        # Build lookup of clubs with multiple teams in the same grade
+        club_grade_teams = defaultdict(list)
+        for team in self.teams:
+            club_grade_teams[(team.club.name, team.grade)].append(team.name)
+        multi_team_clubs = {k: v for k, v in club_grade_teams.items() if len(v) > 1}
+
+        for (date, slot), games in games_per_slot.items():
             club_grades = defaultdict(set)
-            
+            club_grade_team_games = defaultdict(lambda: defaultdict(set))
+
             for game in games:
                 for team in [game.team1, game.team2]:
                     club = self._team_to_club.get(team)
                     if club:
                         club_grades[club].add(game.grade)
-            
+                        club_grade_team_games[club][game.grade].add(team)
+
             for club, grades in club_grades.items():
+                # Check 1: Adjacent grades from same club at same timeslot
                 for g1, g2 in adj_pairs:
                     if g1 in grades and g2 in grades:
                         violations.append(Violation.create(
                             constraint="ClubGradeAdjacency",
                             message=f"Club '{club}' has adjacent grades {g1}/{g2} at {date}, slot {slot}"
                         ))
-        
+
+                # Check 2: Same-club same-grade duplicate teams at same timeslot (not playing each other)
+                for grade, teams_in_slot in club_grade_team_games[club].items():
+                    if (club, grade) not in multi_team_clubs:
+                        continue
+                    if len(teams_in_slot) >= 2:
+                        # Check if they're playing each other in this slot
+                        playing_each_other = any(
+                            g.team1 in teams_in_slot and g.team2 in teams_in_slot
+                            for g in games if g.grade == grade
+                        )
+                        if not playing_each_other:
+                            violations.append(Violation.create(
+                                constraint="ClubGradeAdjacency",
+                                message=f"Club '{club}' has duplicate {grade} teams {sorted(teams_in_slot)} at {date}, slot {slot} (not playing each other)"
+                            ))
+
         return violations
     
     def _check_phl_second_grade_adjacency(self) -> List[Violation]:
@@ -1308,7 +1558,7 @@ class DrawTester:
 
         Hard check: For each (team1, team2, grade) pair, the gap between consecutive
         meetings must be >= min_gap.
-        min_gap = max(T//2+1, T-2 - spacing_base_slack - config_slack)
+        min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - config_slack)
 
         Also reports soft penalty info: sliding window density.
         """
@@ -1334,7 +1584,7 @@ class DrawTester:
                 continue
 
             ideal = T - 2
-            floor_val = T // 2 + 1
+            floor_val = min(T // 2, T - 2)
             min_gap = max(floor_val, ideal - base_slack - config_slack)
 
             sorted_rounds = sorted(rounds)
@@ -1558,14 +1808,20 @@ class DrawTester:
         violations = []
         defaults = self.data.get('constraint_defaults', {})
         max_gap_base = defaults.get('club_game_spread_max_gap', 2)
-        max_overlap_base = defaults.get('club_game_spread_max_overlap', 0)
         config_slack = self.constraint_slack.get('ClubGameSpread', 0)
         hard_upper = max_gap_base + config_slack
-        hard_lower = -(max_overlap_base + config_slack)
+
+        # Count teams per club for dynamic lower bound
+        club_team_count = defaultdict(int)
+        for t in self.data.get('teams', []):
+            club_team_count[t.club.name] += 1
 
         # Group games by (club, week, day) -> {day_slot: set of game_ids}
+        # Only Broadmeadow — away venues have 1 field so gap/overlap is irrelevant
         club_week_day_slots = defaultdict(lambda: defaultdict(set))
         for game in self.draw.games:
+            if game.field_location != 'Newcastle International Hockey Centre':
+                continue
             for team in [game.team1, game.team2]:
                 club = self._team_to_club.get(team)
                 if club:
@@ -1583,6 +1839,11 @@ class DrawTester:
             range_size = max_slot - min_slot + 1
             gap = range_size - num_games
 
+            # Dynamic lower bound: T//2 - 1 where T = club team count
+            T = club_team_count.get(club, 1)
+            max_overlap = max(0, T // 2 - 1) + config_slack
+            hard_lower = -max_overlap
+
             if gap > hard_upper:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
@@ -1595,7 +1856,8 @@ class DrawTester:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
                     message=f"Club '{club}' week {week} ({day}): gap={gap} below lower limit {hard_lower} "
-                            f"(too many double-ups: {num_games} games in {range_size} slots)",
+                            f"(too many double-ups: {num_games} games in {range_size} slots, "
+                            f"club has {T} teams, max overlap={max_overlap})",
                     affected_games=list(all_game_ids)[:5],
                     week=week
                 ))
@@ -1611,7 +1873,7 @@ class DrawTester:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
                     message=f"[soft] Club '{club}' week {week} ({day}): {-gap} double-up(s) "
-                            f"({num_games} games in {range_size} slots, within limit {-hard_lower})",
+                            f"({num_games} games in {range_size} slots, within limit {max_overlap})",
                     affected_games=list(all_game_ids)[:5],
                     week=week
                 ))
@@ -1629,8 +1891,11 @@ class DrawTester:
         config_slack = self.constraint_slack.get('ClubGameSpread', 0)
 
         # Group games by (club, week, day) -> {field_name: [game_ids]}
+        # Only Broadmeadow — away venues have 1 field so field concentration is irrelevant
         club_day_fields = defaultdict(lambda: defaultdict(list))
         for game in self.draw.games:
+            if game.field_location != 'Newcastle International Hockey Centre':
+                continue
             for team in [game.team1, game.team2]:
                 club = self._team_to_club.get(team)
                 if club:
@@ -1885,8 +2150,178 @@ class DrawTester:
 
         return violations
 
+    # ============== Forced / Blocked Game Checks ==============
+
+    @staticmethod
+    def _resolve_team_for_check(name: str, grade, teams: list) -> list:
+        """Resolve a club name to full team name(s) for post-hoc checking.
+
+        Works like utils._resolve_team_name but doesn't need pre-built lookups.
+        """
+        team_names = {t.name for t in teams}
+        if name in team_names:
+            return [name]
+        if grade and not isinstance(grade, (list, tuple)):
+            full = f"{name} {grade}"
+            if full in team_names:
+                return [full]
+            matches = [t.name for t in teams if t.club.name == name and t.grade == grade]
+            if matches:
+                return matches
+        if grade and isinstance(grade, (list, tuple)):
+            results = []
+            for g in grade:
+                results.extend(DrawTester._resolve_team_for_check(name, g, teams))
+            return results
+        results = [t.name for t in teams if t.club.name == name]
+        return results if results else [name]
+
+    @staticmethod
+    def _game_matches_scope(game: 'StoredGame', entry: dict) -> bool:
+        """Check if a StoredGame matches the scope fields of a forced/blocked entry."""
+        field_map = {
+            'grade': lambda g: g.grade,
+            'day': lambda g: g.day,
+            'day_slot': lambda g: g.day_slot,
+            'time': lambda g: g.time,
+            'week': lambda g: g.week,
+            'date': lambda g: g.date,
+            'round_no': lambda g: g.round_no,
+            'field_name': lambda g: g.field_name,
+            'field_location': lambda g: g.field_location,
+        }
+        for field_name, accessor in field_map.items():
+            if field_name in entry:
+                val = entry[field_name]
+                game_val = accessor(game)
+                if isinstance(val, list):
+                    if game_val not in val:
+                        return False
+                else:
+                    if game_val != val:
+                        return False
+        # Handle 'grades' (plural) when 'grade' not present
+        if 'grades' in entry and 'grade' not in entry:
+            if game.grade not in entry['grades']:
+                return False
+        return True
+
+    @staticmethod
+    def _game_matches_teams(game: 'StoredGame', entry: dict, teams: list) -> bool:
+        """Check if a StoredGame matches the team specification of an entry."""
+        raw_teams = entry.get('teams', [])
+        club = entry.get('club')
+
+        if not raw_teams and not club:
+            # No team filter — matches any game in scope
+            return True
+
+        grade = entry.get('grade')
+        grades = entry.get('grades', [])
+        effective_grade = grades if grades else grade
+        game_pair = tuple(sorted([game.team1, game.team2]))
+
+        if raw_teams:
+            if len(raw_teams) == 2:
+                resolved_t1 = DrawTester._resolve_team_for_check(raw_teams[0], effective_grade, teams)
+                resolved_t2 = DrawTester._resolve_team_for_check(raw_teams[1], effective_grade, teams)
+                for rt1 in resolved_t1:
+                    for rt2 in resolved_t2:
+                        pair = tuple(sorted([rt1, rt2]))
+                        if game_pair == pair:
+                            return True
+            elif len(raw_teams) == 1:
+                resolved = DrawTester._resolve_team_for_check(raw_teams[0], effective_grade, teams)
+                for rt in resolved:
+                    if rt in (game.team1, game.team2):
+                        return True
+        elif club:
+            # 'club' key: match any team from that club
+            club_teams = DrawTester._resolve_team_for_check(club, effective_grade, teams)
+            for ct in club_teams:
+                if ct in (game.team1, game.team2):
+                    return True
+
+        return False
+
+    def _check_forced_games(self) -> List[Violation]:
+        """Check that FORCED_GAMES constraints are satisfied in the draw.
+
+        For each forced game entry, counts matching games and verifies the
+        constraint type is respected (default: exactly 1).
+        """
+        violations = []
+        forced_games = self.data.get('forced_games', [])
+        if not forced_games:
+            return violations
+
+        for entry in forced_games:
+            desc = entry.get('description', str({k: v for k, v in entry.items()
+                                                  if k not in ('description', 'reason')}))
+            ctype = entry.get('constraint', 'equal')
+
+            matching_games = []
+            for game in self.draw.games:
+                if self._game_matches_scope(game, entry) and \
+                   self._game_matches_teams(game, entry, self.teams):
+                    matching_games.append(game.game_id)
+
+            count = len(matching_games)
+            violated = False
+            if ctype == 'equal' and count != 1:
+                violated = True
+                msg = f"Expected exactly 1 game, found {count}"
+            elif ctype == 'lesse' and count > 1:
+                violated = True
+                msg = f"Expected at most 1 game, found {count}"
+            elif ctype == 'greatere' and count < 1:
+                violated = True
+                msg = f"Expected at least 1 game, found {count}"
+            elif ctype == 'greater' and count <= 1:
+                violated = True
+                msg = f"Expected more than 1 game, found {count}"
+            elif ctype == 'less' and count >= 1:
+                violated = True
+                msg = f"Expected 0 games, found {count}"
+
+            if violated:
+                violations.append(Violation.create(
+                    constraint="ForcedGames",
+                    message=f"Forced game '{desc}': {msg}",
+                    affected_games=matching_games,
+                ))
+
+        return violations
+
+    def _check_blocked_games(self) -> List[Violation]:
+        """Check that BLOCKED_GAMES are respected in the draw.
+
+        For each blocked game entry, verifies no matching games exist.
+        """
+        violations = []
+        blocked_games = self.data.get('blocked_games', [])
+        if not blocked_games:
+            return violations
+
+        for entry in blocked_games:
+            desc = entry.get('description', str({k: v for k, v in entry.items()
+                                                  if k not in ('description', 'reason')}))
+
+            for game in self.draw.games:
+                if self._game_matches_scope(game, entry) and \
+                   self._game_matches_teams(game, entry, self.teams):
+                    violations.append(Violation.create(
+                        constraint="BlockedGames",
+                        message=f"Blocked game '{desc}': "
+                                f"{game.team1} vs {game.team2} ({game.grade}) "
+                                f"on {game.date} at {game.field_location}",
+                        affected_games=[game.game_id],
+                    ))
+
+        return violations
+
     # ============== Reporting ==============
-    
+
     def print_modifications(self) -> None:
         """Print all modifications made to the draw."""
         if not self.modifications:
