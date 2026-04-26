@@ -38,6 +38,13 @@ _legacy/
 # Temp Excel files
 ~$*
 
+# Loose Excel/CSV draft outputs at repo root (formal outputs live in draws/)
+/2026 Season Draw*.xlsx
+/Week*.csv
+
+# Worktree dir for parallel agent sessions
+.claude/
+
 # ======================
 # INPUT DATA - TRACK THIS
 # ======================

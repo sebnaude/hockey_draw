@@ -86,7 +86,13 @@
 |--------|-------|
 | Game time | 7:00pm |
 | Aligned with | Junior Boys program |
-| Dates | TBC |
+| Blocked before May | Yes (Mar 27, Apr 10, Apr 17, Apr 24) |
+| Blocked during school holidays | Yes (Jul 10, Jul 17 - winter holidays) |
+| Jun 12 | Norths vs Wests (80th Anniversary) |
+
+**Norths PHL requests:**
+- Exactly 1 Friday PHL game vs Gosford (any venue/date)
+- PHL Norths vs Souths on May 10 (aligned with Red & Blue Derby)
 
 ---
 
@@ -117,7 +123,8 @@
 ### Hard No-Play (Team CANNOT be scheduled)
 
 #### Souths
-- **PHL & 2nd Grade** - May 24 (U18 State Championships)
+- **PHL** - May 22-24 full weekend (U18 State Championships)
+- **2nd Grade** - May 24 (U18 State Championships)
 
 #### Gosford
 - **All grades** - June 21 (Recovery weekend after Men's SC)
