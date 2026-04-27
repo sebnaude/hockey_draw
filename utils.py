@@ -3371,6 +3371,20 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
 
 # ============== Season Data Builder ==============
 
+def _merge_constraint_defaults(season_overrides: dict) -> dict:
+    """Merge season-specific overrides over the perennial defaults from config.defaults.
+
+    Season configs may set only the keys they want to change; everything else
+    inherits from `config.defaults.CONSTRAINT_DEFAULTS`. This guarantees every
+    constraint can rely on the full set of keys without a per-season copy.
+    """
+    from config.defaults import CONSTRAINT_DEFAULTS as _DEFAULTS
+    merged = dict(_DEFAULTS)
+    if season_overrides:
+        merged.update(season_overrides)
+    return merged
+
+
 def build_season_data(config: dict) -> dict:
     """
     Build complete data dictionary from a season configuration.
@@ -3597,6 +3611,6 @@ def build_season_data(config: dict) -> dict:
         'forced_games': config.get('forced_games', []),
         'blocked_games': config.get('blocked_games', []),
         'penalty_weights': config.get('penalty_weights', {}),
-        'constraint_defaults': config.get('constraint_defaults', {}),
+        'constraint_defaults': _merge_constraint_defaults(config.get('constraint_defaults', {})),
     }
 

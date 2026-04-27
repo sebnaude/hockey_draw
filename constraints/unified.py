@@ -41,12 +41,12 @@ GRADE_ORDER = ["PHL", "2nd", "3rd", "4th", "5th", "6th"]
 class UnifiedConstraintEngine:
     """Single-pass constraint engine with shared groupings and indicators."""
 
-    # Configurable limits
-    PHL_ADJACENCY_MINUTES = 180
+    # PHL_ADJACENCY_MINUTES, MAITLAND_AWAY_HARD_LIMIT, CLUBS_ON_FIELD_HARD_LIMIT
+    # and CLUB_GAME_SPREAD_HARD_LIMIT used to live here as class constants.
+    # The first is now read from constraint_defaults['phl_adjacency_window_minutes'];
+    # the others were unused (dead config). BROADMEADOW_MAX_SLOTS stays here as
+    # a tuning param (the threshold above which Broadmeadow slot caps relax).
     BROADMEADOW_MAX_SLOTS = 6
-    MAITLAND_AWAY_HARD_LIMIT = 3
-    CLUBS_ON_FIELD_HARD_LIMIT = 5
-    CLUB_GAME_SPREAD_HARD_LIMIT = 2
 
     def __init__(self, model: cp_model.CpModel, X: dict, data: dict, skip_constraints=None):
         self.model = model
@@ -509,12 +509,15 @@ class UnifiedConstraintEngine:
             club, week, day = club_week_day
             second_slots = self.second_club_week_day.get(club_week_day, {})
 
+            adjacency_minutes = self.data.get('constraint_defaults', {}).get(
+                'phl_adjacency_window_minutes', 180
+            )
             for (phl_time, phl_loc), phl_vars in phl_slots.items():
                 if not phl_time:
                     continue
                 phl_time_dt = datetime.strptime(phl_time, '%H:%M')
-                min_time = (phl_time_dt - timedelta(minutes=self.PHL_ADJACENCY_MINUTES)).time()
-                max_time = (phl_time_dt + timedelta(minutes=self.PHL_ADJACENCY_MINUTES)).time()
+                min_time = (phl_time_dt - timedelta(minutes=adjacency_minutes)).time()
+                max_time = (phl_time_dt + timedelta(minutes=adjacency_minutes)).time()
 
                 for (sec_time, sec_loc, sec_team), sec_vars in second_slots.items():
                     if not sec_time:
@@ -562,8 +565,13 @@ class UnifiedConstraintEngine:
             n += 1
 
         # Gosford Friday games in specific rounds
+        gosford_friday_rounds = set(
+            self.data.get('constraint_defaults', {}).get(
+                'gosford_friday_rounds', [2, 4, 5, 9, 10]
+            )
+        )
         for round_no, round_vars in self.phl_friday_gosford_round.items():
-            if round_no in [2, 4, 5, 9, 10]:
+            if round_no in gosford_friday_rounds:
                 self.model.Add(sum(round_vars) == 1)
                 n += 1
 

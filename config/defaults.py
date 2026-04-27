@@ -68,6 +68,36 @@ GRADE_ORDER = ['PHL', '2nd', '3rd', '4th', '5th', '6th']
 #
 # See docs/PERENNIAL_RULES.md for rationale.
 
+# ============== Default CONSTRAINT_DEFAULTS ==============
+# These ship with every season. Season configs may override or extend.
+# All numeric thresholds and parameter constants used by constraints
+# should resolve through this dict so atoms have one source of truth.
+
+CONSTRAINT_DEFAULTS = {
+    # Spacing
+    'spacing_base_slack': 0,
+    # Friday-night game counts
+    'max_friday_broadmeadow': 3,
+    'gosford_friday_games': 8,
+    'maitland_friday_games': 2,
+    'gosford_friday_rounds': [2, 4, 5, 9, 10],
+    # Maitland home-game grouping
+    'maitland_max_consecutive_home': 1,
+    'away_maitland_max_clubs': 3,
+    # Broadmeadow field counts
+    'max_clubs_per_field': 5,
+    # Club game spread
+    'club_game_spread_max_gap': 2,
+    'club_game_spread_max_overlap': 0,
+    # Club-vs-club alignment
+    'club_vs_club_alignment_base_slack': 0,
+    # PHL/2nd adjacency time window
+    'phl_adjacency_window_minutes': 180,
+    # Worst timeslot (penalised by EnsureBestTimeslotChoices)
+    'worst_timeslot_time': '19:00',
+}
+
+
 PERENNIAL_BLOCKED_GAMES = [
     # === Rounds 1-2: All games at Broadmeadow only ===
     # No games at Maitland Park or Central Coast in the first two playing rounds.
