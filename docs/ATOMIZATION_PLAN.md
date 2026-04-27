@@ -1,7 +1,27 @@
 # Atomization Plan — Unified Constraints, Helper-Var Registry, Generic Home/Away
 
 **Branch:** `final-form` (worktree at `C:/Users/c3205/Documents/Code/python/draw-final-form`)
-**Status:** APPROVED — implementation can start.
+**Status:** APPROVED — partially implemented.
+
+## Phase status (as of commit `48f5222`)
+
+| Phase | Status | Commit |
+|---|---|---|
+| 0 — Constraint inventory | ✅ DONE | `6e16d14` |
+| 1 — Helper-Var Registry | ✅ DONE | `244f8cd` |
+| 2 — ConstraintInfo extension | ✅ DONE | `c64c1d4` |
+| 3 — Atomize 3 multi-idea constraints | ⬜ NOT STARTED | — |
+| 4 — FORCED/BLOCKED count adjusters | ⬜ NOT STARTED (depends on 3) | — |
+| 5 — Constants migration | ✅ DONE | `535cac3` |
+| 6 — Generic home-ground rename | 🟡 PREP DONE — `AWAY_VENUE_RULES` skeleton committed (`48f5222`); rename + per-club iteration still TODO | partial |
+| 7a — Tests on real sampled data | ⬜ NOT STARTED | — |
+| 7b — Configurable stages | ⬜ NOT STARTED | — |
+| 7c — Move legacy to `constraints/archived/` | ⬜ NOT STARTED (depends on 3) | — |
+| 7d — Documentation update | 🟡 partial — `docs/CONSTRAINT_INVENTORY.md` (Phase 0) and `docs/HELPER_VARS.md` (Phase 1) shipped | partial |
+
+Test baseline at this point: **1246 passed, 1 skipped** (started at 1216).
+
+The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session.
 **Goal recap:** one idea per constraint; constraint+helper-var registry; zero hardcoded constants in constraints; FORCED/BLOCKED-aware count adjustments; generic home-ground concept; tests on real sampled data; configurable stage assignment; per-club / per-type violation breakdowns.
 
 This plan is in 7 phases, each one independently shippable. Each phase has a concrete deliverable, a test bar, and a list of files touched.
@@ -55,7 +75,9 @@ Captured here so anyone picking up the work has a self-contained briefing.
 
 ---
 
-## Phase 0 — Pre-flight & freeze the inventory  *(no code changes)*
+## Phase 0 — Pre-flight & freeze the inventory  *(no code changes)*  — ✅ DONE (`6e16d14`)
+**Deliverable shipped:** `docs/CONSTRAINT_INVENTORY.md` — 21-row table of every registered constraint, atom-target name(s), and 9 findings flagged for sign-off.
+
 
 Before atomizing, lock down what we have:
 - Snapshot the current 21 registered constraints (registry.py) and the 19 solver classes in `original.py`/`ai.py` into a markdown table.
@@ -68,7 +90,11 @@ Before atomizing, lock down what we have:
 
 ---
 
-## Phase 1 — Helper-Variable Registry
+## Phase 1 — Helper-Variable Registry — ✅ DONE (`244f8cd`)
+**Deliverable shipped:** `constraints/helper_vars.py` with `HelperVarRegistry` (declare/freeze/get_declared + pool-style legacy API). `unified.py` wired (`self.registry` + `self.pool` alias). 15 unit tests. `SharedVariablePool` retained as alias for back-compat. Documented in `docs/HELPER_VARS.md`.
+
+Note for Phase 3 atoms: the registry's pool-style `.get(key)` returns the cached pool var (or None). Use `registry.get_declared(kind, key)` for the new declarative path.
+
 
 **The problem today:** `unified.py` has a `SharedVariablePool` that lazy-creates BoolVars/IntVars and caches them. It works but it's an in-line cache, not a declarative registry. Constraints can't *declare* what they need; they reach in and ask. There's no compile-time check that a constraint built its own helper without going through the pool. There's no way to introspect "what helper-vars does the model use" for debugging.
 
@@ -131,7 +157,9 @@ The `UnifiedConstraintEngine` runs:
 
 ---
 
-## Phase 2 — Constraint Registry (extend the existing one)
+## Phase 2 — Constraint Registry (extend the existing one) — ✅ DONE (`c64c1d4`)
+**Deliverable shipped:** `ConstraintInfo` gained `atom_group`, `required_helpers`, `forced_blocked_adjuster`. `HELPER_VAR_CATALOG` set lists allowed helper-var kinds. New helpers `get_atoms_in_group`, `get_adjuster`, `validate_required_helpers`. 7 new tests.
+
 
 The existing `constraints/registry.py` is a name-mapping registry (canonical ↔ solver class ↔ tester method). It should also know:
 - Severity, slack key, has-soft-component (already there).
@@ -258,7 +286,11 @@ For each of the above I'll list the adjustment formula in the `ATOMIZATION_PLAN.
 
 ---
 
-## Phase 5 — Constants migration to config
+## Phase 5 — Constants migration to config — ✅ DONE (`535cac3`)
+**Deliverable shipped:** Perennial `CONSTRAINT_DEFAULTS` in `config/defaults.py` (every constraint param has a default; seasons override only what they want changed). `_merge_constraint_defaults()` in `utils.py` merges season overrides into perennials. New keys `phl_adjacency_window_minutes`, `gosford_friday_rounds`, `worst_timeslot_time`. `unified.py` reads `PHL_ADJACENCY_MINUTES` and Gosford-Friday rounds from config; 4 dead class constants removed. 8 new tests.
+
+`original.py` and `ai.py` left untouched (reference-only, archived in Phase 7c).
+
 
 Audit found these hardcoded constants in `constraints/unified.py` (and similar spots in original/ai):
 
@@ -282,7 +314,12 @@ Audit found these hardcoded constants in `constraints/unified.py` (and similar s
 
 ---
 
-## Phase 6 — Generic Home-Ground
+## Phase 6 — Generic Home-Ground — 🟡 PREP DONE (`48f5222`); rename TODO
+
+**Skeleton shipped:** `AWAY_VENUE_RULES` dict in `config/defaults.py` keyed by club name with per-club `max_consecutive_home`/`friday_games`/`max_away_clubs`. No constraint reads from it yet.
+
+**Still TODO:** rename + per-club iteration. The constraint logic still hardcodes `'Maitland'`/`'Gosford'` strings; the rename touches ~20 files / ~100 references and needs registry aliases preserved for severity/slack lookups. See pickup notes in `docs/ATOMIZATION_HANDOFF.md`.
+
 
 **Today:** `home_field_map` exists (`{'Maitland': 'Maitland Park', 'Gosford': 'Central Coast Hockey Park'}`) but constraints hard-code "Maitland" / "Gosford" everywhere.
 
