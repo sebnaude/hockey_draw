@@ -49,13 +49,31 @@ Two lists control variable filtering:
 
 | Config | Purpose |
 |--------|---------|
-| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc. and `count` to change the threshold, e.g. `'constraint': 'lesse', 'count': 2` for sum <= 2) |
+| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc. and `count` to change the threshold, e.g. `'constraint': 'lesse', 'count': 2` for sum <= 2). Team filters: `teams=[t1,t2]`, `team1=`, `team2=`, or `club=` (resolves to all teams of that club at the given grade). |
 | `BLOCKED_GAMES` | Eliminate variables matching scope + team matchers (or ALL vars in scope if no teams specified) |
 
-### 4. Friday Night Limits
-- Broadmeadow (NIHC): max 3 games (`CONSTRAINT_DEFAULTS['max_friday_broadmeadow']`)
-- Gosford (CCHP): exactly 8 games (`CONSTRAINT_DEFAULTS['gosford_friday_games']`, AGM decision 2026)
-- Maitland Park: exactly 2 games (`CONSTRAINT_DEFAULTS['maitland_friday_games']`, Gosford vs Maitland only)
+**A FORCED variable can match multiple scopes.** A var that matches both `{day=Friday, club=Maitland}` count==2 and `{day=Friday, teams=[Norths,Maitland]}` count==1 counts toward BOTH constraints. Use this composability to express "exactly N games of kind X, of which exactly M are kind Y" rules.
+
+### 4. Per-venue / per-day game counts use FORCED_GAMES, NOT constraints
+
+Count budgets ("max 3 PHL Fridays at Broadmeadow," "exactly 8 Friday Gosford games per season," "exactly 2 Friday Maitland games per season") are expressed as **`FORCED_GAMES` entries in the season config**, not as constraint classes. Example:
+
+```python
+FORCED_GAMES = [
+    {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+     'count': 3, 'constraint': 'lesse',
+     'description': 'Max 3 PHL Friday games at Broadmeadow per season'},
+    {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Central Coast Hockey Park',
+     'count': 8, 'constraint': 'equal',
+     'description': 'Exactly 8 PHL Friday games at Gosford per season'},
+]
+```
+
+If you find yourself writing a hardcoded count constraint (`model.Add(sum(vars) <op> N)`) for a per-venue / per-day / per-round budget, **stop**. Add a FORCED entry instead. Reserve constraint classes for *structural* rules (no-double-booking, adjacency, balance, spacing) — not for *count budgets*.
+
+The pre-solver `validate_game_config` checks FORCED rule consistency (overlapping scopes with conflicting counts surface there).
+
+See `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the full rationale + migration history.
 
 ### 5. Weeks vs Rounds
 The season spans 27 calendar weeks but has fewer playable rounds:

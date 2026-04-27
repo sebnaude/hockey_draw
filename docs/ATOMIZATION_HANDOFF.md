@@ -47,6 +47,15 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `c64c1d4` | 2 | `feat(constraints): extend ConstraintInfo for atomization (Phase 2)` |
 | `535cac3` | 5 | `feat(config): migrate hardcoded constraint constants to CONSTRAINT_DEFAULTS (Phase 5)` |
 | `48f5222` | 6 prep | `feat(config): add AWAY_VENUE_RULES skeleton for generic home-ground` |
+| `1956608` | 3a | `feat(constraints): atomize PHLAndSecondGradeTimes into 8 atoms (Phase 3a)` — see retraction note below |
+
+### IMPORTANT — Phase 3a partial retraction (FORCED-as-count-rules)
+
+After Phase 3a shipped, the user clarified that **per-venue / per-day game-count budgets** must be expressed as `FORCED_GAMES` entries in the season config, NOT as hardcoded count atoms. Three of the eight atoms shipped in `1956608` (`BroadmeadowFridayCount`, `GosfordFridayCount`, `MaitlandFridayCount`, plus possibly `GosfordFridayRoundsForced`) are therefore **slated for removal** in favor of FORCED entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the full hand-off.
+
+**Do this before continuing the rest of Phase 3.** That work is the next user-facing deliverable.
+
+After it ships, the cluster's atom count drops from 8 to ~4: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `PHLRoundOnePlay`, `PreferredDates`.
 
 ### What changed structurally (prior session)
 
