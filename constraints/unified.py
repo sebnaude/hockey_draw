@@ -24,6 +24,16 @@ from utils import (
     get_duplicated_graded_teams
 )
 from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
+from constraints.atoms import (
+    PHLConcurrencyAtBroadmeadow,
+    PHLAnd2ndConcurrencyAtBroadmeadow,
+    BroadmeadowFridayCount,
+    GosfordFridayCount,
+    GosfordFridayRoundsForced,
+    MaitlandFridayCount,
+    PHLRoundOnePlay,
+    PreferredDates,
+)
 
 # Venue constants
 BROADMEADOW = 'Newcastle International Hockey Centre'
@@ -383,7 +393,7 @@ class UnifiedConstraintEngine:
         if 'PHLAndSecondGradeAdjacency' not in _skip:
             c += self._phl_adjacency_hard()
         if 'PHLAndSecondGradeTimes' not in _skip:
-            c += self._phl_times_hard()
+            c += self._phl_times_atoms_hard()
         if 'EqualMatchUpSpacing' not in _skip:
             c += self._matchup_spacing_hard()
         if 'ClubGradeAdjacency' not in _skip:
@@ -531,7 +541,36 @@ class UnifiedConstraintEngine:
                         n += 1
         return n
 
+    # ----------------------------------------------------------------
+    # PHL/2nd-grade times — atom dispatch (Phase 3, replaces _phl_times_hard /
+    # _phl_times_soft). Legacy methods retained below for parity reference.
+    # ----------------------------------------------------------------
+
+    _PHL_HARD_ATOMS = (
+        PHLConcurrencyAtBroadmeadow,
+        PHLAnd2ndConcurrencyAtBroadmeadow,
+        BroadmeadowFridayCount,
+        GosfordFridayCount,
+        GosfordFridayRoundsForced,
+        MaitlandFridayCount,
+        PHLRoundOnePlay,
+    )
+    _PHL_SOFT_ATOMS = (PreferredDates,)
+
+    def _phl_times_atoms_hard(self):
+        n = 0
+        for atom_cls in self._PHL_HARD_ATOMS:
+            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
+        return n
+
+    def _phl_times_atoms_soft(self):
+        n = 0
+        for atom_cls in self._PHL_SOFT_ATOMS:
+            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
+        return n
+
     def _phl_times_hard(self):
+        """Legacy single-method PHL times — retained for parity reference. Not called."""
         n = 0
         # No concurrent PHL at Broadmeadow
         for slot_id, vars_list in self.phl_slot_vars.items():
@@ -793,7 +832,7 @@ class UnifiedConstraintEngine:
         if 'AwayAtMaitlandGrouping' not in _skip:
             c += self._away_maitland_soft()
         if 'PHLAndSecondGradeTimes' not in _skip:
-            c += self._phl_times_soft()
+            c += self._phl_times_atoms_soft()
         if 'PreferredTimesConstraint' not in _skip:
             c += self._preferred_times()
         if 'EnsureBestTimeslotChoices' not in _skip:
@@ -1007,7 +1046,7 @@ class UnifiedConstraintEngine:
         return n
 
     def _phl_times_soft(self):
-        """Soft: preferred date penalties."""
+        """Legacy preferred-date penalties — retained for parity reference. Not called."""
         n = 0
         weight = self._get_penalty_weight('phl_preferences', 10000)
         self.data['penalties']['phl_preferences'] = {'weight': weight, 'penalties': []}

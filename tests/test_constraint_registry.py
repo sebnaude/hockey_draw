@@ -57,9 +57,8 @@ class TestRegistryCompleteness:
                     f"DrawTester.{attr_name} not covered by registry"
 
     def test_registry_has_expected_entry_count(self):
-        """Registry should have 19 entries (18 solver + 1 tester-only).
-        MaitlandHomeGrouping and MaxMaitlandHomeWeekends are merged."""
-        assert len(CONSTRAINT_REGISTRY) == 21
+        """Registry has the original 21 entries plus 8 PHL atoms (Phase 3)."""
+        assert len(CONSTRAINT_REGISTRY) == 29
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method."""
