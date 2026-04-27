@@ -118,7 +118,7 @@ class TestNoMetadataRunsAllChecks:
         report = tester.run_violation_check()
 
         # Should have constraint_results for all 19 canonical constraints
-        assert len(report.constraint_results) == 19
+        assert len(report.constraint_results) == 21
         assert report.metadata_source == 'none'
         # Every result should be PASSED or VIOLATED (none SKIPPED)
         statuses = {r.status for r in report.constraint_results}
@@ -323,7 +323,7 @@ class TestFromCheckpointLoadsMetadata:
             tester = DrawTester.from_checkpoint(tmpdir, data)
             assert tester._constraints_applied is None  # legacy mode
             report = tester.run_violation_check()
-            assert len(report.constraint_results) == 19
+            assert len(report.constraint_results) == 21
 
 
 class TestFromFileAutodetectsJson:
@@ -384,7 +384,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 19
+        assert len(report.constraint_results) == 21
         assert report.metadata_source == 'none'
 
     def test_legacy_draw_empty_metadata(self):
@@ -393,7 +393,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 19
+        assert len(report.constraint_results) == 21
 
 
 class TestSolverNameNormalization:

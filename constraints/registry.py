@@ -169,6 +169,22 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PreferredTimesConstraint'],
         severity_level=5,
     ),
+    'ForcedGames': ConstraintInfo(
+        canonical_name='ForcedGames',
+        solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class
+        tester_check_methods=['_check_forced_games'],
+        tester_violation_names=['ForcedGames'],
+        severity_level=1,
+        tester_only=True,
+    ),
+    'BlockedGames': ConstraintInfo(
+        canonical_name='BlockedGames',
+        solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class
+        tester_check_methods=['_check_blocked_games'],
+        tester_violation_names=['BlockedGames'],
+        severity_level=1,
+        tester_only=True,
+    ),
 }
 
 

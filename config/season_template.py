@@ -20,32 +20,20 @@ This file contains all season-specific settings including:
 """
 
 from datetime import datetime, time as tm
+from config.defaults import (
+    FIELDS, DAY_TIME_MAP, HOME_FIELD_MAP, GRADE_ORDER,
+    PERENNIAL_BLOCKED_GAMES,
+)
 
 # ============== Playing Fields ==============
-# Define all playing fields for this season
-# Each field needs a location (venue) and name (field identifier)
-
-FIELDS = [
-    {'location': 'Newcastle International Hockey Centre', 'name': 'SF'},  # South Field
-    {'location': 'Newcastle International Hockey Centre', 'name': 'EF'},  # East Field
-    {'location': 'Newcastle International Hockey Centre', 'name': 'WF'},  # West Field
-    {'location': 'Maitland Park', 'name': 'Maitland Main Field'},
-    {'location': 'Central Coast Hockey Park', 'name': 'Wyong Main Field'},
-]
+# Imported from config/defaults.py (same every year).
+# Override here only if venues change for this season.
+# FIELDS = [...]
 
 # ============== Game Times by Venue/Day ==============
-# Standard game times for each venue (non-PHL grades)
-# Format: venue_name -> day_name -> list of time objects
-
-DAY_TIME_MAP = {
-    'Newcastle International Hockey Centre': {
-        'Sunday': [tm(8, 30), tm(10, 0), tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0), tm(17, 30), tm(19, 0)]
-    },
-    'Maitland Park': {
-        'Sunday': [tm(9, 0), tm(10, 30), tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-    },
-    # Add more venues as needed
-}
+# Imported from config/defaults.py (same every year).
+# Override here only if game times change for this season.
+# DAY_TIME_MAP = {...}
 
 # ============== PHL-Specific Game Times ==============
 # PHL grade can have different times including Friday nights
@@ -103,13 +91,9 @@ FIELD_UNAVAILABILITIES = {
 # ============== Club Days (Special Events) ==============
 # Each club may have a "club day" where all their teams play back-to-back
 # at the same venue. Specify the date of each club's event.
-# Two formats supported:
-#   'ClubName': datetime(YYYY, M, D)                                   # derby (intra-club matchups)
-#   'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'}  # force host vs opponent matchups
 
 CLUB_DAYS = {
     # 'ClubName': datetime(YYYY, M, D),
-    # 'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'},
 }
 
 # ============== Blocked Games (Hard No-Play) ==============
@@ -129,6 +113,11 @@ CLUB_DAYS = {
 # See docs/ai/CONFIGURATION_REFERENCE.md for full field reference.
 
 BLOCKED_GAMES = [
+    # --- Perennial rules (from config/defaults.py) ---
+    # Rounds 1-2 at Broadmeadow only, etc. See docs/PERENNIAL_RULES.md.
+    *PERENNIAL_BLOCKED_GAMES,
+
+    # --- Season-specific blocks below ---
     # {
     #     'club': 'ClubName',
     #     'grade': '6th',
@@ -192,6 +181,7 @@ SEASON_CONFIG = {
     
     # Schedule parameters
     'max_rounds': 20,  # Maximum number of rounds (4 rounds = 20 matches per team)
+    'num_dummy_timeslots': 3,  # For solver flexibility
     
     # Special settings
     'play_anzac_sunday': True,  # Whether to schedule games on ANZAC Sunday
@@ -219,15 +209,11 @@ SEASON_CONFIG = {
     'preference_no_play': PREFERENCE_NO_PLAY,
     'phl_preferences': PHL_PREFERENCES,
     
-    # Home field mappings
-    # Clubs not listed default to Newcastle International Hockey Centre
-    'home_field_map': {
-        'Maitland': 'Maitland Park',
-        'Gosford': 'Central Coast Hockey Park',
-    },
-    
-    # Grade order (for adjacency constraints)
-    'grade_order': ['PHL', '2nd', '3rd', '4th', '5th', '6th'],
+    # Home field mappings (from config/defaults.py, override if needed)
+    'home_field_map': HOME_FIELD_MAP,
+
+    # Grade order (from config/defaults.py, override if needed)
+    'grade_order': GRADE_ORDER,
 
     # Base limits for slack-aware constraints (see CONSTRAINT_DEFAULTS in season_2026.py for docs)
     'constraint_defaults': {
@@ -235,8 +221,9 @@ SEASON_CONFIG = {
         'maitland_max_consecutive_home': 1,
         'away_maitland_max_clubs': 3,
         'max_clubs_per_field': 5,
-        'club_game_spread_max_gap': 2,
-        'club_game_spread_max_overlap': 0,  # ClubGameSpread: max allowed double-ups (0 = no two games at same slot)
+        'club_game_spread_max_gap': 1,
+        # club_game_spread_max_overlap: REMOVED — now dynamic per club: T//2 - 1 where T = team count
+        'club_vs_club_alignment_base_slack': 1,  # ClubVsClubAlignment: additional base slack on top of --slack flag
     },
 }
 

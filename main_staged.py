@@ -143,6 +143,29 @@ def _build_normalized_penalty(penalties_dict: dict) -> list:
     return terms
 
 
+def _apply_objective_lower_bound(model, objective_expr, data):
+    """
+    Apply objective lower bound from config to prune bad search space.
+
+    If 'objective_lower_bound' is set in data (from SEASON_CONFIG), adds a
+    constraint that the objective must be >= that value. This tells CP-SAT
+    to prune any branch that can't reach the bound, speeding up the search.
+
+    Args:
+        model: CpModel instance
+        objective_expr: The objective expression (before Maximize)
+        data: Data dict containing config
+
+    Returns:
+        The objective expression (possibly wrapped in an IntVar with lower bound)
+    """
+    lower_bound = data.get('objective_lower_bound')
+    if lower_bound is not None:
+        model.Add(objective_expr >= lower_bound)
+        print(f"  Objective lower bound: {lower_bound:,} (pruning worse solutions)")
+    return objective_expr
+
+
 # ============== Solution Callback for Intermediate Saves ==============
 
 class IntermediateSolutionCallback(cp_model.CpSolverSolutionCallback):
@@ -887,10 +910,10 @@ class StagedScheduleSolver:
         total_penalty = sum(coeff * var for coeff, var in penalty_terms)
 
         # Objective: maximize games scheduled, minimize penalties
-        self.model.Maximize(
-            sum(self.X.values()) - total_penalty
-        )
-    
+        objective_expr = sum(self.X.values()) - total_penalty
+        _apply_objective_lower_bound(self.model, objective_expr, self.data)
+        self.model.Maximize(objective_expr)
+
     def solve_stage(self, stage_config: dict, run_dir: Path = None, stage_name: str = None) -> tuple:
         """Solve a single stage with comprehensive logging and resource monitoring."""
         # Use stage-specific time if set, otherwise fall back to config, then default 2 days
@@ -1297,6 +1320,29 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     # Handle locked games
     if locked_keys:
         locked_keys_set = set(locked_keys) if not isinstance(locked_keys, set) else locked_keys
+
+        # Pre-validate locked keys against current timeslot data
+        from utils import validate_locked_keys_or_exit, repair_locked_keys
+        repair_mode = solver_config.repair_locked if solver_config and hasattr(solver_config, 'repair_locked') else False
+        if repair_mode:
+            repaired, repair_log = repair_locked_keys(list(locked_keys_set), data['timeslots'])
+            if repair_log:
+                repaired_count = sum(1 for r in repair_log if r.get('repaired'))
+                failed_count = sum(1 for r in repair_log if not r.get('repaired'))
+                logger.info(f"  Repaired {repaired_count} locked key(s), {failed_count} unrepairable")
+                print(f"  Repaired {repaired_count} locked key(s)")
+                for r in repair_log[:5]:
+                    if r.get('repaired'):
+                        diffs = ', '.join(f"{k}: {v['draw']}->{v['timeslot']}"
+                                         for k, v in r['field_diffs'].items())
+                        print(f"    Fixed: {r['original'][0]} vs {r['original'][1]} ({r['original'][2]}): {diffs}")
+                if len(repair_log) > 5:
+                    print(f"    ... and {len(repair_log) - 5} more")
+                locked_keys_set = set(repaired)
+        else:
+            validate_locked_keys_or_exit(list(locked_keys_set), data,
+                                         source_label=solver_config.locked_source if solver_config and hasattr(solver_config, 'locked_source') else 'locked draw')
+
         logger.info(f"Locking {len(locked_keys_set)} games from locked weeks...")
         print(f"  Locking {len(locked_keys_set)} games from locked weeks...")
         matched = 0
@@ -1320,7 +1366,10 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                     zeroed += 1
             logger.info(f"  Zeroed {zeroed} non-locked variables in locked weeks")
             print(f"  Zeroed {zeroed} non-locked variables in locked weeks")
-    
+
+        # Store locked keys in data so constraints can access them
+        data['locked_keys_set'] = locked_keys_set
+
     # Apply solution hints if provided
     if hint_solution:
         hints_added = 0
@@ -1398,7 +1447,9 @@ def _main_simple_unified(model, X, data, solver_config, resource_monitor,
     penalties_dict = data.get('penalties', {})
     penalty_terms = _build_normalized_penalty(penalties_dict)
     total_penalty = sum(coeff * var for coeff, var in penalty_terms)
-    model.Maximize(sum(X.values()) - total_penalty)
+    objective_expr = sum(X.values()) - total_penalty
+    _apply_objective_lower_bound(model, objective_expr, data)
+    model.Maximize(objective_expr)
 
     # Penalties summary
     pen_summary = [(k, len(v.get('penalties', []))) for k, v in penalties_dict.items()]
@@ -1567,6 +1618,27 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     # Handle locked games
     if locked_keys:
         locked_keys_set = set(locked_keys) if not isinstance(locked_keys, set) else locked_keys
+
+        # Pre-validate locked keys against current timeslot data
+        from utils import validate_locked_keys_or_exit, repair_locked_keys
+        repair_mode = solver_config.repair_locked if solver_config and hasattr(solver_config, 'repair_locked') else False
+        if repair_mode:
+            repaired, repair_log = repair_locked_keys(list(locked_keys_set), data['timeslots'])
+            if repair_log:
+                repaired_count = sum(1 for r in repair_log if r.get('repaired'))
+                print(f"  Repaired {repaired_count} locked key(s)")
+                for r in repair_log[:5]:
+                    if r.get('repaired'):
+                        diffs = ', '.join(f"{k}: {v['draw']}->{v['timeslot']}"
+                                         for k, v in r['field_diffs'].items())
+                        print(f"    Fixed: {r['original'][0]} vs {r['original'][1]} ({r['original'][2]}): {diffs}")
+                if len(repair_log) > 5:
+                    print(f"    ... and {len(repair_log) - 5} more")
+                locked_keys_set = set(repaired)
+        else:
+            validate_locked_keys_or_exit(list(locked_keys_set), data,
+                                         source_label=solver_config.locked_source if solver_config and hasattr(solver_config, 'locked_source') else 'locked draw')
+
         print(f"  Locking {len(locked_keys_set)} games from locked weeks...")
         matched = 0
         for key in locked_keys_set:
@@ -1587,6 +1659,10 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
                     model.Add(var == 0)
                     zeroed += 1
             print(f"  Zeroed {zeroed} non-locked variables in locked weeks")
+
+    # Store locked keys in data so constraints can access them
+    if locked_keys:
+        data['locked_keys_set'] = locked_keys_set
 
     data['team_conflicts'] = conflicts
     data['games'] = list(data['games'].keys()) if isinstance(data['games'], dict) else data['games']
@@ -1711,7 +1787,9 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
     penalty_terms = _build_normalized_penalty(penalties_dict)
     total_penalty = sum(coeff * var for coeff, var in penalty_terms)
 
-    model.Maximize(sum(X.values()) - total_penalty)
+    objective_expr = sum(X.values()) - total_penalty
+    _apply_objective_lower_bound(model, objective_expr, data)
+    model.Maximize(objective_expr)
 
     # Solve
     print("\nSolving...")

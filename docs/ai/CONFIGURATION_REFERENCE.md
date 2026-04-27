@@ -20,6 +20,10 @@ SEASON_CONFIG = {
     'end_date': datetime(2026, 8, 30),         # Last club game before finals
 
     'max_rounds': 22,           # Maximum games per team (see notes below)
+    # Dummy overflow slots: not attached to a real time/venue, eases solver burden.
+    # Penalty for using them is set in PENALTY_WEIGHTS['dummy_slots'].
+    'num_dummy_timeslots': 3,
+    
     'play_anzac_sunday': True,  # Whether to play on ANZAC Sunday
     
     # Data paths (relative to project root)
@@ -49,6 +53,28 @@ SEASON_CONFIG = {
 }
 ```
 
+### num_dummy_timeslots Parameter
+
+**What it does:** Controls how many dummy overflow timeslots are created. These are not attached to a real time or venue — they exist to give the solver extra capacity and ease scheduling pressure.
+
+**Default:** 3
+
+**How it works:**
+- Dummy variables use short 4-tuple keys `(t1, t2, grade, index)` and are merged into X
+- Constraints exclude them via `len(key) < 11` or `and t.day` checks
+- Game-count constraints (e.g. `EqualGamesAndBalanceMatchUps`) explicitly include dummy vars
+- The solver penalises using dummy slots via `PENALTY_WEIGHTS['dummy_slots']`
+- Set `dummy_slots` penalty weight to 0 for free use, or higher to discourage use
+
+**Config example:**
+```python
+'num_dummy_timeslots': 3,  # Number of overflow slots
+
+PENALTY_WEIGHTS = {
+    ...
+    'dummy_slots': 1,  # Penalty per dummy slot used (0 = no penalty)
+}
+```
 
 ### max_time_per_stage Parameter
 

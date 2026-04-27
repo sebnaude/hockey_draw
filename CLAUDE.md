@@ -49,7 +49,7 @@ Two lists control variable filtering:
 
 | Config | Purpose |
 |--------|---------|
-| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc.) |
+| `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc. and `count` to change the threshold, e.g. `'constraint': 'lesse', 'count': 2` for sum <= 2) |
 | `BLOCKED_GAMES` | Eliminate variables matching scope + team matchers (or ALL vars in scope if no teams specified) |
 
 ### 4. Friday Night Limits
@@ -79,8 +79,9 @@ solver_diagnostics.py     # Logging and resource monitoring
 
 config/
   __init__.py             # Config loader (load_season_data)
+  defaults.py             # Perennial defaults (fields, game times, home maps, perennial blocked games)
   season_2026.py          # Active season config
-  season_template.py      # Template for new seasons
+  season_template.py      # Template for new seasons (imports from defaults.py)
   team_naming.py          # Team name helpers
 
 constraints/
@@ -103,6 +104,10 @@ draws/{year}/             # Output draws (versioned)
   current.json            # Latest draw (always check here first)
   current.xlsx            # Latest schedule
   versions/               # All versioned draws (draw_v*.json + .xlsx)
+                          # Versioning: MAJOR.MINOR (e.g. v20.0, v20.1).
+                          # Solver runs bump MAJOR (v20.0 -> v21.0).
+                          # Hand edits / manual changes bump MINOR (v20.0 -> v20.1).
+                          # Never assign a new MAJOR for a manual edit.
 checkpoints/              # Solver checkpoints
   run_XX/                 # Per-run directories
     stage_name/           # Per-stage: solution.pkl, metadata.json, penalties.json
@@ -122,6 +127,18 @@ X[key] = BoolVar  # 1 = game scheduled, 0 = not
 ```
 
 Note: `team1` is always alphabetically before `team2`. Home/away is determined by venue (field_location), NOT by position in the key.
+
+### Dummy Slots (Y variables)
+
+Dummy timeslots are overflow slots not attached to a real time or venue. They ease solver burden by providing extra scheduling capacity. Controlled by:
+- `SEASON_CONFIG['num_dummy_timeslots']` — how many dummy slots to create (default 3)
+- `PENALTY_WEIGHTS['dummy_slots']` — penalty per dummy slot used (0 = free, higher = discouraged)
+
+Dummy variables use short 4-tuple keys `(t1, t2, grade, index)` and are merged into X. Constraints exclude them via two mechanisms:
+- `len(key) < 11` — skips short dummy keys
+- `and t.day` / `not key[3]` — skips when iterating timeslots
+
+Game-count constraints (e.g. `EqualGamesAndBalanceMatchUps`) explicitly include dummy vars so the solver can use them as overflow. The objective penalises their use: `Maximize(sum(X) - dummy_penalty - soft_penalties)`.
 
 ## Season Dates
 
@@ -423,12 +440,14 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 - **Week vs date** - a single week can have both Friday and Sunday games; always use `date` not `week` when comparing game slots
 - **Per-pair vs aggregate** - FiftyFiftyHomeAway is per-pair; aggregate home/away can be imbalanced even when all pairs are balanced
 - **Slack >= 1 effects** - MaitlandHomeGrouping uses sliding window (correct); check constraint docstrings for slack semantics
+- **Bastardised constraints (2026 locked-week workarounds)**: `EqualMatchUpSpacingConstraint` in `original.py` — only applies to PHL/2nd when locked_weeks active (conditional, safe for normal runs). `ClubVsClubAlignment` — hacked to only apply to PHL/2nd. `PHLAndSecondGradeTimes` — skips locked weeks for Friday counting (totals adjusted by subtracting locked counts) and round 1 enforcement. `PHLAndSecondGradeAdjacency` — must be EXCLUDED via `--exclude` when running with locked weeks (causes infeasibility due to Gosford PHL having zero margin). `locked_keys_set` is stored in `data` by `main_staged.py`/`main_simple`. The AI versions in `ai.py` were NOT changed. Revert hacks if running a full unconstrained solve.
 
 ## Draw Review Checklist
 
 When reviewing, testing, or publishing a draw, always check:
 
-- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case.
+- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case. (Perennial rule — see `docs/PERENNIAL_RULES.md`)
+- **Rounds 1-2 at Broadmeadow only**: All games in rounds 1 and 2 must be at NIHC. No Maitland Park or Central Coast games. Enforced via `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`. (Perennial rule)
 - **7pm (19:00) games**: These are the worst timeslot. Flag any non-PHL-Friday games scheduled at 7pm — they should be minimised.
 
 ## Skills
@@ -444,6 +463,7 @@ Custom Claude Code skills are available in `.claude/commands/`:
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
+| `docs/PERENNIAL_RULES.md` | Standing rules that apply every season | New season setup, draw review |
 | `docs/ai/AI_OPERATIONS_MANUAL.md` | Complete technical reference | Deep dives |
 | `docs/ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing config |
 | `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |

@@ -24,7 +24,7 @@ from dataclasses import dataclass
 # Import utility functions
 from utils import (
     get_club, get_duplicated_graded_teams, get_teams_from_club,
-    get_club_from_clubname, get_nearest_week_by_date, normalize_club_day
+    get_club_from_clubname, get_nearest_week_by_date
 )
 
 
@@ -165,6 +165,7 @@ class EnsureEqualGamesAndBalanceMatchUpsAI(ConstraintAI):
         games = data['games']
         timeslots = data['timeslots']
         num_rounds = data['num_rounds']
+        num_dummy = data.get('num_dummy_timeslots', 0)
         teams = data['teams']
 
         constraints_added = 0
@@ -182,7 +183,15 @@ class EnsureEqualGamesAndBalanceMatchUpsAI(ConstraintAI):
                     team_vars[grade][t1].append(var)
                     team_vars[grade][t2].append(var)
                     pair_vars[grade][tuple(sorted((t1, t2)))].append(var)
-        
+
+            for i in range(num_dummy):
+                dummy_key = (t1, t2, grade, i)
+                if dummy_key in X:
+                    var = X[dummy_key]
+                    team_vars[grade][t1].append(var)
+                    team_vars[grade][t2].append(var)
+                    pair_vars[grade][tuple(sorted((t1, t2)))].append(var)
+
         # Apply constraints per grade
         for grade, teams_in_grade in team_vars.items():
             T = len(teams_in_grade)  # Number of teams in grade
@@ -574,9 +583,9 @@ class TeamConflictConstraintAI(ConstraintAI):
         slot_team_vars = defaultdict(lambda: defaultdict(list))
         
         for key, var in X.items():
-            if not key[3] or key[6] in locked_weeks:
+            if len(key) < 11 or not key[3] or key[6] in locked_weeks:
                 continue
-            
+
             slot = (key[6], key[4])  # (week, day_slot)
             slot_team_vars[slot][key[0]].append(var)  # team1
             slot_team_vars[slot][key[1]].append(var)  # team2
@@ -758,7 +767,7 @@ class EnsureBestTimeslotChoicesAI(ConstraintAI):
         }
 
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue
@@ -799,18 +808,11 @@ class ClubDayConstraintAI(ConstraintAI):
 
         constraints_added = 0
 
-        for club_name, raw_value in club_days.items():
-            desired_date, opponent = normalize_club_day(raw_value)
-
+        for club_name, desired_date in club_days.items():
             # Validate club exists
             club = get_club_from_clubname(club_name, clubs)
             club_teams = get_teams_from_club(club_name, teams)
             date_str = desired_date.date().strftime('%Y-%m-%d')
-
-            # Validate opponent club exists
-            if opponent is not None:
-                if opponent.lower() not in [c.name.lower() for c in clubs]:
-                    raise ValueError(f'Invalid opponent club name {opponent} in ClubDay Dictionary for {club_name}')
 
             closest_week = get_nearest_week_by_date(date_str, timeslots)
             if closest_week in locked_weeks:
@@ -819,7 +821,7 @@ class ClubDayConstraintAI(ConstraintAI):
             # Find all games for this club on this date
             club_game_vars = {}
             for key, var in X.items():
-                if key[7] != date_str:
+                if len(key) < 11 or key[7] != date_str:
                     continue
 
                 t1, t2 = key[0], key[1]
@@ -836,38 +838,15 @@ class ClubDayConstraintAI(ConstraintAI):
                     model.Add(sum(team_vars) >= 1)
                     constraints_added += 1
 
-            # Constraint 2: Matchup logic (derby or opponent)
+            # Constraint 2: Intra-club matchups for same-grade teams
             teams_by_grade = defaultdict(list)
             for team in club_teams:
                 grade = team.rsplit(' ', 1)[1]
                 teams_by_grade[grade].append(team)
 
-            opp_by_grade = defaultdict(list)
-            if opponent is not None:
-                opp_teams = get_teams_from_club(opponent, teams)
-                for team in opp_teams:
-                    grade = team.rsplit(' ', 1)[1]
-                    opp_by_grade[grade].append(team)
-
-            for grade, host_grade_teams in teams_by_grade.items():
-                if opponent is not None and grade in opp_by_grade:
-                    # Opponent has teams in this grade: force cross-club matchups
-                    opp_grade_teams = opp_by_grade[grade]
-                    cross_vars = []
-                    for key, var in club_game_vars.items():
-                        if key[2] != grade:
-                            continue
-                        if ((key[0] in host_grade_teams and key[1] in opp_grade_teams)
-                                or (key[0] in opp_grade_teams and key[1] in host_grade_teams)):
-                            cross_vars.append(var)
-
-                    if cross_vars:
-                        required = min(len(host_grade_teams), len(opp_grade_teams))
-                        model.Add(sum(cross_vars) >= required)
-                        constraints_added += 1
-                elif len(host_grade_teams) > 1:
-                    # No opponent or opponent has no teams in this grade: derby (intra-club)
-                    intra_pairs = list(combinations(host_grade_teams, 2))
+            for grade, grade_teams in teams_by_grade.items():
+                if len(grade_teams) > 1:
+                    intra_pairs = list(combinations(grade_teams, 2))
                     intra_vars = []
 
                     for key, var in club_game_vars.items():
@@ -876,7 +855,7 @@ class ClubDayConstraintAI(ConstraintAI):
                             intra_vars.append(var)
 
                     if intra_vars:
-                        expected_pairs = len(host_grade_teams) // 2
+                        expected_pairs = len(grade_teams) // 2
                         model.Add(sum(intra_vars) >= expected_pairs)
                         constraints_added += 1
             
@@ -1091,7 +1070,7 @@ class ClubGradeAdjacencyConstraintAI(ConstraintAI):
         club_dup_games = defaultdict(list)
 
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
 
             # Skip locked weeks
@@ -1202,7 +1181,7 @@ class ClubVsClubAlignmentAI(ConstraintAI):
         fields_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
             if key[6] in locked_weeks:
                 continue
@@ -1522,11 +1501,11 @@ class MaximiseClubsPerTimeslotBroadmeadowAI(ConstraintAI):
         
         # Group by (week, day_slot) at Broadmeadow on weekends
         slot_club_vars = defaultdict(lambda: defaultdict(list))
-        
+
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
-            
+
             if key[6] in locked_weeks:
                 continue
             
@@ -1619,11 +1598,11 @@ class MinimiseClubsOnAFieldBroadmeadowAI(ConstraintAI):
         
         # Group by (week, date, field)
         field_club_vars = defaultdict(lambda: defaultdict(list))
-        
+
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
-            
+
             if key[6] in locked_weeks:
                 continue
             
@@ -1814,7 +1793,7 @@ class ClubGameSpreadAI(ConstraintAI):
         club_week_day_field_vars = defaultdict(list)
 
         for key, var in X.items():
-            if not key[3]:
+            if len(key) < 11 or not key[3]:
                 continue
             week = key[6]
             if week in locked_weeks:
