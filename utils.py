@@ -562,7 +562,8 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
         # merge safely since they use the ('all',) matcher.
         raw_teams = entry.get('teams', [])
         has_team1_team2 = 'team1' in entry or 'team2' in entry
-        if raw_teams or has_team1_team2:
+        has_club = 'club' in entry
+        if raw_teams or has_team1_team2 or has_club:
             scope.append(('_entry_idx', entry_idx))
 
         scope_key = frozenset(scope)
@@ -607,6 +608,14 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
             elif t2_raw:
                 for rt in _resolve_team_name(t2_raw, effective_grade, team_names_set, team_lookup, teams):
                     scope_groups[scope_key].append(('any', rt))
+        elif has_club:
+            # Club filter: any game involving a team from this club (resolved
+            # via _resolve_team_name, which expands club name → all teams of
+            # that club at the effective grade). Mirrors BLOCKED_GAMES.
+            club_val = entry['club']
+            resolved = _resolve_team_name(club_val, effective_grade, team_names_set, team_lookup, teams)
+            for rt in resolved:
+                scope_groups[scope_key].append(('any', rt))
         else:
             # No teams specified — force any game matching the scope
             scope_groups[scope_key].append(('all',))
@@ -1097,7 +1106,15 @@ def _validate_entry_fields(entries, label, valid_dates, valid_locations, valid_f
 
 
 def _check_forced_constraint_collisions(forced_games, fatals):
-    """Check for two forced game entries with same scope but different constraint types (Bug B)."""
+    """Check for two forced game entries with same scope but different constraint types (Bug B).
+
+    Entries with team filters (`teams`, `team1`/`team2`, `club`) are NOT
+    collision candidates with no-team-filter entries on the same scope dict —
+    they constrain different variable sets and `_build_forced_game_rules`
+    already gives each its own scope_key via `_entry_idx`. Only flag
+    collisions among entries that share scope-dict AND share the same
+    team-filter shape (both no-filter, or both targeting the same team set).
+    """
     scope_entries = {}  # scope_key -> (constraint_type, description)
 
     for entry in forced_games:
@@ -1113,6 +1130,14 @@ def _check_forced_constraint_collisions(forced_games, fatals):
         grades = entry.get('grades', [])
         if grades and 'grade' not in entry:
             scope.append((_KEY_INDEX['grade'], tuple(grades)))
+
+        # Skip entries with team filters — they get distinct scope_keys at
+        # rule-build time and never share a count constraint with a no-filter
+        # entry on the same scope dict.
+        has_team_filter = ('teams' in entry or 'team1' in entry
+                           or 'team2' in entry or 'club' in entry)
+        if has_team_filter:
+            continue
 
         scope_key = frozenset(scope)
         ctype = entry.get('constraint', 'equal')
@@ -1220,6 +1245,174 @@ def _check_forced_venue_team_compat(forced_games, home_field_map, teams, warning
         if home_club not in team_clubs:
             fatals.append(f"Forced game '{desc}' at venue '{loc}' requires home club '{home_club}', "
                          f"but teams are from clubs: {sorted(team_clubs - {''})}.")
+
+
+def _forced_entry_scope_dict(entry):
+    """Build a dict of scope-field → value (or tuple of values) from a forced
+    entry. Lists are turned into tuples for set membership comparison.
+    'grade' alone (singular) is normalised to a 1-tuple if 'grades' isn't given."""
+    scope = {}
+    for field in _SCOPE_FIELDS:
+        if field in entry:
+            v = entry[field]
+            scope[field] = tuple(v) if isinstance(v, list) else (v,)
+    grades = entry.get('grades', [])
+    if grades and 'grade' not in entry:
+        scope['grade'] = tuple(grades)
+    return scope
+
+
+def _scope_dict_subset(narrow, broad):
+    """True if `narrow`'s var set is restricted to a subset of `broad`'s
+    by scope-dict alone — i.e. for every key broad pins, narrow pins it
+    to a value covered by broad's allowed set, AND narrow has at least
+    every key broad has (narrow can pin extra fields, that's still narrower).
+    """
+    for k, vals in broad.items():
+        if k not in narrow:
+            return False
+        if not set(narrow[k]).issubset(set(vals)):
+            return False
+    return True
+
+
+def _forced_entry_pair_set(entry, all_teams, team_names_set, team_lookup):
+    """Set of sorted (team1, team2) pairs the entry's team predicate matches,
+    restricted to teams of the entry's effective grade(s).
+
+    Returns None when grade scope is missing — pair-set computation requires
+    knowing which grade's team list to enumerate.
+    """
+    grade = entry.get('grade')
+    grades = entry.get('grades', [])
+    effective_grades = grades if grades else ([grade] if grade else None)
+    if not effective_grades:
+        return None
+
+    grade_teams = [t.name for t in all_teams if t.grade in effective_grades]
+    raw_teams = entry.get('teams', [])
+    has_t1_t2 = 'team1' in entry or 'team2' in entry
+    club = entry.get('club')
+
+    if not raw_teams and not has_t1_t2 and not club:
+        # 'all' matcher — every pair within the grade(s) matches
+        pairs = set()
+        for i, a in enumerate(grade_teams):
+            for b in grade_teams[i+1:]:
+                pairs.add(tuple(sorted((a, b))))
+        return pairs
+
+    effective_grade = grades if grades else grade
+    pairs = set()
+
+    if raw_teams and len(raw_teams) == 2:
+        r1 = _resolve_team_name(raw_teams[0], effective_grade, team_names_set, team_lookup, all_teams)
+        r2 = _resolve_team_name(raw_teams[1], effective_grade, team_names_set, team_lookup, all_teams)
+        for a in r1:
+            for b in r2:
+                if a != b:
+                    pairs.add(tuple(sorted((a, b))))
+        return pairs
+    if raw_teams and len(raw_teams) == 1:
+        anchors = set(_resolve_team_name(raw_teams[0], effective_grade, team_names_set, team_lookup, all_teams))
+        for a in anchors:
+            for b in grade_teams:
+                if a != b:
+                    pairs.add(tuple(sorted((a, b))))
+        return pairs
+    if has_t1_t2:
+        t1 = entry.get('team1')
+        t2 = entry.get('team2')
+        if t1 and t2:
+            r1 = _resolve_team_name(t1, effective_grade, team_names_set, team_lookup, all_teams)
+            r2 = _resolve_team_name(t2, effective_grade, team_names_set, team_lookup, all_teams)
+            for a in r1:
+                for b in r2:
+                    if a != b:
+                        pairs.add(tuple(sorted((a, b))))
+        else:
+            anchor_raw = t1 or t2
+            anchors = set(_resolve_team_name(anchor_raw, effective_grade, team_names_set, team_lookup, all_teams))
+            for a in anchors:
+                for b in grade_teams:
+                    if a != b:
+                        pairs.add(tuple(sorted((a, b))))
+        return pairs
+    if club:
+        anchors = set(_resolve_team_name(club, effective_grade, team_names_set, team_lookup, all_teams))
+        for a in anchors:
+            for b in grade_teams:
+                if a != b:
+                    pairs.add(tuple(sorted((a, b))))
+        return pairs
+    return set()
+
+
+def _check_forced_scope_subset_consistency(forced_games, teams, warnings, fatals):
+    """Phase 21: detect FORCED entries whose var sets are in a subset relation
+    AND whose count constraints are mutually unsatisfiable.
+
+    If entry B's var set is a subset of entry A's var set, then
+    `sum(B_vars) <= sum(A_vars)`. With `equal` constraints on both, that
+    forces `count_B <= count_A`. Anything else is infeasible.
+
+    For non-`equal` constraint types and partial overlap (neither subset nor
+    disjoint), this check warns rather than fails — the solver detects those.
+    """
+    if not forced_games or len(forced_games) < 2:
+        return
+    team_names_set, team_lookup = _build_team_lookups(teams)
+
+    enriched = []
+    for entry in forced_games:
+        scope_dict = _forced_entry_scope_dict(entry)
+        pair_set = _forced_entry_pair_set(entry, teams, team_names_set, team_lookup)
+        ctype = entry.get('constraint', 'equal')
+        count = entry.get('count', 1)
+        desc = entry.get('description', str(entry))
+        enriched.append((entry, scope_dict, pair_set, ctype, count, desc))
+
+    for i, (a_entry, a_scope, a_pairs, a_ctype, a_count, a_desc) in enumerate(enriched):
+        for j, (b_entry, b_scope, b_pairs, b_ctype, b_count, b_desc) in enumerate(enriched):
+            if i == j:
+                continue
+            # Skip if pair sets unknown (no grade scope) — too risky to compare.
+            if a_pairs is None or b_pairs is None:
+                continue
+            # Is B narrower than A? (B's vars ⊆ A's vars)
+            if not _scope_dict_subset(b_scope, a_scope):
+                continue
+            if not b_pairs.issubset(a_pairs):
+                continue
+            # B is narrower than A. Check count compatibility for the both-equal case.
+            if a_ctype == 'equal' and b_ctype == 'equal':
+                if b_count > a_count:
+                    fatals.append(
+                        f"Forced game count overlap is infeasible: '{b_desc}' "
+                        f"(equal {b_count}) is a subset of '{a_desc}' (equal {a_count}); "
+                        f"narrower scope cannot demand more games than the broader one."
+                    )
+            elif a_ctype == 'equal' and b_ctype == 'greatere':
+                if b_count > a_count:
+                    fatals.append(
+                        f"Forced game count overlap is infeasible: '{b_desc}' "
+                        f"(>= {b_count}) is a subset of '{a_desc}' (equal {a_count}); "
+                        f"narrower scope cannot demand more games than the broader one."
+                    )
+            elif a_ctype == 'lesse' and b_ctype == 'equal':
+                if b_count > a_count:
+                    fatals.append(
+                        f"Forced game count overlap is infeasible: '{b_desc}' "
+                        f"(equal {b_count}) is a subset of '{a_desc}' (<= {a_count}); "
+                        f"narrower scope cannot exceed the broader cap."
+                    )
+            elif a_ctype == 'lesse' and b_ctype == 'greatere':
+                if b_count > a_count:
+                    fatals.append(
+                        f"Forced game count overlap is infeasible: '{b_desc}' "
+                        f"(>= {b_count}) is a subset of '{a_desc}' (<= {a_count}); "
+                        f"narrower floor exceeds broader cap."
+                    )
 
 
 def _check_team_capacity(data, warnings, fatals):
@@ -3025,6 +3218,9 @@ def validate_game_config(data: dict) -> None:
     # Phase 20: Comprehensive scheduling feasibility audit
     _check_scheduling_feasibility(data, warnings, fatals)
 
+    # Phase 21: Forced scope subset consistency
+    _check_forced_scope_subset_consistency(forced_games, teams, warnings, fatals)
+
     # Report
     if warnings:
         for w in warnings:
@@ -3304,7 +3500,8 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
                 scope.append((_KEY_INDEX['grade'], tuple(grades)))
             raw_teams = entry.get('teams', [])
             has_team1_team2 = 'team1' in entry or 'team2' in entry
-            if raw_teams or has_team1_team2:
+            has_club = 'club' in entry
+            if raw_teams or has_team1_team2 or has_club:
                 scope.append(('_entry_idx', entry_idx))
             sk = frozenset(scope)
             scope_to_entry[sk] = entry

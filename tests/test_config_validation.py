@@ -1091,3 +1091,77 @@ class TestSchedulingFeasibility:
         warnings, fatals = [], []
         _check_scheduling_feasibility(base_data, warnings, fatals)
         assert any('locking weeks' in w.lower() or 'unlocked' in w.lower() for w in warnings)
+
+
+# ============== Phase 21: forced scope subset consistency ==============
+
+from utils import _check_forced_scope_subset_consistency
+
+
+class TestForcedScopeSubsetConsistency:
+    def test_compatible_subset_passes(self, teams):
+        """Narrower 'equal 1' inside broader 'equal 2' is satisfiable."""
+        forced = [
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Maitland Park',
+             'count': 2, 'constraint': 'equal',
+             'description': 'broader: 2 PHL Fridays at Maitland'},
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Maitland Park',
+             'teams': ['Norths', 'Maitland'],
+             'count': 1, 'constraint': 'equal',
+             'description': 'narrower: 1 Norths-vs-Maitland Friday at Maitland'},
+        ]
+        warnings, fatals = [], []
+        _check_forced_scope_subset_consistency(forced, teams, warnings, fatals)
+        assert fatals == []
+
+    def test_subset_count_exceeds_broader_fatal(self, teams):
+        """Narrower 'equal 3' inside broader 'equal 2' is infeasible."""
+        forced = [
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Maitland Park',
+             'count': 2, 'constraint': 'equal',
+             'description': 'broader cap'},
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Maitland Park',
+             'club': 'Maitland',
+             'count': 3, 'constraint': 'equal',
+             'description': 'narrower demand'},
+        ]
+        warnings, fatals = [], []
+        _check_forced_scope_subset_consistency(forced, teams, warnings, fatals)
+        assert any('infeasible' in f.lower() for f in fatals)
+
+    def test_narrower_floor_exceeds_broader_cap_fatal(self, teams):
+        """Narrower 'greatere 4' inside broader 'lesse 2' is infeasible."""
+        forced = [
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+             'count': 2, 'constraint': 'lesse',
+             'description': 'broader cap of 2'},
+            {'grade': 'PHL', 'day': 'Friday', 'field_location': 'Newcastle International Hockey Centre',
+             'club': 'Norths',
+             'count': 4, 'constraint': 'greatere',
+             'description': 'narrower floor of 4'},
+        ]
+        warnings, fatals = [], []
+        _check_forced_scope_subset_consistency(forced, teams, warnings, fatals)
+        assert any('infeasible' in f.lower() for f in fatals)
+
+    def test_disjoint_scopes_pass(self, teams):
+        """Two FORCED entries on different days don't trigger any check."""
+        forced = [
+            {'grade': 'PHL', 'day': 'Friday', 'count': 2, 'constraint': 'equal',
+             'description': 'Friday'},
+            {'grade': 'PHL', 'day': 'Sunday', 'count': 5, 'constraint': 'equal',
+             'description': 'Sunday'},
+        ]
+        warnings, fatals = [], []
+        _check_forced_scope_subset_consistency(forced, teams, warnings, fatals)
+        assert fatals == []
+
+    def test_no_grade_skipped(self, teams):
+        """Entries without a grade are skipped (pair set unknown)."""
+        forced = [
+            {'day': 'Friday', 'count': 2, 'constraint': 'equal'},
+            {'day': 'Friday', 'count': 5, 'constraint': 'equal'},
+        ]
+        warnings, fatals = [], []
+        _check_forced_scope_subset_consistency(forced, teams, warnings, fatals)
+        assert fatals == []
