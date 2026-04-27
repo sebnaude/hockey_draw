@@ -140,26 +140,18 @@ FIELD_UNAVAILABILITIES = {
             datetime(2026, 4, 4),   # Apr 3-5 (Easter weekend)
             # May 15-17 (Masters SC) - moved to selective blocking, Sunday open for PHL
             datetime(2026, 6, 6),   # Jun 5-7 (confirmed blocked)
-            # Jun 19-21 (U16 Girls SC) - NOT in weekends so Friday 7pm PHL game allowed
+            # Jun 19-21 (U16 Girls SC) - no matches at Newcastle on Friday or Saturday
         ],
         'whole_days': [
             datetime(2026, 4, 25),  # ANZAC Day (Saturday)
             datetime(2026, 5, 15),  # Masters SC Friday - blocked at NIHC
             datetime(2026, 5, 16),  # Masters SC Saturday - blocked at NIHC
             # May 17 (Sunday) OPEN for PHL at NIHC (non-PHL blocked via BLOCKED_GAMES)
-            datetime(2026, 6, 20),  # U16 Girls SC Saturday
+            datetime(2026, 6, 19),  # U16 Girls SC Friday - fully blocked at NIHC
+            datetime(2026, 6, 20),  # U16 Girls SC Saturday - blocked at NIHC
             # Jun 21 (Sunday) OPEN for PHL at NIHC (non-PHL blocked via BLOCKED_GAMES)
         ],
-        'part_days': [
-            # U16 Girls SC Friday Jun 19 - block daytime, allow 7pm PHL
-            datetime(2026, 6, 19, 8, 30),
-            datetime(2026, 6, 19, 10, 0),
-            datetime(2026, 6, 19, 11, 30),
-            datetime(2026, 6, 19, 13, 0),
-            datetime(2026, 6, 19, 14, 30),
-            datetime(2026, 6, 19, 16, 0),
-            datetime(2026, 6, 19, 17, 30),  # Block up to 5:30pm, allow 7pm
-        ],
+        'part_days': [],
     },
     'Central Coast Hockey Park': {
         'weekends': [
@@ -183,9 +175,6 @@ FIELD_UNAVAILABILITIES = {
 }
 
 # ============== Club Days (Special Events) ==============
-# Two formats supported:
-#   'ClubName': datetime(YYYY, M, D)                                   # derby (intra-club matchups)
-#   'ClubName': {'date': datetime(YYYY, M, D), 'opponent': 'OppClub'}  # force host vs opponent matchups
 
 CLUB_DAYS = {
     'Crusaders': datetime(2026, 6, 14),  # All 4 teams back-to-back on same field
@@ -349,14 +338,7 @@ BLOCKED_GAMES = [
     # === Gosford Friday nights - block non-game Fridays ===
     # All 8 Gosford Friday dates are now forced in FORCED_GAMES.
     # Block remaining Fridays where Gosford should NOT play.
-    # Apr 3 = Easter (already blocked via FIELD_UNAVAILABILITIES, kept here for explicit safety from final-form).
-    {
-        'club': 'Gosford',
-        'date': '2026-04-03',
-        'day': 'Friday',
-        'description': 'Gosford Friday blocked - not a confirmed Friday night date',
-        'reason': 'Only confirmed dates allowed at Gosford',
-    },
+    # Apr 3 = Easter (already blocked via FIELD_UNAVAILABILITIES).
     {'club': 'Gosford', 'date': '2026-04-10', 'day': 'Friday',
      'description': 'Gosford Friday blocked', 'reason': 'Not a Gosford Friday night date'},
     {'club': 'Gosford', 'date': '2026-04-24', 'day': 'Friday',
@@ -480,7 +462,6 @@ PHL_PREFERENCES = {
 #   - Jun 12: Norths vs Wests (80th Anniversary, forced date via FORCED_GAMES)
 #   - Maitland vs Souths: exactly 1 NIHC Friday (solver picks date)
 #   - Wests vs Tigers: exactly 1 NIHC Friday (solver picks date)
-#   - Specific matchups forced via FORCED_GAMES
 #
 # SUNDAY AT GOSFORD:
 #   - Times: 12:00pm or 1:30pm ONLY
@@ -542,34 +523,6 @@ FORCED_GAMES = [
         'field_location': 'Newcastle International Hockey Centre',
         'description': 'NIHC Friday Night - Wests vs Tigers (exactly 1)',
     },
-    # --- Final-form additional NIHC Friday Night entries (preserved) ---
-    # May 8: Norths vs Maitland (was Souths vs Maitland, conflicted with derby)
-    {
-        'teams': ['Norths', 'Maitland'],
-        'grade': 'PHL',
-        'date': '2026-05-08',
-        'day': 'Friday',
-        'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Norths vs Maitland',
-    },
-    # Jun 19: Tigers vs Wests PHL (State Champ weekend - 7pm allowed)
-    {
-        'teams': ['Tigers', 'Wests'],
-        'grade': 'PHL',
-        'date': '2026-06-19',
-        'day': 'Friday',
-        'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Tigers vs Wests (State Champ weekend)',
-    },
-    # Jul 24: Norths vs TBC PHL (any opponent)
-    {
-        'teams': ['Norths'],
-        'grade': 'PHL',
-        'date': '2026-07-24',
-        'day': 'Friday',
-        'field_location': 'Newcastle International Hockey Centre',
-        'description': 'NIHC Friday Night - Norths home (opponent TBC)',
-    },
     # === Norths vs Gosford - exactly 1 Friday PHL game at Gosford ===
     {
         'teams': ['Norths', 'Gosford'],
@@ -592,21 +545,6 @@ FORCED_GAMES = [
         'date': '2026-05-10',
         'day': 'Sunday',
         'description': 'Blue v Red Derby - 2nd Grade',
-    },
-    # --- Final-form additional derby grades (preserved) ---
-    {
-        'teams': ['Norths', 'Souths'],
-        'grade': '3rd',
-        'date': '2026-05-10',
-        'day': 'Sunday',
-        'description': 'Blue v Red Derby - 3rd Grade',
-    },
-    {
-        'teams': ['Norths', 'Souths'],
-        'grade': '4th',
-        'date': '2026-05-10',
-        'day': 'Sunday',
-        'description': 'Blue v Red Derby - 4th Grade',
     },
     # 3rd/4th Derby already covered by locked wk8 entries below
     # === Gosford Friday Nights (7 forced dates; 8th chosen by solver) ===
@@ -664,23 +602,6 @@ FORCED_GAMES = [
         'field_location': 'Central Coast Hockey Park',
         'description': 'Gosford Friday Night - Aug 28',
     },
-    # --- Final-form additional Gosford Friday Night dates (preserved) ---
-    # Mar 27 and Apr 24 are also retained per final-form requests (will conflict with
-    # PERENNIAL_BLOCKED_GAMES round 1-2 logic for Mar 27 — review if needed).
-    {
-        'grade': 'PHL',
-        'date': '2026-03-27',
-        'day': 'Friday',
-        'field_location': 'Central Coast Hockey Park',
-        'description': 'Gosford Friday Night - Mar 27',
-    },
-    {
-        'grade': 'PHL',
-        'date': '2026-04-24',
-        'day': 'Friday',
-        'field_location': 'Central Coast Hockey Park',
-        'description': 'Gosford Friday Night - Apr 24 (ANZAC)',
-    },
     # === State Championship Sundays at NIHC - max 2 PHL games ===
     # These Sundays are open for PHL only (non-PHL blocked via BLOCKED_GAMES).
     # Use 'lesse' constraint: sum <= 2 (at most 2 games, solver may choose fewer).
@@ -706,45 +627,6 @@ FORCED_GAMES = [
         'constraint': 'lesse',
         'count': 2,
         'description': 'U16 Girls SC weekend - max 2 PHL games at NIHC',
-    },
-    # --- Final-form additional Norths v Wests Weekend Jun 14 entries (preserved) ---
-    # From Norths request: all grades Norths v Wests play that weekend.
-    # PHL is on Friday Jun 12 at NIHC (above); below pins 2nd-5th to Sunday Jun 14.
-    # No Norths 6th grade team exists, so 6th excluded.
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': 'PHL',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - PHL',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '2nd',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 2nd Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '3rd',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 3rd Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '4th',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 4th Grade',
-    },
-    {
-        'teams': ['Norths', 'Wests'],
-        'grade': '5th',
-        'date': '2026-06-14',
-        'day': 'Sunday',
-        'description': 'Norths v Wests Weekend - 5th Grade',
     },
     # Norths v Wests Weekend Jun 14: 2nd-5th already covered by locked wk13 entries below
     # PHL is on Friday Jun 12 at NIHC (above)
@@ -1128,61 +1010,61 @@ SEASON_CONFIG = {
     'year': 2026,
     'start_date': datetime(2026, 3, 22),   # Sunday 22nd March (first playing day)
     'end_date': datetime(2026, 8, 30),     # Sunday 30th August (last club game before finals)
-
+    
     # Default max rounds (used as fallback if grade not in MAX_WEEKENDS_PER_GRADE)
     # This is the default MAXIMUM weekends any grade can play
     'max_rounds': 20,
     # Dummy overflow slots: not attached to a real time/venue, eases solver burden.
     # Adjust count as needed. Penalty for using them is set in PENALTY_WEIGHTS['dummy_slots'].
     'num_dummy_timeslots': 0,
-
+    
     # Confirmed: Playing ANZAC weekend Sunday
     'play_anzac_sunday': True,
-
+    
     # Data paths
     'teams_data_path': 'data/2026/teams',
     'noplay_data_path': 'data/2026/noplay',
     'field_availability_path': 'data/2026/field_availability',
-
+    
     # Field definitions
     'fields': FIELDS,
-
+    
     # Time configurations
     'day_time_map': DAY_TIME_MAP,
     'phl_game_times': PHL_GAME_TIMES,  # Controls PHL variable generation (venue/field/day/time)
     'second_grade_times': SECOND_GRADE_TIMES,  # Controls 2nd grade variable generation
-
+    
     # Grade-specific round configuration
     'max_weekends_per_grade': MAX_WEEKENDS_PER_GRADE,  # Max available weekends per grade
     'grade_rounds_override': GRADE_ROUNDS_OVERRIDE,     # Exact round counts (overrides formula)
     'grade_scheduling_method': GRADE_SCHEDULING_METHOD,  # Method 1 (balanced) or 2 (maximize games) per grade
-
+    
     # Unavailabilities
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
-
+    
     # Club events
     'club_days': CLUB_DAYS,
-
+    
     # Preferences
     'preference_no_play': PREFERENCE_NO_PLAY,
     'phl_preferences': PHL_PREFERENCES,
-
+    
     # Special games
     'special_games': SPECIAL_GAMES,
-
+    
     # Forced games (partial key variable elimination)
     'forced_games': FORCED_GAMES,
-
+    
     # Blocked games (no-play variable elimination)
     'blocked_games': BLOCKED_GAMES,
-
+    
     # Home field mappings
     'home_field_map': {
         'Maitland': 'Maitland Park',
         'Gosford': 'Central Coast Hockey Park',
         # All others default to Newcastle International Hockey Centre
     },
-
+    
     # Grade order (for adjacency constraints)
     'grade_order': ['PHL', '2nd', '3rd', '4th', '5th', '6th'],
 
@@ -1205,10 +1087,10 @@ SEASON_CONFIG = {
 def get_season_data() -> dict:
     """
     Build complete data dictionary for the 2026 season.
-
+    
     This loads teams from CSV files, generates timeslots, and builds
     all data structures needed by the solver.
-
+    
     Returns:
         Complete data dict ready for solver
     """
