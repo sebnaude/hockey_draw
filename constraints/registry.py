@@ -5,7 +5,7 @@ Maps between solver class names, tester check methods, unified engine skip names
 severity levels, and slack keys.
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 import re
 
 
@@ -20,6 +20,18 @@ class ConstraintInfo:
     slack_key: Optional[str] = None
     has_soft_component: bool = False
     tester_only: bool = False  # True if no solver equivalent (diagnostic check)
+    # Phase 2 additions for atomization
+    atom_group: Optional[str] = None
+    """Name of the legacy combined constraint this atom was split from
+    (e.g. 'PHLAndSecondGradeTimes'). None for single-idea constraints."""
+    required_helpers: List[str] = field(default_factory=list)
+    """Helper-var kinds the atom declares (must exist in the helper-var catalog)."""
+    forced_blocked_adjuster: Optional[Callable[[Dict, List, List], Dict]] = None
+    """Optional callable that returns count-adjustment metadata.
+
+    Signature: adjuster(constraint_data, forced_games, blocked_games) -> dict.
+    Engine runs every adjuster after FORCED/BLOCKED parsing, before constraints
+    apply(). Output is stored at data['count_adjustments'][canonical_name]."""
 
 
 # Master registry -- keyed by canonical name
@@ -288,3 +300,48 @@ def get_all_canonical_names() -> List[str]:
 def get_tester_only_constraints() -> List[str]:
     """Return canonical names of tester-only diagnostics (no solver equivalent)."""
     return [name for name, info in CONSTRAINT_REGISTRY.items() if info.tester_only]
+
+
+# ----------------------------------------------------------------------
+# Helper-var catalog (Phase 2). Atoms in `required_helpers` must reference
+# kinds that exist here so a typo fails at registry-validation time.
+# ----------------------------------------------------------------------
+
+HELPER_VAR_CATALOG: Set[str] = {
+    'is_slot_used',           # (week, day, location, day_slot)
+    'is_field_used',          # (week, day, location, field, day_slot)
+    'weekend_used',           # (week, location)
+    'team_plays_in_week',     # (team, week)
+    'pair_plays_in_week',     # (team1, team2, week, grade)
+    'pair_plays_on_date',     # (team1, team2, date, grade)
+    'club_plays_on_date_at_field',  # (club, date, field)
+    'club_grade_in_slot',     # (club, grade, week, day, day_slot)
+    'home_game',              # (team, week, opponent)
+    'is_phl_friday',          # (week,)
+    'club_day_field_used',    # (club, field_name)
+    'club_day_slot_used',     # (club, day_slot)
+    'phl_2nd_btb_pair',       # (clubs, round_no, field, slot1, slot2) — back-to-back same-field indicator
+}
+
+
+def get_atoms_in_group(atom_group: str) -> List[str]:
+    """Return canonical names whose atom_group matches the given group."""
+    return [name for name, info in CONSTRAINT_REGISTRY.items() if info.atom_group == atom_group]
+
+
+def get_adjuster(canonical_name: str) -> Optional[Callable]:
+    """Return the FORCED/BLOCKED count adjuster for a constraint, or None."""
+    info = CONSTRAINT_REGISTRY.get(canonical_name)
+    if info is None:
+        return None
+    return info.forced_blocked_adjuster
+
+
+def validate_required_helpers() -> List[str]:
+    """Return list of (constraint_name, helper_kind) pairs whose helper kind is unknown."""
+    bad = []
+    for name, info in CONSTRAINT_REGISTRY.items():
+        for kind in info.required_helpers:
+            if kind not in HELPER_VAR_CATALOG:
+                bad.append(f"{name} -> {kind}")
+    return bad

@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from constraints.registry import (
     CONSTRAINT_REGISTRY,
     ConstraintInfo,
+    HELPER_VAR_CATALOG,
     normalize_constraint_name,
     get_canonical_for_solver_name,
     get_checks_for_applied_constraints,
@@ -16,6 +17,9 @@ from constraints.registry import (
     get_slack_key,
     get_all_canonical_names,
     get_tester_only_constraints,
+    get_atoms_in_group,
+    get_adjuster,
+    validate_required_helpers,
 )
 from constraints.severity import CONSTRAINT_TO_SEVERITY
 
@@ -197,3 +201,39 @@ class TestTesterOnlyConstraints:
             if not info.tester_only:
                 assert len(info.solver_class_names) >= 1, \
                     f"{name}: non-tester-only must have solver_class_names"
+
+
+class TestConstraintInfoExtensions:
+    """Phase 2: atom_group, required_helpers, forced_blocked_adjuster."""
+
+    def test_default_atom_group_is_none(self):
+        for info in CONSTRAINT_REGISTRY.values():
+            # Pre-Phase-3 entries have atom_group = None
+            if info.atom_group is not None:
+                assert isinstance(info.atom_group, str)
+
+    def test_default_required_helpers_is_empty_list(self):
+        for info in CONSTRAINT_REGISTRY.values():
+            assert isinstance(info.required_helpers, list)
+
+    def test_default_adjuster_is_none(self):
+        for info in CONSTRAINT_REGISTRY.values():
+            if info.forced_blocked_adjuster is not None:
+                assert callable(info.forced_blocked_adjuster)
+
+    def test_required_helpers_are_in_catalog(self):
+        bad = validate_required_helpers()
+        assert bad == [], f"Constraints reference unknown helper-var kinds: {bad}"
+
+    def test_get_adjuster_for_unknown_returns_none(self):
+        assert get_adjuster('NonExistentConstraint') is None
+
+    def test_get_atoms_in_group_returns_list(self):
+        # No atoms in groups yet (Phase 3 will add them); function must still return a list
+        result = get_atoms_in_group('SomeUnknownGroup')
+        assert result == []
+
+    def test_helper_var_catalog_is_populated(self):
+        assert len(HELPER_VAR_CATALOG) > 0
+        for kind in HELPER_VAR_CATALOG:
+            assert isinstance(kind, str) and kind
