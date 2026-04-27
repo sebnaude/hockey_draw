@@ -58,6 +58,30 @@ HOME_FIELD_MAP = {
     'Gosford': 'Central Coast Hockey Park',
 }
 
+# ============== Per-Club Away-Venue Rules ==============
+# Per-club tuning for the generic "non-default-home" constraints (Phase 6).
+# Adding/removing a club here is the only change needed to scope all
+# Maitland-style and Gosford-style constraints to a new club. Keys not set
+# fall back to perennial CONSTRAINT_DEFAULTS values.
+#
+#   max_consecutive_home — max consecutive home weeks (NonDefaultHomeGrouping)
+#   friday_games         — exact PHL Friday games at this venue per season
+#   max_away_clubs       — max distinct away clubs at this venue per week
+#                          (AwayAtNonDefaultGrouping)
+
+AWAY_VENUE_RULES = {
+    'Maitland': {
+        'max_consecutive_home': 1,
+        'friday_games': 2,
+        'max_away_clubs': 3,
+    },
+    'Gosford': {
+        'max_consecutive_home': 2,
+        'friday_games': 8,
+        'max_away_clubs': None,  # no per-week away-clubs cap at Gosford
+    },
+}
+
 # ============== Grade Order ==============
 
 GRADE_ORDER = ['PHL', '2nd', '3rd', '4th', '5th', '6th']
