@@ -23,6 +23,7 @@ from utils import (
     get_teams_from_club, get_club_from_clubname, get_nearest_week_by_date,
     get_duplicated_graded_teams
 )
+from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
 
 # Venue constants
 BROADMEADOW = 'Newcastle International Hockey Centre'
@@ -35,62 +36,6 @@ AWAY_VENUES = {
 }
 
 GRADE_ORDER = ["PHL", "2nd", "3rd", "4th", "5th", "6th"]
-
-
-class SharedVariablePool:
-    """Centralized lazy variable pool — no duplicate helper vars.
-
-    All constraint helper variables (BoolVar/IntVar indicators) should be created
-    through this pool. Variables are cached by key and returned on subsequent lookups.
-    """
-
-    def __init__(self, model: cp_model.CpModel):
-        self.model = model
-        self._cache = {}
-        self._stats = {'created': 0, 'hits': 0}
-
-    def get_or_create_bool(self, key, vars_list, label):
-        """Cached BoolVar with AddMaxEquality channeling.
-
-        If vars_list is non-empty, channels: indicator = max(vars_list).
-        If vars_list is empty, forces indicator == 0.
-        """
-        if key in self._cache:
-            self._stats['hits'] += 1
-            return self._cache[key]
-        self._stats['created'] += 1
-        ind = self.model.NewBoolVar(label)
-        if vars_list:
-            self.model.AddMaxEquality(ind, vars_list)
-        else:
-            self.model.Add(ind == 0)
-        self._cache[key] = ind
-        return ind
-
-    def get_or_create_presence(self, key, vars_list, label):
-        """Cached BoolVar with BoolOr/BoolAnd channeling."""
-        if key in self._cache:
-            self._stats['hits'] += 1
-            return self._cache[key]
-        self._stats['created'] += 1
-        ind = self.model.NewBoolVar(label)
-        self.model.AddBoolOr(vars_list).OnlyEnforceIf(ind)
-        self.model.AddBoolAnd([v.Not() for v in vars_list]).OnlyEnforceIf(ind.Not())
-        self._cache[key] = ind
-        return ind
-
-    def register(self, key, var):
-        """Cache a manually-channeled variable (caller adds own constraints)."""
-        self._cache[key] = var
-        return var
-
-    def get(self, key):
-        """Lookup only. Returns None if not cached."""
-        return self._cache.get(key)
-
-    def diagnostics(self):
-        """Return creation/hit statistics."""
-        return {**self._stats, 'pool_size': len(self._cache)}
 
 
 class UnifiedConstraintEngine:
@@ -140,8 +85,10 @@ class UnifiedConstraintEngine:
         # Grouping dicts (populated by build_groupings)
         self._groupings_built = False
 
-        # Shared variable pool (replaces _shared_indicators + _cgs_shared)
-        self.pool = SharedVariablePool(self.model)
+        # Helper-var registry (declarative API for atoms; pool-style methods for legacy engine).
+        # `self.pool` retained as alias so existing internal methods keep working.
+        self.registry = HelperVarRegistry(self.model)
+        self.pool = self.registry
 
         # CGS iteration keys (populated by _club_game_spread_hard for soft phase)
         self._cgs_keys = []
