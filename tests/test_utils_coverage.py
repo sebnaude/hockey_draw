@@ -25,6 +25,7 @@ from utils import (
     circle_method_round_1_pairings,
     _build_forced_game_rules,
     _check_forced_game_status,
+    _get_matching_forced_scopes,
     _build_blocked_game_rules,
     _is_blocked_by_no_play,
     build_season_data,
@@ -575,6 +576,93 @@ class TestCheckForcedGameStatus:
         key = ('A', 'B', 'PHL', 'Sunday', 1, '11:30', 3, '2026-04-04', 3, 'EF', 'NIHC')
         status, _ = _check_forced_game_status(key, rules)
         assert status == 'normal'
+
+
+# ============== _get_matching_forced_scopes (multi-scope match) ==============
+
+class TestGetMatchingForcedScopes:
+    """A variable that matches multiple forced scopes must be registered
+    against EVERY matching scope, not just the first one. Otherwise the
+    sum constraints operate on disjoint buckets and the solver loses
+    flexibility (e.g. overlap between a date-scope `('all',)` and a
+    team-scope `('pair', X, Y)` would falsely require two distinct games)."""
+
+    def test_no_match_returns_empty(self):
+        key = ('A', 'B', 'PHL', 'Sunday', 1, '11:30', 1, '2026-03-21', 1, 'EF', 'NIHC')
+        assert _get_matching_forced_scopes(key, {}) == []
+
+    def test_single_scope_match(self):
+        scope = frozenset([(6, 1)])  # week=1
+        rules = {scope: [('pair', 'A', 'B')]}
+        key = ('A', 'B', 'PHL', 'Sunday', 1, '11:30', 1, '2026-03-21', 1, 'EF', 'NIHC')
+        assert _get_matching_forced_scopes(key, rules) == [scope]
+
+    def test_overlapping_date_and_team_scopes_both_match(self):
+        """Regression: Norths-Gosford-Apr-17-CCHP-Friday must register
+        against BOTH the date-scope (Apr 17 at CCHP, all-matcher) and the
+        team-scope (Norths-Gosford on any Friday at CCHP, pair-matcher)."""
+        date_scope = frozenset([
+            (2, 'PHL'),                              # grade
+            (3, 'Friday'),                           # day
+            (7, '2026-04-17'),                       # date
+            (10, 'Central Coast Hockey Park'),       # field_location
+        ])
+        team_scope = frozenset([
+            (2, 'PHL'),
+            (3, 'Friday'),
+            (10, 'Central Coast Hockey Park'),
+            ('_entry_idx', 99),                      # team-specific entries get an entry-idx
+        ])
+        rules = {
+            date_scope: [('all',)],
+            team_scope: [('pair', 'Gosford PHL', 'Norths PHL')],
+        }
+        key = ('Gosford PHL', 'Norths PHL', 'PHL', 'Friday', 1, '20:00',
+               4, '2026-04-17', 4, 'Wyong Main Field', 'Central Coast Hockey Park')
+        matches = _get_matching_forced_scopes(key, rules)
+        assert set(matches) == {date_scope, team_scope}, (
+            f"Expected variable to match both scopes, got {matches}"
+        )
+
+    def test_team_scope_only_when_date_differs(self):
+        """If date doesn't match the date-scope, only the team-scope matches."""
+        date_scope = frozenset([
+            (2, 'PHL'), (3, 'Friday'),
+            (7, '2026-04-17'), (10, 'Central Coast Hockey Park'),
+        ])
+        team_scope = frozenset([
+            (2, 'PHL'), (3, 'Friday'),
+            (10, 'Central Coast Hockey Park'),
+            ('_entry_idx', 99),
+        ])
+        rules = {
+            date_scope: [('all',)],
+            team_scope: [('pair', 'Gosford PHL', 'Norths PHL')],
+        }
+        # Norths-Gosford on Jun 26 (a different Friday)
+        key = ('Gosford PHL', 'Norths PHL', 'PHL', 'Friday', 1, '20:00',
+               14, '2026-06-26', 14, 'Wyong Main Field', 'Central Coast Hockey Park')
+        assert _get_matching_forced_scopes(key, rules) == [team_scope]
+
+    def test_date_scope_only_when_pair_differs(self):
+        """If teams don't match the team-scope, only the date-scope matches."""
+        date_scope = frozenset([
+            (2, 'PHL'), (3, 'Friday'),
+            (7, '2026-04-17'), (10, 'Central Coast Hockey Park'),
+        ])
+        team_scope = frozenset([
+            (2, 'PHL'), (3, 'Friday'),
+            (10, 'Central Coast Hockey Park'),
+            ('_entry_idx', 99),
+        ])
+        rules = {
+            date_scope: [('all',)],
+            team_scope: [('pair', 'Gosford PHL', 'Norths PHL')],
+        }
+        # Tigers-Gosford on Apr 17 (date matches, team-pair doesn't)
+        key = ('Gosford PHL', 'Tigers PHL', 'PHL', 'Friday', 1, '20:00',
+               4, '2026-04-17', 4, 'Wyong Main Field', 'Central Coast Hockey Park')
+        assert _get_matching_forced_scopes(key, rules) == [date_scope]
 
 
 # ============== _build_blocked_game_rules ==============

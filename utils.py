@@ -626,22 +626,30 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
     return dict(scope_groups), constraint_types, constraint_counts
 
 
-def _check_forced_game_status(key: tuple, forced_rules: dict):
+def _get_matching_forced_scopes(key: tuple, forced_rules: dict) -> list:
     """
-    Check a variable key against forced game rules.
+    Return every scope_key whose scope + team matcher matches this variable.
 
-    FORCED_GAMES works by finding all variables that match the partial key
-    (scope + team matcher) and adding sum == 1 to ensure exactly one outcome
-    occurs. Variables that DON'T match are left alone — they are NOT eliminated.
-
-    Returns:
-        ('force', scope_key) — variable matches scope AND teams → track it for sum == 1
-        ('normal', None)     — variable doesn't match any forced rule → create normally
+    A variable can satisfy multiple forced-game scopes simultaneously — e.g.
+    "1 game on Apr 17 at CCHP" (date scope, all-matcher) and "Norths-Gosford
+    on some Friday at CCHP" (team scope) are both satisfied by the same
+    Norths-Gosford-Apr-17-CCHP variable. The variable must be registered
+    against every matching scope so each scope's sum constraint sees it as a
+    valid candidate; otherwise the buckets become artificially disjoint and
+    the solver loses flexibility.
 
     Args:
-        key: 11-tuple (team1, team2, grade, day, day_slot, time, week, date, round_no, field_name, field_location)
+        key: 11-tuple (team1, team2, grade, day, day_slot, time, week, date,
+             round_no, field_name, field_location)
         forced_rules: Output of _build_forced_game_rules()
+
+    Returns:
+        List of scope_keys this variable matches. Empty list if none match.
     """
+    matches = []
+    t1, t2 = key[0], key[1]
+    sorted_pair = tuple(sorted([t1, t2]))
+
     for scope_key, team_matchers in forced_rules.items():
         # Check if variable matches this scope
         in_scope = True
@@ -663,21 +671,40 @@ def _check_forced_game_status(key: tuple, forced_rules: dict):
             continue
 
         # Variable is in scope — check if it matches ANY team matcher
-        t1, t2 = key[0], key[1]
-        sorted_pair = tuple(sorted([t1, t2]))
         for matcher in team_matchers:
             if matcher[0] == 'all':
-                return ('force', scope_key)  # No team filter — any game in scope
+                matches.append(scope_key)
+                break
             elif matcher[0] == 'pair':
                 if sorted_pair[0] == matcher[1] and sorted_pair[1] == matcher[2]:
-                    return ('force', scope_key)  # Matches — force this game
+                    matches.append(scope_key)
+                    break
             elif matcher[0] == 'any':
                 if t1 == matcher[1] or t2 == matcher[1]:
-                    return ('force', scope_key)  # Matches — force this game
+                    matches.append(scope_key)
+                    break
 
-        # In scope but doesn't match teams — leave it alone, it's a different game
+    return matches
 
-    return ('normal', None)  # Not a forced game — create normally
+
+def _check_forced_game_status(key: tuple, forced_rules: dict):
+    """
+    Back-compat wrapper around _get_matching_forced_scopes.
+
+    Returns:
+        ('force', scope_key) — variable matches at least one forced rule;
+                               scope_key is the FIRST match (iteration order).
+        ('normal', None)     — variable doesn't match any forced rule.
+
+    Note: production code (generate_X) uses _get_matching_forced_scopes
+    directly so a variable can be registered against ALL matching scopes.
+    This wrapper is retained for callers/tests that only need a single
+    yes/no answer.
+    """
+    matches = _get_matching_forced_scopes(key, forced_rules)
+    if matches:
+        return ('force', matches[0])
+    return ('normal', None)
 
 
 # ============== Blocked Games (No-Play Variable Removal) ==============
@@ -3233,14 +3260,18 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
                 blocked_vars_skipped += 1
                 continue
 
-            # Check forced game rules - track matching vars for sum == 1 constraint.
+            # Check forced game rules - track matching vars for sum == N constraint.
+            # A variable may match multiple forced scopes (e.g. a date-scope and an
+            # overlapping team-scope) and must be registered against ALL matching
+            # scopes so each scope's sum constraint sees it as a candidate.
             # Non-matching vars are left alone (not eliminated).
             if forced_game_rules and not in_locked_week:
-                status, scope_key = _check_forced_game_status(key, forced_game_rules)
-                if status == 'force':
+                matching_scopes = _get_matching_forced_scopes(key, forced_game_rules)
+                if matching_scopes:
                     var = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
                     X[key] = var
-                    forced_scope_vars[scope_key].append(var)
+                    for scope_key in matching_scopes:
+                        forced_scope_vars[scope_key].append(var)
                     forced_vars_forced += 1
                     continue
 
