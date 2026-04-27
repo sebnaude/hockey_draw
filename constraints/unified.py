@@ -27,10 +27,7 @@ from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
 from constraints.atoms import (
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
-    BroadmeadowFridayCount,
-    GosfordFridayCount,
     GosfordFridayRoundsForced,
-    MaitlandFridayCount,
     PHLRoundOnePlay,
     PreferredDates,
 )
@@ -549,10 +546,7 @@ class UnifiedConstraintEngine:
     _PHL_HARD_ATOMS = (
         PHLConcurrencyAtBroadmeadow,
         PHLAnd2ndConcurrencyAtBroadmeadow,
-        BroadmeadowFridayCount,
-        GosfordFridayCount,
         GosfordFridayRoundsForced,
-        MaitlandFridayCount,
         PHLRoundOnePlay,
     )
     _PHL_SOFT_ATOMS = (PreferredDates,)

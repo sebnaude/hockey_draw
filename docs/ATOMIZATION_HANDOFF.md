@@ -34,7 +34,7 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
   --ignore=tests/test_spacing_integration.py -q
 ```
 
-**Baseline: 1246 passed, 1 skipped.** Don't ship a phase that drops below 1246.
+**Baseline: 1272 passed, 1 skipped.** Don't ship a phase that drops below 1272.
 
 (Note: the venv lives in the *main* worktree `draw/.venv`, not in `draw-final-form/.venv`. Use the absolute path above.)
 
@@ -48,14 +48,21 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `535cac3` | 5 | `feat(config): migrate hardcoded constraint constants to CONSTRAINT_DEFAULTS (Phase 5)` |
 | `48f5222` | 6 prep | `feat(config): add AWAY_VENUE_RULES skeleton for generic home-ground` |
 | `1956608` | 3a | `feat(constraints): atomize PHLAndSecondGradeTimes into 8 atoms (Phase 3a)` — see retraction note below |
+| (TBD) | 3a retraction | `feat(forced-games): support 'club' filter + multi-scope subset-consistency validation` |
+| (TBD) | 3a retraction | `refactor(constraints): retire Broadmeadow/Gosford/Maitland Friday-count atoms in favor of FORCED_GAMES entries` |
 
-### IMPORTANT — Phase 3a partial retraction (FORCED-as-count-rules)
+### Phase 3a retraction — DONE (FORCED-as-count-rules)
 
-After Phase 3a shipped, the user clarified that **per-venue / per-day game-count budgets** must be expressed as `FORCED_GAMES` entries in the season config, NOT as hardcoded count atoms. Three of the eight atoms shipped in `1956608` (`BroadmeadowFridayCount`, `GosfordFridayCount`, `MaitlandFridayCount`, plus possibly `GosfordFridayRoundsForced`) are therefore **slated for removal** in favor of FORCED entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the full hand-off.
+`docs/FORCED_GAMES_AS_COUNT_RULES.md` is fully implemented. Cluster atom count drops from 8 to **5**: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. (The `GosfordFridayRoundsForced` atom is RETAINED — its per-round `sum == 1` enforcement isn't yet covered by individual per-round FORCED entries; verify before retiring in a future pass.)
 
-**Do this before continuing the rest of Phase 3.** That work is the next user-facing deliverable.
+What shipped:
+1. `'club'` team-filter for `FORCED_GAMES` entries (mirrors `BLOCKED_GAMES`).
+2. New `validate_game_config` Phase 21: subset-consistency for overlapping FORCED scopes (catches `equal N` ⊂ `equal M` when `N > M`, etc.).
+3. `season_2026.py` FORCED_GAMES gained three per-venue Friday count entries (Broadmeadow ≤3, Gosford ==8, Maitland ==2).
+4. `BroadmeadowFridayCount` / `GosfordFridayCount` / `MaitlandFridayCount` atoms + their registry entries + atom tests removed.
+5. Test bar: **1272 passed, 1 skipped** (was 1268).
 
-After it ships, the cluster's atom count drops from 8 to ~4: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `PHLRoundOnePlay`, `PreferredDates`.
+CONSTRAINT_DEFAULTS keys (`max_friday_broadmeadow`, `gosford_friday_games`, `maitland_friday_games`) are RETAINED for now — `original.py`/`ai.py` and the legacy `_phl_times_hard()` parity reference still consume them. They retire when legacy code archives in Phase 7c.
 
 ### What changed structurally (prior session)
 

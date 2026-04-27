@@ -497,6 +497,32 @@ PHL_PREFERENCES = {
 #    'field_location': 'Newcastle International Hockey Centre'}
 
 FORCED_GAMES = [
+    # === Per-venue PHL Friday count caps ===
+    # These three entries express the per-season Friday-night totals at each
+    # venue as FORCED_GAMES count rules — see docs/FORCED_GAMES_AS_COUNT_RULES.md.
+    # Per-venue counts are budgets, not structural constraints; they belong
+    # here in season config, not in hardcoded constraint atoms. Per-pair Friday
+    # entries below (e.g. "Maitland vs Souths" / "Norths vs Gosford") combine
+    # with these caps via multi-scope variable registration (commit cd8a338),
+    # so each Friday game counts toward every matching scope simultaneously.
+    {
+        'grade': 'PHL', 'day': 'Friday',
+        'field_location': 'Newcastle International Hockey Centre',
+        'count': 3, 'constraint': 'lesse',
+        'description': 'Max 3 PHL Friday games at Broadmeadow per season',
+    },
+    {
+        'grade': 'PHL', 'day': 'Friday',
+        'field_location': 'Central Coast Hockey Park',
+        'count': 8, 'constraint': 'equal',
+        'description': 'Exactly 8 PHL Friday games at Gosford per season (AGM 2026)',
+    },
+    {
+        'grade': 'PHL', 'day': 'Friday',
+        'field_location': 'Maitland Park',
+        'count': 2, 'constraint': 'equal',
+        'description': 'Exactly 2 PHL Friday games at Maitland Park per season',
+    },
     # === NIHC Friday Nights ===
     # Jun 12: Norths vs Wests PHL (Norths 80th Anniversary Friday) — fixed date
     {

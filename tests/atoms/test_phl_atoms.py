@@ -13,10 +13,7 @@ from __future__ import annotations
 from ortools.sat.python import cp_model
 
 from constraints.atoms import (
-    BroadmeadowFridayCount,
-    GosfordFridayCount,
     GosfordFridayRoundsForced,
-    MaitlandFridayCount,
     PHLAnd2ndConcurrencyAtBroadmeadow,
     PHLConcurrencyAtBroadmeadow,
     PHLRoundOnePlay,
@@ -106,60 +103,6 @@ class TestPHLAnd2ndConcurrencyAtBroadmeadow:
 
 
 # ----------------------------------------------------------------------
-# BroadmeadowFridayCount
-# ----------------------------------------------------------------------
-
-
-class TestBroadmeadowFridayCount:
-    def test_solo_clean_feasible(self, phl_data):
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        BroadmeadowFridayCount().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-
-    def test_caps_friday_phl_at_broadmeadow(self, phl_data):
-        phl_data['constraint_defaults']['max_friday_broadmeadow'] = 2
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        friday_bm = [
-            k for k in X
-            if k[2] == 'PHL' and k[3] == 'Friday' and k[10] == BROADMEADOW
-        ]
-        assert len(friday_bm) >= 3, 'need 3+ Friday Broadmeadow PHL candidates to test cap=2'
-        for k in friday_bm[:3]:
-            model.Add(X[k] == 1)
-        BroadmeadowFridayCount().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status == cp_model.INFEASIBLE
-
-
-# ----------------------------------------------------------------------
-# GosfordFridayCount
-# ----------------------------------------------------------------------
-
-
-class TestGosfordFridayCount:
-    def test_solo_clean_feasible(self, phl_data):
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        GosfordFridayCount().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-
-    def test_exactly_target_friday_at_gosford(self, phl_data):
-        phl_data['constraint_defaults']['gosford_friday_games'] = 1
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        friday_gf = [
-            k for k in X
-            if k[2] == 'PHL' and k[3] == 'Friday' and k[10] == GOSFORD
-        ]
-        assert len(friday_gf) >= 2
-        for k in friday_gf[:2]:
-            model.Add(X[k] == 1)
-        GosfordFridayCount().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status == cp_model.INFEASIBLE
-
-
-# ----------------------------------------------------------------------
 # GosfordFridayRoundsForced
 # ----------------------------------------------------------------------
 
@@ -178,33 +121,6 @@ class TestGosfordFridayRoundsForced:
                   and k[10] == GOSFORD and k[8] == 2]:
             model.Add(X[k] == 0)
         GosfordFridayRoundsForced().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status == cp_model.INFEASIBLE
-
-
-# ----------------------------------------------------------------------
-# MaitlandFridayCount
-# ----------------------------------------------------------------------
-
-
-class TestMaitlandFridayCount:
-    def test_solo_clean_feasible(self, phl_data):
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        MaitlandFridayCount().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-
-    def test_exactly_target_friday_at_maitland(self, phl_data):
-        phl_data['constraint_defaults']['maitland_friday_games'] = 1
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        friday_mp = [
-            k for k in X
-            if k[2] == 'PHL' and k[3] == 'Friday' and k[10] == MAITLAND
-        ]
-        assert len(friday_mp) >= 2
-        for k in friday_mp[:2]:
-            model.Add(X[k] == 1)
-        MaitlandFridayCount().apply(model, X, phl_data, _registry(model))
         status, _ = solve_with_timeout(model)
         assert status == cp_model.INFEASIBLE
 

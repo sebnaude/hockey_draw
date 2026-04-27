@@ -46,12 +46,12 @@ Legend
 
 | Cluster | Legacy classes | Atoms after split | Net change |
 |---|---|---|---|
-| PHLAndSecondGradeTimes | 1 | 4 (post-FORCED-migration; per-venue Friday counts move to FORCED_GAMES entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | +3 |
+| PHLAndSecondGradeTimes | 1 | 5 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates` (per-venue Friday counts moved to FORCED_GAMES entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | +4 |
 | ClubDayConstraint | 1 | 5 | +4 |
 | ClubVsClubAlignment | 1 | 4 | +3 |
 | MaitlandHomeGrouping + MaxMaitlandHomeWeekends | 2 | 1 (NonDefaultHomeGrouping, with per-club AWAY_VENUE_RULES) | -1 |
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
-| **Total** | **18 solver + 3 tester-only** | **23 solver + 3 tester-only** | **+9** |
+| **Total** | **18 solver + 3 tester-only** | **24 solver + 3 tester-only** | **+10** |
 
 ## 4. Findings vs the plan's assumptions
 

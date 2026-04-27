@@ -10,7 +10,7 @@
 | 0 — Constraint inventory | ✅ DONE | `6e16d14` |
 | 1 — Helper-Var Registry | ✅ DONE | `244f8cd` |
 | 2 — ConstraintInfo extension | ✅ DONE | `c64c1d4` |
-| 3a — Atomize PHLAndSecondGradeTimes | 🟡 PARTIAL — `1956608` shipped 8 atoms; 3-4 will be retired in favor of FORCED_GAMES entries (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | `1956608` |
+| 3a — Atomize PHLAndSecondGradeTimes | ✅ DONE — `1956608` shipped 8 atoms; per-venue Friday count atoms (Broadmeadow / Gosford / Maitland) retired in favor of `FORCED_GAMES` entries (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`). Cluster now has 5 atoms: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. | `1956608` + retraction |
 | 3b — Atomize ClubDayConstraint | ⬜ NOT STARTED | — |
 | 3c — Atomize ClubVsClubAlignment | ⬜ NOT STARTED | — |
 | 4 — FORCED/BLOCKED count adjusters | ⬜ NOT STARTED (depends on 3) | — |
@@ -273,7 +273,7 @@ The `UnifiedConstraintEngine` runs every adjuster after FORCED/BLOCKED are parse
 | Constraint | Why |
 |---|---|
 | `ClubVsClubCoincidence` | Forcing pair off Sunday lowers expected coincidences. (User's example.) |
-| `BroadmeadowFridayCount` / `GosfordFridayCount` / `MaitlandFridayCount` | Forcing PHL Friday games at one venue affects the count budget (already hand-coded as the locked-week HACK in original.py). |
+| ~~`BroadmeadowFridayCount` / `GosfordFridayCount` / `MaitlandFridayCount`~~ | **Out of scope — retired.** Per-venue Friday counts are FORCED_GAMES entries now (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`). The locked-week HACK in `original.py` becomes obsolete when those legacy classes archive in Phase 7c. |
 | `EqualMatchUpSpacing` | Forcing pair-meetings onto specific weeks reduces flexibility for spacing. |
 | `MaitlandHomeGrouping` | Forcing a home weekend changes the consecutive-window calculation. |
 | `AwayAtMaitlandGrouping` | Forcing an away match at Maitland changes the away-clubs-per-week count. |
