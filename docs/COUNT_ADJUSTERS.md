@@ -1,8 +1,9 @@
 # FORCED/BLOCKED Count Adjusters (Phase 4)
 
-> **Status:** framework shipped (commit `1521c9b`); no actual
-> adjusters registered yet. Each adjuster formula needs user sign-off
-> before it ships — see "Proposed adjuster formulas" below.
+> **Status:** framework shipped (commit `1521c9b`). The 5 adjuster formulas
+> below are **approved spec** — implement them as written. Flag deviations
+> only if you find a real bug in the formula while reading the related atom
+> code. Implementation order is suggested, not strict.
 
 ## What it is
 
@@ -47,7 +48,7 @@ data['count_adjustments']['EqualGames']  # whatever my_adjuster returned
 `run_count_adjusters(data)` is also exposed for tests; the engine calls it
 exactly once.
 
-## Proposed adjuster formulas (awaiting user sign-off)
+## Adjuster formulas (approved spec)
 
 These are the catalog from `ATOMIZATION_PLAN.md` Phase 4 + the user's
 example use cases. Each formula is the **proposed** behaviour; the actual
@@ -123,16 +124,39 @@ expected_meetings[grade][club_pair] = (
 This is the most subtle one. The user flagged it as the canonical
 motivating example for the whole adjuster mechanism.
 
-## Sign-off table
+## Implementation status
 
 | # | Adjuster | Status |
 |---|---|---|
-| 1 | `EqualGames` | ⏸ proposed: **no adjuster needed** — please confirm |
-| 2 | `EqualMatchUpSpacing` | ⏸ proposed formula above — please confirm or refine |
-| 3 | `MaitlandHomeGrouping` (`NonDefaultHomeGrouping`) | ⏸ proposed formula above — please confirm or refine |
-| 4 | `AwayAtMaitlandGrouping` (`AwayAtNonDefaultGrouping`) | ⏸ proposed formula above — please confirm or refine |
-| 5 | `ClubVsClubCoincidence` | ⏸ proposed formula above — please confirm or refine |
+| 1 | `EqualGames` | ✅ approved: **no adjuster** — formula above explains why |
+| 2 | `EqualMatchUpSpacing` | 🟡 approved spec — implement |
+| 3 | `MaitlandHomeGrouping` (`NonDefaultHomeGrouping`) | 🟡 approved spec — implement (will rename in Phase 6) |
+| 4 | `AwayAtMaitlandGrouping` (`AwayAtNonDefaultGrouping`) | 🟡 approved spec — implement (will rename in Phase 6) |
+| 5 | `ClubVsClubCoincidence` | 🟡 approved spec — implement (the user's worked example) |
 
-Once a formula is signed off, the implementation lands as a standalone
-commit on `final-form` with: the adjuster callable, the atom change to
-read `data['count_adjustments'][canonical_name]`, and unit tests.
+Each adjuster ships as one commit on `final-form` with: (a) the adjuster
+callable assigned to `CONSTRAINT_REGISTRY[name].forced_blocked_adjuster`, (b)
+the atom change to read `data['count_adjustments'][canonical_name]`, (c)
+unit tests covering both the adjuster math (synthesised FORCED/BLOCKED) and
+the atom's behaviour change. The two Phase-6 renames mean adjusters #3 and
+#4 should be implemented against the new `NonDefaultHomeGrouping` /
+`AwayAtNonDefaultGrouping` atoms, not the legacy names.
+
+**Where to wire it:** the adjuster registers on the `ConstraintInfo` for the
+*atom* canonical name (e.g. `ClubVsClubCoincidence`, not the parent
+`ClubVsClubAlignment`). Atoms read `data['count_adjustments'][self.canonical_name]`
+inside their `apply()`.
+
+**Test pattern:**
+
+```python
+def test_adjuster_reduces_expected_meetings(self):
+    data = {...synthetic data...}
+    data['forced_games'] = [{
+        'grade': 'PHL', 'day': 'Friday', 'field_location': GOSFORD,
+        'teams': ['Maitland PHL', 'Norths PHL'], 'count': 2, 'constraint': 'equal',
+    }]
+    data['blocked_games'] = []
+    out = my_adjuster(data, data['forced_games'], data['blocked_games'])
+    assert out[('Maitland', 'Norths')]['PHL'] == total_meetings - 2
+```

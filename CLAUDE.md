@@ -20,11 +20,21 @@ Constraint programming system for generating hockey competition schedules using 
 
 ## Critical Rules
 
-### 1. `constraints/original.py` — Only Edit When Directed
-The original human-written constraints are the **source of truth**. Do NOT edit `constraints/original.py` unless the user explicitly asks you to. By default, all fixes go to `constraints/ai.py` only.
+### 1. Atom-based constraints — `constraints/atoms/` is the source of truth
+Branch `final-form` runs the atomized engine. Each constraint is one idea, one
+file under `constraints/atoms/`. Atoms are dispatched by
+`UnifiedConstraintEngine` (see `constraints/unified.py`), registered in
+`constraints/registry.py` (with `atom_group` set when split from a legacy
+combined class), and tested under `tests/atoms/`.
 
-- Default edit targets: `constraints/ai.py`, `tests/test_ai_constraints_comprehensive.py`
-- Only edit when user directs: `constraints/original.py`, `tests/test_constraints.py`, `tests/test_constraints_equivalence.py`
+Legacy combined classes in `constraints/original.py` and `constraints/ai.py`
+are **reference-only** on `final-form` — kept callable for parity tests but
+not invoked by the prod pipeline. Don't add new logic there. The pipeline
+moves them to `constraints/archived/` in Phase 7c.
+
+- Default edit targets: `constraints/atoms/<atom>.py`, `constraints/registry.py`, `tests/atoms/`
+- Read first: `docs/ATOMIZATION_HANDOFF.md`, `docs/ATOMIZATION_PLAN.md`, `docs/HELPER_VARS.md`, `docs/COUNT_ADJUSTERS.md`, `docs/CONSTRAINT_INVENTORY.md`
+- Only edit when user directs: `constraints/original.py`, `constraints/ai.py`, anything under `constraints/archived/`
 
 ### 2. Solver Execution
 - **ALWAYS** run solver commands in background - runs for HOURS/DAYS
@@ -103,8 +113,17 @@ config/
   team_naming.py          # Team name helpers
 
 constraints/
-  original.py             # Original constraints (READ-ONLY)
-  ai.py                   # AI-enhanced constraints (edit this)
+  atoms/                  # Atomic constraints — one idea per file (Phase 3)
+    base.py               # Atom base class + venue constants + helpers
+    phl_*.py              # PHL atoms (Phase 3a)
+    club_day_*.py         # ClubDay atoms (Phase 3b)
+    club_vs_club_*.py     # ClubVsClub atoms (Phase 3c)
+    phl_2nd_back_to_back.py  # PHL/2nd Sunday back-to-back atom (Phase 3c)
+  unified.py              # UnifiedConstraintEngine (atom dispatch)
+  helper_vars.py          # HelperVarRegistry (declarative + pool API)
+  registry.py             # CONSTRAINT_REGISTRY + run_count_adjusters
+  original.py             # Legacy combined classes (REFERENCE ONLY on final-form)
+  ai.py                   # Legacy AI variants (REFERENCE ONLY on final-form)
   soft.py                 # Soft constraint variants
   severity.py             # Severity-based relaxation + CONSTRAINT_TO_SEVERITY mapping
   resolver.py             # Infeasibility resolver
@@ -199,16 +218,31 @@ Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `Dra
 
 **PHLAndSecondGradeAdjacency**: Uses 180-minute time window with location logic — within 180 min must be same location, outside 180 min must be different location.
 
-### 19 Constraint Pairs (original + AI)
+### Atomized constraints (final-form)
 
-All audited for parity. 5 bugs were fixed in AI versions:
-1. `EqualMatchUpSpacingConstraintAI` - was a no-op
-2. `EnsureBestTimeslotChoicesAI` - missing slot bounding
-3. `ClubVsClubAlignmentAI` - missing Sunday field-alignment
-4. `MaximiseClubsPerTimeslotBroadmeadowAI` - missing dynamic hard minimum
-5. `PHLAndSecondGradeAdjacencyAI` - missing same-location enforcement
+Each "constraint" in the registry is now one of:
+- A **1:1 atom** — single-idea constraint, file in `constraints/atoms/`.
+- An **atom group** — atoms that were split from a legacy multi-idea class
+  (e.g. `PHLAndSecondGradeTimes` → 5 atoms with `atom_group='PHLAndSecondGradeTimes'`).
+- A **legacy entry** — kept in the registry pointing at the legacy combined
+  class for back-compat with severity/slack lookups; not dispatched by the
+  unified engine.
 
-6th bug fixed: `MaitlandHomeGrouping` (both original + AI) - pairwise BoolVar check was a no-op with any slack ≥ 1, replaced with sliding window.
+`docs/CONSTRAINT_INVENTORY.md` is the single source of truth for the table
+mapping legacy classes → atoms. `docs/ATOMIZATION_HANDOFF.md` tracks
+remaining work.
+
+Historical bug fixes carried over from the pre-atomization era:
+1. `EqualMatchUpSpacingConstraintAI` was a no-op — fixed
+2. `EnsureBestTimeslotChoicesAI` missing slot bounding — fixed
+3. `ClubVsClubAlignmentAI` missing Sunday field-alignment — fixed (atom enforces it)
+4. `MaximiseClubsPerTimeslotBroadmeadowAI` missing dynamic hard minimum — fixed
+5. `PHLAndSecondGradeAdjacencyAI` missing same-location enforcement — fixed
+6. `MaitlandHomeGrouping` pairwise check was a no-op with slack ≥ 1 — replaced with sliding window
+7. Pre-atomization unified engine dropped the PHL/2nd Sunday back-to-back
+   same-field rule — restored by `PHLAnd2ndBackToBackSameField` atom in Phase 3c
+8. Pre-atomization unified engine dropped the `CLUB_DAYS` opponent-matchup
+   branch — restored by `ClubDayOpponentMatchup` atom in Phase 3b
 
 ## Analyzing Checkpoints
 

@@ -54,8 +54,12 @@ python run.py generate --help
 ├── utils.py            # Utility functions
 │
 ├── constraints/        # Constraint modules
-│   ├── original.py     # Original human-written constraints
-│   ├── ai.py           # AI-enhanced constraints
+│   ├── atoms/          # Atomic constraints — one idea per file (final-form)
+│   ├── unified.py      # UnifiedConstraintEngine (atom dispatch)
+│   ├── helper_vars.py  # HelperVarRegistry (declarative + pool API)
+│   ├── registry.py     # CONSTRAINT_REGISTRY + run_count_adjusters
+│   ├── original.py     # Legacy combined classes (reference-only on final-form)
+│   ├── ai.py           # Legacy AI variants (reference-only on final-form)
 │   ├── soft.py         # Soft constraint variants
 │   ├── severity.py     # Severity-based relaxation
 │   └── resolver.py     # Infeasibility resolver
@@ -80,6 +84,13 @@ python run.py generate --help
 ```
 
 ## Documentation
+
+### Atomization (final-form branch)
+- **[Atomization Handoff](docs/ATOMIZATION_HANDOFF.md)** - Self-contained pickup prompt for the in-flight refactor
+- **[Atomization Plan](docs/ATOMIZATION_PLAN.md)** - 7-phase plan with status
+- **[Constraint Inventory](docs/CONSTRAINT_INVENTORY.md)** - Constraint → atom mapping
+- **[Helper Variables](docs/HELPER_VARS.md)** - HelperVarRegistry API
+- **[Count Adjusters](docs/COUNT_ADJUSTERS.md)** - FORCED/BLOCKED count-adjuster framework
 
 ### For AI Assistants
 - **[AI Documentation Index](docs/ai/README.md)** - Start here

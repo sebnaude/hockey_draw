@@ -1,30 +1,42 @@
-# Hand-off prompt — Atomization implementation (continuation)
+# Hand-off prompt — Atomization, FINAL PUSH
 
-> Paste this entire document into a fresh Claude Code session as the first user message. It is self-contained.
+> Paste this entire document into a fresh Claude Code session as the first
+> user message. It is self-contained.
+>
+> **This is the last push.** Phases 0, 1, 2, 3a, 3b, 3c, 5, Phase-6 prep, and
+> Phase-4 framework are merged on `final-form`. You are doing the rest in
+> one continuous session: Phase 4 per-adjuster implementations, Phase 6
+> generic home-ground rename, Phase 7a tests + violation breakdowns, Phase
+> 7b configurable stages, Phase 7c archive legacy, Phase 7d docs. Do not
+> stop and ask between phases unless you find a real blocker — the
+> formulas, decisions, and architecture are all locked in. Run the test bar
+> after every phase, fix what's broken, commit, move on.
 
 ---
 
-You are taking over an in-flight refactor of a hockey-draw constraint solver. **Phases 0, 1, 2, 3a, 3b, 3c, 5, Phase-6 prep, and Phase-4 framework are merged on `final-form`.** Your job is the remaining work: Phase 4 per-adjuster implementations (formulas in `docs/COUNT_ADJUSTERS.md` awaiting sign-off), Phase 6 (generic home-ground rename), and Phase 7 (tests, configurable stages, archive legacy, docs).
-
-Work carefully, ship one phase at a time, verify with tests, and report after each phase.
-
 ## Repo + branch + worktree
 
-- **Repo:** `C:/Users/c3205/Documents/Code/python/draw` (main worktree — DO NOT touch; on `feat/ai-updates`)
+- **Repo:** `C:/Users/c3205/Documents/Code/python/draw` (main worktree —
+  DO NOT touch; on `feat/ai-updates`)
 - **Branch you must work on:** `final-form`
-- **Worktree to use:** `C:/Users/c3205/Documents/Code/python/draw-final-form` — **always `cd` into here**
-- **Push permission requires user approval.** Don't push yourself; ask the user.
-- The main project doc `CLAUDE.md` (in the worktree root) lists project rules — read it before any code change.
+- **Worktree to use:** `C:/Users/c3205/Documents/Code/python/draw-final-form`
+  — **always `cd` into here**
+- **Push permission requires user approval.** Don't push yourself; ask
+  the user when everything is green.
+- The main project doc `CLAUDE.md` (in the worktree root) lists project
+  rules — read it before any code change.
 
 ## Read these first (MANDATORY)
 
-1. `C:/Users/c3205/Documents/Code/python/draw-final-form/CLAUDE.md` — project rules
-2. `C:/Users/c3205/Documents/Code/python/draw-final-form/docs/ATOMIZATION_PLAN.md` — full plan (now annotated with phase status)
-3. `C:/Users/c3205/Documents/Code/python/draw-final-form/docs/CONSTRAINT_INVENTORY.md` — Phase 0 deliverable; the table you'll re-read for atom names + behavior
-4. `C:/Users/c3205/Documents/Code/python/draw-final-form/docs/HELPER_VARS.md` — Phase 1 deliverable; HelperVarRegistry API atoms must use
-5. `C:/Users/c3205/Documents/Code/python/draw-final-form/config/season_2026.py` — actual season config (lock this in your head before editing constraints)
+1. `CLAUDE.md` — project rules (atomization-aware as of Phase 3c)
+2. `docs/ATOMIZATION_PLAN.md` — full plan, annotated with phase status
+3. `docs/CONSTRAINT_INVENTORY.md` — single source of truth for constraint → atom mapping
+4. `docs/HELPER_VARS.md` — `HelperVarRegistry` API atoms must use
+5. `docs/COUNT_ADJUSTERS.md` — Phase 4 framework + the 5 approved adjuster formulas
+6. `docs/FORCED_GAMES_AS_COUNT_RULES.md` — perennial rule for count budgets
+7. `config/season_2026.py` — actual season config (lock this in your head before editing constraints)
 
-## Current state of the branch (commit `0cf78e6`)
+## Current state of `final-form`
 
 Quick test bar (no slow integration tests):
 ```
@@ -34,61 +46,61 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
   --ignore=tests/test_spacing_integration.py -q
 ```
 
-**Baseline: 1305 passed, 1 skipped** (1272 → 1287 → 1298 → 1305 after Phase 4 framework). Don't ship a phase that drops below 1305.
+**Baseline at start: 1305 passed, 1 skipped.** Don't ship a phase that drops
+below this; every phase below should add tests and lift it further.
 
-(Note: the venv lives in the *main* worktree `draw/.venv`, not in `draw-final-form/.venv`. Use the absolute path above.)
+(The venv lives in the *main* worktree `draw/.venv`, not in
+`draw-final-form/.venv`. Use the absolute path above.)
 
-### Commits in the chain so far (master pickup point = `cd8a338`)
+### Commits in the chain so far
 
 | Hash | Phase | Summary |
 |---|---|---|
-| `6e16d14` | 0 | `docs: add constraint inventory (Phase 0)` |
-| `244f8cd` | 1 | `feat(constraints): extract HelperVarRegistry from SharedVariablePool (Phase 1)` |
-| `c64c1d4` | 2 | `feat(constraints): extend ConstraintInfo for atomization (Phase 2)` |
-| `535cac3` | 5 | `feat(config): migrate hardcoded constraint constants to CONSTRAINT_DEFAULTS (Phase 5)` |
+| `6e16d14` | 0 | `docs: add constraint inventory` |
+| `244f8cd` | 1 | `feat(constraints): extract HelperVarRegistry from SharedVariablePool` |
+| `c64c1d4` | 2 | `feat(constraints): extend ConstraintInfo for atomization` |
+| `535cac3` | 5 | `feat(config): migrate hardcoded constraint constants to CONSTRAINT_DEFAULTS` |
 | `48f5222` | 6 prep | `feat(config): add AWAY_VENUE_RULES skeleton for generic home-ground` |
-| `1956608` | 3a | `feat(constraints): atomize PHLAndSecondGradeTimes into 8 atoms (Phase 3a)` |
-| `3a4ab4d` | 3a retraction | `docs: hand-off — FORCED_GAMES supersedes per-venue Friday count atoms` |
-| `e9bf5a7` | 3a retraction | `feat(forced-games): support 'club' filter + multi-scope subset consistency` |
-| `5cfae6c` | 3a retraction | `refactor(constraints): retire per-venue Friday-count atoms for FORCED_GAMES` |
-| `4f0777c` | 3a retraction | `docs: document FORCED-as-count-budget as a perennial rule` |
-| `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
-| `8d2934d` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
-| `08f11be` | docs | `docs: backfill phase-3c commit hash` |
-| `1521c9b` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework (Phase 4)` |
+| `1956608` | 3a | `feat(constraints): atomize PHLAndSecondGradeTimes into 8 atoms` |
+| `e9bf5a7` + `5cfae6c` | 3a retraction | per-venue Friday counts moved to FORCED_GAMES |
+| `4f0777c` + `4ed0abf` | docs | sweep |
+| `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms` |
+| `8d2934d` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms` |
+| `08f11be` | docs | hash backfill |
+| `1521c9b` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework` |
+| `8c0e351` | docs | hash backfill |
 
-### Phase 3a retraction — DONE (FORCED-as-count-rules)
+### What's already in place
 
-`docs/FORCED_GAMES_AS_COUNT_RULES.md` is fully implemented. Cluster atom count is **5**: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. (`GosfordFridayRoundsForced` is RETAINED — its per-round `sum == 1` enforcement isn't yet covered by individual per-round FORCED entries; verify before retiring in a future pass.)
+- `constraints/atoms/` — 14 atoms across 3 groups: PHL (5), ClubDay (5),
+  ClubVsClub (4) + shared helpers + `base.py` + `__init__.py`
+- `constraints/registry.py` — 35 entries (21 originals + 14 atoms),
+  `run_count_adjusters(data)` plumbing, `HELPER_VAR_CATALOG`
+- `constraints/unified.py` — atom dispatch wired for all 3 groups; legacy
+  `_phl_times_*`, `_club_day_*`, `_club_alignment_*` retained as
+  parity-reference (not invoked in stage 1/2)
+- `constraints/helper_vars.py` — `HelperVarRegistry` (declarative + pool API)
+- `config/defaults.py` — perennial `CONSTRAINT_DEFAULTS`,
+  `AWAY_VENUE_RULES` skeleton (per-club home-venue rules; no constraint
+  reads from it yet — that's Phase 6)
+- `tests/atoms/` — atom-level tests + 3 fixtures (PHL, ClubDay, CvC)
+- `tests/test_count_adjusters.py` — 7 framework tests for Phase 4
+- `docs/` — inventory, plan, helper-vars, count-adjusters,
+  forced-games-as-count-rules, perennial rules
 
-What shipped:
-1. `'club'` team-filter for `FORCED_GAMES` entries (mirrors `BLOCKED_GAMES`).
-2. New `validate_game_config` Phase 21: subset-consistency for overlapping FORCED scopes (catches `equal N` ⊂ `equal M` when `N > M`, etc.).
-3. `season_2026.py` FORCED_GAMES gained three per-venue Friday count entries (Broadmeadow ≤3, Gosford ==8, Maitland ==2).
-4. `BroadmeadowFridayCount` / `GosfordFridayCount` / `MaitlandFridayCount` atoms + their registry entries + atom tests removed.
-5. `docs/PERENNIAL_RULES.md` Rule 3 documents the count-budget-as-FORCED pattern for new seasons.
-6. Test bar: **1272 passed, 1 skipped** (was 1268).
+### What's still in place that needs to go
 
-CONSTRAINT_DEFAULTS keys (`max_friday_broadmeadow`, `gosford_friday_games`, `maitland_friday_games`) are RETAINED for now — `original.py`/`ai.py` and the legacy `_phl_times_hard()` parity reference still consume them. They retire when legacy code archives in Phase 7c.
-
-### What changed structurally (prior session)
-
-- `constraints/helper_vars.py` (new) — `HelperVarRegistry` with declarative `declare`/`freeze`/`get_declared` API atoms must use, plus pool-style `get_or_create_bool`/`get_or_create_presence`/`register`/`lookup`/`get` (legacy compat). `SharedVariablePool` is an alias for `HelperVarRegistry`.
-- `constraints/unified.py` — engine exposes `self.registry` (declarative entry point for atoms) and `self.pool` (legacy alias). Class-level `PHL_ADJACENCY_MINUTES`, `MAITLAND_AWAY_HARD_LIMIT`, `CLUBS_ON_FIELD_HARD_LIMIT`, `CLUB_GAME_SPREAD_HARD_LIMIT` removed (first migrated to config; the other three were dead code). `BROADMEADOW_MAX_SLOTS = 6` retained — it's a tuning threshold, not derivable. Hardcoded Gosford-Friday rounds `[2, 4, 5, 9, 10]` now read from `data['constraint_defaults']['gosford_friday_rounds']`.
-- `constraints/registry.py` — `ConstraintInfo` extended with `atom_group` (str|None), `required_helpers` (list[str]), `forced_blocked_adjuster` (callable|None). `HELPER_VAR_CATALOG` set lists allowed helper kinds. New helpers `get_atoms_in_group`, `get_adjuster`, `validate_required_helpers`.
-- `config/defaults.py` — adds perennial `CONSTRAINT_DEFAULTS` dict (every constraint param has a default; seasons override only what they want changed). New keys: `phl_adjacency_window_minutes`, `gosford_friday_rounds`, `worst_timeslot_time`. Adds `AWAY_VENUE_RULES` skeleton (Maitland + Gosford `max_consecutive_home`/`friday_games`/`max_away_clubs`) — no constraint reads from it yet.
-- `utils.py` — `_merge_constraint_defaults()` merges season overrides over perennial defaults inside `build_season_data`.
-
-### What's still in place
-
-- `constraints/unified.py` (~1450 lines) — 2-stage hard/soft engine, 27+ pre-computed groupings, lookup caches. Atom dispatch is wired for `PHLAndSecondGradeTimes` (Phase 3a), `ClubDayConstraint` (Phase 3b), AND `ClubVsClubAlignment` (Phase 3c — see `_club_vs_club_atoms_hard` / `_club_vs_club_atoms_soft`). Legacy `_club_alignment_hard` / `_club_alignment_soft` retained for parity reference only.
-- `constraints/registry.py` (~470 lines) — 35 entries (21 original + 5 PHL atoms + 5 ClubDay atoms + 4 ClubVsClub atoms).
-- `constraints/atoms/` — 16 atoms shipped: 5 PHL + 5 ClubDay + 4 ClubVsClub (`club_vs_club_coincidence.py`, `club_vs_club_field_limit.py`, `club_vs_club_deficit_penalty.py`, `phl_2nd_back_to_back.py`) + shared helpers (`_club_day_shared.py`, `_club_vs_club_shared.py`) + `base.py` + `__init__.py`.
-- `constraints/original.py` (1733 lines) and `constraints/ai.py` (2040 lines) — legacy combined classes. Reference-only. Move to `constraints/archived/` in Phase 7c.
-- `constraints/archived_equalspacing_original.py` exists at the top level — move it to `constraints/archived/equalspacing_original.py` in Phase 7c.
-- `utils.py` (~3813 lines) — 21-phase `validate_game_config` harness (Phase 21 added in `e9bf5a7` for FORCED subset consistency). `_build_forced_game_rules` accepts `'club'` filter (also `e9bf5a7`). `_get_matching_forced_scopes` does multi-scope FORCED match. `generate_X` returns `(X, conflicts)` — NOT `(X, Y, conflicts)`.
-- `analytics/tester.py` (~2495 lines) — `_check_forced_games`, `_check_blocked_games`, dynamic per-club `ClubGameSpread` overlap bound. Phase 7a-bis adds the per-club / per-type breakdown.
-- `tests/fixtures/draw_2026_first6weeks.json` exists. `tests/atoms/conftest.py` has the small PHL+2nd fixture used by atom tests; Phase 7a creates `tests/fixtures/violations/`.
+- `constraints/original.py` (~1733 lines) and `constraints/ai.py` (~2040
+  lines) — legacy combined classes. Pipeline must NOT import them in prod
+  by end of Phase 7c.
+- `constraints/archived_equalspacing_original.py` at the top level — also
+  moves to `constraints/archived/` in 7c.
+- Hardcoded `STAGES` and `STAGES_AI` dicts in `main_staged.py` — Phase 7b
+  replaces with config-driven `SOLVER_STAGES`.
+- `--ai` CLI flag in `run.py` — Phase 7c removes it.
+- Hardcoded `'Maitland'` / `'Gosford'` strings in constraint logic —
+  Phase 6 replaces with iteration over `home_field_map.keys()` and
+  `AWAY_VENUE_RULES`.
 
 ## Decisions already locked (do NOT re-litigate)
 
@@ -96,271 +108,529 @@ CONSTRAINT_DEFAULTS keys (`max_friday_broadmeadow`, `gosford_friday_games`, `mai
 |---|---|
 | 1 | Atom names use `PHLConcurrencyAtBroadmeadow`-style descriptive names. No `Atom` suffix. |
 | 2/3 | Legacy `original.py` + `ai.py` move to `constraints/archived/`. Pipeline imports forbidden. Test enforces. |
-| 4 | `ClubDayOpponentMatchup` atom matches `original.py` behavior (supports `{'date': ..., 'opponent': 'OppClub'}`). |
-| 5 | Per-club home-venue config key is `AWAY_VENUE_RULES` — already added in `config/defaults.py`. |
+| 4 | `ClubDayOpponentMatchup` atom matches `original.py` behaviour (supports `{'date': ..., 'opponent': 'OppClub'}` form). DONE in 3b. |
+| 5 | Per-club home-venue config key is `AWAY_VENUE_RULES` — already in `config/defaults.py`. |
 | 6 | Tests use both static fixtures (one per atom-violation) AND programmatic per-test construction. Plus per-club / per-type breakdown in `ViolationReport`. |
 | 7 | `SOLVER_STAGES` is a config-driven list of `{name, description, atoms, ...}` dicts. CLI flags `--stages-config`, `--stage-only`, `--skip-stage`, `--list-stages`. |
+| 8 | Phase 4 adjuster formulas in `docs/COUNT_ADJUSTERS.md` are **approved spec** — implement them as written. |
 
 ## Critical project facts you MUST remember
 
-These are common pitfalls — they're in `CLAUDE.md` too but are easy to get wrong:
+These are common pitfalls — they're in `CLAUDE.md` too but easy to get wrong:
 
 1. **Variable key is an 11-tuple** `(team1, team2, grade, day, day_slot, time, week, date, round_no, field_name, field_location)`. `team1` is alphabetically first. Home/away is determined by `field_location`, NOT by team1/team2 position.
 2. **Dummy keys are 4-tuples** `(team1, team2, grade, index)`. Skip them via `len(key) < 11` or `not key[3]`.
 3. **`generate_X` signature: `(X, conflicts)`** — final-form does NOT use the `(X, Y, conflicts)` 3-tuple; dummies are handled via `HelperVarRegistry`.
 4. **A FORCED variable can match multiple scopes.** Use `_get_matching_forced_scopes()` (returns list), not `_check_forced_game_status()` (returns first match only — back-compat wrapper only).
-5. **Aggregate per-team home/away constraint was removed deliberately.** Per-pair balance only. CLAUDE.md notes "by design". *Phase 0 inventory found the aggregate block is still in `original.py:426-447`* — the atom must drop it; flag for user sign-off.
-6. **PHL locked-week HACKs in `constraints/original.py`** (lines ~242-301) are explicit user-flagged tech debt. They become obsolete when (a) per-venue Friday count budgets moved to `FORCED_GAMES` (DONE — `e9bf5a7`/`5cfae6c`); (b) `original.py`/`ai.py` archive in Phase 7c. Until then, the legacy classes still consume `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']` etc. and the HACK still adjusts for locked weeks. Don't write new code that depends on the HACK's substring matching — use `home_field_map` lookups.
+5. **Aggregate per-team home/away constraint was removed deliberately.** Per-pair balance only. The aggregate block is still in `original.py:426-447` — when archiving the legacy classes (7c), this drops away naturally.
+6. **PHL locked-week HACKs in `constraints/original.py`** are explicit user-flagged tech debt. They become obsolete when `original.py`/`ai.py` archive in 7c.
 7. **Maitland Sunday slot is 13:30 (not 13:00)** — `season_2026.py` uses 13:30. If you see 13:00 anywhere, it's stale.
 8. **`home_field_map` already exists** at `data['home_field_map']` (e.g. `{'Maitland': 'Maitland Park', 'Gosford': 'Central Coast Hockey Park'}`). Defaults to Newcastle International Hockey Centre (Broadmeadow) for unlisted clubs.
-9. **Solver runs are LONG (hours/days).** Never run `python run.py generate ...` synchronously. Use background jobs for solver tests; for unit tests build small fixtures and run for ≤30s.
-10. **The `--ai` CLI flag is being deprecated.** After atomization there's no original/AI distinction. Don't add new code paths that use `args.ai`.
-11. **`HelperVarRegistry.get(key)`** returns the cached pool var (or `None`) — NOT the declarative var. Use `registry.get_declared(kind, key)` for the declarative API.
+9. **Solver runs are LONG (hours/days).** Never run `python run.py generate ...` synchronously. Use small fixtures for unit tests; never run the full solver from a Phase 7 task.
+10. **`HelperVarRegistry.get(key)`** returns the cached pool var (or `None`) — NOT the declarative var. Use `registry.get_declared(kind, key)` for the declarative API.
+11. **`coincide` BoolVars** for ClubVsClub are registered under pool prefixes
+    `cvc_coincide` (lower-grade) and `cvc_phl_btb_coincide` (PHL/2nd) — atoms
+    after `Coincidence` / `BackToBack` read them by these prefix keys.
+12. **Phase-4 count adjustments** live at `data['count_adjustments'][canonical_name]`.
+    `UnifiedConstraintEngine.build_groupings()` calls `run_count_adjusters(data)`
+    once before any atom `apply()`. Atoms read by canonical name.
 
 ## How to work
 
-Iterate one phase at a time. Order from `ATOMIZATION_PLAN.md`:
-
-```
-[0✅ inventory] ──┐
-                 ├─→ [1✅ registry] ─→ [3a✅] ─→ [3b✅ ClubDay] ─→ [3c✅ ClubVsClub] ─→ 7c move legacy
-[2✅ ConstraintInfo extend] ─┘                                                              │
-                                                                                             ↓
-                                                                     4 (FORCED/BLOCKED adjusters)
-                                                                                             ↓
-[5✅ constants migration] ──────────────────────────────────────────────────────────────────┤
-[6 prep ✅] 6 (generic home-ground rename) ─────────────────────────────────────────────────┤
-                                                                                             ↓
-7a (tests) ─ 7b (configurable stages) ─ 7d (docs)
-```
-
 **Per-phase workflow:**
-1. Re-read the relevant phase section in `ATOMIZATION_PLAN.md` (now annotated with status).
-2. Plan the work (use `TaskCreate` to track sub-tasks within the phase).
-3. Implement with `Edit`/`Write`. NEVER touch `constraints/archived/` (once that exists) — those files are reference-only.
+1. Re-read the relevant phase section in `ATOMIZATION_PLAN.md` and the
+   "What I'll do per phase" detail below.
+2. Plan with `TaskCreate` to track sub-tasks within the phase.
+3. Implement with `Edit`/`Write`. NEVER touch `constraints/archived/` (once
+   that exists) — those files are reference-only.
 4. Run the test bar:
    ```
    cd /c/Users/c3205/Documents/Code/python/draw-final-form
    timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -m pytest tests/ \
      --ignore=tests/test_solver_integration.py --ignore=tests/test_spacing_integration.py -q
    ```
-   Must pass at ≥1298 (current baseline) before you commit.
-5. Commit on `final-form` with a descriptive message. Use `git commit --no-verify` ONLY if the user explicitly authorizes (don't skip pre-commit hooks proactively).
-6. Report to the user using the template at the end of this doc.
-7. Wait for user approval before starting the next phase.
+   Must pass at the running baseline (start: 1305) before you commit each phase.
+5. Commit on `final-form` with a descriptive message. Do NOT use
+   `--no-verify` unless explicitly authorized.
+6. Update **all** of these docs at end of each phase:
+   - `docs/ATOMIZATION_HANDOFF.md` — phase status + commit table
+   - `docs/ATOMIZATION_PLAN.md` — phase status table
+   - `docs/CONSTRAINT_INVENTORY.md` — atom annotations if relevant
+   - `docs/COUNT_ADJUSTERS.md` — adjuster status table (Phase 4)
+   - `CLAUDE.md` — file structure, pitfalls, anything that drifts
+   - `README.md` — if dir structure changes
+7. Move on. Don't pause for sign-off. Final report at the very end.
 
 **Do NOT:**
-- Push without user approval (push permission is denied; ask).
+- Push without user approval (push permission is denied; ask at the end).
 - Modify `feat/ai-updates` (work only on `final-form`).
-- Modify the main worktree at `C:/Users/c3205/Documents/Code/python/draw` (use the `final-form` worktree).
-- Invent new constraint behavior. You're re-shaping existing logic into atoms; behavioral changes get raised separately for sign-off first.
-- Use `unittest.mock`, `monkeypatch`, or any mocking on solver/data dicts in tests. Real CP-SAT models with sampled data only.
-- Add docstrings beyond what was there. Don't over-comment. CLAUDE.md is strict on this.
-- Run the full solver (it takes hours). Use small fixtures for tests.
-- Touch the open Excel files at the repo root (`2026 Season Draw V*.xlsx` etc.) — they're gitignored as drafts.
+- Modify the main worktree at `C:/Users/c3205/Documents/Code/python/draw`.
+- Invent new constraint behavior. You're re-shaping existing logic into
+  atoms; behavioral changes get raised separately for sign-off first.
+- Use `unittest.mock`, `monkeypatch`, or any mocking on solver/data dicts
+  in tests. Real CP-SAT models with sampled data only.
+- Add docstrings beyond what was there. Don't over-comment.
+- Run the full solver (it takes hours). Use small fixtures.
+- Touch the open Excel files at the repo root (`2026 Season Draw V*.xlsx`
+  etc.) — they're gitignored as drafts.
 
-## Phase-by-phase pickup notes
+---
 
-### Phase 3 — Atomize the 3 multi-idea constraints
+# THE WORK
 
-#### Phase 3a — `PHLAndSecondGradeTimes` → 5 atoms — ✅ DONE
-Atoms shipped in `1956608` (8 originally) then trimmed to 5 in `e9bf5a7`+`5cfae6c`:
-`PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`,
-`GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. Per-venue
-Friday count atoms became `FORCED_GAMES` entries (see
-`docs/FORCED_GAMES_AS_COUNT_RULES.md`).
+## Phase 4 — FORCED/BLOCKED count adjusters (5 implementations)
 
-#### Phase 3b — `ClubDayConstraint` → 5 atoms — ✅ DONE
+Framework already shipped in `1521c9b`. The 5 formulas in
+`docs/COUNT_ADJUSTERS.md` are **approved spec** — implement them as written.
 
-Atoms shipped: `ClubDayParticipation`, `ClubDayIntraClubMatchup`,
-`ClubDayOpponentMatchup`, `ClubDaySameField`, `ClubDayContiguousSlots`. Each
-in its own file under `constraints/atoms/`. Shared parsing/lookup helpers in
-`constraints/atoms/_club_day_shared.py`.
+### Where to put each adjuster
 
-Wired into `constraints/unified.py:_club_day_atoms_hard` — replaces the legacy
-`_club_day_scheduling` + `_club_day_field_contiguity` pair (kept callable for
-parity reference; not dispatched). `unified.py:build_groupings` now calls
-`normalize_club_day` so the `{'date': ..., 'opponent': ...}` dict form parses
-correctly.
+Each adjuster is a free function (or staticmethod) that lives next to its
+atom. Convention:
 
-Per Decision #4 the atoms additionally enforce the opponent-matchup branch
-from `original.py:ClubDayConstraint` that the pre-atomization unified engine
-silently dropped — the legacy unified methods only ever ran the derby branch.
-
-Tests:
-- `tests/atoms/test_club_day_atoms.py` — 13 solo-clean / solo-violation tests
-- `tests/atoms/test_club_day_atoms_parity.py` — 2 parity tests vs legacy methods
-- `tests/atoms/club_day_fixture.py` — 3-club Broadmeadow fixture with
-  duplicate 3rd-grade teams for derby + opponent scenarios.
-
-Test bar lifted to **1287 passed, 1 skipped** (was 1272 before Phase 3b).
-
-Atom helpers used: `club_day_field_used` (SameField), `club_day_slot_used`
-(ContiguousSlots) — both already in `HELPER_VAR_CATALOG`.
-
-#### Phase 3c — `ClubVsClubAlignment` → 4 atoms — ✅ DONE
-
-Atoms shipped: `ClubVsClubCoincidence`, `ClubVsClubFieldLimit`,
-`ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`. Shared helpers in
-`constraints/atoms/_club_vs_club_shared.py`.
-
-Wired via `_club_vs_club_atoms_hard` (Coincidence + FieldLimit + BackToBack)
-and `_club_vs_club_atoms_soft` (DeficitPenalty). `Coincidence` registers the
-per-`(grade, other_grade, club_pair, round_no)` `coincide` BoolVar in the
-helper-var pool under key prefix `cvc_coincide`; `FieldLimit` and
-`DeficitPenalty` read it back. `BackToBack` does the same for PHL/2nd
-under prefix `cvc_phl_btb_coincide`.
-
-The atom set additionally adds back the PHL/2nd Sunday back-to-back
-same-field rule that the pre-atomization unified engine silently dropped
-(present in `original.py:ClubVsClubAlignment` lines 1096–1198, omitted by
-`unified.py:_club_alignment_*`).
-
-Note on stage layering: `ClubVsClubFieldLimit` and `PHLAnd2ndBackToBackSameField`
-each contain BOTH a HARD and a SOFT component — the field-excess penalty
-piggybacks on the ≤2-fields HARD constraint, and the PHL/2nd deficit penalty
-piggybacks on the back-to-back HARD enforcement. This breaks the previous
-"hard stage creates no penalty buckets" invariant; `test_hard_stage_no_penalties`
-was relaxed to whitelist the two ClubVsClub buckets.
-
-Tests:
-- `tests/atoms/test_club_vs_club_atoms.py` — 9 solo-clean / solo-violation tests
-- `tests/atoms/test_club_vs_club_atoms_parity.py` — 2 parity tests vs legacy
-- `tests/atoms/club_vs_club_fixture.py` — 2-club fixture with R=4 weeks
-  giving 3rd (4 teams) per-team=1 vs 4th (2 teams) per-team=4 to trigger the
-  lower-grade alignment block, plus PHL/2nd for the back-to-back block.
-
-Test bar lifted to **1298 passed, 1 skipped** (was 1287 before Phase 3c).
-
-### Phase 4 — FORCED/BLOCKED count adjusters — 🟡 FRAMEWORK SHIPPED
-
-**Framework status:** `run_count_adjusters(data)` in `constraints/registry.py`
-iterates every `ConstraintInfo.forced_blocked_adjuster` callable and stashes
-results under `data['count_adjustments'][canonical_name]`. The engine
-invokes it once during `UnifiedConstraintEngine.build_groupings()`. 7 unit
-tests in `tests/test_count_adjusters.py`. **No actual adjusters are
-registered yet** — each formula needs user sign-off.
-
-**Per-adjuster sign-off:** see `docs/COUNT_ADJUSTERS.md` for the 5 proposed
-formulas (EqualGames, EqualMatchUpSpacing, MaitlandHomeGrouping/
-NonDefaultHomeGrouping, AwayAtMaitlandGrouping/AwayAtNonDefaultGrouping,
-ClubVsClubCoincidence). The `EqualGames` analysis suggests **no adjuster
-needed** — flag for explicit confirmation. The other 4 have draft formulas
-inline.
-
-Once a formula is signed off, the implementation lands as a standalone
-commit on `final-form` with: the adjuster callable, the atom change to
-read `data['count_adjustments'][canonical_name]`, and unit tests.
-
-Catalog from the plan (for context):
-
-| Atom | Adjuster behavior |
-|---|---|
-| `ClubVsClubCoincidence` | `expected_meetings = total_meetings - forced_off_sunday - blocked_on_sunday` per (club_pair, grade) |
-| `EqualMatchUpSpacing` | If pair forced into N specific weeks, reduce flexibility budget by N |
-| `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping`) | Forced home weekend changes consecutive-window calc |
-| `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`) | Forced away match at venue X changes away-clubs-per-week count |
-| `EqualGames` | If team is FORCED into N games, per-team budget = num_rounds - N |
-
-(Per-venue Friday count atoms are gone — those budgets are FORCED_GAMES entries directly, no adjuster needed.)
-
-Each adjuster has signature:
 ```python
-def adjuster(constraint_data: dict, forced_games: list, blocked_games: list) -> dict:
-    """Return count overrides keyed by whatever the constraint cares about."""
+# constraints/atoms/<atom_file>.py — bottom of the file
+
+def <atom_name>_adjuster(data, forced_games, blocked_games):
+    """One-line description.
+
+    Returns dict keyed by whatever the atom needs.
+    """
+    ...
+
+# Wire into the registry on import:
+from constraints.registry import CONSTRAINT_REGISTRY
+CONSTRAINT_REGISTRY['<atom_canonical_name>'].forced_blocked_adjuster = <atom_name>_adjuster
 ```
 
-Engine runs every adjuster after FORCED/BLOCKED parsing, before atom `apply()`. Output is stored at `data['count_adjustments'][canonical_name]`. Atoms read it.
+(The `CONSTRAINT_REGISTRY` mutation pattern is OK because each atom file is
+imported exactly once via `constraints/atoms/__init__.py`.)
 
-**Report each adjuster formula to the user before committing.** They want to sanity-check.
+### Per-adjuster implementations
 
-### Phase 6 — Generic home-ground rename
+#### #1 `EqualGames` — no adjuster needed
 
-Renames + per-club iteration (no longer hardcode "Maitland" / "Gosford"):
+`docs/COUNT_ADJUSTERS.md` formula #1 explains why: FORCED entries pin
+specific X vars to 1, but `sum(team_vars) == num_rounds` is unchanged
+(FORCED just makes some terms equal 1; the sum still has to add up to
+num_rounds). No code change needed.
 
-| Today | Generic |
-|---|---|
-| `MaitlandHomeGrouping` | `NonDefaultHomeGrouping` (per non-default-home club) |
-| `MaxMaitlandHomeWeekends` | folded into `NonDefaultHomeGrouping` (was redundant) |
-| `AwayAtMaitlandGrouping` | `AwayAtNonDefaultGrouping` per club |
+**Action:** add a one-paragraph note in `docs/COUNT_ADJUSTERS.md` confirming
+"no adjuster needed; analysis verified" and update the status table.
 
-- Constraint logic iterates over `data['home_field_map'].keys()` instead of hardcoded `'Maitland'` / `'Gosford'` strings.
-- Per-club tuning comes from `AWAY_VENUE_RULES` (already added to `config/defaults.py`).
-- Keep registry aliases: old canonical names (`MaitlandHomeGrouping`, `AwayAtMaitlandGrouping`, `MaxMaitlandHomeWeekends`) point to the new entries via `solver_class_names` so existing tests + severity/slack lookups keep working.
-- Touches ~20 files / ~100 references — go carefully.
+Note: the `EqualGames` atom doesn't actually exist yet on final-form — it's
+still inside `EqualGamesAndBalanceMatchUps`. Don't split it just for this;
+the analysis applies regardless.
 
-### Phase 7 — Tests, configurable stages, archive, docs
+#### #2 `EqualMatchUpSpacing` adjuster
 
-- **7a:** static fixtures in `tests/fixtures/violations/` (one per atom that benefits) + programmatic per-test construction. `ViolationReport.breakdown` (by_club, by_type, by_severity, soft_pressure) — see plan section 7a-bis.
-- **7b:** `SOLVER_STAGES` list in config (default in `config/defaults.py`, season override allowed). CLI flags `--stages-config`, `--stage-only`, `--skip-stage`, `--list-stages`. Validation runs in `validate_game_config`. Drop the hardcoded `STAGES` / `STAGES_AI` dicts in `main_staged.py`.
-- **7c:** move `constraints/original.py`, `constraints/ai.py`, `constraints/archived_equalspacing_original.py` to `constraints/archived/`. `tests/test_no_legacy_imports.py` greps prod code (everything outside `constraints/archived/` and `tests/`) and fails if any module imports those. Remove `--ai` CLI flag.
-- **7d:** rewrite `CLAUDE.md` constraint sections; add `docs/HELPER_VARS.md` already (Phase 1 deliverable), add `docs/HARNESS.md` and `docs/STAGES.md`; move full constraint table out of `CLAUDE.md` into `docs/CONSTRAINT_INVENTORY.md` (single source of truth).
+**Atom:** `EqualMatchUpSpacing` (canonical name; not yet split into its own
+atom file — the legacy classes still own this. Wire the adjuster against
+the registry entry `'EqualMatchUpSpacing'`. The atom file you create or
+edit reads `data['count_adjustments']['EqualMatchUpSpacing']`.)
 
-## Useful commands
-
-```bash
-# always work from the final-form worktree
-cd /c/Users/c3205/Documents/Code/python/draw-final-form
-
-# venv is in the MAIN worktree (final-form has no .venv of its own)
-PY=/c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe
-
-# quick test run
-timeout 240 $PY -m pytest tests/ \
-  --ignore=tests/test_solver_integration.py \
-  --ignore=tests/test_spacing_integration.py -q
-
-# helper-var registry — verify Phase 1 wiring
-$PY -c "from constraints.helper_vars import HelperVarRegistry; r = HelperVarRegistry(None); print(r.diagnostics())"
-
-# inspect the registry (now with atom_group / required_helpers / adjuster)
-$PY -c "from constraints.registry import CONSTRAINT_REGISTRY; \
-[print(n, '->', i.severity_level, 'atoms:', i.atom_group, 'helpers:', i.required_helpers) \
- for n, i in CONSTRAINT_REGISTRY.items()]"
-
-# check that perennial CONSTRAINT_DEFAULTS merged into season data correctly
-$PY -c "from config import load_season_data; d = load_season_data(2026); \
-print({k: d['constraint_defaults'][k] for k in ('phl_adjacency_window_minutes', 'gosford_friday_rounds', 'worst_timeslot_time')})"
-
-# count constraint classes in original.py / ai.py (for archive verification)
-grep -c "^class.*Constraint\b" constraints/original.py constraints/ai.py
-
-# inspect the helper-var catalog
-$PY -c "from constraints.registry import HELPER_VAR_CATALOG; print(sorted(HELPER_VAR_CATALOG))"
+**Adjuster spec:**
+```
+forced_rounds_per_pair: Dict[(t1, t2, grade), Set[int]]
+  for each FORCED entry that pins (t1, t2, grade) into specific weeks/rounds:
+    accumulate the rounds.
+return forced_rounds_per_pair
 ```
 
-## When you finish a phase
+The atom uses this to compute `effective_T = T - len(forced_rounds_per_pair[pair])`
+and clamp the spacing window down. If the pair has 0 forced rounds, behaviour is
+unchanged.
 
-Report in this shape (copy/paste template):
+**Tests:**
+- Adjuster math: synthesise FORCED entries pinning (t1, t2, grade) into weeks
+  W1, W2; assert `forced_rounds_per_pair[(t1,t2,grade)] == {W1, W2}`.
+- Atom integration: clean fixture passes; same fixture + adjuster output
+  showing 2 forced rounds → atom uses tighter min_gap.
 
+#### #3 `MaitlandHomeGrouping` adjuster (will rename to `NonDefaultHomeGrouping` in Phase 6)
+
+**Atom:** `MaitlandHomeGrouping` for now; rename in Phase 6.
+
+**Adjuster spec:**
 ```
-## Phase N — <name> — DONE
-
-**Commits:** <hash> "<msg>"
-
-**Files touched:**
-- path/to/file.py (LOC change: +X / -Y) — what changed in one line
-- ...
-
-**Tests:** <N passing / M total>
-
-**FORCED/BLOCKED adjusters added (for user sanity-check):**
-- AtomName: <formula in plain English> — example: "expected_meetings = total_meetings - forced_off_sunday - blocked_on_sunday"
-- ...
-
-**Parity gaps (atom vs legacy):**
-- <none> OR
-- AtomName: <gap explained, why it's intentional>
-- ...
-
-**Constants migrated:**
-- ConstantName: from `path/to/file.py:line` to `config_key.subkey`
-- ...
-
-**Open questions for next phase:**
-- ...
-
-Ready for Phase N+1?
+forced_home_weeks_per_club: Dict[club_name, Set[int]]
+  for each FORCED entry that pins a (team_of_club_C, _, ..., field_location=home_field_map[C]):
+    accumulate the week.
+return forced_home_weeks_per_club
 ```
 
-Work carefully. Ask before doing anything risky. Commit small. Verify often.
+The atom uses this to clamp the per-week home indicator to 1 for those
+weeks (so the sliding-window math accounts for them as definite home weekends).
+
+**Tests:** synthesise FORCED entry pinning Maitland home weekend in week W;
+assert adjuster returns `{'Maitland': {W}}`; assert atom no longer permits
+W to be 0 in the home indicator.
+
+#### #4 `AwayAtMaitlandGrouping` adjuster (will rename to `AwayAtNonDefaultGrouping` in Phase 6)
+
+**Atom:** `AwayAtMaitlandGrouping` for now; rename in Phase 6.
+
+**Adjuster spec:**
+```
+forced_away_clubs_per_week: Dict[(week, venue), Set[away_club]]
+  for each FORCED entry that pins a game at field_location=V where V != home of either team:
+    away_club = the team's club whose home is NOT V
+    accumulate (week, V) -> away_club
+return forced_away_clubs_per_week
+```
+
+The atom uses `len(forced_away_clubs_per_week[(week, V)])` as a baseline
+floor for the per-week away-clubs count.
+
+**Tests:** synthesise FORCED Norths-vs-Maitland Friday at Maitland Park,
+week W; assert adjuster returns `{(W, 'Maitland Park'): {'Norths'}}`.
+
+#### #5 `ClubVsClubCoincidence` adjuster (the user's worked example)
+
+**Atom:** `ClubVsClubCoincidence` (already exists, Phase 3c).
+
+**Adjuster spec:**
+```
+expected_meetings: Dict[grade, Dict[club_pair, int]]
+  for each grade, club_pair in by_grade_clubpair_round:
+    total = num_meetings(club_pair, grade) per the season  # see below
+    forced_off_sunday = count of FORCED entries pinning that pair on a non-Sunday day
+    blocked_on_sunday = count of BLOCKED entries removing Sunday vars for that pair
+    expected_meetings[grade][club_pair] = max(0, total - forced_off_sunday - blocked_on_sunday)
+return expected_meetings
+```
+
+`total` is the BalancedMatchups expected meeting count: for grade with R rounds
+and T teams, base = R // (T-1) for even T, R // T for odd. Each pair gets
+either base or base+1 meetings. The adjuster can use `base` as a conservative
+lower bound, or compute exact per-pair if available.
+
+The atom uses `expected_meetings[grade][club_pair]` instead of the constant
+`num_games` when computing
+`min_required = max(0, expected_meetings - slack)`.
+
+**Tests:**
+- Synthesised FORCED on Friday Gosford for (Maitland PHL, Norths PHL) round 5,
+  count=2 → assert `expected_meetings['PHL'][('Maitland', 'Norths')] == total - 2`.
+- Atom integration: with adjuster output, the lower-grade alignment block
+  doesn't penalize "missing" coincidences for those forced rounds.
+
+### Phase 4 sweep at end
+
+- All 5 adjuster statuses in `docs/COUNT_ADJUSTERS.md` flipped from 🟡 → ✅
+- Test bar should rise by ~15-25 tests (3-5 per adjuster).
+- Commit message: `feat(constraints): implement Phase 4 FORCED/BLOCKED count adjusters`
+
+---
+
+## Phase 6 — Generic home-ground rename
+
+**Goal:** stop hardcoding `'Maitland'` / `'Gosford'` in constraint logic.
+Iterate over `home_field_map.keys()` instead. Per-club tuning comes from
+`AWAY_VENUE_RULES` (already in `config/defaults.py`).
+
+### Renames
+
+| Today | Generic | Behaviour |
+|---|---|---|
+| `MaitlandHomeGrouping` | `NonDefaultHomeGrouping` | Per non-default-home club, no back-to-back home weekends (sliding window). Slack from `AWAY_VENUE_RULES[club]['max_consecutive_home']`. |
+| `MaxMaitlandHomeWeekends` | folded into `NonDefaultHomeGrouping` | Was redundant once `MaitlandHomeGrouping` switched to sliding window. |
+| `AwayAtMaitlandGrouping` | `AwayAtNonDefaultGrouping` | Per non-default-home club, max away clubs per week. Limit from `AWAY_VENUE_RULES[club]['max_away_clubs']`. |
+
+### Files touched (~20 files / ~100 references — go carefully)
+
+- `constraints/unified.py` — `_maitland_grouping_hard`, `_maitland_grouping_soft`, `_max_venue_weekends`, `_away_maitland_hard`, `_away_maitland_soft`. Rename methods, replace string literals, iterate `home_field_map`.
+- `constraints/registry.py` — add new canonical entries `NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`. Keep old entries (`MaitlandHomeGrouping`, `AwayAtMaitlandGrouping`, `MaxMaitlandHomeWeekends`) as aliases pointing at the new entries (preserve `solver_class_names`, `slack_key`, `tester_check_methods` so existing tests + severity/slack lookups keep working).
+- `analytics/tester.py` — `_check_maitland_back_to_back`, `_check_maitland_away_clubs_limit` rename + iterate non-default clubs. Keep old method names as thin aliases that call the new ones (so registry's `tester_check_methods` lookups don't break).
+- `constraints/severity.py` — update `CONSTRAINT_TO_SEVERITY` map.
+- `constraints/original.py` / `ai.py` — leave alone (legacy, will archive in 7c).
+- `tests/` — update assertions referencing old names; add a fictional 3rd
+  non-default-home club to a fixture and assert constraints scope to it.
+
+### Behaviour rules
+
+- "Non-default home" = `home_field_map.get(club_name)` exists AND is not Broadmeadow.
+- For each non-default-home club, the new constraints scope by that club's
+  `home_field_map` value.
+- `AWAY_VENUE_RULES[club]` provides per-club tuning. Default values live in
+  `config/defaults.py`; missing keys fall back to historical Maitland values.
+- Removing a club from `home_field_map` makes its constraints go silent
+  rather than crash — verify with a test.
+
+### Phase 6 sweep at end
+
+- Adjusters #3 and #4 (Phase 4) updated to register against the new
+  `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` entries.
+- `docs/CONSTRAINT_INVENTORY.md` rows for `MaitlandHomeGrouping` /
+  `AwayAtMaitlandGrouping` annotated with the rename.
+- `CLAUDE.md` "Severity Levels" table updated.
+- Commit message: `refactor(constraints): generic home-ground (Phase 6)`
+
+---
+
+## Phase 7a — Tests + violation breakdowns
+
+### Static violation fixtures
+
+Create `tests/fixtures/violations/` with one JSON per atom that benefits
+from a static fixture:
+
+```
+tests/fixtures/violations/
+  club_game_spread_overlap.json     # _violations: ["ClubGameSpread"]
+  club_grade_adjacency.json         # _violations: ["ClubGradeAdjacency"]
+  phl_friday_overcount.json         # _violations: ["ForcedGames"]  (count budget)
+  home_away_imbalance.json          # _violations: ["FiftyFiftyHomeAway"]
+  club_day_split_field.json         # _violations: ["ClubDaySameField"]
+  club_day_opponent_missing.json    # _violations: ["ClubDayOpponentMatchup"]
+  cvc_field_excess.json             # _violations: ["ClubVsClubFieldLimit"]
+  phl_2nd_no_back_to_back.json      # _violations: ["PHLAnd2ndBackToBackSameField"]
+```
+
+Each fixture has top-level metadata:
+```json
+{
+  "_violations": ["AtomCanonicalName1", "..."],
+  "_description": "Why this fixture exists.",
+  "...rest is normal DrawStorage shape..."
+}
+```
+
+A new test in `tests/atoms/test_violation_fixtures.py` walks the directory,
+loads each fixture, runs `DrawTester.run_violation_check()`, and asserts
+that **at least** the listed violations are flagged. Fixtures may flag more
+than they list (other latent issues) — that's fine.
+
+### `ViolationReport.breakdown`
+
+Extend `analytics/tester.py`:
+
+```python
+@dataclass
+class ViolationBreakdown:
+    by_club: Dict[str, List[Violation]]
+    by_type: Dict[str, List[Violation]]   # canonical name -> violations
+    by_severity: Dict[str, List[Violation]]  # 'CRITICAL'/.../'VERY LOW' -> violations
+    soft_pressure: Dict[str, Dict[str, Any]]
+    # ^ canonical_name -> { 'at_limit': N_clubs, 'over_limit': N_clubs,
+    #                       'total_penalty': X, 'worst_club': 'ClubName',
+    #                       'worst_value': X }
+
+@dataclass
+class ViolationReport:
+    ...existing fields...
+    breakdown: ViolationBreakdown
+```
+
+Each `Violation` gains `affected_clubs: List[str]` (already there via
+existing fields if not, add it) and `metric_value: Optional[float]`.
+`ViolationReport.breakdown` aggregates without re-deriving.
+
+**Test pattern:** load a violations fixture, run check, assert
+`report.breakdown.by_type` has the expected keys; assert
+`soft_pressure[constraint_name]['at_limit']` is the right club count.
+
+### Phase 7a sweep at end
+
+- ≥8 fixtures in `tests/fixtures/violations/`
+- ≥10 new tests in `tests/atoms/test_violation_fixtures.py` and
+  `tests/test_violation_breakdown.py`
+- Commit message: `test(analytics): static violation fixtures + ViolationReport.breakdown (Phase 7a)`
+
+---
+
+## Phase 7b — Configurable stages
+
+### `SOLVER_STAGES` config
+
+Add to `config/defaults.py`:
+```python
+DEFAULT_STAGES = [
+    {
+        'name': 'critical_feasibility',
+        'description': 'Hard feasibility — every constraint that must hold for a valid draw',
+        'atoms': [
+            'NoDoubleBookingTeams', 'NoDoubleBookingFields',
+            'EqualGamesAndBalanceMatchUps',
+            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
+            'GosfordFridayRoundsForced', 'PHLRoundOnePlay',
+        ],
+    },
+    {
+        'name': 'home_away_balance',
+        'atoms': [
+            'FiftyFiftyHomeandAway',
+            'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping',
+        ],
+    },
+    {
+        'name': 'club_alignment',
+        'atoms': [
+            'ClubGradeAdjacency',
+            'ClubVsClubCoincidence', 'ClubVsClubFieldLimit',
+            'PHLAnd2ndBackToBackSameField',
+        ],
+    },
+    {
+        'name': 'club_day',
+        'atoms': [
+            'ClubDayParticipation', 'ClubDayIntraClubMatchup',
+            'ClubDayOpponentMatchup', 'ClubDaySameField', 'ClubDayContiguousSlots',
+        ],
+    },
+    {
+        'name': 'soft_optimisation',
+        'atoms': [
+            'EqualMatchUpSpacing', 'ClubGameSpread',
+            'ClubVsClubDeficitPenalty', 'PreferredDates',
+            'EnsureBestTimeslotChoices', 'PreferredTimes',
+            'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
+        ],
+    },
+]
+```
+
+Per-stage optional fields: `time_limit_seconds`, `use_prior_solution_as_hint`,
+`soft_only`, `requires_complete_solution`. Defaults documented in `docs/STAGES.md`.
+
+### CLI
+
+`run.py`: add `--stages-config <path>` (override config-defined stages),
+`--stage-only NAME`, `--skip-stage NAME`, `--list-stages`.
+
+### Pipeline rewire
+
+- `main_staged.py::main_staged()` reads `data['solver_stages']`, validates,
+  iterates stages.
+- For each stage, instantiate the listed atoms via the registry, dispatch
+  through the unified engine.
+- Delete the hardcoded `STAGES` and `STAGES_AI` dicts in `main_staged.py`.
+
+### Validation
+
+New `_validate_stages` phase in `validate_game_config`:
+- Every atom listed in any stage must exist in `CONSTRAINT_REGISTRY`.
+- Every registered atom (excluding `tester_only=True`) must appear in
+  exactly one stage (warn if missing; fail if duplicate).
+
+### Phase 7b sweep at end
+
+- `--list-stages` works on `season_2026`.
+- Round-trip: edit `SOLVER_STAGES` to put `EqualGames` in stage 2 → solver
+  validates and produces a draw (test on a tiny fixture, not full solve).
+- ≥8 new tests in `tests/test_configurable_stages.py`.
+- Commit message: `feat(solver): config-driven SOLVER_STAGES + CLI flags (Phase 7b)`
+
+---
+
+## Phase 7c — Move legacy classes + remove `--ai`
+
+### Move
+
+- `constraints/original.py` → `constraints/archived/original.py`
+- `constraints/ai.py` → `constraints/archived/ai.py`
+- `constraints/archived_equalspacing_original.py` → `constraints/archived/equalspacing_original.py`
+- New `constraints/archived/__init__.py` (empty or with `__all__ = []`)
+- New `constraints/archived/README.md` explaining: "These are
+  pre-atomization implementations kept for historical reference. Do NOT
+  import in production code; the pipeline is locked against this. Use the
+  atoms in `constraints/atoms/` instead."
+
+### Lock down imports
+
+- `constraints/__init__.py` exports ONLY atoms + `UnifiedConstraintEngine` +
+  `registry`. No re-export of archived modules.
+- `tests/test_no_legacy_imports.py` (new): greps the prod codebase
+  (everything outside `constraints/archived/` and `tests/`) for
+  `from constraints.original`, `from constraints.ai`, `from constraints.archived`
+  and fails if any prod module imports them.
+- Update `main_staged.py`, `analytics/*`, `run.py`, every script in
+  `scripts/` to import only via the registry.
+
+### Remove `--ai` flag
+
+- `run.py`: drop the `--ai` CLI flag.
+- `main_staged.py`: drop `args.ai` usage and the `STAGES_AI` dict (already
+  scheduled for delete in 7b).
+- Update tests that reference `--ai`.
+
+### Update parity tests
+
+The atom-level parity tests in `tests/atoms/test_*_parity.py` reference
+legacy methods on `UnifiedConstraintEngine` (`_phl_times_hard`,
+`_club_day_scheduling`, `_club_alignment_hard`, etc.). These methods are
+defined inline in `unified.py`, NOT imported from `original.py` / `ai.py`,
+so they survive the archive move. Verify the parity tests still pass.
+
+### Phase 7c sweep at end
+
+- `tests/test_no_legacy_imports.py` passes.
+- All atom parity tests still pass.
+- Full test suite passes at the running baseline + Phase 7a/7b additions.
+- Commit message: `refactor: archive legacy constraint classes; remove --ai (Phase 7c)`
+
+---
+
+## Phase 7d — Documentation
+
+### Rewrite
+
+- `CLAUDE.md` — re-do the constraint architecture sections: atoms +
+  registry replace the "ai vs original" model. Move the constraint table
+  to `docs/CONSTRAINT_INVENTORY.md` (single source) and reference it from
+  CLAUDE.md.
+- `docs/HARNESS.md` (new) — describe the
+  `generate_X` → `validate_game_config` → `UnifiedConstraintEngine`
+  pipeline, including the count-adjuster step.
+- `docs/STAGES.md` (new) — `SOLVER_STAGES` config schema, per-stage options,
+  CLI flags, examples.
+- `docs/CONSTRAINT_INVENTORY.md` — sweep all rows to mark Phase 6 renames
+  and confirm atom-shipped status.
+- `README.md` — final pass; remove Phase-3 "in-flight" caveats, point at
+  the docs index.
+
+### Final sweep
+
+- `docs/ATOMIZATION_HANDOFF.md` (this file) — mark all phases ✅ DONE,
+  remove "next phase" pointers.
+- `docs/ATOMIZATION_PLAN.md` — phase status table all ✅; "Definition of
+  done" checklist all ticked.
+
+Commit message: `docs: Phase 7d sweep — atomization complete`
+
+---
+
+# WHEN YOU'RE DONE
+
+Run the test bar one final time. Confirm:
+- All Phase 7c imports clean (`tests/test_no_legacy_imports.py` green).
+- Test count substantially higher than 1305 (expect 1400+ after all
+  Phase 7 additions).
+- No skipped tests other than the original 1.
+
+Then summarise to the user:
+
+```
+## Atomization complete — all phases ✅
+
+**Final commit chain (Phase 4 onwards):** <hashes>
+
+**Test bar:** 1305 → <final> passed, 1 skipped
+
+**Files touched (totals):**
+- New atoms: <N>
+- New tests: <N>
+- Renamed constraints: <list>
+- Files moved to constraints/archived/: 3
+
+**Phases 4 / 6 / 7a / 7b / 7c / 7d — all done.** Ready for push approval.
+
+Open questions / things flagged during the work:
+- ...
+```
+
+Then ask the user for push approval before `git push`.
+
+Work carefully. Commit small per-phase. Verify often. Don't pause for
+sign-off — the spec is locked. If you find a real bug in the spec, flag it
+in your final summary, not mid-work.

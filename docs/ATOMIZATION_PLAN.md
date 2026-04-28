@@ -23,7 +23,7 @@
 
 Test baseline at this point: **1305 passed, 1 skipped** (started at 1216; 1272 after 3a; 1287 after 3b; 1298 after 3c; 1305 after Phase 4 framework).
 
-The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session.
+The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session — and **the next session is the final push**, completing Phase 4 per-adjuster implementations + Phase 6 + Phase 7a/b/c/d in one continuous run.
 **Goal recap:** one idea per constraint; constraint+helper-var registry; zero hardcoded constants in constraints; FORCED/BLOCKED-aware count adjustments; generic home-ground concept; tests on real sampled data; configurable stage assignment; per-club / per-type violation breakdowns.
 
 This plan is in 7 phases, each one independently shippable. Each phase has a concrete deliverable, a test bar, and a list of files touched.
