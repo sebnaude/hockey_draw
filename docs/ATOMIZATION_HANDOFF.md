@@ -4,7 +4,7 @@
 
 ---
 
-You are taking over an in-flight refactor of a hockey-draw constraint solver. **Phases 0, 1, 2, 3a, 3b, 3c, 5, and Phase-6 prep are merged on `final-form`.** Your job is the remaining work: Phase 4 (FORCED/BLOCKED count adjusters), Phase 6 (generic home-ground rename), and Phase 7 (tests, configurable stages, archive legacy, docs).
+You are taking over an in-flight refactor of a hockey-draw constraint solver. **Phases 0, 1, 2, 3a, 3b, 3c, 5, Phase-6 prep, and Phase-4 framework are merged on `final-form`.** Your job is the remaining work: Phase 4 per-adjuster implementations (formulas in `docs/COUNT_ADJUSTERS.md` awaiting sign-off), Phase 6 (generic home-ground rename), and Phase 7 (tests, configurable stages, archive legacy, docs).
 
 Work carefully, ship one phase at a time, verify with tests, and report after each phase.
 
@@ -34,7 +34,7 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
   --ignore=tests/test_spacing_integration.py -q
 ```
 
-**Baseline: 1298 passed, 1 skipped** (1272 → 1287 after 3b → 1298 after 3c). Don't ship a phase that drops below 1298.
+**Baseline: 1305 passed, 1 skipped** (1272 → 1287 → 1298 → 1305 after Phase 4 framework). Don't ship a phase that drops below 1305.
 
 (Note: the venv lives in the *main* worktree `draw/.venv`, not in `draw-final-form/.venv`. Use the absolute path above.)
 
@@ -54,6 +54,8 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `4f0777c` | 3a retraction | `docs: document FORCED-as-count-budget as a perennial rule` |
 | `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
 | `8d2934d` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
+| `08f11be` | docs | `docs: backfill phase-3c commit hash` |
+| `<phase-4-framework>` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework (Phase 4)` |
 
 ### Phase 3a retraction — DONE (FORCED-as-count-rules)
 
@@ -230,9 +232,27 @@ Tests:
 
 Test bar lifted to **1298 passed, 1 skipped** (was 1287 before Phase 3c).
 
-### Phase 4 — FORCED/BLOCKED count adjusters
+### Phase 4 — FORCED/BLOCKED count adjusters — 🟡 FRAMEWORK SHIPPED
 
-Once Phase 3 atoms exist, register a `forced_blocked_adjuster` callable on each count-sensitive atom's `ConstraintInfo`. Catalog from the plan:
+**Framework status:** `run_count_adjusters(data)` in `constraints/registry.py`
+iterates every `ConstraintInfo.forced_blocked_adjuster` callable and stashes
+results under `data['count_adjustments'][canonical_name]`. The engine
+invokes it once during `UnifiedConstraintEngine.build_groupings()`. 7 unit
+tests in `tests/test_count_adjusters.py`. **No actual adjusters are
+registered yet** — each formula needs user sign-off.
+
+**Per-adjuster sign-off:** see `docs/COUNT_ADJUSTERS.md` for the 5 proposed
+formulas (EqualGames, EqualMatchUpSpacing, MaitlandHomeGrouping/
+NonDefaultHomeGrouping, AwayAtMaitlandGrouping/AwayAtNonDefaultGrouping,
+ClubVsClubCoincidence). The `EqualGames` analysis suggests **no adjuster
+needed** — flag for explicit confirmation. The other 4 have draft formulas
+inline.
+
+Once a formula is signed off, the implementation lands as a standalone
+commit on `final-form` with: the adjuster callable, the atom change to
+read `data['count_adjustments'][canonical_name]`, and unit tests.
+
+Catalog from the plan (for context):
 
 | Atom | Adjuster behavior |
 |---|---|

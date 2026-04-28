@@ -462,6 +462,37 @@ def get_adjuster(canonical_name: str) -> Optional[Callable]:
     return info.forced_blocked_adjuster
 
 
+def run_count_adjusters(data: Dict) -> Dict[str, Dict]:
+    """Run every registered FORCED/BLOCKED count adjuster and stash results.
+
+    For every `ConstraintInfo` with `forced_blocked_adjuster` set, calls
+    `adjuster(data, forced_games, blocked_games)` and stores the result under
+    `data['count_adjustments'][canonical_name]`.
+
+    Returns the populated `data['count_adjustments']` dict (also mutated in
+    place). Atoms read their entry by canonical name during `apply()`.
+
+    Adjusters that raise are caught and re-raised with a wrapping context so
+    a buggy adjuster doesn't crash the whole pipeline silently.
+    """
+    forced = data.get('forced_games', []) or []
+    blocked = data.get('blocked_games', []) or []
+    adjustments = data.setdefault('count_adjustments', {})
+
+    for canonical_name, info in CONSTRAINT_REGISTRY.items():
+        if info.forced_blocked_adjuster is None:
+            continue
+        try:
+            result = info.forced_blocked_adjuster(data, forced, blocked)
+        except Exception as e:
+            raise RuntimeError(
+                f"forced_blocked_adjuster for {canonical_name!r} raised: {e}"
+            ) from e
+        if result is not None:
+            adjustments[canonical_name] = result
+    return adjustments
+
+
 def validate_required_helpers() -> List[str]:
     """Return list of (constraint_name, helper_kind) pairs whose helper kind is unknown."""
     bad = []

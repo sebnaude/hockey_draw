@@ -482,6 +482,7 @@ Custom Claude Code skills are available in `.claude/commands/`:
 | Document | Purpose | Read When |
 |----------|---------|-----------|
 | `docs/PERENNIAL_RULES.md` | Standing rules that apply every season | New season setup, draw review |
+| `docs/COUNT_ADJUSTERS.md` | FORCED/BLOCKED count-adjuster framework + proposed formulas | Adding a count-sensitive atom; reasoning about FORCED/BLOCKED interactions |
 | `docs/ai/AI_OPERATIONS_MANUAL.md` | Complete technical reference | Deep dives |
 | `docs/ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing config |
 | `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |

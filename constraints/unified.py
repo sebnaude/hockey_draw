@@ -24,6 +24,7 @@ from utils import (
     get_duplicated_graded_teams, normalize_club_day,
 )
 from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
+from constraints.registry import run_count_adjusters
 from constraints.atoms import (
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
@@ -144,9 +145,17 @@ class UnifiedConstraintEngine:
     # ================================================================
 
     def build_groupings(self):
-        """Single pass over X to populate all grouping dicts."""
+        """Single pass over X to populate all grouping dicts.
+
+        Phase 4: also runs every registered FORCED/BLOCKED count adjuster
+        once, populating `data['count_adjustments']`. Atoms read their
+        adjustment by canonical name during `apply()`.
+        """
         if self._groupings_built:
             return
+
+        # Phase 4: FORCED/BLOCKED count adjusters run before any atom apply().
+        run_count_adjusters(self.data)
 
         # --- Core groupings ---
         self.by_week_team = defaultdict(list)

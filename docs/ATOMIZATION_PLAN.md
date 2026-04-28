@@ -13,7 +13,7 @@
 | 3a — Atomize PHLAndSecondGradeTimes | ✅ DONE — `1956608` shipped 8 atoms; per-venue Friday count atoms (Broadmeadow / Gosford / Maitland) retired in favor of `FORCED_GAMES` entries (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`). Cluster now has 5 atoms: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. | `1956608` + retraction |
 | 3b — Atomize ClubDayConstraint | ✅ DONE — 5 atoms (`ClubDayParticipation`, `ClubDayIntraClubMatchup`, `ClubDayOpponentMatchup`, `ClubDaySameField`, `ClubDayContiguousSlots`) wired via `_club_day_atoms_hard`; legacy `_club_day_scheduling`/`_club_day_field_contiguity` retained as parity reference only. Atoms additionally enforce the opponent-matchup branch from `original.py` (Decision #4) that the legacy unified methods silently dropped. `build_groupings` now uses `normalize_club_day` for dict-form CLUB_DAYS. 15 new tests. | `0cf78e6` |
 | 3c — Atomize ClubVsClubAlignment | ✅ DONE — 4 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) wired via `_club_vs_club_atoms_hard`/`_club_vs_club_atoms_soft`. Re-introduces the PHL/2nd back-to-back same-field rule the pre-atomization unified engine silently dropped (still present in `original.py:1096–1198`). 11 new tests. | `8d2934d` |
-| 4 — FORCED/BLOCKED count adjusters | ⬜ NOT STARTED (depends on 3) | — |
+| 4 — FORCED/BLOCKED count adjusters | 🟡 FRAMEWORK SHIPPED (`<phase-4-framework>`); 5 adjuster formulas proposed in `docs/COUNT_ADJUSTERS.md` awaiting user sign-off before per-adjuster implementations land. Engine calls `run_count_adjusters(data)` during `build_groupings`; no actual adjusters registered yet. | partial |
 | 5 — Constants migration | ✅ DONE | `535cac3` |
 | 6 — Generic home-ground rename | 🟡 PREP DONE — `AWAY_VENUE_RULES` skeleton committed (`48f5222`); rename + per-club iteration still TODO | partial |
 | 7a — Tests on real sampled data | ⬜ NOT STARTED | — |
@@ -21,7 +21,7 @@
 | 7c — Move legacy to `constraints/archived/` | ⬜ NOT STARTED (depends on 3) | — |
 | 7d — Documentation update | 🟡 partial — `docs/CONSTRAINT_INVENTORY.md` (Phase 0) and `docs/HELPER_VARS.md` (Phase 1) shipped | partial |
 
-Test baseline at this point: **1298 passed, 1 skipped** (started at 1216; 1272 after 3a; 1287 after 3b; 1298 after 3c).
+Test baseline at this point: **1305 passed, 1 skipped** (started at 1216; 1272 after 3a; 1287 after 3b; 1298 after 3c; 1305 after Phase 4 framework).
 
 The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session.
 **Goal recap:** one idea per constraint; constraint+helper-var registry; zero hardcoded constants in constraints; FORCED/BLOCKED-aware count adjustments; generic home-ground concept; tests on real sampled data; configurable stage assignment; per-club / per-type violation breakdowns.
