@@ -1,6 +1,6 @@
 # FORCED/BLOCKED Count Adjusters (Phase 4)
 
-> **Status:** framework shipped (commit `<phase-4-framework>`); no actual
+> **Status:** framework shipped (commit `1521c9b`); no actual
 > adjusters registered yet. Each adjuster formula needs user sign-off
 > before it ships — see "Proposed adjuster formulas" below.
 

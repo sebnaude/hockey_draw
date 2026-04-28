@@ -55,7 +55,7 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
 | `8d2934d` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
 | `08f11be` | docs | `docs: backfill phase-3c commit hash` |
-| `<phase-4-framework>` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework (Phase 4)` |
+| `1521c9b` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework (Phase 4)` |
 
 ### Phase 3a retraction — DONE (FORCED-as-count-rules)
 
