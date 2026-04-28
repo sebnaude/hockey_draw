@@ -19,6 +19,10 @@ from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchu
 from constraints.atoms.club_day_opponent_matchup import ClubDayOpponentMatchup
 from constraints.atoms.club_day_same_field import ClubDaySameField
 from constraints.atoms.club_day_contiguous_slots import ClubDayContiguousSlots
+from constraints.atoms.club_vs_club_coincidence import ClubVsClubCoincidence
+from constraints.atoms.club_vs_club_field_limit import ClubVsClubFieldLimit
+from constraints.atoms.club_vs_club_deficit_penalty import ClubVsClubDeficitPenalty
+from constraints.atoms.phl_2nd_back_to_back import PHLAnd2ndBackToBackSameField
 
 
 PHL_TIMES_ATOMS = [
@@ -39,6 +43,14 @@ CLUB_DAY_ATOMS = [
 ]
 
 
+CLUB_VS_CLUB_ATOMS = [
+    ClubVsClubCoincidence,
+    ClubVsClubFieldLimit,
+    ClubVsClubDeficitPenalty,
+    PHLAnd2ndBackToBackSameField,
+]
+
+
 __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
@@ -53,4 +65,9 @@ __all__ = [
     'ClubDaySameField',
     'ClubDayContiguousSlots',
     'CLUB_DAY_ATOMS',
+    'ClubVsClubCoincidence',
+    'ClubVsClubFieldLimit',
+    'ClubVsClubDeficitPenalty',
+    'PHLAnd2ndBackToBackSameField',
+    'CLUB_VS_CLUB_ATOMS',
 ]

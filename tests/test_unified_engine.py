@@ -1159,7 +1159,15 @@ class TestStageCorrectness:
     """Verify hard stage has no penalties, soft stage populates penalties."""
 
     def test_hard_stage_no_penalties(self, mini_unified_data):
-        """Stage 1 does not populate data['penalties'] with any entries."""
+        """Stage 1 does not populate data['penalties'] except for atoms whose
+        single idea spans both hard and soft components.
+
+        After Phase 3c, `ClubVsClubFieldLimit` (HARD ≤2 fields + SOFT field
+        excess) and `PHLAnd2ndBackToBackSameField` (HARD back-to-back + SOFT
+        coincidence deficit) legitimately register their penalty buckets in
+        stage 1 because the atom is the unit, not the stage. Every other
+        constraint should still be clean.
+        """
         model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -1169,9 +1177,12 @@ class TestStageCorrectness:
         engine.build_groupings()
         engine.apply_stage_1_hard()
 
-        # Hard stage should NOT have created any penalty entries
-        assert len(data['penalties']) == 0, \
-            f"Hard stage created penalty entries: {list(data['penalties'].keys())}"
+        allowed_in_stage_1 = {
+            'ClubVsClubAlignment', 'ClubVsClubAlignmentField',
+        }
+        unexpected = set(data['penalties']) - allowed_in_stage_1
+        assert not unexpected, \
+            f"unexpected penalty entries from hard stage: {sorted(unexpected)}"
 
     def test_soft_stage_populates_penalties(self, mini_unified_data):
         """After both stages, penalties dict has entries with weight and penalties keys."""

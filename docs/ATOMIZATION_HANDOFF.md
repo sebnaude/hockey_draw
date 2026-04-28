@@ -4,7 +4,7 @@
 
 ---
 
-You are taking over an in-flight refactor of a hockey-draw constraint solver. **Phases 0, 1, 2, 3a, 3b, 5, and Phase-6 prep are merged on `final-form`.** Your job is the remaining work: Phase 3c (`ClubVsClubAlignment` → 4 atoms), Phase 4 (FORCED/BLOCKED count adjusters), Phase 6 (generic home-ground rename), and Phase 7 (tests, configurable stages, archive legacy, docs).
+You are taking over an in-flight refactor of a hockey-draw constraint solver. **Phases 0, 1, 2, 3a, 3b, 3c, 5, and Phase-6 prep are merged on `final-form`.** Your job is the remaining work: Phase 4 (FORCED/BLOCKED count adjusters), Phase 6 (generic home-ground rename), and Phase 7 (tests, configurable stages, archive legacy, docs).
 
 Work carefully, ship one phase at a time, verify with tests, and report after each phase.
 
@@ -24,7 +24,7 @@ Work carefully, ship one phase at a time, verify with tests, and report after ea
 4. `C:/Users/c3205/Documents/Code/python/draw-final-form/docs/HELPER_VARS.md` — Phase 1 deliverable; HelperVarRegistry API atoms must use
 5. `C:/Users/c3205/Documents/Code/python/draw-final-form/config/season_2026.py` — actual season config (lock this in your head before editing constraints)
 
-## Current state of the branch (commit `<phase-3b>`)
+## Current state of the branch (commit `0cf78e6`)
 
 Quick test bar (no slow integration tests):
 ```
@@ -34,7 +34,7 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
   --ignore=tests/test_spacing_integration.py -q
 ```
 
-**Baseline: 1287 passed, 1 skipped** (was 1272 before Phase 3b shipped 15 new atom tests). Don't ship a phase that drops below 1287.
+**Baseline: 1298 passed, 1 skipped** (1272 → 1287 after 3b → 1298 after 3c). Don't ship a phase that drops below 1298.
 
 (Note: the venv lives in the *main* worktree `draw/.venv`, not in `draw-final-form/.venv`. Use the absolute path above.)
 
@@ -52,7 +52,8 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `e9bf5a7` | 3a retraction | `feat(forced-games): support 'club' filter + multi-scope subset consistency` |
 | `5cfae6c` | 3a retraction | `refactor(constraints): retire per-venue Friday-count atoms for FORCED_GAMES` |
 | `4f0777c` | 3a retraction | `docs: document FORCED-as-count-budget as a perennial rule` |
-| `<phase-3b>` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
+| `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
+| `<phase-3c>` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
 
 ### Phase 3a retraction — DONE (FORCED-as-count-rules)
 
@@ -78,9 +79,9 @@ CONSTRAINT_DEFAULTS keys (`max_friday_broadmeadow`, `gosford_friday_games`, `mai
 
 ### What's still in place
 
-- `constraints/unified.py` (~1410 lines) — 2-stage hard/soft engine, 27+ pre-computed groupings, lookup caches. Atom dispatch is wired for `PHLAndSecondGradeTimes` (Phase 3a) AND `ClubDayConstraint` (Phase 3b — see `_club_day_atoms_hard`). The legacy `_club_day_scheduling` / `_club_day_field_contiguity` methods are retained as parity-reference only (not invoked by stage 1). Internal methods for `ClubVsClubAlignment` still hold legacy combined logic — Phase 3c.
-- `constraints/registry.py` (~430 lines) — 31 entries (21 original + 5 PHL atoms + 5 ClubDay atoms). Phase 3c will add 4 more atom entries (with `atom_group='ClubVsClubAlignment'`).
-- `constraints/atoms/` — 12 atoms shipped: 5 PHL (`phl_concurrency.py`, `phl_2nd_concurrency.py`, `gosford_friday_rounds.py`, `phl_round_one_play.py`, `preferred_dates.py`) + 5 ClubDay (`club_day_participation.py`, `club_day_intra_club_matchup.py`, `club_day_opponent_matchup.py`, `club_day_same_field.py`, `club_day_contiguous_slots.py`) + `_club_day_shared.py` helpers + `base.py` + `__init__.py`.
+- `constraints/unified.py` (~1450 lines) — 2-stage hard/soft engine, 27+ pre-computed groupings, lookup caches. Atom dispatch is wired for `PHLAndSecondGradeTimes` (Phase 3a), `ClubDayConstraint` (Phase 3b), AND `ClubVsClubAlignment` (Phase 3c — see `_club_vs_club_atoms_hard` / `_club_vs_club_atoms_soft`). Legacy `_club_alignment_hard` / `_club_alignment_soft` retained for parity reference only.
+- `constraints/registry.py` (~470 lines) — 35 entries (21 original + 5 PHL atoms + 5 ClubDay atoms + 4 ClubVsClub atoms).
+- `constraints/atoms/` — 16 atoms shipped: 5 PHL + 5 ClubDay + 4 ClubVsClub (`club_vs_club_coincidence.py`, `club_vs_club_field_limit.py`, `club_vs_club_deficit_penalty.py`, `phl_2nd_back_to_back.py`) + shared helpers (`_club_day_shared.py`, `_club_vs_club_shared.py`) + `base.py` + `__init__.py`.
 - `constraints/original.py` (1733 lines) and `constraints/ai.py` (2040 lines) — legacy combined classes. Reference-only. Move to `constraints/archived/` in Phase 7c.
 - `constraints/archived_equalspacing_original.py` exists at the top level — move it to `constraints/archived/equalspacing_original.py` in Phase 7c.
 - `utils.py` (~3813 lines) — 21-phase `validate_game_config` harness (Phase 21 added in `e9bf5a7` for FORCED subset consistency). `_build_forced_game_rules` accepts `'club'` filter (also `e9bf5a7`). `_get_matching_forced_scopes` does multi-scope FORCED match. `generate_X` returns `(X, conflicts)` — NOT `(X, Y, conflicts)`.
@@ -120,14 +121,14 @@ Iterate one phase at a time. Order from `ATOMIZATION_PLAN.md`:
 
 ```
 [0✅ inventory] ──┐
-                 ├─→ [1✅ helper-var registry] ─→ [3a✅] ─→ [3b✅ ClubDay] ─→ 3c (ClubVsClub) ─→ 7c move legacy
-[2✅ constraint registry extend] ─┘                                                       │
-                                                                                           ↓
+                 ├─→ [1✅ registry] ─→ [3a✅] ─→ [3b✅ ClubDay] ─→ [3c✅ ClubVsClub] ─→ 7c move legacy
+[2✅ ConstraintInfo extend] ─┘                                                              │
+                                                                                             ↓
                                                                      4 (FORCED/BLOCKED adjusters)
-                                                                                           ↓
-[5✅ constants migration] ────────────────────────────────────────────────────────────────┤
-[6 prep ✅] 6 (generic home-ground rename) ───────────────────────────────────────────────┤
-                                                                                           ↓
+                                                                                             ↓
+[5✅ constants migration] ──────────────────────────────────────────────────────────────────┤
+[6 prep ✅] 6 (generic home-ground rename) ─────────────────────────────────────────────────┤
+                                                                                             ↓
 7a (tests) ─ 7b (configurable stages) ─ 7d (docs)
 ```
 
@@ -141,7 +142,7 @@ Iterate one phase at a time. Order from `ATOMIZATION_PLAN.md`:
    timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -m pytest tests/ \
      --ignore=tests/test_solver_integration.py --ignore=tests/test_spacing_integration.py -q
    ```
-   Must pass at ≥1287 (current baseline) before you commit.
+   Must pass at ≥1298 (current baseline) before you commit.
 5. Commit on `final-form` with a descriptive message. Use `git commit --no-verify` ONLY if the user explicitly authorizes (don't skip pre-commit hooks proactively).
 6. Report to the user using the template at the end of this doc.
 7. Wait for user approval before starting the next phase.
@@ -195,9 +196,39 @@ Test bar lifted to **1287 passed, 1 skipped** (was 1272 before Phase 3b).
 Atom helpers used: `club_day_field_used` (SameField), `club_day_slot_used`
 (ContiguousSlots) — both already in `HELPER_VAR_CATALOG`.
 
-#### Phase 3c — `ClubVsClubAlignment` → 4 atoms
+#### Phase 3c — `ClubVsClubAlignment` → 4 atoms — ✅ DONE
 
-3 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`) + extracted `PHLAnd2ndBackToBackSameField`. See `CONSTRAINT_INVENTORY.md` for the behaviour breakdown.
+Atoms shipped: `ClubVsClubCoincidence`, `ClubVsClubFieldLimit`,
+`ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`. Shared helpers in
+`constraints/atoms/_club_vs_club_shared.py`.
+
+Wired via `_club_vs_club_atoms_hard` (Coincidence + FieldLimit + BackToBack)
+and `_club_vs_club_atoms_soft` (DeficitPenalty). `Coincidence` registers the
+per-`(grade, other_grade, club_pair, round_no)` `coincide` BoolVar in the
+helper-var pool under key prefix `cvc_coincide`; `FieldLimit` and
+`DeficitPenalty` read it back. `BackToBack` does the same for PHL/2nd
+under prefix `cvc_phl_btb_coincide`.
+
+The atom set additionally adds back the PHL/2nd Sunday back-to-back
+same-field rule that the pre-atomization unified engine silently dropped
+(present in `original.py:ClubVsClubAlignment` lines 1096–1198, omitted by
+`unified.py:_club_alignment_*`).
+
+Note on stage layering: `ClubVsClubFieldLimit` and `PHLAnd2ndBackToBackSameField`
+each contain BOTH a HARD and a SOFT component — the field-excess penalty
+piggybacks on the ≤2-fields HARD constraint, and the PHL/2nd deficit penalty
+piggybacks on the back-to-back HARD enforcement. This breaks the previous
+"hard stage creates no penalty buckets" invariant; `test_hard_stage_no_penalties`
+was relaxed to whitelist the two ClubVsClub buckets.
+
+Tests:
+- `tests/atoms/test_club_vs_club_atoms.py` — 9 solo-clean / solo-violation tests
+- `tests/atoms/test_club_vs_club_atoms_parity.py` — 2 parity tests vs legacy
+- `tests/atoms/club_vs_club_fixture.py` — 2-club fixture with R=4 weeks
+  giving 3rd (4 teams) per-team=1 vs 4th (2 teams) per-team=4 to trigger the
+  lower-grade alignment block, plus PHL/2nd for the back-to-back block.
+
+Test bar lifted to **1298 passed, 1 skipped** (was 1287 before Phase 3c).
 
 ### Phase 4 — FORCED/BLOCKED count adjusters
 

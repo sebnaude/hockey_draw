@@ -11,8 +11,8 @@
 | 1 — Helper-Var Registry | ✅ DONE | `244f8cd` |
 | 2 — ConstraintInfo extension | ✅ DONE | `c64c1d4` |
 | 3a — Atomize PHLAndSecondGradeTimes | ✅ DONE — `1956608` shipped 8 atoms; per-venue Friday count atoms (Broadmeadow / Gosford / Maitland) retired in favor of `FORCED_GAMES` entries (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`). Cluster now has 5 atoms: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. | `1956608` + retraction |
-| 3b — Atomize ClubDayConstraint | ✅ DONE — 5 atoms (`ClubDayParticipation`, `ClubDayIntraClubMatchup`, `ClubDayOpponentMatchup`, `ClubDaySameField`, `ClubDayContiguousSlots`) wired via `_club_day_atoms_hard`; legacy `_club_day_scheduling`/`_club_day_field_contiguity` retained as parity reference only. Atoms additionally enforce the opponent-matchup branch from `original.py` (Decision #4) that the legacy unified methods silently dropped. `build_groupings` now uses `normalize_club_day` for dict-form CLUB_DAYS. 15 new tests. | `<phase-3b>` |
-| 3c — Atomize ClubVsClubAlignment | ⬜ NOT STARTED | — |
+| 3b — Atomize ClubDayConstraint | ✅ DONE — 5 atoms (`ClubDayParticipation`, `ClubDayIntraClubMatchup`, `ClubDayOpponentMatchup`, `ClubDaySameField`, `ClubDayContiguousSlots`) wired via `_club_day_atoms_hard`; legacy `_club_day_scheduling`/`_club_day_field_contiguity` retained as parity reference only. Atoms additionally enforce the opponent-matchup branch from `original.py` (Decision #4) that the legacy unified methods silently dropped. `build_groupings` now uses `normalize_club_day` for dict-form CLUB_DAYS. 15 new tests. | `0cf78e6` |
+| 3c — Atomize ClubVsClubAlignment | ✅ DONE — 4 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) wired via `_club_vs_club_atoms_hard`/`_club_vs_club_atoms_soft`. Re-introduces the PHL/2nd back-to-back same-field rule the pre-atomization unified engine silently dropped (still present in `original.py:1096–1198`). 11 new tests. | `<phase-3c>` |
 | 4 — FORCED/BLOCKED count adjusters | ⬜ NOT STARTED (depends on 3) | — |
 | 5 — Constants migration | ✅ DONE | `535cac3` |
 | 6 — Generic home-ground rename | 🟡 PREP DONE — `AWAY_VENUE_RULES` skeleton committed (`48f5222`); rename + per-club iteration still TODO | partial |
@@ -21,7 +21,7 @@
 | 7c — Move legacy to `constraints/archived/` | ⬜ NOT STARTED (depends on 3) | — |
 | 7d — Documentation update | 🟡 partial — `docs/CONSTRAINT_INVENTORY.md` (Phase 0) and `docs/HELPER_VARS.md` (Phase 1) shipped | partial |
 
-Test baseline at this point: **1287 passed, 1 skipped** (started at 1216; 1272 after 3a; 1287 after 3b).
+Test baseline at this point: **1298 passed, 1 skipped** (started at 1216; 1272 after 3a; 1287 after 3b; 1298 after 3c).
 
 The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session.
 **Goal recap:** one idea per constraint; constraint+helper-var registry; zero hardcoded constants in constraints; FORCED/BLOCKED-aware count adjustments; generic home-ground concept; tests on real sampled data; configurable stage assignment; per-club / per-type violation breakdowns.
@@ -217,7 +217,7 @@ For each, split into atoms. **Each atom** = 1 file in `constraints/atoms/`, 1 cl
 
 The user's rule: **count budgets use `FORCED_GAMES`, constraints reserve for structural rules** (no-double-booking, adjacency, balance, spacing).
 
-### 3b. `ClubDayConstraint` → 5 atoms — ✅ DONE (`<phase-3b>`)
+### 3b. `ClubDayConstraint` → 5 atoms — ✅ DONE (`0cf78e6`)
 | Atom | Idea |
 |---|---|
 | `ClubDayParticipation` | All teams of that club play on that date. |
@@ -231,14 +231,19 @@ Wired via `UnifiedConstraintEngine._club_day_atoms_hard`. Legacy
 reference; not dispatched. `build_groupings` now uses `normalize_club_day` so
 the `{'date': ..., 'opponent': ...}` dict form is supported throughout.
 
-### 3c. `ClubVsClubAlignment` → 3 atoms
+### 3c. `ClubVsClubAlignment` → 4 atoms — ✅ DONE (`<phase-3c>`)
 | Atom | Idea |
 |---|---|
 | `ClubVsClubCoincidence` | Club-pair meetings should coincide on the same date across grades (≥ N grades on that date). |
-| `ClubVsClubFieldLimit` | When coinciding, ≤ 2 fields. |
+| `ClubVsClubFieldLimit` | When coinciding, ≤ 2 fields (HARD) + field-excess penalty (SOFT). |
 | `ClubVsClubDeficitPenalty` | Soft penalty for missing coincidences. |
+| `PHLAnd2ndBackToBackSameField` | PHL/2nd Sunday: when coinciding, must be back-to-back same-field; min coincidences (HARD) + deficit penalty (SOFT). |
 
-The PHL/2nd back-to-back same-field algorithm that was hacked onto `ClubVsClubAlignment` becomes a separate atom: `PHLAnd2ndBackToBackSameField`.
+The PHL/2nd back-to-back algorithm was extracted from
+`ClubVsClubAlignment` per the original plan (it's a structurally different
+rule from the lower-grade ≤ 2-fields rule). The unified engine's
+pre-atomization `_club_alignment_*` methods silently omitted this block;
+the new atom adds it back to match `original.py:ClubVsClubAlignment`.
 
 **Per-atom test bar:**
 1. Sampled-data unit test that triggers a violation by construction → atom adds an infeasibility / penalty.

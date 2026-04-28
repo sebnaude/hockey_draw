@@ -35,6 +35,10 @@ from constraints.atoms import (
     ClubDayOpponentMatchup,
     ClubDaySameField,
     ClubDayContiguousSlots,
+    ClubVsClubCoincidence,
+    ClubVsClubFieldLimit,
+    ClubVsClubDeficitPenalty,
+    PHLAnd2ndBackToBackSameField,
 )
 
 # Venue constants
@@ -403,7 +407,7 @@ class UnifiedConstraintEngine:
         if 'ClubGradeAdjacency' not in _skip:
             c += self._grade_adjacency_hard()
         if 'ClubVsClubAlignment' not in _skip:
-            c += self._club_alignment_hard()
+            c += self._club_vs_club_atoms_hard()
         if 'MaitlandHomeGrouping' not in _skip:
             c += self._maitland_grouping_hard()
         if 'AwayAtMaitlandGrouping' not in _skip:
@@ -661,6 +665,33 @@ class UnifiedConstraintEngine:
                 n += 1
         return n
 
+    # ----------------------------------------------------------------
+    # ClubVsClub — atom dispatch (Phase 3c, replaces _club_alignment_hard /
+    # _club_alignment_soft). Legacy methods retained below for parity reference.
+    # The hard atoms must run in this order: Coincidence creates the
+    # `coincide` BoolVars, FieldLimit + DeficitPenalty + BackToBack read them
+    # back from the helper-var pool.
+    # ----------------------------------------------------------------
+
+    _CLUB_VS_CLUB_HARD_ATOMS = (
+        ClubVsClubCoincidence,
+        ClubVsClubFieldLimit,
+        PHLAnd2ndBackToBackSameField,
+    )
+    _CLUB_VS_CLUB_SOFT_ATOMS = (ClubVsClubDeficitPenalty,)
+
+    def _club_vs_club_atoms_hard(self):
+        n = 0
+        for atom_cls in self._CLUB_VS_CLUB_HARD_ATOMS:
+            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
+        return n
+
+    def _club_vs_club_atoms_soft(self):
+        n = 0
+        for atom_cls in self._CLUB_VS_CLUB_SOFT_ATOMS:
+            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
+        return n
+
     def _club_alignment_hard(self):
         """Hard: min coincidences + max 2 fields when coinciding."""
         n = 0
@@ -847,7 +878,7 @@ class UnifiedConstraintEngine:
         if 'ClubGradeAdjacency' not in _skip:
             c += self._grade_adjacency_soft()
         if 'ClubVsClubAlignment' not in _skip:
-            c += self._club_alignment_soft()
+            c += self._club_vs_club_atoms_soft()
         if 'MaitlandHomeGrouping' not in _skip:
             c += self._maitland_grouping_soft()
         if 'AwayAtMaitlandGrouping' not in _skip:
