@@ -236,11 +236,12 @@ FIELD_UNAVAILABILITIES = {
 
 Friday night games are configured across multiple existing config structures (no separate `FRIDAY_NIGHT_CONFIG` dict):
 
-- **Game counts**: `CONSTRAINT_DEFAULTS` — `gosford_friday_games` (exact, AGM), `maitland_friday_games` (exact), `max_friday_broadmeadow` (max at NIHC)
+- **Game counts**: `FORCED_GAMES` entries — `{grade='PHL', day='Friday', field_location=<venue>, count=N, constraint='equal'|'lesse'}`. Per-venue count budgets live in season config so they are discoverable, reportable, and per-season tweakable. See `docs/PERENNIAL_RULES.md` Rule 3.
 - **Timeslots**: `PHL_GAME_TIMES` controls which Friday times exist at each venue (8pm Gosford, 7pm Maitland, 7pm NIHC EF only)
-- **Forced dates**: `FORCED_GAMES` forces specific Friday dates at Gosford (5 dates) and specific matchups at NIHC (3 dates)
+- **Forced dates**: `FORCED_GAMES` forces specific Friday dates at Gosford and specific matchups at NIHC. The multi-scope match (commit `cd8a338`) means each Friday game counts toward both its date/pair scope AND the per-venue count scope simultaneously.
 - **Date filtering**: `BLOCKED_GAMES` prevents non-confirmed Gosford Friday dates, and blocks non-Gosford clubs from Maitland Fridays
-- **Constraint enforcement**: `PHLAndSecondGradeTimes` (both original and AI) enforces the exact/max counts
+- **Pre-solver consistency**: `validate_game_config` Phase 21 checks subset-related FORCED scopes for compatible counts (e.g. fatal if a narrower `equal 3` sits inside a broader `equal 2`).
+- **Legacy reference**: `CONSTRAINT_DEFAULTS['gosford_friday_games']`/`['maitland_friday_games']`/`['max_friday_broadmeadow']` keys still exist; they're consumed by archived classes (`original.py`/`ai.py` and the legacy `_phl_times_hard()` parity reference) and retire when those archive in Phase 7c. New code should NOT read from them — use the FORCED_GAMES entries directly.
 
 ---
 

@@ -21,7 +21,7 @@
 | 7c — Move legacy to `constraints/archived/` | ⬜ NOT STARTED (depends on 3) | — |
 | 7d — Documentation update | 🟡 partial — `docs/CONSTRAINT_INVENTORY.md` (Phase 0) and `docs/HELPER_VARS.md` (Phase 1) shipped | partial |
 
-Test baseline at this point: **1246 passed, 1 skipped** (started at 1216).
+Test baseline at this point: **1272 passed, 1 skipped** (started at 1216).
 
 The hand-off doc `docs/ATOMIZATION_HANDOFF.md` is the canonical pickup point for the next session.
 **Goal recap:** one idea per constraint; constraint+helper-var registry; zero hardcoded constants in constraints; FORCED/BLOCKED-aware count adjustments; generic home-ground concept; tests on real sampled data; configurable stage assignment; per-club / per-type violation breakdowns.
@@ -199,21 +199,23 @@ The atomized constraints get registered with `atom_group='PHLAndSecondGradeTimes
 
 For each, split into atoms. **Each atom** = 1 file in `constraints/atoms/`, 1 class, 1 idea, registers via the registry, declares its helpers.
 
-### 3a. `PHLAndSecondGradeTimes` → 4 atoms (post-FORCED-migration)
+### 3a. `PHLAndSecondGradeTimes` → 5 atoms — ✅ DONE (`1956608` + retraction `e9bf5a7`+`5cfae6c`)
 | Atom | Idea |
 |---|---|
 | `PHLConcurrencyAtBroadmeadow` | At Broadmeadow, no two PHL games in the same `(slot, location)`. |
 | `PHLAnd2ndConcurrencyAtBroadmeadow` | At Broadmeadow, PHL and same-club 2nd grade can't share a slot. |
+| `GosfordFridayRoundsForced` | For each configured round, exactly one PHL Friday Gosford game (per-round forcing). |
 | `PHLRoundOnePlay` | Every PHL team plays in round 1. |
 | `PreferredDates` | Preferred dates carry positive weight. |
 
-**Removed from this list (now expressed as `FORCED_GAMES` entries in season config):**
-- `BroadmeadowFridayCount` (max 3 PHL Fridays at NIHC) — `{grade='PHL', day='Friday', field_location=NIHC, count=3, constraint='lesse'}`
-- `GosfordFridayCount` (exactly 8 per season) — `{grade='PHL', day='Friday', field_location=Gosford, count=8, constraint='equal'}`
-- `MaitlandFridayCount` (exactly 2 per season) — `{grade='PHL', day='Friday', field_location=Maitland, count=2, constraint='equal'}`
-- `GosfordFridayRoundsForced` ({2,4,5,9,10}) — already covered by per-round FORCED entries in `season_2026.py:555-603`
+**Removed (now expressed as `FORCED_GAMES` entries in season config — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`):**
+- ~~`BroadmeadowFridayCount`~~ → `{grade='PHL', day='Friday', field_location=NIHC, count=3, constraint='lesse'}`
+- ~~`GosfordFridayCount`~~ → `{grade='PHL', day='Friday', field_location=Gosford, count=8, constraint='equal'}`
+- ~~`MaitlandFridayCount`~~ → `{grade='PHL', day='Friday', field_location=Maitland, count=2, constraint='equal'}`
 
-See `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the design decision and migration steps. The user's rule: **count budgets use `FORCED_GAMES`, constraints reserve for structural rules** (no-double-booking, adjacency, balance, spacing).
+`GosfordFridayRoundsForced` was kept (its per-round `sum == 1` doesn't yet cleanly map to per-round FORCED entries given locked-week dynamics).
+
+The user's rule: **count budgets use `FORCED_GAMES`, constraints reserve for structural rules** (no-double-booking, adjacency, balance, spacing).
 
 ### 3b. `ClubDayConstraint` → 4 atoms
 | Atom | Idea |
@@ -432,7 +434,7 @@ DEFAULT_STAGES = [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGames', 'BalancedMatchups',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            'BroadmeadowFridayCount', 'GosfordFridayCount', 'MaitlandFridayCount',
+            'GosfordFridayRoundsForced',
             'PHLRoundOnePlay',
         ],
     },
@@ -614,8 +616,8 @@ I will *not* invent new behavior or new constraint ideas in this work — only r
 - `main_staged.py` reads `SOLVER_STAGES` from config; supports `--stages-config`, `--stage-only`, `--skip-stage`, `--list-stages`.
 - Every constant from the punch list is in `CONSTRAINT_DEFAULTS`/`AWAY_VENUE_RULES` or derived from existing data.
 - `MaitlandHomeGrouping`/`AwayAtMaitlandGrouping`/etc. renamed to `NonDefaultHomeGrouping`/`AwayAtNonDefaultGrouping`/etc., scope by `home_field_map` keys.
-- FORCED/BLOCKED count adjusters registered for at least: `ClubVsClubCoincidence`, `BroadmeadowFridayCount`, `GosfordFridayCount`, `MaitlandFridayCount`, `EqualMatchUpSpacing`, `NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `EqualGames`. Each with a documented formula.
-- Test suite: ≥1212 passing (current baseline), every atom has solo-clean + solo-violation tests, plus `tests/fixtures/violations/` has at least one fixture per atom needing a static one.
+- FORCED/BLOCKED count adjusters registered for at least: `ClubVsClubCoincidence`, `EqualMatchUpSpacing`, `NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `EqualGames`. Each with a documented formula. (Per-venue Friday counts handled by FORCED_GAMES directly — no adjuster needed.)
+- Test suite: ≥1272 passing (current baseline), every atom has solo-clean + solo-violation tests, plus `tests/fixtures/violations/` has at least one fixture per atom needing a static one.
 - `DrawTester.run_violation_check()` returns `ViolationReport.breakdown` with by_club, by_type, by_severity, soft_pressure aggregations.
 - `tests/test_no_legacy_imports.py` passes.
 - CLAUDE.md updated; new docs `CONSTRAINT_INVENTORY.md`, `HELPER_VARS.md`, `HARNESS.md`, `STAGES.md` added.

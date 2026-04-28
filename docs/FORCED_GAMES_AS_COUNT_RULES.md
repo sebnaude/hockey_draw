@@ -1,6 +1,20 @@
-# Hand-off — FORCED_GAMES supersedes per-venue Friday count atoms
+# FORCED_GAMES supersedes per-venue Friday count atoms
 
-> **Read this before** starting Phase 3 cluster cleanup, Phase 4, or anything that touches `BroadmeadowFridayCount` / `GosfordFridayCount` / `MaitlandFridayCount`.
+> **STATUS: DONE — 2026-04-28.** Migration shipped on `final-form` in
+> commits `e9bf5a7` (FORCED `'club'` filter + Phase 21 subset-consistency
+> validation) and `5cfae6c` (atom retirement). Three Friday-count atoms
+> (`BroadmeadowFridayCount`, `GosfordFridayCount`, `MaitlandFridayCount`)
+> are gone; their budgets live in `season_2026.py:FORCED_GAMES` now.
+> `GosfordFridayRoundsForced` was RETAINED — its per-round
+> enforcement isn't yet covered by per-round FORCED entries.
+> Test bar: 1272 passed, 1 skipped (was 1268).
+>
+> The convention going forward is documented in:
+> - `CLAUDE.md` §3-§4 (FORCED `club=` filter + per-venue counts use FORCED)
+> - `docs/PERENNIAL_RULES.md` Rule 3 (count budgets pattern for new seasons)
+>
+> The remainder of this document is preserved as the historical
+> design rationale and migration plan.
 
 ## TL;DR
 

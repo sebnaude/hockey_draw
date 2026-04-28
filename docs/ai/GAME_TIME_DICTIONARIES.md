@@ -180,7 +180,7 @@ Simply remove from the list. No variables will be created for that slot.
 ### Adding Friday Nights
 
 1. Add to `PHL_GAME_TIMES` under 'Friday' key for the venue/field
-2. Update `CONSTRAINT_DEFAULTS` with counts (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`)
+2. Add per-venue count budgets as `FORCED_GAMES` entries (Gosford `equal N`, Maitland `equal N`, Broadmeadow `lesse N` — see `docs/PERENNIAL_RULES.md` Rule 3)
 3. Use `FORCED_GAMES` to force specific dates/matchups (supports `constraint` field for equality types)
 4. Use `BLOCKED_GAMES` to restrict which teams/dates can play (e.g., block non-Gosford clubs from Maitland Fridays)
 

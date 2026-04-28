@@ -21,8 +21,9 @@
 
 | Information | Source | Config Location |
 |-------------|--------|-----------------|
-| Friday night games at Gosford (count) | AGM decision | `CONSTRAINT_DEFAULTS['gosford_friday_games']` |
-| Friday night games at Maitland (count) | Committee | `CONSTRAINT_DEFAULTS['maitland_friday_games']` |
+| Friday night games at Gosford (count) | AGM decision | `FORCED_GAMES` entry: `{grade='PHL', day='Friday', field_location='Central Coast Hockey Park', count=N, constraint='equal'}` |
+| Friday night games at Maitland (count) | Committee | `FORCED_GAMES` entry: `{grade='PHL', day='Friday', field_location='Maitland Park', count=N, constraint='equal'}` |
+| Max Friday games at Broadmeadow | Operational | `FORCED_GAMES` entry: `{grade='PHL', day='Friday', field_location='Newcastle International Hockey Centre', count=N, constraint='lesse'}` |
 | Friday night dates at Gosford | Club agreements | `FORCED_GAMES` (force dates) + `BLOCKED_GAMES` (block non-confirmed) |
 | Maitland Friday opponents | Committee | `BLOCKED_GAMES` blocks non-Gosford clubs at Maitland on Fridays |
 | Gosford Friday start time | AGM decision | `PHL_GAME_TIMES['Central Coast Hockey Park']['Friday']` (8pm) |
@@ -225,7 +226,7 @@ Before generating:
 - [ ] `SEASON_CONFIG` dates set correctly
 - [ ] `FIELD_UNAVAILABILITIES` updated for blocked weekends
 - [ ] `PHL_GAME_TIMES` and `SECOND_GRADE_TIMES` reviewed
-- [ ] `CONSTRAINT_DEFAULTS` set for Friday night counts (`gosford_friday_games`, `maitland_friday_games`, `max_friday_broadmeadow`)
+- [ ] `FORCED_GAMES` configured for per-venue Friday-night count budgets (Gosford `equal N`, Maitland `equal N`, Broadmeadow `lesse N`) — see `docs/PERENNIAL_RULES.md` Rule 3
 - [ ] `FORCED_GAMES` configured for Friday night dates/matchups (supports `constraint` field for equality types)
 - [ ] `BLOCKED_GAMES` configured to block non-confirmed Friday dates and restrict Maitland Fridays to Gosford only
 - [ ] `BLOCKED_GAMES` includes all hard no-play requests

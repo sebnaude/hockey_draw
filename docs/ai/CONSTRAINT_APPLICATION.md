@@ -202,29 +202,29 @@ CLUB_DAYS = {
 
 ## Friday Night Games
 
+Per-venue Friday counts are expressed as `FORCED_GAMES` entries in season config — NOT as constraint atoms. See `docs/PERENNIAL_RULES.md` Rule 3 and `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the design rationale.
+
 ### Gosford Friday Nights
 
-1. Set exact count in `CONSTRAINT_DEFAULTS['gosford_friday_games']`
+1. Add a count budget FORCED_GAMES entry: `{grade='PHL', day='Friday', field_location='Central Coast Hockey Park', count=N, constraint='equal'}`
 2. Add times to `PHL_GAME_TIMES['Central Coast Hockey Park']` (8pm confirmed at AGM)
-3. Use `FORCED_GAMES` to force games on confirmed Friday dates (scope-only, no team needed — PHL_GAME_TIMES restricts to Gosford-involved games)
+3. Use additional `FORCED_GAMES` entries to force games on confirmed Friday dates (scope-only, no team needed — PHL_GAME_TIMES restricts to Gosford-involved games)
 4. Use `BLOCKED_GAMES` to prevent games on non-confirmed Friday dates
-5. Constraint `PHLAndSecondGradeTimes` enforces exact count
+5. The multi-scope FORCED match means each Friday game counts toward the count budget AND any matching per-date / per-pair entry simultaneously
 
 ### Maitland Friday Nights
 
-1. Set exact count in `CONSTRAINT_DEFAULTS['maitland_friday_games']`
+1. Add a count budget FORCED_GAMES entry: `{grade='PHL', day='Friday', field_location='Maitland Park', count=N, constraint='equal'}`
 2. Add times to `PHL_GAME_TIMES['Maitland Park']` (7pm)
 3. `home_field_map` already restricts to Maitland-involved games
 4. Use `BLOCKED_GAMES` to block all non-Gosford clubs from PHL Friday at Maitland Park
 5. Net result: only Gosford vs Maitland PHL variables exist on Fridays at Maitland
-6. Constraint `PHLAndSecondGradeTimes` enforces exact count
 
 ### NIHC Friday Nights
 
 1. Set times in `PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Friday']` (7pm)
-2. Set max count in `CONSTRAINT_DEFAULTS['max_friday_broadmeadow']`
-3. Use `FORCED_GAMES` to lock specific matchups to NIHC Friday dates
-4. Constraint `PHLAndSecondGradeTimes` limits Friday games at NIHC to the configured max
+2. Add a count budget FORCED_GAMES entry: `{grade='PHL', day='Friday', field_location='Newcastle International Hockey Centre', count=N, constraint='lesse'}`
+3. Use `FORCED_GAMES` to lock specific matchups to NIHC Friday dates (each matchup also counts toward the cap)
 
 ---
 
