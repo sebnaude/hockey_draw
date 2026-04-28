@@ -53,7 +53,7 @@ timeout 240 /c/Users/c3205/Documents/Code/python/draw/.venv/Scripts/python.exe -
 | `5cfae6c` | 3a retraction | `refactor(constraints): retire per-venue Friday-count atoms for FORCED_GAMES` |
 | `4f0777c` | 3a retraction | `docs: document FORCED-as-count-budget as a perennial rule` |
 | `0cf78e6` | 3b | `feat(constraints): atomize ClubDayConstraint into 5 atoms (Phase 3b)` |
-| `<phase-3c>` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
+| `8d2934d` | 3c | `feat(constraints): atomize ClubVsClubAlignment into 4 atoms (Phase 3c)` |
 
 ### Phase 3a retraction — DONE (FORCED-as-count-rules)
 

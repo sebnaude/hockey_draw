@@ -12,7 +12,7 @@
 | 2 — ConstraintInfo extension | ✅ DONE | `c64c1d4` |
 | 3a — Atomize PHLAndSecondGradeTimes | ✅ DONE — `1956608` shipped 8 atoms; per-venue Friday count atoms (Broadmeadow / Gosford / Maitland) retired in favor of `FORCED_GAMES` entries (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`). Cluster now has 5 atoms: `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates`. | `1956608` + retraction |
 | 3b — Atomize ClubDayConstraint | ✅ DONE — 5 atoms (`ClubDayParticipation`, `ClubDayIntraClubMatchup`, `ClubDayOpponentMatchup`, `ClubDaySameField`, `ClubDayContiguousSlots`) wired via `_club_day_atoms_hard`; legacy `_club_day_scheduling`/`_club_day_field_contiguity` retained as parity reference only. Atoms additionally enforce the opponent-matchup branch from `original.py` (Decision #4) that the legacy unified methods silently dropped. `build_groupings` now uses `normalize_club_day` for dict-form CLUB_DAYS. 15 new tests. | `0cf78e6` |
-| 3c — Atomize ClubVsClubAlignment | ✅ DONE — 4 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) wired via `_club_vs_club_atoms_hard`/`_club_vs_club_atoms_soft`. Re-introduces the PHL/2nd back-to-back same-field rule the pre-atomization unified engine silently dropped (still present in `original.py:1096–1198`). 11 new tests. | `<phase-3c>` |
+| 3c — Atomize ClubVsClubAlignment | ✅ DONE — 4 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) wired via `_club_vs_club_atoms_hard`/`_club_vs_club_atoms_soft`. Re-introduces the PHL/2nd back-to-back same-field rule the pre-atomization unified engine silently dropped (still present in `original.py:1096–1198`). 11 new tests. | `8d2934d` |
 | 4 — FORCED/BLOCKED count adjusters | ⬜ NOT STARTED (depends on 3) | — |
 | 5 — Constants migration | ✅ DONE | `535cac3` |
 | 6 — Generic home-ground rename | 🟡 PREP DONE — `AWAY_VENUE_RULES` skeleton committed (`48f5222`); rename + per-club iteration still TODO | partial |
@@ -231,7 +231,7 @@ Wired via `UnifiedConstraintEngine._club_day_atoms_hard`. Legacy
 reference; not dispatched. `build_groupings` now uses `normalize_club_day` so
 the `{'date': ..., 'opponent': ...}` dict form is supported throughout.
 
-### 3c. `ClubVsClubAlignment` → 4 atoms — ✅ DONE (`<phase-3c>`)
+### 3c. `ClubVsClubAlignment` → 4 atoms — ✅ DONE (`8d2934d`)
 | Atom | Idea |
 |---|---|
 | `ClubVsClubCoincidence` | Club-pair meetings should coincide on the same date across grades (≥ N grades on that date). |
