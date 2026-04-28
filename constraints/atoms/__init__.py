@@ -14,6 +14,11 @@ from constraints.atoms.phl_2nd_concurrency import PHLAnd2ndConcurrencyAtBroadmea
 from constraints.atoms.gosford_friday_rounds import GosfordFridayRoundsForced
 from constraints.atoms.phl_round_one_play import PHLRoundOnePlay
 from constraints.atoms.preferred_dates import PreferredDates
+from constraints.atoms.club_day_participation import ClubDayParticipation
+from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchup
+from constraints.atoms.club_day_opponent_matchup import ClubDayOpponentMatchup
+from constraints.atoms.club_day_same_field import ClubDaySameField
+from constraints.atoms.club_day_contiguous_slots import ClubDayContiguousSlots
 
 
 PHL_TIMES_ATOMS = [
@@ -25,6 +30,15 @@ PHL_TIMES_ATOMS = [
 ]
 
 
+CLUB_DAY_ATOMS = [
+    ClubDayParticipation,
+    ClubDayIntraClubMatchup,
+    ClubDayOpponentMatchup,
+    ClubDaySameField,
+    ClubDayContiguousSlots,
+]
+
+
 __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
@@ -33,4 +47,10 @@ __all__ = [
     'PHLRoundOnePlay',
     'PreferredDates',
     'PHL_TIMES_ATOMS',
+    'ClubDayParticipation',
+    'ClubDayIntraClubMatchup',
+    'ClubDayOpponentMatchup',
+    'ClubDaySameField',
+    'ClubDayContiguousSlots',
+    'CLUB_DAY_ATOMS',
 ]

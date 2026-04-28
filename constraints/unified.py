@@ -21,7 +21,7 @@ from itertools import combinations
 
 from utils import (
     get_teams_from_club, get_club_from_clubname, get_nearest_week_by_date,
-    get_duplicated_graded_teams
+    get_duplicated_graded_teams, normalize_club_day,
 )
 from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
 from constraints.atoms import (
@@ -30,6 +30,11 @@ from constraints.atoms import (
     GosfordFridayRoundsForced,
     PHLRoundOnePlay,
     PreferredDates,
+    ClubDayParticipation,
+    ClubDayIntraClubMatchup,
+    ClubDayOpponentMatchup,
+    ClubDaySameField,
+    ClubDayContiguousSlots,
 )
 
 # Venue constants
@@ -202,10 +207,12 @@ class UnifiedConstraintEngine:
             for d in phl_prefs.get('preferred_dates', [])
         )
 
-        # Get club day dates
+        # Get club day dates (normalize_club_day handles the dict form
+        # `{'date': dt, 'opponent': 'X'}` used when an opponent is set).
         club_days = self.data.get('club_days', {})
         club_day_dates = {}
-        for club_name, dt in club_days.items():
+        for club_name, value in club_days.items():
+            dt, _opponent = normalize_club_day(value)
             club_day_dates[dt.date().strftime('%Y-%m-%d')] = club_name
 
         # === SINGLE PASS OVER X ===
@@ -402,8 +409,7 @@ class UnifiedConstraintEngine:
         if 'AwayAtMaitlandGrouping' not in _skip:
             c += self._away_maitland_hard()
         if 'ClubDay' not in _skip:
-            c += self._club_day_scheduling()
-            c += self._club_day_field_contiguity()
+            c += self._club_day_atoms_hard()
         if 'ClubGameSpread' not in _skip:
             c += self._club_game_spread_hard()
         if 'EnsureBestTimeslotChoices' not in _skip:
@@ -759,6 +765,27 @@ class UnifiedConstraintEngine:
                 self.model.Add(nc == sum(club_indicators))
                 self.model.Add(nc <= hard_limit)
                 n += 1
+        return n
+
+    # ----------------------------------------------------------------
+    # ClubDay — atom dispatch (Phase 3b, replaces _club_day_scheduling /
+    # _club_day_field_contiguity). Legacy methods retained below for parity
+    # reference. The atom set additionally enforces opponent-matchup
+    # semantics from `original.py`, which the legacy unified methods omitted.
+    # ----------------------------------------------------------------
+
+    _CLUB_DAY_HARD_ATOMS = (
+        ClubDayParticipation,
+        ClubDayIntraClubMatchup,
+        ClubDayOpponentMatchup,
+        ClubDaySameField,
+        ClubDayContiguousSlots,
+    )
+
+    def _club_day_atoms_hard(self):
+        n = 0
+        for atom_cls in self._CLUB_DAY_HARD_ATOMS:
+            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
         return n
 
     def _club_day_scheduling(self):

@@ -57,11 +57,11 @@ class TestRegistryCompleteness:
                     f"DrawTester.{attr_name} not covered by registry"
 
     def test_registry_has_expected_entry_count(self):
-        """Registry has the original 21 entries plus 5 surviving PHL atoms.
-        Three Friday-count atoms (Broadmeadow/Gosford/Maitland) were retired
-        in favour of FORCED_GAMES entries — see
-        docs/FORCED_GAMES_AS_COUNT_RULES.md."""
-        assert len(CONSTRAINT_REGISTRY) == 26
+        """Registry contains 21 originals + 5 surviving PHL atoms (Phase 3a)
+        + 5 ClubDay atoms (Phase 3b) = 31. Three Friday-count atoms
+        (Broadmeadow/Gosford/Maitland) were retired in favour of FORCED_GAMES
+        entries — see docs/FORCED_GAMES_AS_COUNT_RULES.md."""
+        assert len(CONSTRAINT_REGISTRY) == 31
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method."""

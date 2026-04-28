@@ -1193,7 +1193,11 @@ class TestStageCorrectness:
             assert isinstance(info['weight'], int), f"Penalty '{name}' weight not int"
 
     def test_club_day_contiguity_in_stage_1(self, mini_unified_data):
-        """_club_day_field_contiguity is called from stage 1 (hard), not stage 2."""
+        """ClubDay hard constraints (incl. contiguity) are dispatched from stage 1.
+
+        Phase 3b replaced `_club_day_scheduling` + `_club_day_field_contiguity`
+        with a single `_club_day_atoms_hard` that runs all 5 ClubDay atoms.
+        """
         model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
@@ -1202,16 +1206,15 @@ class TestStageCorrectness:
         engine = UnifiedConstraintEngine(model, X, data)
         engine.build_groupings()
 
-        # Verify _club_day_field_contiguity is no longer in stage 2 dispatch
-        # by checking that stage 2 source doesn't contain it
         import inspect
         stage2_source = inspect.getsource(engine.apply_stage_2_soft)
-        assert '_club_day_field_contiguity' not in stage2_source, \
-            "_club_day_field_contiguity should not be called from stage 2"
+        assert '_club_day_atoms_hard' not in stage2_source, \
+            "ClubDay atoms should not be called from stage 2"
+        assert '_club_day_field_contiguity' not in stage2_source
 
         stage1_source = inspect.getsource(engine.apply_stage_1_hard)
-        assert '_club_day_field_contiguity' in stage1_source, \
-            "_club_day_field_contiguity should be called from stage 1"
+        assert '_club_day_atoms_hard' in stage1_source, \
+            "ClubDay atoms should be called from stage 1"
 
     def test_phase_c_exists(self, mini_engine):
         """apply_phase_c exists and returns 0."""
