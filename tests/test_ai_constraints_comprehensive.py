@@ -29,7 +29,7 @@ from models import PlayingField, Team, Club, Grade, Timeslot
 from utils import max_games_per_grade
 
 # Import ALL AI constraints
-from constraints.ai import (
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,
@@ -50,8 +50,8 @@ from constraints.ai import (
     PreferredTimesConstraintAI,
 )
 
-# Import ALL original constraints for parity testing
-from constraints import (
+# Import ALL original constraints for parity testing (Phase 7c-archived)
+from constraints.archived.original import (
     NoDoubleBookingTeamsConstraint,
     NoDoubleBookingFieldsConstraint,
     EnsureEqualGamesAndBalanceMatchUps,

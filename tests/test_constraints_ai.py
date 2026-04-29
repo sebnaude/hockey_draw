@@ -15,7 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
-from constraints.ai import (
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,
@@ -827,7 +827,7 @@ class TestAIConstraintEquivalence:
 
     def test_double_booking_equivalence(self, basic_teams, basic_timeslots, basic_grades, basic_fields, basic_clubs):
         """Test that AI version produces same feasibility as original."""
-        from constraints import NoDoubleBookingTeamsConstraint
+        from constraints.archived.original import NoDoubleBookingTeamsConstraint
         
         games = [
             ('Tigers 3rd', 'Wests 3rd', '3rd'),

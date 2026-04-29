@@ -23,15 +23,12 @@ from main_staged import (
     StagedScheduleSolver,
     CheckpointManager,
     IntermediateSolutionCallback,
-    STAGES,
-    STAGES_AI,
-    STAGES_SEVERITY,
     _build_constraints_applied,
     _build_normalized_penalty,
     _serialize_config,
 )
 from solver_diagnostics import SolverConfig
-from constraints import (
+from constraints.archived.original import (
     NoDoubleBookingTeamsConstraint,
     NoDoubleBookingFieldsConstraint,
     EnsureEqualGamesAndBalanceMatchUps,

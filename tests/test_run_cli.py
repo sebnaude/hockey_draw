@@ -128,19 +128,17 @@ class TestCommandRouting:
             sys.argv = old_argv
 
         captured = capsys.readouterr()
-        assert 'AVAILABLE CONSTRAINTS' in captured.out
+        assert 'REGISTERED CONSTRAINTS' in captured.out
 
-    def test_list_constraints_ai_flag(self, capsys):
-        """Test list-constraints with --ai flag."""
+    def test_list_constraints_no_ai_flag(self):
+        """Phase 7c: --ai flag is gone; list-constraints should reject it."""
         old_argv = sys.argv
         try:
             sys.argv = ['run.py', 'list-constraints', '--ai']
-            run.main()
+            with pytest.raises(SystemExit):
+                run.main()
         finally:
             sys.argv = old_argv
-
-        captured = capsys.readouterr()
-        assert 'AI-ENHANCED' in captured.out
 
 
 # ============== run_generate Arg Setup Tests ==============
@@ -212,28 +210,20 @@ class TestRunGenerate:
 class TestRunListConstraints:
     """Tests for run_list_constraints function."""
 
-    def test_lists_original_constraints(self, capsys):
-        """Test listing original constraints."""
-        run.run_list_constraints(use_ai=False)
+    def test_lists_constraints(self, capsys):
+        """Phase 7c: list-constraints prints SOLVER_STAGES atoms."""
+        run.run_list_constraints()
 
         captured = capsys.readouterr()
-        assert 'ORIGINAL' in captured.out
-        assert 'Constraints:' in captured.out
-
-    def test_lists_ai_constraints(self, capsys):
-        """Test listing AI-enhanced constraints."""
-        run.run_list_constraints(use_ai=True)
-
-        captured = capsys.readouterr()
-        assert 'AI-ENHANCED' in captured.out
+        assert 'REGISTERED CONSTRAINTS' in captured.out
+        assert 'NoDoubleBookingTeams' in captured.out
 
     def test_lists_stage_information(self, capsys):
-        """Test that stage info is included in output."""
-        run.run_list_constraints(use_ai=False)
+        """Stage names from DEFAULT_STAGES appear in the output."""
+        run.run_list_constraints()
 
         captured = capsys.readouterr()
-        assert 'stage' in captured.out.lower()
-        assert 'Time Limit' in captured.out
+        assert 'critical_feasibility' in captured.out
 
 
 # ============== Integration Tests ==============
@@ -339,16 +329,11 @@ class TestDiagnoseCommand:
         assert len(data['teams']) > 0
 
     def test_diagnose_gets_stage_config(self):
-        """Test diagnose command accesses stage configuration."""
-        from main_staged import STAGES, STAGES_AI
-
-        # Test standard stages
-        assert 'stage1_required' in STAGES
-        assert 'constraints' in STAGES['stage1_required']
-
-        # Test AI stages
-        assert 'stage1_required' in STAGES_AI
-        assert 'constraints' in STAGES_AI['stage1_required']
+        """Phase 7c: diagnose now uses SOLVER_STAGES from the registry."""
+        from constraints.stages import load_solver_stages
+        stages = load_solver_stages({})
+        names = [s['name'] for s in stages]
+        assert 'critical_feasibility' in names
 
     def test_diagnose_args_namespace(self):
         """Test diagnose argument namespace structure."""

@@ -1,21 +1,19 @@
-"""Phase 7c: lockdown test — production code must not import from
-`constraints/archived/`.
+"""Phase 7c: lockdown test — production code must not import the
+pre-atomization combined-constraint modules.
 
-This is the architectural fence around the pre-atomization implementations.
-Anything that needs the original combined classes goes through the
-registry / atoms / `constraints.stages` dispatcher, NOT a direct import of
-`constraints.archived.*`.
+Forbidden in production:
+  - `constraints.archived.*` (the new home for the legacy modules)
+  - `constraints.original`              (old top-level path)
+  - `constraints.ai`                    (old top-level path)
+  - `constraints.archived_equalspacing_original` (old top-level path)
 
-Tests are exempt — `tests/test_constraints_equivalence.py` and the
-per-cluster parity tests in `tests/atoms/` legitimately import the legacy
+The legacy classes live under `constraints/archived/`. New constraint
+work goes through the registry / atoms / `constraints.stages` dispatcher.
+
+Tests and the `constraints/archived/` package itself are exempt —
+parity tests in `tests/atoms/*_parity.py` and
+`tests/test_constraints_equivalence.py` legitimately import the legacy
 classes for parity comparisons.
-
-NOTE on scope: the spec also forbids prod imports of `constraints.original`,
-`constraints.ai`, and `constraints.archived_equalspacing_original`. Those
-top-level modules still exist as part of the partial Phase 7c migration —
-see `docs/ATOMIZATION_HANDOFF.md` for the follow-up move-and-shim plan.
-This test enforces the new lockdown around `constraints/archived/` so any
-new code that lands gravitates to the registry-driven path.
 """
 from __future__ import annotations
 
@@ -29,12 +27,12 @@ REPO = Path(__file__).resolve().parents[1]
 ALLOWED = (REPO / 'constraints' / 'archived', REPO / 'tests')
 SKIP_DIR_NAMES = {'.venv', 'venv', '__pycache__', 'site-packages', '.git'}
 
-# Match `from constraints.archived.<anything> import ...` and
-# `import constraints.archived.<anything>`. The bare
-# `from constraints.archived import` is also caught.
+# Match every forbidden import shape — both the old top-level paths
+# (constraints.original / constraints.ai / constraints.archived_equalspacing_original)
+# and the new constraints.archived.* path.
 PATTERN = re.compile(
-    r'^\s*from\s+constraints\.archived(\.\w+)?\s+import\b|'
-    r'^\s*import\s+constraints\.archived(\.\w+)?\b',
+    r'^\s*from\s+constraints\.(archived(\.\w+)?|original|ai|archived_equalspacing_original)\b\s+import\b|'
+    r'^\s*import\s+constraints\.(archived(\.\w+)?|original|ai|archived_equalspacing_original)\b',
     re.MULTILINE,
 )
 

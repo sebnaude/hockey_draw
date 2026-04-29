@@ -16,9 +16,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import load_season_data
 from utils import generate_X
-from constraints.ai import EqualMatchUpSpacingConstraintAI
-from constraints.original import EqualMatchUpSpacingConstraint
-from constraints.ai import (
+from constraints.archived.ai import EqualMatchUpSpacingConstraintAI
+from constraints.archived.original import EqualMatchUpSpacingConstraint
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
 
-# Import both original and AI versions
-from constraints import (
+# Import both original and AI versions (Phase 7c-archived)
+from constraints.archived.original import (
     NoDoubleBookingTeamsConstraint,
     NoDoubleBookingFieldsConstraint,
     EnsureEqualGamesAndBalanceMatchUps,
@@ -29,7 +29,7 @@ from constraints import (
     MinimiseClubsOnAFieldBroadmeadow,
 )
 
-from constraints.ai import (
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

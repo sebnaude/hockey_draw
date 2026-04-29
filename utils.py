@@ -27,6 +27,60 @@ def get_club_object(team_name: str, teams: List[Team]) -> Club:
 def get_teams_from_club(club_name: str, teams: List[Team]) -> List[str]:
     return [team.name for team in teams if team.club.name == club_name]
 
+
+def normalize_preference_no_play(noplay: dict, teams: list, clubs: list) -> list:
+    """Normalize PREFERENCE_NO_PLAY to a list of (key, club_name, team_names, restriction) tuples.
+
+    Supports:
+      - 2025 legacy format: ``{'ClubName': [{'date': '...', ...}, ...]}``
+      - 2026 structured format: ``{'EntryKey': {'club': 'ClubName',
+        'dates': [datetime, ...], 'grade': '...' | 'grades': [...]}}``
+
+    Used by `constraints/soft.py`, `constraints/unified.py`, and
+    `constraints.archived.ai`'s `PreferredTimesConstraintAI`. Lives here in
+    `utils.py` so all three can pull the helper without crossing the
+    `constraints/archived/` lockdown line.
+    """
+    from datetime import datetime as _dt
+
+    normalized = []
+    club_names_lower = [c.name.lower() for c in clubs]
+
+    for key, value in noplay.items():
+        if isinstance(value, dict) and 'club' in value:
+            club_name = value['club']
+            if club_name.lower() not in club_names_lower:
+                raise ValueError(f"Invalid club '{club_name}' in PREFERENCE_NO_PLAY entry '{key}'")
+            dates = value.get('dates', [])
+            if 'date' in value:
+                dates = [value['date']]
+            club_teams = get_teams_from_club(club_name, teams)
+            if 'grade' in value:
+                grade = value['grade']
+                club_teams = [t for t in club_teams if grade.lower() in t.lower()]
+            elif 'grades' in value:
+                grades = [g.lower() for g in value['grades']]
+                club_teams = [t for t in club_teams if any(g in t.lower() for g in grades)]
+            for date in dates:
+                if isinstance(date, _dt):
+                    date_str = date.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(date)
+                normalized.append((key, club_name, club_teams, {'date': date_str}))
+        elif isinstance(value, list):
+            club_name = key
+            if club_name.lower() not in club_names_lower:
+                raise ValueError(f"Invalid club name '{club_name}' in PREFERENCE_NO_PLAY")
+            club_teams = get_teams_from_club(club_name, teams)
+            for restriction in value:
+                normalized.append((key, club_name, club_teams, restriction))
+        else:
+            raise ValueError(
+                f"Invalid PREFERENCE_NO_PLAY format for key '{key}': expected dict with 'club' key or list"
+            )
+
+    return normalized
+
 def get_club_from_clubname(club: str, clubs: List[Club]) -> Club:
     for c in clubs:
         if c.name == club:

@@ -23,7 +23,7 @@ from constraints.severity import (
     apply_constraints_with_relaxation,
     create_relaxation_test_func,
 )
-from constraints.ai import (
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

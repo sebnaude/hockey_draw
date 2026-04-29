@@ -18,7 +18,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
-from constraints import (
+from constraints.archived.original import (
     NoDoubleBookingTeamsConstraint,
     NoDoubleBookingFieldsConstraint,
     EnsureEqualGamesAndBalanceMatchUps,

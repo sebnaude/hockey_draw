@@ -19,7 +19,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
-from constraints import (
+from constraints.archived.original import (
     PHLAndSecondGradeAdjacency,
     PHLAndSecondGradeTimes,
     MaxMaitlandHomeWeekends,
@@ -545,7 +545,7 @@ class TestMiniSeasonIntegration:
 
     def test_all_core_constraints_with_mini_season(self, mini_season_data):
         """Test that all core constraints work together on mini season."""
-        from constraints import (
+        from constraints.archived.original import (
             NoDoubleBookingTeamsConstraint,
             NoDoubleBookingFieldsConstraint,
             EnsureEqualGamesAndBalanceMatchUps,
@@ -571,11 +571,11 @@ class TestMiniSeasonIntegration:
 
     def test_constraint_counts_games_correctly(self, mini_season_data):
         """Test that constraint system correctly counts scheduled games."""
-        from constraints import NoDoubleBookingTeamsConstraint
-        
+        from constraints.archived.original import NoDoubleBookingTeamsConstraint
+
         games = mini_season_data['games']
         timeslots = mini_season_data['timeslots']
-        
+
         model, X = create_model_and_vars(games, timeslots)
         
         NoDoubleBookingTeamsConstraint().apply(model, X, mini_season_data)

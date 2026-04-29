@@ -1661,7 +1661,7 @@ class PreferredTimesConstraintAI(ConstraintAI):
     PRIORITY = "soft"
 
     def apply(self, model, X, data) -> int:
-        from constraints.original import _normalize_preference_no_play
+        from utils import normalize_preference_no_play as _normalize_preference_no_play
 
         if 'penalties' not in data:
             data['penalties'] = {}

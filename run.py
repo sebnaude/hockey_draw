@@ -89,17 +89,15 @@ Examples:
                             help='Use minimal-memory solver configuration (2 workers, no probing) - very slow but stable')
     gen_parser.add_argument('--high-performance', action='store_true',
                             help='Use high-performance config (all cores, full linearization)')
-    gen_parser.add_argument('--ai', action='store_true',
-                            help='Use AI-enhanced constraint implementations instead of originals')
     gen_parser.add_argument('--unified', action='store_true',
-                            help='Use unified constraint engine (shared helpers, 3-phase solving)')
+                            help='[Deprecated; no-op] retained for back-compat. '
+                                 'Phase 7c: --simple always uses the unified engine.')
     gen_parser.add_argument('--exclude', nargs='+', metavar='CONSTRAINT',
-                            help='Exclude specific constraints from simple mode solve. '
-                                 'Use class names (e.g. EnsureBestTimeslotChoices or EnsureBestTimeslotChoicesAI)')
+                            help='Exclude specific atoms from the solve by canonical name '
+                                 '(e.g. ClubGameSpread, EnsureBestTimeslotChoices).')
     gen_parser.add_argument('--stages', nargs='+', metavar='STAGE',
-                            help='Run only specific stages (e.g., --stages stage1_required). '
-                                 'Default: stage1_required, stage2_soft. '
-                                 'With --staged: severity_1, severity_2, severity_3, severity_4, severity_5')
+                            help='Run only specific SOLVER_STAGES entries by name '
+                                 '(e.g. --stages critical_feasibility soft_optimisation).')
     gen_parser.add_argument('--staged', action='store_true',
                             help='Use severity-based staging instead of default. '
                                  'Runs 5 stages by severity level: '
@@ -174,8 +172,6 @@ Examples:
     
     # List constraints command
     list_parser = subparsers.add_parser('list-constraints', help='List all constraints')
-    list_parser.add_argument('--ai', action='store_true',
-                            help='Show AI-enhanced constraint implementations')
     
     # Preseason report command
     preseason_parser = subparsers.add_parser('preseason', help='Generate pre-season configuration report')
@@ -197,8 +193,6 @@ Examples:
                                  help='Attempt iterative relaxation to find feasible solution')
     diagnose_parser.add_argument('--max-iterations', type=int, default=10,
                                  help='Max relaxation iterations (default: 10)')
-    diagnose_parser.add_argument('--ai', action='store_true',
-                                 help='Use AI constraint implementations')
     
     # Validate command - check draw keys against current timeslot data
     validate_parser = subparsers.add_parser('validate',
@@ -236,7 +230,7 @@ Examples:
     elif args.command == 'import':
         run_import(args)
     elif args.command == 'list-constraints':
-        run_list_constraints(use_ai=args.ai)
+        run_list_constraints()
     elif args.command == 'preseason':
         run_preseason(args)
     elif args.command == 'diagnose':
@@ -472,14 +466,9 @@ def run_generate(args):
     
     use_unified = getattr(args, 'unified', False)
 
-    # Validate incompatible flag combinations
-    if use_unified:
-        if getattr(args, 'staged', False):
-            print("WARNING: --unified and --staged are incompatible. Using --unified.")
-        if args.ai:
-            print("WARNING: --ai is ignored with --unified (unified engine has its own implementation).")
-        if args.exclude:
-            print("WARNING: --exclude is ignored with --unified (unified engine applies all constraints).")
+    # --unified is now a no-op (Phase 7c: --simple always uses the engine).
+    if use_unified and getattr(args, 'staged', False):
+        print("WARNING: --unified and --staged are incompatible. Using --unified.")
 
     exclude = args.exclude or []
     relax_config = None
@@ -500,11 +489,8 @@ def run_generate(args):
     if hint_path:
         provenance['hint_source'] = hint_path
 
-    if use_unified:
-        print("\n[!] EXPERIMENTAL: --unified mode is not fully tested. Use --simple for production.")
-
     # Resolve --stages-config / --stage-only / --skip-stage. Used for
-    # SOLVER_STAGES dispatch in main_staged (non-severity, non-unified path).
+    # SOLVER_STAGES dispatch in main_staged.
     resolved_stages = None
     needs_stage_overrides = bool(
         getattr(args, 'stages_config', None)
@@ -522,13 +508,11 @@ def run_generate(args):
             locked_weeks=locked_weeks,
             solver_config=solver_config,
             exclude_constraints=exclude,
-            use_ai=args.ai,
             year=args.year,
             relax_config=relax_config,
             fix_round_1=fix_round_1,
             constraint_slack=constraint_slack,
             hint_solution=hint_solution,
-            use_unified=use_unified,
             run_id=final_run_id,
             description=user_description,
             provenance=provenance,
@@ -549,7 +533,6 @@ def run_generate(args):
             constraint_slack=constraint_slack,
             severity_staged=severity_staged,
             hint_solution=hint_solution,
-            use_ai=args.ai,
             exclude_constraints=exclude,
             description=user_description,
             provenance=provenance,
@@ -779,29 +762,34 @@ def run_import(args):
         print(f"\n[OK] Draw saved to {output}")
 
 
-def run_list_constraints(use_ai=False):
-    """List all available constraints."""
-    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
+def run_list_constraints():
+    """List all registered atoms / constraints, grouped by SOLVER_STAGES.
+
+    Phase 7c: legacy STAGES / STAGES_AI dicts are gone. Output now reflects
+    the configured `DEFAULT_STAGES` and the canonical-name registry.
+    """
     print("="*60)
-    print(f"AVAILABLE CONSTRAINTS ({mode_label})")
+    print("REGISTERED CONSTRAINTS (SOLVER_STAGES)")
     print("="*60)
-    
-    from main_staged import STAGES, STAGES_AI
-    stages = STAGES_AI if use_ai else STAGES
-    
-    for stage_id, stage_info in stages.items():
-        print(f"\n{stage_info['name']} ({stage_id})")
-        print("-" * 40)
-        print(f"Description: {stage_info['description']}")
-        print(f"Required: {'Yes' if stage_info.get('required') else 'No'}")
-        max_time = stage_info.get('max_time_seconds', 172800)
-        print(f"Time Limit: {max_time // 60} minutes")
-        print("Constraints:")
-        for constraint_cls in stage_info['constraints']:
-            doc = constraint_cls.__doc__ or "No description"
-            doc_line = doc.strip().split('\n')[0]
-            print(f"  - {constraint_cls.__name__}")
-            print(f"    {doc_line}")
+
+    from constraints.stages import load_solver_stages, list_stages
+    from constraints.registry import CONSTRAINT_REGISTRY
+
+    stages = load_solver_stages({})
+    print(list_stages(stages))
+
+    # Show tester-only / unstaged entries separately so users can see what's
+    # in the registry that isn't currently dispatched.
+    staged_atoms = {a for s in stages for a in s.get('atoms', [])}
+    extras = [
+        name for name, info in CONSTRAINT_REGISTRY.items()
+        if name not in staged_atoms and not info.tester_only
+    ]
+    if extras:
+        print("\n--- Registered but not in DEFAULT_STAGES ---")
+        for name in sorted(extras):
+            info = CONSTRAINT_REGISTRY[name]
+            print(f"  - {name}  (severity {info.severity_level})")
 
 
 def load_data_for_year(year: int) -> dict:
@@ -884,86 +872,30 @@ def run_preseason(args):
 
 
 def run_diagnose(args):
-    """
-    Find blocking constraints and resolve infeasibility.
-    
-    This command helps identify which constraint(s) are causing
-    infeasibility and can automatically relax them to find a solution.
+    """Find blocking constraints and resolve infeasibility.
+
+    Phase 7c: this command was previously wired to the legacy STAGES /
+    STAGES_AI dicts. Those dicts are gone; the command is currently
+    deprecated pending a port to the atom + registry path. Use
+    `--list-stages` to inspect the new SOLVER_STAGES configuration, and
+    `run.py generate --year YYYY --stage-only NAME` to test a stage.
     """
     print("="*60)
     print(f"INFEASIBILITY DIAGNOSIS - {args.year} SEASON")
     print("="*60)
-    
-    from main_staged import load_data, STAGES, STAGES_AI
-    from constraints.resolver import (
-        InfeasibilityResolver, 
-        ConstraintSlackRegistry,
+    print(
+        "\n[DEPRECATED] `run.py diagnose` was driven by the pre-atomization "
+        "STAGES / STAGES_AI dicts that Phase 7c removed.\n"
+        "The InfeasibilityResolver still works on constraint classes; the "
+        "diagnose CLI just isn't wired to the registry yet.\n\n"
+        "Workarounds:\n"
+        "  - `run.py generate --year YYYY --list-stages` shows the configured stages.\n"
+        "  - `run.py generate --year YYYY --stage-only critical_feasibility` runs a single stage.\n"
+        "  - `run.py generate --year YYYY --simple --slack N` loosens slack-aware constraints.\n"
+        "Open follow-up: re-port diagnose to atom canonical names (see "
+        "docs/ATOMIZATION_HANDOFF.md)."
     )
-    
-    # Load data
-    print(f"\nLoading {args.year} season data...")
-    data = load_data(args.year)
-    
-    # Get stage configuration
-    stages = STAGES_AI if args.ai else STAGES
-    if args.stage not in stages:
-        print(f"[ERROR] Unknown stage: {args.stage}")
-        print(f"Available stages: {list(stages.keys())}")
-        sys.exit(1)
-    
-    stage_config = stages[args.stage]
-    constraint_classes = stage_config.get('constraints', [])
-    constraint_names = [cls.__name__ for cls in constraint_classes]
-    
-    print(f"\nStage: {args.stage} ({stage_config['name']})")
-    print(f"Constraints to test: {len(constraint_names)}")
-    for name in constraint_names:
-        print(f"  - {name}")
-    
-    # Create resolver
-    registry = ConstraintSlackRegistry()
-    resolver = InfeasibilityResolver(
-        data, 
-        registry, 
-        timeout_per_test=args.timeout,
-        verbose=True
-    )
-    
-    if args.resolve:
-        # Attempt iterative relaxation
-        print(f"\nAttempting iterative resolution (max {args.max_iterations} iterations)...")
-        success, relaxed = resolver.resolve_iteratively(
-            constraint_classes, 
-            max_iterations=args.max_iterations
-        )
-        
-        print("\n" + resolver.get_resolution_report())
-        
-        if success:
-            print("\n[SUCCESS] Found feasible configuration!")
-            print(f"Relaxed constraints: {relaxed}")
-            sys.exit(0)
-        else:
-            print("\n[FAILED] Could not find feasible configuration")
-            sys.exit(1)
-    else:
-        # Just find the blocking constraint(s)
-        print("\nSearching for blocking constraint...")
-        blocking = resolver.find_blocking_constraints(constraint_classes)
-        
-        if blocking:
-            print(f"\n[FOUND] Blocking constraint(s): {blocking}")
-            for name in blocking:
-                state = registry.get_state(name)
-                if state and state.can_relax():
-                    print(f"  {name}: Can be relaxed (Level {state.severity_level})")
-                else:
-                    print(f"  {name}: Level 1 constraint - cannot be relaxed")
-            print(f"\n  Use --resolve to attempt automatic relaxation")
-            sys.exit(1)
-        else:
-            print("\n[OK] All constraints are feasible together!")
-            sys.exit(0)
+    sys.exit(2)
 
 
 def run_validate(args):

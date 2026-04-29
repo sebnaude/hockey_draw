@@ -170,6 +170,42 @@ def validate_solver_stages(stages: List[Dict[str, Any]]) -> List[str]:
     return errors
 
 
+def severity_solver_stages() -> List[Dict[str, Any]]:
+    """Return a SOLVER_STAGES list grouped by severity level (1=critical → 5=very low).
+
+    Built from `CONSTRAINT_REGISTRY` so it stays in sync as atoms come and
+    go. Tester-only entries are skipped, and atomized clusters surface their
+    atoms (not the legacy combined name) so the dispatcher routes through
+    the engine path. The result is suitable to pass to
+    `StagedScheduleSolver.run_solver_stages_solve(stages_override=...)`
+    when the user opts into severity-based staging via `--staged`.
+    """
+    from collections import defaultdict
+    # Names of atom_groups whose atoms cover them (skip the combined name so
+    # the dispatcher uses atoms instead of legacy classes).
+    atomized_groups = {
+        info.atom_group for info in CONSTRAINT_REGISTRY.values()
+        if info.atom_group
+    }
+    by_severity: Dict[int, List[str]] = defaultdict(list)
+    for name, info in CONSTRAINT_REGISTRY.items():
+        if info.tester_only:
+            continue
+        if name in atomized_groups:
+            # Skip the legacy combined name; its atoms appear separately.
+            continue
+        by_severity[info.severity_level].append(name)
+
+    stages: List[Dict[str, Any]] = []
+    for level in sorted(by_severity):
+        stages.append({
+            'name': f'severity_{level}',
+            'description': f'Severity level {level} constraints',
+            'atoms': sorted(by_severity[level]),
+        })
+    return stages
+
+
 def list_stages(stages: List[Dict[str, Any]]) -> str:
     """Return a human-readable string of the configured stages."""
     lines = []

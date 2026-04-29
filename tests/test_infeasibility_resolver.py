@@ -22,7 +22,7 @@ from constraints.resolver import (
     InfeasibilityResolver,
     build_names_map,
 )
-from constraints.ai import (
+from constraints.archived.ai import (
     NoDoubleBookingTeamsConstraintAI,
     NoDoubleBookingFieldsConstraintAI,
     EnsureEqualGamesAndBalanceMatchUpsAI,

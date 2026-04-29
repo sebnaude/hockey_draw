@@ -38,52 +38,11 @@ from solver_diagnostics import (
     setup_logging, ResourceMonitor, SolverConfig, get_recommended_config,
     log_system_info, log_model_info, log_solve_result, PSUTIL_AVAILABLE
 )
-from constraints import (
-    NoDoubleBookingTeamsConstraint,
-    NoDoubleBookingFieldsConstraint,
-    EnsureEqualGamesAndBalanceMatchUps,
-    PHLAndSecondGradeAdjacency,
-    PHLAndSecondGradeTimes,
-    FiftyFiftyHomeandAway,
-    TeamConflictConstraint,
-    ClubGradeAdjacencyConstraint,
-    MaxMaitlandHomeWeekends,
-    EnsureBestTimeslotChoices,
-    ClubDayConstraint,
-    EqualMatchUpSpacingConstraint,
-    ClubVsClubAlignment,
-    MaitlandHomeGrouping,
-    AwayAtMaitlandGrouping,
-    MaximiseClubsPerTimeslotBroadmeadow,
-    MinimiseClubsOnAFieldBroadmeadow,
-    PreferredTimesConstraint,
-    ClubGameSpread,
-)
-from constraints.ai import (
-    NoDoubleBookingTeamsConstraintAI,
-    NoDoubleBookingFieldsConstraintAI,
-    EnsureEqualGamesAndBalanceMatchUpsAI,
-    PHLAndSecondGradeAdjacencyAI,
-    PHLAndSecondGradeTimesAI,
-    FiftyFiftyHomeandAwayAI,
-    TeamConflictConstraintAI,
-    ClubGradeAdjacencyConstraintAI,
-    MaxMaitlandHomeWeekendsAI,
-    EnsureBestTimeslotChoicesAI,
-    ClubDayConstraintAI,
-    EqualMatchUpSpacingConstraintAI,
-    ClubVsClubAlignmentAI,
-    MaitlandHomeGroupingAI,
-    AwayAtMaitlandGroupingAI,
-    MaximiseClubsPerTimeslotBroadmeadowAI,
-    MinimiseClubsOnAFieldBroadmeadowAI,
-    PreferredTimesConstraintAI,
-    ClubGameSpreadAI,
-)
 from constraints.stages import (
     apply_solver_stage,
     load_solver_stages,
     list_stages,
+    severity_solver_stages,
 )
 
 
@@ -232,268 +191,14 @@ class IntermediateSolutionCallback(cp_model.CpSolverSolutionCallback):
 
 
 # ============== Stage Definitions ==============
+#
+# Phase 7c: legacy STAGES / STAGES_AI / STAGES_UNIFIED / STAGES_SEVERITY[_AI]
+# dicts have been removed. Stage configuration now flows through
+# `config/defaults.py::DEFAULT_STAGES` (or per-season overrides) and the
+# `constraints/stages.py::apply_solver_stage` dispatcher. Severity-staged
+# solving uses `severity_solver_stages()` to build the per-level stage list
+# from the registry.
 
-STAGES = {
-    'stage1_required': {
-        'name': 'Required Constraints',
-        'description': 'Core scheduling rules that must be satisfied',
-        'constraints': [
-            # Core double-booking prevention
-            NoDoubleBookingTeamsConstraint,
-            NoDoubleBookingFieldsConstraint,
-            # Game balance
-            EnsureEqualGamesAndBalanceMatchUps,
-            # Grade adjacency and timing
-            PHLAndSecondGradeAdjacency,
-            PHLAndSecondGradeTimes,
-            # Home/Away balance
-            FiftyFiftyHomeandAway,
-            # Team conflicts
-            TeamConflictConstraint,
-            # Venue constraints
-            MaxMaitlandHomeWeekends,
-            # Club day events
-            ClubDayConstraint,
-            # Spacing
-            EqualMatchUpSpacingConstraint,
-            # Grade adjacency for clubs
-            ClubGradeAdjacencyConstraint,
-            # Club alignment
-            ClubVsClubAlignment,
-            # Maitland grouping (has hard element: no back-to-back)
-            MaitlandHomeGrouping,
-            # Away at Maitland (hard limit of 3 away clubs)
-            AwayAtMaitlandGrouping,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'stage2_soft': {
-        'name': 'Soft Preferences and Timeslot Optimization',
-        'description': 'Quality optimizations with penalties',
-        'constraints': [
-            # Timeslot optimization
-            EnsureBestTimeslotChoices,
-            # Club diversity at Broadmeadow
-            MaximiseClubsPerTimeslotBroadmeadow,
-            # Field continuity at Broadmeadow
-            MinimiseClubsOnAFieldBroadmeadow,
-            # Preferred times / no-play constraints
-            PreferredTimesConstraint,
-            # Club game closeness
-            ClubGameSpread,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-}
-
-# AI-enhanced constraint stages (mirrors STAGES but uses AI implementations)
-STAGES_AI = {
-    'stage1_required': {
-        'name': 'Required Constraints (AI)',
-        'description': 'Core scheduling rules - AI implementations',
-        'constraints': [
-            # Core double-booking prevention
-            NoDoubleBookingTeamsConstraintAI,
-            NoDoubleBookingFieldsConstraintAI,
-            # Game balance
-            EnsureEqualGamesAndBalanceMatchUpsAI,
-            # Grade adjacency and timing
-            PHLAndSecondGradeAdjacencyAI,
-            PHLAndSecondGradeTimesAI,
-            # Home/Away balance
-            FiftyFiftyHomeandAwayAI,
-            # Team conflicts
-            TeamConflictConstraintAI,
-            # Venue constraints
-            MaxMaitlandHomeWeekendsAI,
-            # Club day events
-            ClubDayConstraintAI,
-            # Spacing
-            EqualMatchUpSpacingConstraintAI,
-            # Grade adjacency for clubs
-            ClubGradeAdjacencyConstraintAI,
-            # Club alignment
-            ClubVsClubAlignmentAI,
-            # Maitland grouping (has hard element: no back-to-back)
-            MaitlandHomeGroupingAI,
-            # Away at Maitland (hard limit of 3 away clubs)
-            AwayAtMaitlandGroupingAI,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'stage2_soft': {
-        'name': 'Soft Preferences and Timeslot Optimization (AI)',
-        'description': 'Quality optimizations - AI implementations',
-        'constraints': [
-            # Timeslot optimization
-            EnsureBestTimeslotChoicesAI,
-            # Club diversity at Broadmeadow
-            MaximiseClubsPerTimeslotBroadmeadowAI,
-            # Field continuity at Broadmeadow
-            MinimiseClubsOnAFieldBroadmeadowAI,
-            # Preferred times / no-play constraints
-            PreferredTimesConstraintAI,
-            # Club game closeness
-            ClubGameSpreadAI,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-}
-
-# Unified constraint engine stages (3-phase: hard → soft → intra-day)
-STAGES_UNIFIED = {
-    'phase_a_hard': {
-        'name': 'Hard Inter-week Constraints (Unified)',
-        'description': 'Feasibility: scheduling decisions, no penalties',
-        'phase': 'a',
-        'required': True,
-        'use_callback': True,
-    },
-    'phase_b_soft': {
-        'name': 'Soft Inter-week Penalties (Unified)',
-        'description': 'Quality: inter-week penalties on top of Phase A',
-        'phase': 'b',
-        'required': True,
-        'use_callback': True,
-    },
-    'phase_c_intraday': {
-        'name': 'Intra-day Optimization (Unified)',
-        'description': 'Field/slot assignment within each day',
-        'phase': 'c',
-        'required': False,
-        'use_callback': True,
-    },
-}
-
-# Severity-based stages: group constraints by severity level (1-5)
-# These allow progressive solving from CRITICAL → VERY LOW priority constraints.
-STAGES_SEVERITY = {
-    'severity_1': {
-        'name': 'Critical Constraints',
-        'description': 'Double-booking, equal games, home/away balance, PHL adjacency, matchup spacing',
-        'constraints': [
-            NoDoubleBookingTeamsConstraint,
-            NoDoubleBookingFieldsConstraint,
-            EnsureEqualGamesAndBalanceMatchUps,
-            EqualMatchUpSpacingConstraint,
-            FiftyFiftyHomeandAway,
-            MaitlandHomeGrouping,
-            MaxMaitlandHomeWeekends,
-            PHLAndSecondGradeAdjacency,
-            PHLAndSecondGradeTimes,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_2': {
-        'name': 'High Priority Constraints',
-        'description': 'Club days, team conflicts, Maitland away grouping',
-        'constraints': [
-            AwayAtMaitlandGrouping,
-            ClubDayConstraint,
-            TeamConflictConstraint,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_3': {
-        'name': 'Medium Priority Constraints',
-        'description': 'Grade adjacency, club vs club alignment, club game spread',
-        'constraints': [
-            ClubGradeAdjacencyConstraint,
-            ClubVsClubAlignment,
-            ClubGameSpread,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_4': {
-        'name': 'Low Priority Constraints',
-        'description': 'Club density at Broadmeadow',
-        'constraints': [
-            MaximiseClubsPerTimeslotBroadmeadow,
-            MinimiseClubsOnAFieldBroadmeadow,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-    'severity_5': {
-        'name': 'Very Low Priority Constraints',
-        'description': 'Timeslot choices, preferred times',
-        'constraints': [
-            EnsureBestTimeslotChoices,
-            PreferredTimesConstraint,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-}
-
-STAGES_SEVERITY_AI = {
-    'severity_1': {
-        'name': 'Critical Constraints (AI)',
-        'description': 'Double-booking, equal games, home/away balance, PHL adjacency, matchup spacing - AI',
-        'constraints': [
-            NoDoubleBookingTeamsConstraintAI,
-            NoDoubleBookingFieldsConstraintAI,
-            EnsureEqualGamesAndBalanceMatchUpsAI,
-            EqualMatchUpSpacingConstraintAI,
-            FiftyFiftyHomeandAwayAI,
-            MaitlandHomeGroupingAI,
-            MaxMaitlandHomeWeekendsAI,
-            PHLAndSecondGradeAdjacencyAI,
-            PHLAndSecondGradeTimesAI,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_2': {
-        'name': 'High Priority Constraints (AI)',
-        'description': 'Club days, team conflicts, Maitland away grouping - AI',
-        'constraints': [
-            AwayAtMaitlandGroupingAI,
-            ClubDayConstraintAI,
-            TeamConflictConstraintAI,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_3': {
-        'name': 'Medium Priority Constraints (AI)',
-        'description': 'Grade adjacency, club vs club alignment, club game spread - AI',
-        'constraints': [
-            ClubGradeAdjacencyConstraintAI,
-            ClubVsClubAlignmentAI,
-            ClubGameSpreadAI,
-        ],
-        'required': True,
-        'use_callback': True,
-    },
-    'severity_4': {
-        'name': 'Low Priority Constraints (AI)',
-        'description': 'Club density at Broadmeadow - AI',
-        'constraints': [
-            MaximiseClubsPerTimeslotBroadmeadowAI,
-            MinimiseClubsOnAFieldBroadmeadowAI,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-    'severity_5': {
-        'name': 'Very Low Priority Constraints (AI)',
-        'description': 'Timeslot choices, preferred times - AI',
-        'constraints': [
-            EnsureBestTimeslotChoicesAI,
-            PreferredTimesConstraintAI,
-        ],
-        'required': False,
-        'use_callback': True,
-    },
-}
 
 # ============== Checkpoint Management ==============
 
@@ -572,7 +277,6 @@ class CheckpointManager:
             'description': data.get('_user_description', ''),
             'year': data.get('year'),
             'mode': data.get('_solver_mode', 'unknown'),
-            'use_ai': data.get('_use_ai', False),
 
             # Inputs
             'locked_weeks': sorted(data.get('locked_weeks', set())),
@@ -660,7 +364,6 @@ class CheckpointManager:
             'year': data.get('year'),
             'description': data.get('_user_description', ''),
             'mode': data.get('_solver_mode', 'unknown'),
-            'use_ai': data.get('_use_ai', False),
             'locked_weeks': sorted(data.get('locked_weeks', set())),
             'excluded_constraints': data.get('_excluded_constraints', []),
             'constraint_slack': _serialize_config(data.get('constraint_slack', {})),
@@ -732,9 +435,15 @@ class CheckpointManager:
             'metadata': metadata,
         }
     
-    def get_last_completed_stage(self, run_dir: Path) -> str:
-        """Find the last successfully completed stage."""
-        for stage_name in reversed(list(STAGES.keys())):
+    def get_last_completed_stage(self, run_dir: Path, stage_names: list = None) -> str:
+        """Find the last successfully completed stage.
+
+        Phase 7c: takes the candidate stage names as an argument (callers
+        usually pass `[s['name'] for s in data['solver_stages']]`).
+        """
+        if stage_names is None:
+            return None
+        for stage_name in reversed(list(stage_names)):
             stage_dir = run_dir / stage_name
             if (stage_dir / 'solution.pkl').exists():
                 with open(stage_dir / 'metadata.json', 'r') as f:
@@ -1123,176 +832,42 @@ class StagedScheduleSolver:
 
     def run_staged_solve(self, run_id: str = None, resume_from: str = None,
                          stages_to_run: list = None, severity_staged: bool = False,
-                         use_ai: bool = False, exclude_constraints: list = None) -> dict:
+                         exclude_constraints: list = None) -> dict:
+        """Run the staged solving process.
+
+        Phase 7c: this method is now a thin shim over
+        :meth:`run_solver_stages_solve`. The legacy ``STAGES`` /
+        ``STAGES_AI`` dicts are gone; severity-staged solves build their
+        stage list from the registry via
+        :func:`constraints.stages.severity_solver_stages`. Other modes go
+        through :data:`config.defaults.DEFAULT_STAGES` (or per-season
+        ``solver_stages`` overrides).
+
+        ``exclude_constraints`` becomes a name-based filter on the
+        resolved stages' atom lists.
         """
-        Run the staged solving process.
-
-        Args:
-            run_id: Identifier for this run (for checkpointing)
-            resume_from: Stage name to resume from
-            stages_to_run: List of stage names to run (default: all)
-            severity_staged: If True, use severity-based staging.
-            use_ai: If True, use AI-enhanced constraint implementations.
-            exclude_constraints: Optional list of constraint class names to exclude.
-
-        Returns:
-            Final solution dictionary
-        """
-        run_dir = self.checkpoint_manager.get_run_dir(run_id)
-        self.logger.info(f"Run directory: {run_dir}")
-        print(f"Run directory: {run_dir}")
-
-        # Save run-level metadata at start (before solving)
-        self.checkpoint_manager.save_run_metadata(run_dir, self.data, self.solver_config)
-
-        # Select stage dictionary based on mode and AI flag
         if severity_staged:
-            active_stages = STAGES_SEVERITY_AI if use_ai else STAGES_SEVERITY
-            mode_label = f"SEVERITY-BASED stages ({'AI' if use_ai else 'original'})"
+            stages = severity_solver_stages()
         else:
-            active_stages = STAGES_AI if use_ai else STAGES
-            mode_label = f"DEFAULT stages ({'AI' if use_ai else 'original'})"
+            stages = self.data.get('solver_stages') or load_solver_stages({})
+        if stages_to_run:
+            wanted = set(stages_to_run)
+            stages = [s for s in stages if s['name'] in wanted]
 
-        # Build exclusion set (normalize AI/non-AI suffixes)
+        # Drop excluded atoms from every stage. Stages that end up empty
+        # are removed.
         exclude_set = set(exclude_constraints or [])
-        normalized_exclude = set()
-        for name in exclude_set:
-            normalized_exclude.add(name)
-            if name.endswith('AI'):
-                normalized_exclude.add(name[:-2])
-            else:
-                normalized_exclude.add(name + 'AI')
-
-        # Filter excluded constraints from each stage
-        if normalized_exclude:
-            filtered_stages = {}
-            for stage_id, stage_config in active_stages.items():
-                filtered_config = dict(stage_config)
-                filtered_config['constraints'] = [
-                    cls for cls in stage_config['constraints']
-                    if cls.__name__ not in normalized_exclude
-                ]
-                filtered_stages[stage_id] = filtered_config
-            active_stages = filtered_stages
+        if exclude_set:
+            filtered = []
+            for s in stages:
+                kept = [a for a in s.get('atoms', []) if a not in exclude_set]
+                if kept:
+                    filtered.append({**s, 'atoms': kept})
+            stages = filtered
             self.logger.info(f"Excluding constraints: {', '.join(exclude_set)}")
             print(f"  Excluding constraints: {', '.join(exclude_set)}")
-        print(f"Mode: {mode_label}")
-        self.logger.info(f"Using {mode_label}")
-        stages_to_run = stages_to_run or list(active_stages.keys())
-        self.logger.info(f"Stages to run: {stages_to_run} (severity_staged={severity_staged})")
-        
-        # Handle resumption
-        if resume_from:
-            self.logger.info(f"Attempting to resume from stage: {resume_from}")
-            last_stage = resume_from
-            loaded = self.checkpoint_manager.load_stage(run_dir, resume_from)
-            if loaded:
-                self.current_solution = loaded['solution']
-                games_in_hint = sum(1 for v in loaded['solution'].values() if v == 1)
-                self.logger.info(f"Loaded checkpoint from {resume_from}: {games_in_hint} games")
-                print(f"Resuming from {resume_from} (loaded {games_in_hint} games as hint)")
-                
-                # Skip stages before resume point
-                skip_idx = stages_to_run.index(resume_from) + 1
-                stages_to_run = stages_to_run[skip_idx:]
-                print(f"Will run remaining stages: {stages_to_run}")
-                self.logger.info(f"Remaining stages after resume: {stages_to_run}")
-            else:
-                self.logger.warning(f"Stage {resume_from} not found or checkpoint not loadable")
-                self.logger.warning(f"Could not load checkpoint for {resume_from}")
-        
-        # Process each stage
-        for stage_name in stages_to_run:
-            stage_config = active_stages[stage_name]
-            
-            self.logger.info("=" * 60)
-            self.logger.info(f"STARTING STAGE: {stage_name}")
-            self.logger.info(f"  Name: {stage_config['name']}")
-            self.logger.info(f"  Description: {stage_config['description']}")
-            max_time = stage_config.get('max_time_seconds', self.data.get('max_time_per_stage', 172800))
-            self.logger.info(f"  Max time: {max_time}s ({max_time/3600:.1f}h)")
-            self.logger.info(f"  Required: {stage_config.get('required', False)}")
-            self.logger.info("=" * 60)
-            
-            print(f"\n{'='*60}")
-            print(f"STAGE: {stage_config['name']}")
-            print(f"Description: {stage_config['description']}")
-            print(f"{'='*60}")
-            
-            # Add hints from previous solution
-            if self.current_solution:
-                self.add_solution_hints(self.current_solution)
-            
-            # If relaxation is enabled, check feasibility first and relax if needed
-            if self.relax_config.get('enabled'):
-                problem_level = self.find_and_relax_problem_group(stage_config['constraints'])
-                if problem_level == 1:
-                    # Level 1 infeasibility - cannot proceed
-                    self.logger.error("Level 1 constraints infeasible - aborting")
-                    print("\n[FATAL] Level 1 constraints are infeasible. Check data/config.")
-                    return None
-            
-            # Apply constraints (uses soft versions for relaxed groups)
-            self.logger.info("Applying constraints...")
-            print("Applying constraints:")
-            constraints_added = self.apply_constraints(stage_config['constraints'])
-            constraint_names = [cls.__name__ for cls in stage_config['constraints']]
 
-            # Track cumulative constraints applied for metadata
-            if 'constraints_applied' not in self.data:
-                self.data['constraints_applied'] = []
-            for cls in stage_config['constraints']:
-                self.data['constraints_applied'].append({
-                    'name': cls.__name__,
-                    'stage': stage_name,
-                })
-            self.logger.info(f"  Constraints added this stage: {constraints_added}")
-            self.logger.info(f"  Model total constraints: {len(self.model.Proto().constraints)}")
-            print(f"  Applying {len(stage_config['constraints'])} constraints from stage: {constraint_names}")
-            print(f"  Total: {constraints_added} constraints added")
-            print(f"  Model total: {len(self.model.Proto().constraints)} constraints")
-            
-            # Build objective
-            self.build_objective()
-            
-            # Solve with full exception handling
-            print("Solving...")
-            try:
-                status, solution, solve_time = self.solve_stage(stage_config, run_dir, stage_name)
-            except Exception as e:
-                self.logger.critical(f"CRITICAL ERROR in stage {stage_name}: {e}")
-                self.logger.critical(traceback.format_exc())
-                print(f"CRITICAL ERROR: {e}")
-                raise
-            
-            # Save checkpoint
-            self.logger.info(f"Saving checkpoint for {stage_name}...")
-            self.checkpoint_manager.save_stage(
-                run_dir, stage_name, solution, self.data, status, solve_time
-            )
-            self.logger.info(f"Checkpoint saved successfully")
-            
-            # Handle result
-            if status in ['OPTIMAL', 'FEASIBLE']:
-                self.current_solution = solution
-                self.logger.info(f"Stage {stage_name} completed successfully")
-            else:
-                if stage_config.get('required', False):
-                    self.logger.error(f"Required stage {stage_name} failed with status {status}")
-                    print(f"ERROR: Required stage {stage_name} failed with status {status}")
-                    return None
-                else:
-                    print(f"WARNING: Stage {stage_name} did not find solution, using previous")
-
-        # Update run metadata with final status
-        final_status = 'completed' if self.current_solution else 'failed'
-        final_games = sum(1 for v in self.current_solution.values() if v == 1) if self.current_solution else 0
-        self.checkpoint_manager.update_run_status(run_dir, final_status, {
-            'stages_completed': stages_to_run,
-            'num_scheduled_games': final_games,
-        })
-
-        return self.current_solution
+        return self.run_solver_stages_solve(run_id=run_id, stages_override=stages)
 
 
 # ============== Data Loading ==============
@@ -1324,30 +899,28 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 stages_to_run: list = None, relax_config: dict = None,
                 fix_round_1: bool = False, constraint_slack: dict = None,
                 severity_staged: bool = False, hint_solution: dict = None,
-                use_ai: bool = False, exclude_constraints: list = None,
+                exclude_constraints: list = None,
                 description: str = '', provenance: dict = None,
                 solver_stages: list = None):
-    """
-    Main entry point for staged solving.
+    """Main entry point for staged solving (Phase 7c-clean).
 
     Args:
-        run_id: Identifier for this run (auto-generated if None)
-        resume_from: Stage name to resume from
+        run_id: Identifier for this run (auto-generated if None).
+        resume_from: Stage name to resume from.
         locked_keys: Optional set of game keys that are locked (pre-scheduled).
         locked_weeks: Optional set of week numbers that are locked.
         solver_config: Optional solver configuration for resource management.
         year: The season year (e.g., 2025, 2026). Required.
-        stages_to_run: List of stage names to run (default: all). Available: stage1_required, stage2_soft.
-            With severity_staged: severity_1, severity_2, severity_3, severity_4.
+        stages_to_run: Restrict to specific stage names. Default = all stages.
         relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
         fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
         constraint_slack: Optional dict mapping constraint names to slack values.
-        severity_staged: If True, use severity-based staging (5 levels by severity).
+        severity_staged: If True, dispatch via `severity_solver_stages()` instead of DEFAULT_STAGES.
         hint_solution: Optional dict of variable hints from a prior solution.
-        use_ai: If True, use AI-enhanced constraint implementations.
-        exclude_constraints: Optional list of constraint class names to exclude.
+        exclude_constraints: Optional list of canonical atom names to exclude.
         description: User-provided description for metadata.
         provenance: Dict with locked_source, hint_source paths etc.
+        solver_stages: Optional override for the stage list (from `--stages-config` etc.).
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -1356,13 +929,12 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         raise ValueError("Year is required. Use --year YYYY to specify the season.")
     # Set up logging
     logger = setup_logging(run_id=run_id)
-    mode_label = "AI-ENHANCED" if use_ai else "ORIGINAL"
     logger.info("=" * 60)
-    logger.info(f"HOCKEY DRAW SCHEDULER - STAGED SOLVING ({mode_label})")
+    logger.info("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
     logger.info("=" * 60)
 
     print("="*60)
-    print(f"HOCKEY DRAW SCHEDULER - STAGED SOLVING ({mode_label})")
+    print("HOCKEY DRAW SCHEDULER - STAGED SOLVING")
     print("="*60)
     
     # Log system info
@@ -1398,7 +970,6 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
 
     # Store solver provenance for metadata
     data['_solver_mode'] = 'severity' if severity_staged else 'staged'
-    data['_use_ai'] = use_ai
     data['_solver_workers'] = solver_config.num_workers if solver_config else None
     data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
     data['_excluded_constraints'] = list(exclude_constraints or [])
@@ -1498,14 +1069,15 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         logger.info(f"Added {hints_added} solution hints from prior solution")
         print(f"  Added {hints_added} solution hints (solver will use as starting point)")
 
-    # Run staged solve. Default path is SOLVER_STAGES (Phase 7b); the legacy
-    # severity_staged flow keeps using the hardcoded STAGES_SEVERITY map.
+    # Run staged solve. Default path is SOLVER_STAGES (Phase 7b);
+    # severity_staged builds its stage list from the registry via
+    # `severity_solver_stages()`.
     try:
         if severity_staged:
             solution = solver.run_staged_solve(
                 run_id=run_id, resume_from=resume_from,
                 stages_to_run=stages_to_run, severity_staged=True,
-                use_ai=use_ai, exclude_constraints=exclude_constraints,
+                exclude_constraints=exclude_constraints,
             )
         else:
             stages_override = data.get('solver_stages')
@@ -1664,24 +1236,18 @@ def _main_simple_unified(model, X, data, solver_config, resource_monitor,
         return None, data
 
 
-def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude_constraints=None, use_ai=False, year: int = None, relax_config: dict = None, fix_round_1: bool = False, constraint_slack: dict = None, hint_solution: dict = None, use_unified: bool = False, run_id: str = None, description: str = '', provenance: dict = None):
-    """
-    Simple (non-staged) main entry point.
-    Uses all constraints in a single solve.
+def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
+                exclude_constraints=None, year: int = None,
+                relax_config: dict = None, fix_round_1: bool = False,
+                constraint_slack: dict = None, hint_solution: dict = None,
+                use_unified: bool = True, run_id: str = None,
+                description: str = '', provenance: dict = None):
+    """Simple (non-staged) main entry point — single solve via the unified engine.
 
-    Args:
-        locked_keys: Optional set of game keys that are locked (pre-scheduled).
-        locked_weeks: Optional set of week numbers that are locked.
-        solver_config: Optional SolverConfig for solver parameters.
-        exclude_constraints: Optional list of constraint class names to exclude.
-        use_ai: If True, use AI-enhanced constraint implementations.
-        year: The season year (e.g., 2025, 2026). Required.
-        relax_config: Optional dict with 'enabled' and 'timeout' for severity-based relaxation.
-        fix_round_1: If True, apply Round 1 symmetry breaking to reduce search space.
-        constraint_slack: Optional dict mapping constraint names to slack values.
-        hint_solution: Optional dict of variable hints from a prior solution.
-        use_unified: If True, use unified constraint engine.
-        run_id: Identifier for this run (default: "simple").
+    Phase 7c: the legacy iterate-classes path is gone. ``--simple`` always
+    routes through ``_main_simple_unified`` which uses
+    ``UnifiedConstraintEngine`` (and the registry for non-engine atoms).
+    ``use_unified`` is retained as a no-op flag for CLI back-compat.
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -1690,13 +1256,12 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         raise ValueError("Year is required. Use --year YYYY to specify the season.")
     # Set up logging for single solve mode
     logger = setup_logging(run_id=run_id or "simple")
-    
-    mode_label = "UNIFIED" if use_unified else ("AI-ENHANCED" if use_ai else "ORIGINAL")
+
     logger.info("=" * 60)
-    logger.info(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
+    logger.info("HOCKEY DRAW SCHEDULER - SINGLE SOLVE")
     logger.info("=" * 60)
     print("="*60)
-    print(f"HOCKEY DRAW SCHEDULER - SINGLE SOLVE ({mode_label})")
+    print("HOCKEY DRAW SCHEDULER - SINGLE SOLVE")
     print("="*60)
     
     # Log system info
@@ -1730,8 +1295,7 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         print(f"  Constraint slack overrides: {constraint_slack}")
 
     # Store solver provenance for metadata
-    data['_solver_mode'] = 'unified' if use_unified else 'simple'
-    data['_use_ai'] = use_ai
+    data['_solver_mode'] = 'unified'
     data['_solver_workers'] = solver_config.num_workers if solver_config else None
     data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
     data['_excluded_constraints'] = list(exclude_constraints or [])
@@ -1821,232 +1385,13 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None, exclude
         num_constraints = symmetry_constraint.apply(model, X, data)
         print(f"  Added {num_constraints} symmetry breaking constraints")
 
-    # === UNIFIED ENGINE PATH ===
-    if use_unified:
-        return _main_simple_unified(model, X, data, solver_config, resource_monitor,
-                                     checkpoint_manager, run_dir, logger)
-
-    # Get constraint classes (not instances yet)
-    stages = STAGES_AI if use_ai else STAGES
-    
-    exclude_set = set(exclude_constraints or [])
-    # Normalize exclusion: accept names with or without 'AI' suffix
-    # e.g., '--exclude FooConstraint' also excludes 'FooConstraintAI' and vice versa
-    normalized_exclude = set()
-    for name in exclude_set:
-        normalized_exclude.add(name)
-        if name.endswith('AI'):
-            normalized_exclude.add(name[:-2])  # Strip 'AI'
-        else:
-            normalized_exclude.add(name + 'AI')  # Add 'AI'
-    
-    if exclude_set:
-        print(f"  Excluding constraints: {', '.join(exclude_set)}")
-    
-    all_constraint_classes = [
-        cls for stage in stages.values()
-        for cls in stage['constraints']
-        if cls.__name__ not in normalized_exclude
-    ]
-
-    # Relaxation: find problem severity group if enabled
-    relaxed_groups = {}  # Dict[int, int] mapping severity level -> slack level
-    
-    if relax_config and relax_config.get('enabled'):
-        from constraints.severity import (
-            SeverityGroupResolver,
-            create_relaxation_test_func,
-            get_severity_level
-        )
-        
-        timeout = relax_config.get('timeout', 30.0)
-        
-        print("\n" + "="*60)
-        print("SEVERITY-BASED RELAXATION")
-        print("="*60)
-        
-        resolver = SeverityGroupResolver(all_constraint_classes, verbose=True)
-        test_func = create_relaxation_test_func(data, generate_X, timeout=timeout)
-        
-        problem_level = resolver.find_problem_severity_group(test_func, timeout)
-        
-        if problem_level == 1:
-            print("\n[FATAL] Level 1 constraints are infeasible. Check data/config.")
-            return None, data
-        elif problem_level is not None:
-            print(f"\n[RELAX] Setting slack=1 for severity level {problem_level}")
-            relaxed_groups[problem_level] = 1
-            print(resolver.get_state_summary())
-    
-    # Apply all constraints (using soft versions for relaxed groups)
-    print("\nApplying constraints...")
-
-    # Track constraints for metadata
-    data['constraints_applied'] = _build_constraints_applied(all_constraint_classes)
-
-    for cls in all_constraint_classes:
-        # Check if this constraint's severity group is relaxed
-        if relaxed_groups:
-            from constraints.severity import get_severity_level
-            level = get_severity_level(cls)
-            
-            if level in relaxed_groups:
-                # Use soft version with specified slack
-                slack = relaxed_groups[level]
-                from constraints.soft import get_soft_constraint
-                soft_instance = get_soft_constraint(cls.__name__, slack)
-                
-                if soft_instance:
-                    soft_instance.apply(model, X, data)
-                    print(f"  {cls.__name__} (SOFT slack={slack})")
-                    continue
-        
-        # Use hard constraint
-        constraint = cls()
-        constraint.apply(model, X, data)
-        print(f"  {cls.__name__}")
-    
-    print(f"  Total: {len(model.Proto().constraints)} constraints")
-    
-    # Build objective with normalized penalties
-    penalties_dict = data.get('penalties', {})
-
-    print(f"\nPenalty weight normalization:")
-    for name, info in penalties_dict.items():
-        n = len(info.get('penalties', []))
-        w = info['weight']
-        nw = max(1, w // n) if n > 0 else 0
-        print(f"  {name}: {n} vars, weight {w:,} -> normalized {nw:,}/var")
-
-    penalty_terms = _build_normalized_penalty(penalties_dict)
-    total_penalty = sum(coeff * var for coeff, var in penalty_terms)
-
-    objective_expr = sum(X.values()) - total_penalty
-    _apply_objective_lower_bound(model, objective_expr, data)
-    model.Maximize(objective_expr)
-
-    # Solve
-    print("\nSolving...")
-    solver = cp_model.CpSolver()
-    solver.parameters.log_search_progress = True
-    solver.parameters.max_time_in_seconds = 259200  # 72 hours (matches staged mode)
-    
-    # Apply solver configuration if provided
-    if solver_config:
-        solver_config.apply_to_solver(solver)
-        print(f"  Solver configured: workers={solver_config.num_workers}")
-    
-    # Log model info before solve
-    log_model_info(model, X, logger)
-    
-    # Log pre-solve resource state
-    if resource_monitor:
-        print("\n[*] Pre-solve resource snapshot:")
-        resource_monitor.log_snapshot(prefix="PRE-SOLVE")
-    
-    # Start background resource monitoring during solve
-    if resource_monitor:
-        resource_monitor.start_monitoring(interval=30.0)
-        logger.info("Started resource monitoring (interval: 30.0s)")
-    
-    # Create intermediate solution callback for checkpoint saves
-    stage_name = "simple_solve"
-    callback = IntermediateSolutionCallback(
-        X=X,
-        checkpoint_manager=checkpoint_manager,
-        run_dir=run_dir,
-        stage_name=stage_name,
-        data=data,
-        save_interval=60
-    )
-    logger.info("Using solution callback for intermediate saves...")
-    print("  Using solution callback for intermediate saves...")
-    
-    start_time = datetime.now()
-    
-    try:
-        status = solver.Solve(model, callback)
-    except Exception as e:
-        logger.critical(f"CRITICAL ERROR during solve: {e}")
-        logger.critical(traceback.format_exc())
-        print(f"\nCRITICAL ERROR: {e}")
-        raise
-    finally:
-        # Stop resource monitoring
-        if resource_monitor:
-            snapshots = resource_monitor.stop_monitoring()
-            peak_memory = resource_monitor.get_peak_memory()
-            if peak_memory:
-                logger.info(f"Peak process memory during solve: {peak_memory:.0f}MB")
-                print(f"\n[*] Peak process memory: {peak_memory:.0f}MB")
-    
-    solve_time = (datetime.now() - start_time).total_seconds()
-    logger.info(f"Callback found {callback.solution_count} intermediate solutions")
-    print(f"  Callback found {callback.solution_count} intermediate solutions")
-    
-    # Log post-solve resource state
-    if resource_monitor:
-        print("\n[*] Post-solve resource snapshot:")
-        resource_monitor.log_snapshot(prefix="POST-SOLVE")
-    
-    status_name = solver.status_name(status)
-    print(f"\nStatus: {status_name}")
-    print(f"Solve time: {solve_time:.1f}s")
-    
-    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        solution = {key: solver.Value(var) for key, var in X.items()}
-        objective = solver.ObjectiveValue()
-        games_scheduled = sum(1 for v in solution.values() if v == 1)
-        
-        # Log solve result
-        log_solve_result(status_name, objective, solve_time, games_scheduled, logger)
-        print(f"  Objective: {objective}")
-        print(f"  Games scheduled: {games_scheduled}")
-        
-        # Save final checkpoint
-        logger.info(f"Saving final checkpoint for {stage_name}...")
-        checkpoint_manager.save_stage(
-            run_dir, stage_name, solution, data, status_name, solve_time
-        )
-        logger.info("Final checkpoint saved successfully")
-        
-        # Use unified versioning system
-        print("\n" + "="*60)
-        print("EXPORTING RESULTS")
-        print("="*60)
-        
-        from analytics.versioning import DrawVersionManager
-        
-        version_manager = DrawVersionManager('draws', year=year)
-        
-        excluded_desc = f", excluded: {', '.join(exclude_set)}" if exclude_set else ""
-        auto_desc = f"Season {year} draw - simple mode{excluded_desc}"
-        description = f"{data['_user_description']} | {auto_desc}" if data.get('_user_description') else auto_desc
-        
-        version = version_manager.save_solver_output(
-            solution, data,
-            description=description,
-            mode="simple",
-            is_major=True
-        )
-        
-        logger.info(f"Saved as {version.version_string}")
-        logger.info("Simple solve completed successfully")
-        checkpoint_manager.update_run_status(run_dir, 'completed', {
-            'num_scheduled_games': games_scheduled,
-            'objective': objective,
-            'solve_time': solve_time,
-            'status': status_name,
-        })
-        return solution, data
-    else:
-        logger.warning(f"Simple solve did not find solution: {status_name}")
-        print("No valid solution found.")
-        checkpoint_manager.update_run_status(run_dir, 'failed', {
-            'solve_time': solve_time,
-            'status': status_name,
-        })
-        return None, data
+    # Phase 7c: --simple now always routes through the unified engine.
+    # The legacy single-solve path (which iterated STAGES / STAGES_AI to
+    # apply legacy classes one-by-one) was removed alongside the legacy
+    # files. `--unified` is now redundant but kept as a no-op for
+    # backwards-compatible CLI invocations.
+    return _main_simple_unified(model, X, data, solver_config, resource_monitor,
+                                 checkpoint_manager, run_dir, logger)
 
 
 if __name__ == "__main__":

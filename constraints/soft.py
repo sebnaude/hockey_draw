@@ -34,10 +34,10 @@ from datetime import datetime
 from itertools import combinations
 
 from utils import (
-    get_club, get_duplicated_graded_teams, get_teams_from_club, 
-    get_club_from_clubname, get_nearest_week_by_date
+    get_club, get_duplicated_graded_teams, get_teams_from_club,
+    get_club_from_clubname, get_nearest_week_by_date,
+    normalize_preference_no_play as _normalize_preference_no_play,
 )
-from constraints.original import _normalize_preference_no_play
 
 
 # ============== Base Classes ==============

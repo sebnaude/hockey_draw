@@ -27,8 +27,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
-from constraints.ai import EnsureBestTimeslotChoicesAI
-from constraints.original import EnsureBestTimeslotChoices
+from constraints.archived.ai import EnsureBestTimeslotChoicesAI
+from constraints.archived.original import EnsureBestTimeslotChoices
 
 BROADMEADOW = 'Newcastle International Hockey Centre'
 MAITLAND = 'Maitland Park'
@@ -617,7 +617,7 @@ class TestSolutionInspection:
         model, X = create_model_and_vars(games, timeslots)
 
         # Need at least NoDoubleBooking to get a realistic solution
-        from constraints.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
+        from constraints.archived.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
         NoDoubleBookingTeamsConstraintAI().apply(model, X, data)
         NoDoubleBookingFieldsConstraintAI().apply(model, X, data)
         constraint_cls().apply(model, X, data)
@@ -668,7 +668,7 @@ class TestSolutionInspection:
 
         model, X = create_model_and_vars(games, timeslots)
 
-        from constraints.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
+        from constraints.archived.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
         NoDoubleBookingTeamsConstraintAI().apply(model, X, data)
         NoDoubleBookingFieldsConstraintAI().apply(model, X, data)
         constraint_cls().apply(model, X, data)
@@ -715,7 +715,7 @@ class TestSolutionInspection:
 
         model, X = create_model_and_vars(games, timeslots)
 
-        from constraints.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
+        from constraints.archived.ai import NoDoubleBookingTeamsConstraintAI, NoDoubleBookingFieldsConstraintAI
         NoDoubleBookingTeamsConstraintAI().apply(model, X, data)
         NoDoubleBookingFieldsConstraintAI().apply(model, X, data)
         constraint_cls().apply(model, X, data)

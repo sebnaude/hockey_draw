@@ -362,32 +362,19 @@ class TestLoadLockedKeys:
 class TestRunListConstraintsExtended:
     """Extended tests for run_list_constraints."""
 
-    def test_original_lists_constraint_classes(self, capsys):
-        """Original mode should list actual constraint class names."""
-        run.run_list_constraints(use_ai=False)
+    def test_lists_constraint_atom_names(self, capsys):
+        """Phase 7c: list-constraints prints SOLVER_STAGES atoms."""
+        run.run_list_constraints()
         output = capsys.readouterr().out
-        # Should contain at least some known constraint names
-        assert "NoDoubleBooking" in output or "EqualGames" in output or "Constraint" in output
-
-    def test_ai_lists_different_constraints(self, capsys):
-        """AI mode should list AI constraint class names."""
-        run.run_list_constraints(use_ai=True)
-        output = capsys.readouterr().out
-        assert "AI-ENHANCED" in output
+        assert "REGISTERED CONSTRAINTS" in output
+        assert "NoDoubleBooking" in output
 
     def test_lists_stage_names(self, capsys):
-        """Should list stage names and descriptions."""
-        run.run_list_constraints(use_ai=False)
+        """Phase 7c: stage names from DEFAULT_STAGES appear in output."""
+        run.run_list_constraints()
         output = capsys.readouterr().out
-        assert "Description:" in output
-        assert "Required:" in output
-
-    def test_lists_time_limits(self, capsys):
-        """Should show time limit for each stage."""
-        run.run_list_constraints(use_ai=False)
-        output = capsys.readouterr().out
-        assert "Time Limit:" in output
-        assert "minutes" in output
+        assert "critical_feasibility" in output
+        assert "soft_optimisation" in output
 
 
 # ============== CLI Argument Parsing Tests ==============
@@ -405,7 +392,6 @@ class TestCLIArgumentParsing:
         gen_parser = subparsers.add_parser('generate')
         gen_parser.add_argument('--year', type=int, required=True)
         gen_parser.add_argument('--simple', action='store_true')
-        gen_parser.add_argument('--ai', action='store_true')
         gen_parser.add_argument('--unified', action='store_true')
         gen_parser.add_argument('--low-memory', action='store_true')
         gen_parser.add_argument('--minimal-memory', action='store_true')
@@ -463,9 +449,8 @@ class TestCLIArgumentParsing:
         import_parser.add_argument('--output', '-o', type=str)
         import_parser.add_argument('--year', type=int, required=True)
 
-        # List constraints
-        list_parser = subparsers.add_parser('list-constraints')
-        list_parser.add_argument('--ai', action='store_true')
+        # List constraints (no --ai after Phase 7c)
+        subparsers.add_parser('list-constraints')
 
         # Preseason
         preseason_parser = subparsers.add_parser('preseason')
@@ -479,7 +464,6 @@ class TestCLIArgumentParsing:
         diagnose_parser.add_argument('--timeout', type=float, default=5.0)
         diagnose_parser.add_argument('--resolve', action='store_true')
         diagnose_parser.add_argument('--max-iterations', type=int, default=10)
-        diagnose_parser.add_argument('--ai', action='store_true')
 
         # Migrate
         migrate_parser = subparsers.add_parser('migrate')
@@ -517,9 +501,10 @@ class TestCLIArgumentParsing:
         args = self._parse_args(['generate', '--year', '2026', '--workers', '8'])
         assert args.workers == 8
 
-    def test_generate_ai_flag(self):
-        args = self._parse_args(['generate', '--year', '2026', '--ai'])
-        assert args.ai is True
+    def test_generate_no_ai_flag(self):
+        """Phase 7c: --ai removed from generate."""
+        with pytest.raises(SystemExit):
+            self._parse_args(['generate', '--year', '2026', '--ai'])
 
     def test_generate_staged_flag(self):
         args = self._parse_args(['generate', '--year', '2026', '--staged'])
@@ -633,11 +618,11 @@ class TestCLIArgumentParsing:
     def test_list_constraints_command(self):
         args = self._parse_args(['list-constraints'])
         assert args.command == 'list-constraints'
-        assert args.ai is False
 
-    def test_list_constraints_ai(self):
-        args = self._parse_args(['list-constraints', '--ai'])
-        assert args.ai is True
+    def test_list_constraints_no_ai(self):
+        """Phase 7c: --ai removed from list-constraints."""
+        with pytest.raises(SystemExit):
+            self._parse_args(['list-constraints', '--ai'])
 
     def test_preseason_command(self):
         args = self._parse_args(['preseason', '--year', '2026'])
@@ -655,7 +640,6 @@ class TestCLIArgumentParsing:
         assert args.timeout == 5.0
         assert args.resolve is False
         assert args.max_iterations == 10
-        assert args.ai is False
 
     def test_diagnose_resolve(self):
         args = self._parse_args([
@@ -666,9 +650,10 @@ class TestCLIArgumentParsing:
         assert args.max_iterations == 20
         assert args.timeout == 15.0
 
-    def test_diagnose_ai(self):
-        args = self._parse_args(['diagnose', '--year', '2026', '--ai'])
-        assert args.ai is True
+    def test_diagnose_no_ai(self):
+        """Phase 7c: --ai removed from diagnose."""
+        with pytest.raises(SystemExit):
+            self._parse_args(['diagnose', '--year', '2026', '--ai'])
 
     def test_diagnose_stage(self):
         args = self._parse_args(['diagnose', '--year', '2026', '--stage', 'stage2_soft'])
@@ -857,16 +842,14 @@ class TestMainNoCommand:
             sys.argv = old_argv
 
         output = capsys.readouterr().out
-        assert 'AVAILABLE CONSTRAINTS' in output
+        assert 'REGISTERED CONSTRAINTS' in output
 
-    def test_list_constraints_ai_via_main(self, capsys):
-        """list-constraints --ai via main() should work."""
+    def test_list_constraints_ai_via_main_rejected(self):
+        """Phase 7c: --ai removed; list-constraints --ai exits non-zero."""
         old_argv = sys.argv
         try:
             sys.argv = ['run.py', 'list-constraints', '--ai']
-            run.main()
+            with pytest.raises(SystemExit):
+                run.main()
         finally:
             sys.argv = old_argv
-
-        output = capsys.readouterr().out
-        assert 'AI-ENHANCED' in output

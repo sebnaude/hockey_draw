@@ -1,85 +1,24 @@
 # constraints/__init__.py
+"""Constraint package — atom-driven (Phase 7c).
+
+Public surface:
+- `constraints.atoms` — atomized constraint implementations.
+- `constraints.registry` — `CONSTRAINT_REGISTRY` + canonical-name lookup.
+- `constraints.helper_vars` — `HelperVarRegistry` / `SharedVariablePool`.
+- `constraints.unified` — `UnifiedConstraintEngine`.
+- `constraints.stages` — SOLVER_STAGES dispatch + validation.
+- `constraints.severity`, `constraints.soft`, `constraints.resolver`,
+  `constraints.symmetry` — supporting subsystems.
+
+The pre-atomization combined-constraint classes used to be re-exported
+here from `constraints.original` / `constraints.ai`. Phase 7c moved both
+modules into `constraints/archived/` and removed the re-export. New code
+must go through atoms + registry. Tests that need the legacy classes
+import from `constraints.archived.original` / `constraints.archived.ai`
+directly — those paths are exempt from the lockdown test.
 """
-Constraint classes for the Hockey Draw Scheduler.
 
-This package provides backward-compatible imports for all constraint-related code.
-Files were reorganized from root into this package for cleaner structure.
-
-Modules:
-- original: Original constraint implementations (from constraints.py)
-- ai: AI-enhanced constraint implementations (from constraints_ai.py)  
-- soft: Soft/relaxable constraint versions (from constraints_soft.py)
-- severity: Severity levels and relaxation (from severity_relaxation.py)
-- resolver: Infeasibility resolution (from infeasibility_resolver.py)
-"""
-
-# Original constraints (backward compatible with: from constraints import ...)
-from constraints.original import (
-    Constraint,
-    NoDoubleBookingTeamsConstraint,
-    NoDoubleBookingFieldsConstraint,
-    EnsureEqualGamesAndBalanceMatchUps,
-    PHLAndSecondGradeAdjacency,
-    PHLAndSecondGradeTimes,
-    FiftyFiftyHomeandAway,
-    TeamConflictConstraint,
-    MaxMaitlandHomeWeekends,
-    EnsureBestTimeslotChoices,
-    ClubDayConstraint,
-    EqualMatchUpSpacingConstraint,
-    ClubGradeAdjacencyConstraint,
-    ClubVsClubAlignment,
-    MaitlandHomeGrouping,
-    AwayAtMaitlandGrouping,
-    MaximiseClubsPerTimeslotBroadmeadow,
-    MinimiseClubsOnAFieldBroadmeadow,
-    PreferredTimesConstraint,
-    ClubGameSpread,
-)
-
-# AI constraints (backward compatible with: from constraints_ai import ...)
-from constraints.ai import (
-    ConstraintAI,
-    PenaltyConfig,
-    NoDoubleBookingTeamsConstraintAI,
-    NoDoubleBookingFieldsConstraintAI,
-    EnsureEqualGamesAndBalanceMatchUpsAI,
-    PHLAndSecondGradeAdjacencyAI,
-    PHLAndSecondGradeTimesAI,
-    FiftyFiftyHomeandAwayAI,
-    TeamConflictConstraintAI,
-    MaxMaitlandHomeWeekendsAI,
-    EnsureBestTimeslotChoicesAI,
-    ClubDayConstraintAI,
-    EqualMatchUpSpacingConstraintAI,
-    ClubGradeAdjacencyConstraintAI,
-    ClubVsClubAlignmentAI,
-    MaitlandHomeGroupingAI,
-    AwayAtMaitlandGroupingAI,
-    MaximiseClubsPerTimeslotBroadmeadowAI,
-    MinimiseClubsOnAFieldBroadmeadowAI,
-    PreferredTimesConstraintAI,
-    ClubGameSpreadAI,
-)
-
-# Soft constraints
-from constraints.soft import (
-    SoftConstraint,
-    ClubDayConstraintSoft,
-    AwayAtMaitlandGroupingSoft,
-    TeamConflictConstraintSoft,
-    EqualMatchUpSpacingConstraintSoft,
-    ClubGradeAdjacencyConstraintSoft,
-    ClubVsClubAlignmentSoft,
-    EnsureBestTimeslotChoicesSoft,
-    MaximiseClubsPerTimeslotBroadmeadowSoft,
-    MinimiseClubsOnAFieldBroadmeadowSoft,
-    PreferredTimesConstraintSoft,
-    get_soft_constraint,
-    get_soft_stage_constraints,
-)
-
-# Severity/relaxation
+# Severity / relaxation (no legacy-class deps; safe to keep).
 from constraints.severity import (
     get_severity_level,
     group_constraints_by_severity,
@@ -89,7 +28,7 @@ from constraints.severity import (
     apply_constraints_with_relaxation,
 )
 
-# Infeasibility resolver
+# Infeasibility resolver (no legacy-class deps; safe to keep).
 from constraints.resolver import (
     ConstraintState,
     ConstraintSlackRegistry,
@@ -102,62 +41,6 @@ from constraints.resolver import (
 )
 
 __all__ = [
-    # Original
-    'Constraint',
-    'NoDoubleBookingTeamsConstraint',
-    'NoDoubleBookingFieldsConstraint',
-    'EnsureEqualGamesAndBalanceMatchUps',
-    'PHLAndSecondGradeAdjacency',
-    'PHLAndSecondGradeTimes',
-    'FiftyFiftyHomeandAway',
-    'TeamConflictConstraint',
-    'MaxMaitlandHomeWeekends',
-    'EnsureBestTimeslotChoices',
-    'ClubDayConstraint',
-    'EqualMatchUpSpacingConstraint',
-    'ClubGradeAdjacencyConstraint',
-    'ClubVsClubAlignment',
-    'MaitlandHomeGrouping',
-    'AwayAtMaitlandGrouping',
-    'MaximiseClubsPerTimeslotBroadmeadow',
-    'MinimiseClubsOnAFieldBroadmeadow',
-    'PreferredTimesConstraint',
-    'ClubGameSpread',
-    # AI
-    'ConstraintAI',
-    'PenaltyConfig',
-    'NoDoubleBookingTeamsConstraintAI',
-    'NoDoubleBookingFieldsConstraintAI',
-    'EnsureEqualGamesAndBalanceMatchUpsAI',
-    'PHLAndSecondGradeAdjacencyAI',
-    'PHLAndSecondGradeTimesAI',
-    'FiftyFiftyHomeandAwayAI',
-    'TeamConflictConstraintAI',
-    'MaxMaitlandHomeWeekendsAI',
-    'EnsureBestTimeslotChoicesAI',
-    'ClubDayConstraintAI',
-    'EqualMatchUpSpacingConstraintAI',
-    'ClubGradeAdjacencyConstraintAI',
-    'ClubVsClubAlignmentAI',
-    'MaitlandHomeGroupingAI',
-    'AwayAtMaitlandGroupingAI',
-    'MaximiseClubsPerTimeslotBroadmeadowAI',
-    'MinimiseClubsOnAFieldBroadmeadowAI',
-    'PreferredTimesConstraintAI',
-    # Soft
-    'SoftConstraint',
-    'ClubDayConstraintSoft',
-    'AwayAtMaitlandGroupingSoft',
-    'TeamConflictConstraintSoft',
-    'EqualMatchUpSpacingConstraintSoft',
-    'ClubGradeAdjacencyConstraintSoft',
-    'ClubVsClubAlignmentSoft',
-    'EnsureBestTimeslotChoicesSoft',
-    'MaximiseClubsPerTimeslotBroadmeadowSoft',
-    'MinimiseClubsOnAFieldBroadmeadowSoft',
-    'PreferredTimesConstraintSoft',
-    'get_soft_constraint',
-    'get_soft_stage_constraints',
     # Severity
     'get_severity_level',
     'group_constraints_by_severity',

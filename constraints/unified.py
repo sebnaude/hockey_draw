@@ -1223,7 +1223,7 @@ class UnifiedConstraintEngine:
         if not noplay:
             return 0
 
-        from constraints.original import _normalize_preference_no_play
+        from utils import normalize_preference_no_play as _normalize_preference_no_play
         allowed_keys = ['team_name', 'team2', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
         allowed_keys2 = ['team1', 'team_name', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
 
