@@ -86,11 +86,13 @@ python run.py generate --help
 ## Documentation
 
 ### Atomization (final-form branch)
-- **[Atomization Handoff](docs/ATOMIZATION_HANDOFF.md)** - Self-contained pickup prompt for the in-flight refactor
+- **[Atomization Handoff](docs/ATOMIZATION_HANDOFF.md)** - Self-contained pickup prompt for the remaining work
 - **[Atomization Plan](docs/ATOMIZATION_PLAN.md)** - 7-phase plan with status
-- **[Constraint Inventory](docs/CONSTRAINT_INVENTORY.md)** - Constraint → atom mapping
+- **[Constraint Inventory](docs/CONSTRAINT_INVENTORY.md)** - Constraint → atom mapping (37 registry entries)
 - **[Helper Variables](docs/HELPER_VARS.md)** - HelperVarRegistry API
-- **[Count Adjusters](docs/COUNT_ADJUSTERS.md)** - FORCED/BLOCKED count-adjuster framework
+- **[Count Adjusters](docs/COUNT_ADJUSTERS.md)** - FORCED/BLOCKED count-adjuster framework + 4 shipped formulas
+- **[Solver Stages](docs/STAGES.md)** - `SOLVER_STAGES` config + validation API (Phase 7b foundation)
+- **[Harness](docs/HARNESS.md)** - End-to-end pipeline reference (build_season_data → generate_X → engine → tester)
 
 ### For AI Assistants
 - **[AI Documentation Index](docs/ai/README.md)** - Start here

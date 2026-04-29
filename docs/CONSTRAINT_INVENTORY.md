@@ -1,8 +1,8 @@
-# Constraint Inventory (Phase 0)
+# Constraint Inventory (Phase 0 / kept current through Phase 7)
 
-Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization (Phase 3).
+Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` @ commit `d99e8c0` from `constraints/registry.py` (21 entries) + `constraints/original.py` (19 solver classes) + `constraints/ai.py` (19 solver classes).
+Generated against `final-form` and updated through the Phase-6 generic-home rename. The registry currently has **37 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`).
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -33,6 +33,19 @@ Legend
 | MinimiseClubsOnAFieldBroadmeadow | original.py:MinimiseClubsOnAFieldBroadmeadow | At NIHC Sat/Sun per (week, date, field_name): per-club presence indicator; HARD num_clubs ≤ max_clubs_per_field + slack; SOFT penalty = abs(num_clubs - 2) | 4 | MinimiseClubsOnAFieldBroadmeadow | MinimiseClubsOnAFieldBroadmeadow |
 | EnsureBestTimeslotChoices | original.py:EnsureBestTimeslotChoices | Per (week, day, location): build per-(field, day_slot) max-equality indicators; for adjacent slot pair (curr, next) for every (f, f2): next_used ⇒ curr_used (cross-field stacking + contiguity). SOFT: 7pm games incur penalty 1 each | 5 | — | EnsureBestTimeslotChoices |
 | PreferredTimes | original.py:PreferredTimesConstraint | Normalize PREFERENCE_NO_PLAY (legacy + 2026 structured); for each (entry, club, club_teams, restriction): match X keys via two key orderings; soft penalty = the var when match | 5 | — | PreferredTimes |
+
+## 1b. Phase-6 generic aliases (registered on `final-form` after `67474f4`)
+
+| Canonical name | Aliases | Purpose |
+|---|---|---|
+| `NonDefaultHomeGrouping` | `MaitlandHomeGrouping`, `MaxMaitlandHomeWeekends` (legacy entries own the reverse lookup) | Generic per-club non-default-home back-to-back constraint. Iterates `home_field_map.keys()`; per-club tuning from `AWAY_VENUE_RULES[club]['max_consecutive_home']` (None disables). Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`. |
+| `AwayAtNonDefaultGrouping` | `AwayAtMaitlandGrouping` | Generic per-venue away-clubs-per-week constraint. Iterates `home_field_map.values()`; per-club `AWAY_VENUE_RULES[club]['max_away_clubs']` (None disables). Falls back to `CONSTRAINT_DEFAULTS['away_maitland_max_clubs']`. |
+
+The legacy `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` registry entries
+remain as the canonical names for severity/slack lookups (preserves
+`data['constraint_slack']['MaitlandHomeGrouping']` and
+`CONSTRAINT_TO_SEVERITY` paths). The new aliases exist for `SOLVER_STAGES`
+configs that prefer the generic name.
 
 ## 2. Tester-only diagnostics
 
