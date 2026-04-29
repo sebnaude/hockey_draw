@@ -144,17 +144,18 @@ exits non-zero.
 when the key is present. Any errors become FATAL config errors via the
 existing fatals/warnings collection.
 
-## Status (as of `final-form` after Phase 7b dispatch commit `dd76a79`)
+## Status (as of `final-form` after Phase 7c completion commit `0140495`)
 
 - ✅ `DEFAULT_STAGES` config + `constraints/stages.py` API + 10 tests in
   `tests/test_solver_stages.py`.
 - ✅ `main_staged.py` dispatch rewire (`run_solver_stages_solve`).
   Default `main_staged()` path is now SOLVER_STAGES; `severity_staged`
-  keeps the legacy `STAGES_SEVERITY[_AI]` dispatch.
+  builds its stage list from the registry via
+  `severity_solver_stages()`.
 - ✅ CLI flags `--stages-config`, `--stage-only`, `--skip-stage`,
   `--list-stages`. 18 dispatch tests in `tests/test_solver_stages_dispatch.py`.
 - ✅ Config-validation Phase 22 `_validate_stages`.
-- ⏳ Deletion of legacy `STAGES` / `STAGES_AI` dicts — deferred. They
-  still back the severity dispatch and the `list-constraints` /
-  `diagnose` CLI commands. See follow-up note in
-  `docs/ATOMIZATION_HANDOFF.md`.
+- ✅ Legacy `STAGES` / `STAGES_AI` / `STAGES_UNIFIED` /
+  `STAGES_SEVERITY[_AI]` dicts deleted (Phase 7c).
+- ✅ `--ai` CLI flag removed; `run_list_constraints` reads the
+  registry; `run_diagnose` deprecated pending atom-aware port.
