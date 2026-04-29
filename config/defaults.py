@@ -71,14 +71,15 @@ HOME_FIELD_MAP = {
 
 AWAY_VENUE_RULES = {
     'Maitland': {
-        'max_consecutive_home': 1,
-        'friday_games': 2,
-        'max_away_clubs': 3,
+        # No explicit overrides — Maitland falls back to CONSTRAINT_DEFAULTS
+        # (`maitland_max_consecutive_home`, `away_maitland_max_clubs`,
+        # `maitland_friday_games`). Season configs may override here per-club
+        # without touching the global defaults.
     },
     'Gosford': {
-        'max_consecutive_home': 2,
+        'max_consecutive_home': 2,    # Gosford allows 2 consecutive home weekends
         'friday_games': 8,
-        'max_away_clubs': None,  # no per-week away-clubs cap at Gosford
+        'max_away_clubs': None,       # no per-week away-clubs cap at Gosford
     },
 }
 
@@ -120,6 +121,66 @@ CONSTRAINT_DEFAULTS = {
     # Worst timeslot (penalised by EnsureBestTimeslotChoices)
     'worst_timeslot_time': '19:00',
 }
+
+
+# ============== Solver Stages (Phase 7b) ==============
+# Default ordered list of solver stages, each a dict of:
+#   name: short identifier (used for --stage-only / --skip-stage CLI)
+#   description: human-readable summary
+#   atoms: list of canonical constraint names from constraints/registry.py
+# Optional fields:
+#   time_limit_seconds, use_prior_solution_as_hint, soft_only, requires_complete_solution
+#
+# Season configs may override `SOLVER_STAGES` to reorder, add, or remove stages.
+
+DEFAULT_STAGES = [
+    {
+        'name': 'critical_feasibility',
+        'description': 'Hard feasibility — every constraint that must hold for a valid draw',
+        'atoms': [
+            'NoDoubleBookingTeams', 'NoDoubleBookingFields',
+            'EqualGamesAndBalanceMatchUps',
+            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
+            'GosfordFridayRoundsForced', 'PHLRoundOnePlay',
+        ],
+    },
+    {
+        'name': 'home_away_balance',
+        'description': 'Per-pair home/away + non-default-home grouping',
+        'atoms': [
+            'FiftyFiftyHomeandAway',
+            'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping',
+        ],
+    },
+    {
+        'name': 'club_alignment',
+        'description': 'Cross-grade coincidence + field limits',
+        'atoms': [
+            'ClubGradeAdjacency',
+            'ClubVsClubCoincidence', 'ClubVsClubFieldLimit',
+            'PHLAnd2ndBackToBackSameField',
+        ],
+    },
+    {
+        'name': 'club_day',
+        'description': 'Per-club day-of-week constraints',
+        'atoms': [
+            'ClubDayParticipation', 'ClubDayIntraClubMatchup',
+            'ClubDayOpponentMatchup', 'ClubDaySameField', 'ClubDayContiguousSlots',
+        ],
+    },
+    {
+        'name': 'soft_optimisation',
+        'description': 'Soft penalties and optimisation',
+        'soft_only': True,
+        'atoms': [
+            'EqualMatchUpSpacing', 'ClubGameSpread',
+            'ClubVsClubDeficitPenalty', 'PreferredDates',
+            'EnsureBestTimeslotChoices', 'PreferredTimes',
+            'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
+        ],
+    },
+]
 
 
 PERENNIAL_BLOCKED_GAMES = [

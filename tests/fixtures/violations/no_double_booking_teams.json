@@ -1,0 +1,38 @@
+{
+  "_violations": ["NoDoubleBookingTeams"],
+  "_description": "Tigers PHL plays two games in week 1 — should flag NoDoubleBookingTeams.",
+  "version": "1.0",
+  "description": "violation fixture: double booking",
+  "num_weeks": 1,
+  "num_games": 2,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Tigers PHL",
+      "team2": "Norths PHL",
+      "grade": "PHL",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "EF",
+      "field_location": "Newcastle International Hockey Centre"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Tigers PHL",
+      "team2": "Wests PHL",
+      "grade": "PHL",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "13:00",
+      "day_slot": 4,
+      "field_name": "WF",
+      "field_location": "Newcastle International Hockey Centre"
+    }
+  ]
+}

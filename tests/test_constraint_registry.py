@@ -58,11 +58,9 @@ class TestRegistryCompleteness:
 
     def test_registry_has_expected_entry_count(self):
         """Registry contains 21 originals + 5 PHL atoms (Phase 3a) + 5 ClubDay
-        atoms (Phase 3b) + 4 ClubVsClub atoms (Phase 3c) = 35. Three
-        Friday-count atoms (Broadmeadow/Gosford/Maitland) were retired in
-        favour of FORCED_GAMES entries — see
-        docs/FORCED_GAMES_AS_COUNT_RULES.md."""
-        assert len(CONSTRAINT_REGISTRY) == 35
+        atoms (Phase 3b) + 4 ClubVsClub atoms (Phase 3c) + 2 Phase-6 generic
+        aliases (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) = 37."""
+        assert len(CONSTRAINT_REGISTRY) == 37
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method."""
@@ -200,8 +198,12 @@ class TestTesterOnlyConstraints:
         assert 'ClubFieldConcentration' in tester_only
 
     def test_non_tester_only_have_solver_names(self):
+        # Phase 6: aliases for the legacy Maitland-named constraints don't
+        # carry their own solver_class_names — the legacy entries own the
+        # reverse lookup. They reference the same logical constraint.
+        ALIAS_NAMES = {'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping'}
         for name, info in CONSTRAINT_REGISTRY.items():
-            if not info.tester_only:
+            if not info.tester_only and name not in ALIAS_NAMES:
                 assert len(info.solver_class_names) >= 1, \
                     f"{name}: non-tester-only must have solver_class_names"
 

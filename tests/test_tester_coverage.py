@@ -84,6 +84,7 @@ def make_data(clubs=None, teams=None, grades=None, num_rounds=None, **extras):
         grades = make_grades(teams)
     if num_rounds is None:
         num_rounds = {g.name: 10 for g in grades}
+    home_field_map = {c.name: c.home_field for c in clubs if c.home_field != NIHC}
     data = {
         'clubs': clubs,
         'teams': teams,
@@ -91,6 +92,8 @@ def make_data(clubs=None, teams=None, grades=None, num_rounds=None, **extras):
         'num_rounds': num_rounds,
         'timeslots': [],
         'constraint_defaults': {},
+        'home_field_map': home_field_map,
+        'away_venue_rules': {},
     }
     data.update(extras)
     return data

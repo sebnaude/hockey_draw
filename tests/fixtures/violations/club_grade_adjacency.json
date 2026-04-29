@@ -1,0 +1,38 @@
+{
+  "_violations": ["ClubGradeAdjacency"],
+  "_description": "Tigers PHL and Tigers 2nd play in the same Sunday timeslot — adjacent-grade conflict.",
+  "version": "1.0",
+  "description": "violation fixture: adjacent grades same slot",
+  "num_weeks": 1,
+  "num_games": 2,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Tigers PHL",
+      "team2": "Norths PHL",
+      "grade": "PHL",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "EF",
+      "field_location": "Newcastle International Hockey Centre"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Tigers 2nd",
+      "team2": "Norths 2nd",
+      "grade": "2nd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "WF",
+      "field_location": "Newcastle International Hockey Centre"
+    }
+  ]
+}

@@ -3582,6 +3582,23 @@ def _merge_constraint_defaults(season_overrides: dict) -> dict:
     return merged
 
 
+def _merge_away_venue_rules(season_overrides: dict) -> dict:
+    """Merge season-specific AWAY_VENUE_RULES over the perennial defaults.
+
+    Season configs override only what they want changed; the rest inherits
+    from `config.defaults.AWAY_VENUE_RULES`. The merge is shallow per club,
+    so a season may override e.g. `Maitland.max_consecutive_home` without
+    repeating the whole club's rule block.
+    """
+    from config.defaults import AWAY_VENUE_RULES as _DEFAULTS
+    merged: dict = {}
+    for club, rules in _DEFAULTS.items():
+        merged[club] = dict(rules)
+    for club, rules in (season_overrides or {}).items():
+        merged.setdefault(club, {}).update(rules)
+    return merged
+
+
 def build_season_data(config: dict) -> dict:
     """
     Build complete data dictionary from a season configuration.
@@ -3809,5 +3826,6 @@ def build_season_data(config: dict) -> dict:
         'blocked_games': config.get('blocked_games', []),
         'penalty_weights': config.get('penalty_weights', {}),
         'constraint_defaults': _merge_constraint_defaults(config.get('constraint_defaults', {})),
+        'away_venue_rules': _merge_away_venue_rules(config.get('away_venue_rules', {})),
     }
 

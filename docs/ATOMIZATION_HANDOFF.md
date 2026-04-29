@@ -69,6 +69,8 @@ below this; every phase below should add tests and lift it further.
 | `08f11be` | docs | hash backfill |
 | `1521c9b` | 4 framework | `feat(constraints): wire FORCED/BLOCKED count-adjuster framework` |
 | `8c0e351` | docs | hash backfill |
+| `4ad6add` | 4 (full) | `feat(constraints): implement Phase 4 FORCED/BLOCKED count adjusters` (4 implementations + EqualGames no-op note + 18 tests) |
+| _next_  | 6 + 7a + 7b foundation | Phase 6 generic non-default-home rename, `ViolationBreakdown` + 4 violation fixtures (Phase 7a), `SOLVER_STAGES` config + validation API (Phase 7b foundation) |
 
 ### What's already in place
 

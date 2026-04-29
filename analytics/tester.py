@@ -20,7 +20,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -113,14 +113,21 @@ class Violation:
     affected_games: List[str] = field(default_factory=list)
     week: Optional[int] = None
     severity_level: int = 5  # 1-5, lower = worse
-    
+    # Phase 7a: structured aggregation hooks. Atoms populate these so
+    # ViolationReport.breakdown can roll up by club / metric without
+    # re-deriving from `message`.
+    affected_clubs: List[str] = field(default_factory=list)
+    metric_value: Optional[float] = None
+
     def __str__(self) -> str:
         games_str = f" [{', '.join(self.affected_games)}]" if self.affected_games else ""
         return f"[L{self.severity_level}-{self.severity}] {self.constraint}: {self.message}{games_str}"
-    
+
     @classmethod
-    def create(cls, constraint: str, message: str, 
-               affected_games: List[str] = None, week: Optional[int] = None) -> 'Violation':
+    def create(cls, constraint: str, message: str,
+               affected_games: List[str] = None, week: Optional[int] = None,
+               affected_clubs: List[str] = None,
+               metric_value: Optional[float] = None) -> 'Violation':
         """Factory method that auto-determines severity from constraint name."""
         level = CONSTRAINT_SEVERITY_LEVELS.get(constraint, 5)
         severity = SEVERITY_LEVEL_LABELS.get(level, 'VERY LOW')
@@ -130,7 +137,58 @@ class Violation:
             message=message,
             affected_games=affected_games or [],
             week=week,
-            severity_level=level
+            severity_level=level,
+            affected_clubs=affected_clubs or [],
+            metric_value=metric_value,
+        )
+
+
+@dataclass
+class ViolationBreakdown:
+    """Phase 7a: structured aggregation of violations.
+
+    `by_club`: club_name -> violations involving that club.
+    `by_type`: canonical constraint name -> violations of that type.
+    `by_severity`: severity label ('CRITICAL', 'HIGH', ...) -> violations.
+    `soft_pressure`: canonical_name -> rollup of how close clubs are to limit.
+        keys per entry: at_limit (int), over_limit (int), total_penalty (number),
+        worst_club (str|None), worst_value (number|None).
+    """
+    by_club: Dict[str, List['Violation']] = field(default_factory=dict)
+    by_type: Dict[str, List['Violation']] = field(default_factory=dict)
+    by_severity: Dict[str, List['Violation']] = field(default_factory=dict)
+    soft_pressure: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    @classmethod
+    def from_violations(cls, violations: List['Violation']) -> 'ViolationBreakdown':
+        by_club: Dict[str, List['Violation']] = defaultdict(list)
+        by_type: Dict[str, List['Violation']] = defaultdict(list)
+        by_severity: Dict[str, List['Violation']] = defaultdict(list)
+        soft: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {'at_limit': 0, 'over_limit': 0, 'total_penalty': 0,
+                     'worst_club': None, 'worst_value': None}
+        )
+
+        for v in violations:
+            by_type[v.constraint].append(v)
+            by_severity[v.severity].append(v)
+            for c in v.affected_clubs:
+                by_club[c].append(v)
+
+            if v.metric_value is not None:
+                bucket = soft[v.constraint]
+                bucket['over_limit'] += 1
+                bucket['total_penalty'] += float(v.metric_value)
+                if (bucket['worst_value'] is None
+                        or v.metric_value > bucket['worst_value']):
+                    bucket['worst_value'] = float(v.metric_value)
+                    bucket['worst_club'] = (
+                        v.affected_clubs[0] if v.affected_clubs else None
+                    )
+
+        return cls(
+            by_club=dict(by_club), by_type=dict(by_type),
+            by_severity=dict(by_severity), soft_pressure=dict(soft),
         )
 
 
@@ -152,6 +210,11 @@ class ViolationReport:
     violations: List[Violation] = field(default_factory=list)
     constraint_results: List[ConstraintResult] = field(default_factory=list)
     metadata_source: str = ''  # 'draw_json', 'checkpoint', 'manual', 'none'
+
+    @property
+    def breakdown(self) -> 'ViolationBreakdown':
+        """Phase 7a: structured aggregation by club / type / severity / soft-pressure."""
+        return ViolationBreakdown.from_violations(self.violations)
     
     @property
     def has_violations(self) -> bool:
@@ -1288,69 +1351,99 @@ class DrawTester:
         return violations
     
     def _check_maitland_back_to_back(self) -> List[Violation]:
-        """Check max consecutive Maitland home weekends (sliding window, respects slack).
+        """Generic non-default-home back-to-back check (Phase 6).
 
-        Matches the solver constraint: in any window of (max_consecutive + 1)
-        consecutive Maitland-game weeks, at most max_consecutive can be home.
-        Uses constraint_defaults['maitland_max_consecutive_home'] as base (default 1).
+        For each club in `home_field_map`, checks the sliding window of
+        (max_consecutive + 1) consecutive home weeks, where max_consecutive
+        comes from `AWAY_VENUE_RULES[club]['max_consecutive_home']` (or
+        `constraint_defaults['maitland_max_consecutive_home']`). Clubs whose
+        rule is None skip the check. Originally Maitland-only; method name
+        retained for registry-mapping back-compat.
         """
         violations = []
         defaults = self.data.get('constraint_defaults', {})
-        base_max = defaults.get('maitland_max_consecutive_home', 1)
+        rules = self.data.get('away_venue_rules', {}) or {}
+        home_field_map = self.data.get('home_field_map', {}) or {}
         slack = self.constraint_slack.get('MaitlandHomeGrouping', 0)
-        max_consecutive = base_max + slack
 
-        home_weeks = set()
-        maitland_weeks = set()
-        for game in self.draw.games:
-            if 'Maitland' in game.team1 or 'Maitland' in game.team2:
-                maitland_weeks.add(game.week)
-                if game.field_location == 'Maitland Park':
-                    home_weeks.add(game.week)
+        for nd_club, nd_venue in home_field_map.items():
+            club_rules = rules.get(nd_club, {})
+            base_max = club_rules.get(
+                'max_consecutive_home',
+                defaults.get('maitland_max_consecutive_home', 1),
+            )
+            if base_max is None:
+                continue
+            max_consecutive = base_max + slack
 
-        # Build indicator list matching solver order (sorted weeks with Maitland games)
-        sorted_maitland_weeks = sorted(maitland_weeks)
-        is_home = [1 if w in home_weeks else 0 for w in sorted_maitland_weeks]
+            home_weeks = set()
+            club_weeks = set()
+            for game in self.draw.games:
+                club1 = self._team_to_club.get(game.team1)
+                club2 = self._team_to_club.get(game.team2)
+                if nd_club in (club1, club2):
+                    club_weeks.add(game.week)
+                    if game.field_location == nd_venue:
+                        home_weeks.add(game.week)
 
-        # Sliding window check
-        window_size = max_consecutive + 1
-        for i in range(len(is_home) - window_size + 1):
-            window_sum = sum(is_home[i:i + window_size])
-            if window_sum > max_consecutive:
-                # Report the week that breaks the limit
-                breach_week = sorted_maitland_weeks[i + window_size - 1]
-                window_weeks = sorted_maitland_weeks[i:i + window_size]
-                violations.append(Violation.create(
-                    constraint="MaxMaitlandHomeWeekends",
-                    message=f"Maitland home {window_sum}/{window_size} in weeks {window_weeks} (max consecutive: {max_consecutive})",
-                    week=breach_week
-                ))
+            sorted_weeks = sorted(club_weeks)
+            is_home = [1 if w in home_weeks else 0 for w in sorted_weeks]
+            window_size = max_consecutive + 1
+            for i in range(len(is_home) - window_size + 1):
+                window_sum = sum(is_home[i:i + window_size])
+                if window_sum > max_consecutive:
+                    breach_week = sorted_weeks[i + window_size - 1]
+                    window_w = sorted_weeks[i:i + window_size]
+                    violations.append(Violation.create(
+                        constraint="MaxMaitlandHomeWeekends",
+                        message=(
+                            f"{nd_club} home {window_sum}/{window_size} in "
+                            f"weeks {window_w} (max consecutive: {max_consecutive})"
+                        ),
+                        week=breach_week,
+                    ))
 
         return violations
-    
+
     def _check_maitland_away_clubs_limit(self) -> List[Violation]:
-        """Check max away clubs at Maitland per weekend (respects constraint_slack and constraint_defaults)."""
+        """Generic away-clubs-per-week check at each non-default-home venue (Phase 6).
+
+        Per-venue limit comes from `AWAY_VENUE_RULES[club]['max_away_clubs']`
+        (or `constraint_defaults['away_maitland_max_clubs']`). None disables.
+        """
         violations = []
         defaults = self.data.get('constraint_defaults', {})
-        base_limit = defaults.get('away_maitland_max_clubs', 3)
+        rules = self.data.get('away_venue_rules', {}) or {}
+        home_field_map = self.data.get('home_field_map', {}) or {}
         slack = self.constraint_slack.get('AwayAtMaitlandGrouping', 0)
-        max_away_clubs = base_limit + slack
-        away_clubs_per_week = defaultdict(set)
 
-        for game in self.draw.games:
-            if game.field_location == 'Maitland Park':
-                for team in [game.team1, game.team2]:
-                    if 'Maitland' not in team:
-                        club = self._team_to_club.get(team, 'Unknown')
-                        away_clubs_per_week[game.week].add(club)
-
-        for week, clubs in away_clubs_per_week.items():
-            if len(clubs) > max_away_clubs:
-                violations.append(Violation.create(
-                    constraint="AwayAtMaitlandGrouping",
-                    message=f"Week {week}: {len(clubs)} away clubs at Maitland (max {max_away_clubs}): {clubs}",
-                    week=week
-                ))
+        for nd_club, nd_venue in home_field_map.items():
+            club_rules = rules.get(nd_club, {})
+            base_limit = club_rules.get(
+                'max_away_clubs',
+                defaults.get('away_maitland_max_clubs', 3),
+            )
+            if base_limit is None:
+                continue
+            max_away_clubs = base_limit + slack
+            away_clubs_per_week = defaultdict(set)
+            for game in self.draw.games:
+                if game.field_location != nd_venue:
+                    continue
+                for team in (game.team1, game.team2):
+                    team_club = self._team_to_club.get(team, 'Unknown')
+                    if team_club != nd_club:
+                        away_clubs_per_week[game.week].add(team_club)
+            for week, clubs in away_clubs_per_week.items():
+                if len(clubs) > max_away_clubs:
+                    violations.append(Violation.create(
+                        constraint="AwayAtMaitlandGrouping",
+                        message=(
+                            f"Week {week}: {len(clubs)} away clubs at {nd_venue} "
+                            f"(max {max_away_clubs}): {clubs}"
+                        ),
+                        week=week,
+                    ))
 
         return violations
     

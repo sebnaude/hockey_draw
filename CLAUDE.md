@@ -228,6 +228,63 @@ Each "constraint" in the registry is now one of:
   class for back-compat with severity/slack lookups; not dispatched by the
   unified engine.
 
+### FORCED/BLOCKED count adjusters (Phase 4)
+
+Every constraint that cares about expected counts (pair meetings, home weekends,
+away clubs per week, spacing flexibility) registers a
+`forced_blocked_adjuster` callable on its `ConstraintInfo`.
+`UnifiedConstraintEngine.build_groupings()` runs every adjuster once via
+`run_count_adjusters(data)` and stashes the result under
+`data['count_adjustments'][canonical_name]`. Atoms (or legacy methods that
+haven't been atomised yet) read their entry by canonical name during apply.
+
+Currently shipped adjusters: `EqualMatchUpSpacing`, `MaitlandHomeGrouping`,
+`AwayAtMaitlandGrouping`, `ClubVsClubCoincidence`. `EqualGames` is
+no-op-by-design (FORCED entries pin terms to 1; the per-team game-count sum is
+unchanged). See `docs/COUNT_ADJUSTERS.md` for formulas.
+
+### Generic non-default-home (Phase 6)
+
+Constraints originally hardcoded for Maitland (`MaitlandHomeGrouping`,
+`AwayAtMaitlandGrouping`, `MaxMaitlandHomeWeekends`) now iterate over every
+club in `home_field_map` whose home venue isn't Broadmeadow. Per-club tuning
+comes from `AWAY_VENUE_RULES[club]` (in `config/defaults.py` or season
+overrides):
+- `max_consecutive_home`: per-club sliding-window limit. `None` disables the
+  grouping for that club. Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`.
+- `max_away_clubs`: per-club hard cap on distinct away clubs per week at the
+  venue. `None` disables. Falls back to `CONSTRAINT_DEFAULTS['away_maitland_max_clubs']`.
+
+Adding a new non-default home club: add it to `home_field_map` and (optionally)
+`AWAY_VENUE_RULES`. No constraint code changes. Removing a club silences its
+constraints rather than crashing.
+
+The registry exposes both the legacy `MaitlandHomeGrouping` /
+`AwayAtMaitlandGrouping` names (preserving severity/slack lookups) and the
+generic `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` aliases.
+
+### Configurable solver stages (Phase 7b foundation)
+
+`config/defaults.py::DEFAULT_STAGES` lists the canonical solver stages by
+canonical atom name. Season configs may override via `'solver_stages'` in the
+`SEASON_CONFIG` dict. `constraints/stages.py` provides
+`load_solver_stages(season_config)`, `validate_solver_stages(stages)`, and
+`list_stages(stages)` for loading/validating/inspecting the configured stage
+list. The legacy `STAGES` / `STAGES_AI` dicts in `main_staged.py` still drive
+the actual solver dispatch — wiring `main_staged.py` and the
+`--stages-config`/`--stage-only`/`--skip-stage`/`--list-stages` CLI flags
+through is tracked as follow-up work.
+
+### Violation breakdown (Phase 7a)
+
+`ViolationReport.breakdown` returns a `ViolationBreakdown` with `by_club`,
+`by_type`, `by_severity`, and `soft_pressure` aggregations. `Violation` carries
+`affected_clubs: List[str]` and `metric_value: Optional[float]` so atoms can
+populate structured data for soft-pressure rollups (e.g. who's at-limit,
+worst-club, total-penalty per constraint). Static violation fixtures live in
+`tests/fixtures/violations/`; `tests/test_violation_fixtures.py` walks the
+directory and asserts each fixture's listed `_violations` are flagged.
+
 `docs/CONSTRAINT_INVENTORY.md` is the single source of truth for the table
 mapping legacy classes → atoms. `docs/ATOMIZATION_HANDOFF.md` tracks
 remaining work.
