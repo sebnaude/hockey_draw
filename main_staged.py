@@ -80,6 +80,11 @@ from constraints.ai import (
     PreferredTimesConstraintAI,
     ClubGameSpreadAI,
 )
+from constraints.stages import (
+    apply_solver_stage,
+    load_solver_stages,
+    list_stages,
+)
 
 
 # ============== Metadata Helpers ==============
@@ -1009,6 +1014,113 @@ class StagedScheduleSolver:
             self.logger.warning(f"Stage {stage_name} did not find solution: {status_name}")
             return status_name, {}, solve_time
     
+    def run_solver_stages_solve(self, run_id: str = None,
+                                stages_override: list = None) -> dict:
+        """Run solving driven by `data['solver_stages']` (Phase 7b).
+
+        Uses `UnifiedConstraintEngine` for atomized clusters; falls back to
+        the legacy solver class for non-engine atoms (e.g. Maximise/Minimise
+        Broadmeadow constraints) via the registry.
+
+        Each stage applies its atoms, builds the objective, and solves with
+        the previous solution carried as hints. Solution is saved as a
+        checkpoint per stage.
+        """
+        from constraints.unified import UnifiedConstraintEngine
+
+        run_dir = self.checkpoint_manager.get_run_dir(run_id)
+        self.logger.info(f"Run directory: {run_dir}")
+        print(f"Run directory: {run_dir}")
+        self.checkpoint_manager.save_run_metadata(run_dir, self.data, self.solver_config)
+
+        stages = stages_override if stages_override is not None else self.data.get('solver_stages')
+        if not stages:
+            stages = load_solver_stages({})
+        self.data['solver_stages'] = stages
+        self.logger.info(f"Stages to run ({len(stages)}): {[s['name'] for s in stages]}")
+        print(f"Mode: SOLVER_STAGES (config-driven, {len(stages)} stages)")
+
+        engine = UnifiedConstraintEngine(self.model, self.X, self.data, skip_constraints=set())
+        engine.build_groupings()
+
+        if 'constraints_applied' not in self.data:
+            self.data['constraints_applied'] = []
+
+        applied_engine_keys: set = set()
+        applied_atoms: set = set()
+
+        for stage in stages:
+            stage_name = stage['name']
+            self.logger.info("=" * 60)
+            self.logger.info(f"STARTING STAGE: {stage_name}")
+            self.logger.info(f"  Atoms: {stage.get('atoms', [])}")
+            self.logger.info("=" * 60)
+            print(f"\n{'='*60}")
+            print(f"STAGE: {stage_name}")
+            print(f"Description: {stage.get('description', '')}")
+            print(f"Atoms: {stage.get('atoms', [])}")
+            print(f"{'='*60}")
+
+            if self.current_solution:
+                self.add_solution_hints(self.current_solution)
+
+            print("Applying atoms via UnifiedConstraintEngine + registry fallbacks...")
+            added, atoms_this_stage = apply_solver_stage(
+                stage,
+                model=self.model,
+                X=self.X,
+                data=self.data,
+                engine=engine,
+                applied_engine_keys=applied_engine_keys,
+                applied_atoms=applied_atoms,
+            )
+            for atom in atoms_this_stage:
+                self.data['constraints_applied'].append({
+                    'name': atom,
+                    'stage': stage_name,
+                })
+            print(f"  Atoms applied this stage: {atoms_this_stage}")
+            print(f"  Constraints added this stage: {added}")
+            print(f"  Model total constraints: {len(self.model.Proto().constraints)}")
+
+            self.build_objective()
+
+            stage_config = {
+                'use_callback': True,
+                'max_time_seconds': stage.get(
+                    'time_limit_seconds',
+                    self.data.get('max_time_per_stage', 172800),
+                ),
+            }
+            print("Solving...")
+            try:
+                status, solution, solve_time = self.solve_stage(stage_config, run_dir, stage_name)
+            except Exception as e:
+                self.logger.critical(f"CRITICAL ERROR in stage {stage_name}: {e}")
+                self.logger.critical(traceback.format_exc())
+                print(f"CRITICAL ERROR: {e}")
+                raise
+
+            self.checkpoint_manager.save_stage(
+                run_dir, stage_name, solution, self.data, status, solve_time
+            )
+            if status in ['OPTIMAL', 'FEASIBLE']:
+                self.current_solution = solution
+            elif stage.get('requires_complete_solution', True):
+                self.logger.error(f"Required stage {stage_name} failed with status {status}")
+                print(f"ERROR: Required stage {stage_name} failed with status {status}")
+                self.checkpoint_manager.update_run_status(run_dir, 'failed', {'failed_stage': stage_name})
+                return None
+            else:
+                print(f"WARNING: Stage {stage_name} did not find solution, using previous")
+
+        final_games = sum(1 for v in self.current_solution.values() if v == 1) if self.current_solution else 0
+        self.checkpoint_manager.update_run_status(run_dir, 'completed' if self.current_solution else 'failed', {
+            'stages_completed': [s['name'] for s in stages],
+            'num_scheduled_games': final_games,
+        })
+        return self.current_solution
+
     def run_staged_solve(self, run_id: str = None, resume_from: str = None,
                          stages_to_run: list = None, severity_staged: bool = False,
                          use_ai: bool = False, exclude_constraints: list = None) -> dict:
@@ -1213,7 +1325,8 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 fix_round_1: bool = False, constraint_slack: dict = None,
                 severity_staged: bool = False, hint_solution: dict = None,
                 use_ai: bool = False, exclude_constraints: list = None,
-                description: str = '', provenance: dict = None):
+                description: str = '', provenance: dict = None,
+                solver_stages: list = None):
     """
     Main entry point for staged solving.
 
@@ -1293,6 +1406,10 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         data['_user_description'] = description
     if provenance:
         data['_provenance'] = provenance
+
+    # Phase 7b: caller-supplied solver_stages override (from --stages-config etc.).
+    if solver_stages is not None:
+        data['solver_stages'] = solver_stages
 
     # Initialize solver with config
     checkpoint_manager = CheckpointManager()
@@ -1381,9 +1498,26 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         logger.info(f"Added {hints_added} solution hints from prior solution")
         print(f"  Added {hints_added} solution hints (solver will use as starting point)")
 
-    # Run staged solve
+    # Run staged solve. Default path is SOLVER_STAGES (Phase 7b); the legacy
+    # severity_staged flow keeps using the hardcoded STAGES_SEVERITY map.
     try:
-        solution = solver.run_staged_solve(run_id=run_id, resume_from=resume_from, stages_to_run=stages_to_run, severity_staged=severity_staged, use_ai=use_ai, exclude_constraints=exclude_constraints)
+        if severity_staged:
+            solution = solver.run_staged_solve(
+                run_id=run_id, resume_from=resume_from,
+                stages_to_run=stages_to_run, severity_staged=True,
+                use_ai=use_ai, exclude_constraints=exclude_constraints,
+            )
+        else:
+            stages_override = data.get('solver_stages')
+            if not stages_override:
+                stages_override = load_solver_stages({})
+                data['solver_stages'] = stages_override
+            if stages_to_run:
+                names = set(stages_to_run)
+                stages_override = [s for s in stages_override if s['name'] in names]
+            solution = solver.run_solver_stages_solve(
+                run_id=run_id, stages_override=stages_override,
+            )
     except Exception as e:
         logger.critical(f"FATAL ERROR during solve: {e}")
         logger.critical(traceback.format_exc())

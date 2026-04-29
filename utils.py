@@ -3078,6 +3078,21 @@ def _check_forced_blocked_scope_overlap(data, warnings, fatals):
                     )
 
 
+def _validate_stages(data, warnings, fatals):
+    """Phase 22 (Phase 7b): validate `data['solver_stages']` if set.
+
+    No-op when the key is absent — `load_solver_stages` will populate it
+    later from `DEFAULT_STAGES`.
+    """
+    stages = data.get('solver_stages')
+    if stages is None:
+        return
+    from constraints.stages import validate_solver_stages
+    errors = validate_solver_stages(stages)
+    for err in errors:
+        fatals.append(f"solver_stages: {err}")
+
+
 def validate_game_config(data: dict) -> None:
     """
     Pre-validate FORCED_GAMES, BLOCKED_GAMES, and related config before
@@ -3220,6 +3235,9 @@ def validate_game_config(data: dict) -> None:
 
     # Phase 21: Forced scope subset consistency
     _check_forced_scope_subset_consistency(forced_games, teams, warnings, fatals)
+
+    # Phase 22: SOLVER_STAGES validation (Phase 7b)
+    _validate_stages(data, warnings, fatals)
 
     # Report
     if warnings:

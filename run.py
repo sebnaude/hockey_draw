@@ -118,7 +118,16 @@ Examples:
                             help='Relax constraints by adding N to their limits. '
                                  'Applies to all slack-aware constraints: '
                                  'EqualMatchUpSpacing, MaitlandHomeGrouping, AwayAtMaitlandGrouping, etc.')
-    
+    gen_parser.add_argument('--stages-config', type=str, metavar='FILE',
+                            help='Path to a JSON file with a custom SOLVER_STAGES list. '
+                                 'Replaces the in-config solver_stages.')
+    gen_parser.add_argument('--stage-only', type=str, metavar='NAME',
+                            help='Run only the named SOLVER_STAGES entry.')
+    gen_parser.add_argument('--skip-stage', action='append', default=[], metavar='NAME',
+                            help='Skip a SOLVER_STAGES entry. May be passed multiple times.')
+    gen_parser.add_argument('--list-stages', action='store_true',
+                            help='Print the configured SOLVER_STAGES and exit.')
+
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
     test_parser.add_argument('draw_file', help='Path to draw JSON file')
@@ -293,14 +302,68 @@ def _load_locked_keys(path: str, locked_weeks: set) -> list:
     sys.exit(1)
 
 
+def _resolve_solver_stages(args, season_config):
+    """Resolve `solver_stages` from CLI flags + season config.
+
+    Order of precedence:
+      1. `--stages-config FILE` (overrides season + default).
+      2. `season_config['solver_stages']` (if set).
+      3. `DEFAULT_STAGES`.
+
+    Then applies `--stage-only` and `--skip-stage` filters in that order.
+    Returns the resolved list, or `None` to leave defaults in place.
+    """
+    import json as _json
+    from constraints.stages import load_solver_stages, validate_solver_stages
+
+    if getattr(args, 'stages_config', None):
+        with open(args.stages_config, 'r', encoding='utf-8') as f:
+            stages = _json.load(f)
+        if not isinstance(stages, list):
+            print(f"ERROR: --stages-config {args.stages_config} must contain a JSON list")
+            sys.exit(1)
+    else:
+        stages = load_solver_stages(season_config or {})
+
+    only = getattr(args, 'stage_only', None)
+    if only:
+        stages = [s for s in stages if s.get('name') == only]
+        if not stages:
+            print(f"ERROR: --stage-only {only!r} matched no configured stage")
+            sys.exit(1)
+
+    skip = list(getattr(args, 'skip_stage', None) or [])
+    if skip:
+        stages = [s for s in stages if s.get('name') not in skip]
+
+    errors = validate_solver_stages(stages)
+    if errors:
+        print("ERROR: solver_stages validation failed:")
+        for err in errors:
+            print(f"  - {err}")
+        sys.exit(1)
+
+    return stages
+
+
 def run_generate(args):
     """Generate a new draw."""
     print("="*60)
     print(f"HOCKEY DRAW SCHEDULER - SEASON {args.year}")
     print("="*60)
-    
+
     from main_staged import main_staged, load_data
     from solver_diagnostics import SolverConfig, get_recommended_config
+
+    # --list-stages: print and exit before any solver setup.
+    if getattr(args, 'list_stages', False):
+        from constraints.stages import list_stages
+        # Only load season_config if the user didn't pass --stages-config.
+        season_config = {} if getattr(args, 'stages_config', None) else load_data(args.year)
+        stages = _resolve_solver_stages(args, season_config)
+        print("Configured solver stages:")
+        print(list_stages(stages))
+        return
     
     # Parse resume arguments
     resume_run_id = None
@@ -440,6 +503,18 @@ def run_generate(args):
     if use_unified:
         print("\n[!] EXPERIMENTAL: --unified mode is not fully tested. Use --simple for production.")
 
+    # Resolve --stages-config / --stage-only / --skip-stage. Used for
+    # SOLVER_STAGES dispatch in main_staged (non-severity, non-unified path).
+    resolved_stages = None
+    needs_stage_overrides = bool(
+        getattr(args, 'stages_config', None)
+        or getattr(args, 'stage_only', None)
+        or getattr(args, 'skip_stage', None)
+    )
+    if needs_stage_overrides:
+        season_config = {} if getattr(args, 'stages_config', None) else load_data(args.year)
+        resolved_stages = _resolve_solver_stages(args, season_config)
+
     if args.simple or use_unified:
         from main_staged import main_simple
         solution, data = main_simple(
@@ -478,6 +553,7 @@ def run_generate(args):
             exclude_constraints=exclude,
             description=user_description,
             provenance=provenance,
+            solver_stages=resolved_stages,
         )
     
     if solution:
