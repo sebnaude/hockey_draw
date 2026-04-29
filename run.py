@@ -185,8 +185,9 @@ Examples:
         help='Find blocking constraints and resolve infeasibility')
     diagnose_parser.add_argument('--year', type=int, required=True,
                                  help='Season year (e.g., 2025, 2026). Required.')
-    diagnose_parser.add_argument('--stage', type=str, default='stage1_required',
-                                 help='Stage to analyze (default: stage1_required)')
+    diagnose_parser.add_argument('--stage', type=str, default='critical_feasibility',
+                                 help='SOLVER_STAGES name to analyze (default: critical_feasibility). '
+                                      'Severity-derived names (severity_1..severity_5) also work.')
     diagnose_parser.add_argument('--timeout', type=float, default=5.0,
                                  help='Timeout per feasibility test in seconds (default: 5)')
     diagnose_parser.add_argument('--resolve', action='store_true',
@@ -871,31 +872,141 @@ def run_preseason(args):
         sys.exit(1)
 
 
-def run_diagnose(args):
-    """Find blocking constraints and resolve infeasibility.
+def _diagnose_solve_stage(data, atoms, timeout):
+    """Build a fresh model, apply only the given atoms via the engine, and solve.
 
-    Phase 7c: this command was previously wired to the legacy STAGES /
-    STAGES_AI dicts. Those dicts are gone; the command is currently
-    deprecated pending a port to the atom + registry path. Use
-    `--list-stages` to inspect the new SOLVER_STAGES configuration, and
-    `run.py generate --year YYYY --stage-only NAME` to test a stage.
+    Returns ``(status_name, solve_time_seconds, num_atoms_applied)``.
+    """
+    from datetime import datetime as _dt
+
+    from ortools.sat.python import cp_model
+    from constraints.stages import apply_solver_stage
+    from constraints.unified import UnifiedConstraintEngine
+    from utils import generate_X
+
+    model = cp_model.CpModel()
+    test_data = dict(data)
+    test_data['penalties'] = {}
+    X, conflicts = generate_X(model, test_data)
+    if isinstance(test_data.get('games'), dict):
+        test_data['games'] = list(test_data['games'].keys())
+    test_data['team_conflicts'] = conflicts
+
+    engine = UnifiedConstraintEngine(model, X, test_data, skip_constraints=set())
+    engine.build_groupings()
+
+    if atoms:
+        local_stage = {'name': 'diagnose', 'atoms': list(atoms)}
+        apply_solver_stage(
+            local_stage,
+            model=model, X=X, data=test_data, engine=engine,
+            applied_engine_keys=set(), applied_atoms=set(),
+        )
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = timeout
+    solver.parameters.num_workers = 1
+
+    start = _dt.now()
+    status = solver.Solve(model)
+    elapsed = (_dt.now() - start).total_seconds()
+    return solver.status_name(status), elapsed, len(atoms)
+
+
+def _diagnose_group_atoms(atoms):
+    """Group atoms by engine skip-key for cluster-level removal testing.
+
+    Atoms that share an engine key (e.g. all PHL atoms map to
+    ``PHLAndSecondGradeTimes``) are removed as a unit — the engine
+    applies a cluster atomically, so per-atom removal is meaningless
+    inside a cluster. Atoms with no engine key (non-engine legacy class
+    fallbacks) form singleton groups so they remove individually.
+    """
+    from collections import defaultdict
+    from constraints.stages import atom_to_engine_key
+
+    groups = defaultdict(list)
+    for atom in atoms:
+        key = atom_to_engine_key(atom) or atom
+        groups[key].append(atom)
+    return dict(groups)
+
+
+def run_diagnose(args):
+    """Find blocking atoms / clusters and report which removal makes the stage feasible.
+
+    Phase 7c-bis: the command now drives the unified engine via
+    SOLVER_STAGES instead of the deleted ``STAGES`` / ``STAGES_AI``
+    dicts. ``--stage`` accepts any name from
+    ``constraints.stages.load_solver_stages()`` or ``severity_N`` from
+    ``severity_solver_stages()``. Removal testing operates at engine-key
+    granularity (atoms inside a cluster apply together), so the
+    "blocking" report names a cluster when the blocker is one of the
+    atomized groups.
     """
     print("="*60)
     print(f"INFEASIBILITY DIAGNOSIS - {args.year} SEASON")
     print("="*60)
-    print(
-        "\n[DEPRECATED] `run.py diagnose` was driven by the pre-atomization "
-        "STAGES / STAGES_AI dicts that Phase 7c removed.\n"
-        "The InfeasibilityResolver still works on constraint classes; the "
-        "diagnose CLI just isn't wired to the registry yet.\n\n"
-        "Workarounds:\n"
-        "  - `run.py generate --year YYYY --list-stages` shows the configured stages.\n"
-        "  - `run.py generate --year YYYY --stage-only critical_feasibility` runs a single stage.\n"
-        "  - `run.py generate --year YYYY --simple --slack N` loosens slack-aware constraints.\n"
-        "Open follow-up: re-port diagnose to atom canonical names (see "
-        "docs/ATOMIZATION_HANDOFF.md)."
-    )
-    sys.exit(2)
+
+    from main_staged import load_data
+    from constraints.stages import load_solver_stages, severity_solver_stages
+
+    print(f"\nLoading {args.year} season data...")
+    data = load_data(args.year)
+
+    # Resolve stage: union of configured SOLVER_STAGES and the registry-derived
+    # severity stages so users can target either.
+    stages = list(load_solver_stages(data)) + list(severity_solver_stages())
+    stage = next((s for s in stages if s['name'] == args.stage), None)
+    if stage is None:
+        print(f"[ERROR] Unknown stage: {args.stage}")
+        print(f"Available stages: {sorted({s['name'] for s in stages})}")
+        sys.exit(1)
+
+    atoms = list(stage.get('atoms', []))
+    print(f"\nStage: {args.stage}")
+    print(f"Atoms ({len(atoms)}):")
+    for a in atoms:
+        print(f"  - {a}")
+
+    # First test: all atoms together.
+    print(f"\n[1] Testing ALL {len(atoms)} atoms together (timeout {args.timeout}s)...")
+    status, elapsed, _ = _diagnose_solve_stage(data, atoms, args.timeout)
+    print(f"    Status: {status} ({elapsed:.1f}s)")
+    if status in ('OPTIMAL', 'FEASIBLE'):
+        print("\n[OK] Stage is feasible — no blocking atoms.")
+        sys.exit(0)
+    if status != 'INFEASIBLE':
+        print(f"\n[INCONCLUSIVE] Solver returned {status}. Increase --timeout for a definitive answer.")
+        sys.exit(1)
+
+    # Removal testing — group by engine key so atomized clusters are tested as a unit.
+    print(f"\n[2] Stage is INFEASIBLE. Testing cluster removal at timeout {args.timeout}s...")
+    groups = _diagnose_group_atoms(atoms)
+    blocking = []
+    for key, members in groups.items():
+        remaining = [a for a in atoms if a not in set(members)]
+        sub_status, sub_elapsed, _ = _diagnose_solve_stage(data, remaining, args.timeout)
+        unblocks = sub_status in ('OPTIMAL', 'FEASIBLE', 'UNKNOWN')
+        marker = 'unblocks' if unblocks else 'still blocked'
+        print(f"    Without {key} ({len(members)} atom(s)): {sub_status} ({sub_elapsed:.1f}s) — {marker}")
+        if unblocks:
+            blocking.append(key)
+
+    if blocking:
+        print(f"\n[FOUND] Blocking cluster(s): {blocking}")
+        if args.resolve:
+            print("\n[INFO] --resolve is not yet wired to the engine path. Use the "
+                  "reported clusters as input to `run.py generate --year YYYY "
+                  "--exclude <atom>` for ad-hoc relaxation.")
+        else:
+            print("  Use --exclude on `run.py generate` to drop a blocking atom.")
+        sys.exit(1)
+
+    print("\n[INFO] No single cluster removal restores feasibility. The blocker "
+          "is interactive across multiple clusters; try --exclude on subsets via "
+          "`run.py generate`.")
+    sys.exit(1)
 
 
 def run_validate(args):

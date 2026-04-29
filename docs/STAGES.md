@@ -158,4 +158,5 @@ existing fatals/warnings collection.
 - ✅ Legacy `STAGES` / `STAGES_AI` / `STAGES_UNIFIED` /
   `STAGES_SEVERITY[_AI]` dicts deleted (Phase 7c).
 - ✅ `--ai` CLI flag removed; `run_list_constraints` reads the
-  registry; `run_diagnose` deprecated pending atom-aware port.
+  registry; `run_diagnose` ported to drive the unified engine via
+  `apply_solver_stage` with cluster-level removal testing.

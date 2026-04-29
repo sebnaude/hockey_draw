@@ -395,8 +395,11 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 # Pre-season report
 .\.venv\Scripts\python.exe run.py preseason --year 2026
 
-# Diagnose infeasibility
+# Diagnose infeasibility (drives the unified engine; --stage accepts any
+# SOLVER_STAGES name or severity_N from severity_solver_stages())
 .\.venv\Scripts\python.exe run.py diagnose --year 2026 --timeout 60
+.\.venv\Scripts\python.exe run.py diagnose --year 2026 --stage critical_feasibility
+.\.venv\Scripts\python.exe run.py diagnose --year 2026 --stage severity_2 --timeout 30
 
 # Swap games
 .\.venv\Scripts\python.exe run.py swap current G001 G002 --year 2026 --save

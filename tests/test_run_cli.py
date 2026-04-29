@@ -336,18 +336,17 @@ class TestDiagnoseCommand:
         assert 'critical_feasibility' in names
 
     def test_diagnose_args_namespace(self):
-        """Test diagnose argument namespace structure."""
+        """Phase 7c-bis: diagnose namespace uses SOLVER_STAGES names."""
         args = argparse.Namespace(
             year=2025,
-            ai=False,
-            stage='stage1_required',
+            stage='critical_feasibility',
             resolve=False,
             timeout=5,
             max_iterations=5,
         )
 
         assert args.year == 2025
-        assert args.stage == 'stage1_required'
+        assert args.stage == 'critical_feasibility'
         assert args.resolve is False
 
     def test_diagnose_creates_resolver(self):
@@ -366,6 +365,37 @@ class TestDiagnoseCommand:
 
         assert resolver is not None
         assert resolver.timeout == 5
+
+    def test_diagnose_group_atoms_clusters_by_engine_key(self):
+        """`_diagnose_group_atoms` groups atomized cluster atoms together."""
+        groups = run._diagnose_group_atoms([
+            'PHLConcurrencyAtBroadmeadow',
+            'PHLAnd2ndConcurrencyAtBroadmeadow',
+            'NoDoubleBookingTeams',
+            'MaximiseClubsPerTimeslotBroadmeadow',
+        ])
+        # PHL atoms collapse to PHLAndSecondGradeTimes.
+        assert 'PHLAndSecondGradeTimes' in groups
+        assert set(groups['PHLAndSecondGradeTimes']) == {
+            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
+        }
+        # NoDoubleBookingTeams is its own engine key.
+        assert 'NoDoubleBookingTeams' in groups
+        # Non-engine atom forms a singleton under its own canonical name.
+        assert 'MaximiseClubsPerTimeslotBroadmeadow' in groups
+
+    def test_diagnose_unknown_stage_exits(self, capsys):
+        """Unknown --stage names should print available stages and exit."""
+        old_argv = sys.argv
+        try:
+            sys.argv = ['run.py', 'diagnose', '--year', '2025', '--stage', 'no_such_stage']
+            with pytest.raises(SystemExit):
+                run.main()
+        finally:
+            sys.argv = old_argv
+        captured = capsys.readouterr()
+        assert 'Unknown stage' in captured.out
+        assert 'critical_feasibility' in captured.out
 
 
 # ============== Preseason Command Tests ==============

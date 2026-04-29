@@ -1,14 +1,13 @@
-# Hand-off prompt — Atomization, FINAL-FINAL PUSH (status: ALL ✅)
+# Hand-off prompt — Atomization, FINAL-FINAL PUSH (status: ALL ✅, diagnose ✅)
 
-> **Update (commits `dd76a79` + `4599f01` + `0140495` on `final-form`):**
-> Every remaining phase is now shipped. Test bar: **1285 passed, 1
-> skipped** (down from the 1383 mid-push checkpoint because two test
-> files dedicated to deleted STAGES infrastructure were removed in the
-> 7c-completion commit). See the "What landed in this push" appendix at
-> the bottom of this document for the full breakdown. The only
-> remaining open follow-up is rewiring `run.py diagnose` to drive
-> `InfeasibilityResolver` from atom canonical names — the rest of the
-> spec is fulfilled.
+> **Update (commits `dd76a79` + `4599f01` + `0140495` + diagnose port on `final-form`):**
+> Every spec phase is shipped, including the previously-deferred
+> `run.py diagnose` port. Diagnose now drives the unified engine via
+> `apply_solver_stage` with cluster-level removal testing — `--stage`
+> accepts SOLVER_STAGES names (`critical_feasibility`, `home_away_balance`,
+> `club_alignment`, `club_day`, `soft_optimisation`) plus the
+> registry-derived severity stages (`severity_1` … `severity_5`). Test
+> bar: **1287 passed, 1 skipped**.
 >
 > Original handoff text follows — preserved for reference.
 
@@ -569,27 +568,32 @@ in your final summary, not mid-work.
   `tests/test_severity_staged.py`. Four obsolete diagnostic scripts
   deleted.
 
-## Open follow-up
+## Diagnose port — shipped ✅
 
-`run.py diagnose` is currently a stub that prints workaround
-instructions and exits non-zero. The `InfeasibilityResolver` still
-operates on constraint *classes*, but the diagnose CLI was wired to the
-deleted `STAGES`/`STAGES_AI` dicts. Re-porting it to drive the resolver
-from atom canonical names (probably via a small adapter that resolves
-canonical names through the registry) is the only spec item left. The
-shape of the rewrite:
+`run.py diagnose` is back as a working command, driving the unified
+engine via `apply_solver_stage`:
 
-```python
-from constraints.stages import load_solver_stages
-from constraints.registry import CONSTRAINT_REGISTRY
+- ``--stage`` accepts any name from `load_solver_stages()` (defaults
+  from `config/defaults.py::DEFAULT_STAGES`) or `severity_solver_stages()`
+  (registry-derived `severity_1` … `severity_5`).
+- The command first applies all atoms in the chosen stage and reports
+  the solver status. If `INFEASIBLE`, it groups atoms by engine
+  skip-key and removes one cluster at a time, reporting which cluster's
+  removal restores feasibility.
+- Granularity is engine-key (cluster), not per-atom — the engine
+  applies an atomized cluster as a unit, so per-atom removal inside a
+  cluster is meaningless. Atoms with no engine key (legacy-class
+  fallbacks like `MaximiseClubsPerTimeslotBroadmeadow`) are tested as
+  singleton clusters.
+- Two helpers in `run.py` are unit-tested:
+  `_diagnose_solve_stage` (model build + apply + solve) and
+  `_diagnose_group_atoms` (engine-key grouping).
+- ``--resolve`` now prints a clear "use --exclude on generate" pointer
+  rather than running iterative relaxation (the old per-class slack
+  registry path doesn't map cleanly to atoms; this is a deliberate
+  scope choice).
 
-stages = load_solver_stages({})
-stage = next(s for s in stages if s['name'] == args.stage)
-atoms = [CONSTRAINT_REGISTRY[a] for a in stage['atoms']]
-# ... feed `atoms` into a registry-aware InfeasibilityResolver variant ...
-```
-
-**Test bar across the chain: 1216 → 1352 → 1383 → 1285 passed, 1 skipped.**
-The dip at the end is the ~120 tests removed alongside the deleted
-STAGES dict test files; those tests were entirely about infrastructure
-that no longer exists.
+**Test bar across the chain: 1216 → 1352 → 1383 → 1285 → 1287 passed,
+1 skipped.** The dip at the second-to-last step is the ~120 tests
+removed alongside the deleted STAGES dict test files; the +2 at the
+end is from new diagnose unit tests.

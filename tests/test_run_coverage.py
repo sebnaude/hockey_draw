@@ -460,7 +460,7 @@ class TestCLIArgumentParsing:
         # Diagnose
         diagnose_parser = subparsers.add_parser('diagnose')
         diagnose_parser.add_argument('--year', type=int, required=True)
-        diagnose_parser.add_argument('--stage', type=str, default='stage1_required')
+        diagnose_parser.add_argument('--stage', type=str, default='critical_feasibility')
         diagnose_parser.add_argument('--timeout', type=float, default=5.0)
         diagnose_parser.add_argument('--resolve', action='store_true')
         diagnose_parser.add_argument('--max-iterations', type=int, default=10)
@@ -636,7 +636,7 @@ class TestCLIArgumentParsing:
     def test_diagnose_command(self):
         args = self._parse_args(['diagnose', '--year', '2026'])
         assert args.command == 'diagnose'
-        assert args.stage == 'stage1_required'
+        assert args.stage == 'critical_feasibility'
         assert args.timeout == 5.0
         assert args.resolve is False
         assert args.max_iterations == 10
@@ -656,8 +656,8 @@ class TestCLIArgumentParsing:
             self._parse_args(['diagnose', '--year', '2026', '--ai'])
 
     def test_diagnose_stage(self):
-        args = self._parse_args(['diagnose', '--year', '2026', '--stage', 'stage2_soft'])
-        assert args.stage == 'stage2_soft'
+        args = self._parse_args(['diagnose', '--year', '2026', '--stage', 'soft_optimisation'])
+        assert args.stage == 'soft_optimisation'
 
     def test_migrate_command(self):
         args = self._parse_args(['migrate', '--year', '2026'])
