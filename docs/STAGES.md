@@ -94,11 +94,67 @@ print(list_stages(stages))                  # human-readable
 - No atom appears in more than one stage.
 - Optional keys are spelled correctly.
 
-## Status (as of `final-form` after the Phase-6/7a/7b commit `67474f4`)
+## Dispatcher
+
+`constraints/stages.py::apply_solver_stage` is the single entry point that
+the solver uses to apply a stage's atoms to the model. It splits each stage's
+atoms into:
+
+- **engine atoms** — handled by `UnifiedConstraintEngine` via its
+  `skip_constraints` set. The dispatcher computes the set of engine
+  skip-keys for the stage and runs `apply_stage_1_hard` / `apply_stage_2_soft`
+  with the inverse skip mask. `applied_engine_keys` is threaded across
+  stages so a cluster's hard atoms never get re-added.
+- **non-engine atoms** — atoms whose canonical names don't map to an
+  engine method (e.g. `MaximiseClubsPerTimeslotBroadmeadow`). The
+  dispatcher resolves the legacy solver class via `solver_class_names` in
+  the registry and instantiates it directly.
+
+The mapping atom canonical name → engine skip-key lives in
+`atom_to_engine_key()`. Atoms with `atom_group` set (atomized clusters)
+return their parent's name; Phase-6 aliases (`NonDefaultHomeGrouping`,
+`AwayAtNonDefaultGrouping`, `PreferredTimes`) return their legacy
+counterparts. Atoms whose canonical name is itself a legacy combined name
+return that name. Anything else returns `None` (legacy class fallback).
+
+`StagedScheduleSolver.run_solver_stages_solve` drives the loop: builds
+engine + groupings once, then per-stage applies the dispatcher, builds
+the objective, solves, saves a checkpoint, and carries the solution as
+hints into the next stage.
+
+## CLI flags
+
+`run.py generate` accepts:
+
+| Flag | Purpose |
+|---|---|
+| `--stages-config FILE` | Load a custom stage list from a JSON file (replaces season config + defaults). |
+| `--stage-only NAME` | Restrict the run to a single stage by name. |
+| `--skip-stage NAME` | Skip a stage by name. May be passed multiple times. |
+| `--list-stages` | Print the resolved stage list and exit. Honours the other three flags. |
+
+`_resolve_solver_stages` in `run.py` wires the flags into the stage list.
+Validation runs before solving; an unknown atom or invalid stage name
+exits non-zero.
+
+## Config validation phase
+
+`utils.py::validate_game_config` includes a Phase 22 step
+`_validate_stages` that runs `validate_solver_stages(data['solver_stages'])`
+when the key is present. Any errors become FATAL config errors via the
+existing fatals/warnings collection.
+
+## Status (as of `final-form` after Phase 7b dispatch commit `dd76a79`)
 
 - ✅ `DEFAULT_STAGES` config + `constraints/stages.py` API + 10 tests in
   `tests/test_solver_stages.py`.
-- ⏳ `main_staged.py` dispatch rewire — still uses legacy `STAGES` /
-  `STAGES_AI` dicts. Tracked in `docs/ATOMIZATION_HANDOFF.md`.
-- ⏳ CLI flags `--stages-config`, `--stage-only`, `--skip-stage`,
-  `--list-stages` — pending in same follow-up commit.
+- ✅ `main_staged.py` dispatch rewire (`run_solver_stages_solve`).
+  Default `main_staged()` path is now SOLVER_STAGES; `severity_staged`
+  keeps the legacy `STAGES_SEVERITY[_AI]` dispatch.
+- ✅ CLI flags `--stages-config`, `--stage-only`, `--skip-stage`,
+  `--list-stages`. 18 dispatch tests in `tests/test_solver_stages_dispatch.py`.
+- ✅ Config-validation Phase 22 `_validate_stages`.
+- ⏳ Deletion of legacy `STAGES` / `STAGES_AI` dicts — deferred. They
+  still back the severity dispatch and the `list-constraints` /
+  `diagnose` CLI commands. See follow-up note in
+  `docs/ATOMIZATION_HANDOFF.md`.

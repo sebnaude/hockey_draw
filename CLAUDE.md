@@ -365,7 +365,20 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 
 ```powershell
 # Generate (ALWAYS background, ALWAYS --year)
+# Default uses config-driven SOLVER_STAGES (Phase 7b). Each stage applies its
+# atoms via the UnifiedConstraintEngine + registry, then solves with hints
+# carried over.
 .\.venv\Scripts\python.exe run.py generate --year 2026
+
+# List the resolved SOLVER_STAGES for a season and exit (no solve).
+.\.venv\Scripts\python.exe run.py generate --year 2026 --list-stages
+
+# Restrict to a single stage by name, or skip stages.
+.\.venv\Scripts\python.exe run.py generate --year 2026 --stage-only critical_feasibility
+.\.venv\Scripts\python.exe run.py generate --year 2026 --skip-stage soft_optimisation
+
+# Use a custom stages config (JSON list of {name, atoms, ...}) — replaces defaults.
+.\.venv\Scripts\python.exe run.py generate --year 2026 --stages-config my_stages.json
 
 # Generate with slack (loosens constraints)
 .\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3
