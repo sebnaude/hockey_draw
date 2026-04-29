@@ -1,0 +1,38 @@
+{
+  "_violations": ["ClubVsClubAlignment"],
+  "_description": "Tigers vs Norths play 3rd grade in round 1 and 4th grade in round 2 — non-coincident rounds. ClubVsClubAlignment expects min 1 coincident round per pair-of-grades; 0 coincident triggers the violation.",
+  "version": "1.0",
+  "description": "violation fixture: club-vs-club non-coincident grades",
+  "num_weeks": 2,
+  "num_games": 2,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Tigers 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "EF",
+      "field_location": "Newcastle International Hockey Centre"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Tigers 4th",
+      "team2": "Norths 4th",
+      "grade": "4th",
+      "week": 2,
+      "round_no": 2,
+      "date": "2026-04-12",
+      "day": "Sunday",
+      "time": "13:00",
+      "day_slot": 4,
+      "field_name": "WF",
+      "field_location": "Newcastle International Hockey Centre"
+    }
+  ]
+}

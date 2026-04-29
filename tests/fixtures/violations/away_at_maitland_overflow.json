@@ -1,0 +1,66 @@
+{
+  "_violations": ["AwayAtMaitlandGrouping"],
+  "_description": "In a single week, 4 distinct away clubs play at Maitland Park while max_away_clubs=3 — triggers AwayAtMaitlandGrouping.",
+  "version": "1.0",
+  "description": "violation fixture: too many away clubs at Maitland Park",
+  "num_weeks": 1,
+  "num_games": 4,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Maitland 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "09:00",
+      "day_slot": 1,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Maitland 4th",
+      "team2": "Tigers 4th",
+      "grade": "4th",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "10:30",
+      "day_slot": 2,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    },
+    {
+      "game_id": "G00003",
+      "team1": "Maitland 5th",
+      "team2": "Wests 5th",
+      "grade": "5th",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "12:00",
+      "day_slot": 3,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    },
+    {
+      "game_id": "G00004",
+      "team1": "Maitland 6th",
+      "team2": "Easts 6th",
+      "grade": "6th",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "13:30",
+      "day_slot": 4,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    }
+  ]
+}

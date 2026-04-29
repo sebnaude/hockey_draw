@@ -113,12 +113,11 @@ def test_violation_fixtures_present():
 
     The set is intentionally narrow — fixtures only earn their place when they
     reliably exercise an atom violation path with a minimal hand-crafted draw.
-    Adding more is good; the bar here is that we have at least the basic
-    coverage.
+    Adding more is good; the bar here is that we have the agreed coverage.
     """
     fixtures = _all_fixtures()
-    assert len(fixtures) >= 4, (
-        f'Phase 7a expects at least 4 violation fixtures; found {len(fixtures)}'
+    assert len(fixtures) >= 8, (
+        f'Phase 7a (expanded) expects at least 8 violation fixtures; found {len(fixtures)}'
     )
 
 

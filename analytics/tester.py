@@ -1343,9 +1343,12 @@ class DrawTester:
                 away = counts['away']
                 total = home + away
                 if total > 0 and not (home * 2 >= total - 1 and home * 2 <= total + 1):
+                    team_club = self._team_to_club.get(team) or club_prefix
                     violations.append(Violation.create(
                         constraint="FiftyFiftyHomeAway",
-                        message=f"'{team}' vs '{opponent}': {home}H/{away}A out of {total} (not balanced)"
+                        message=f"'{team}' vs '{opponent}': {home}H/{away}A out of {total} (not balanced)",
+                        affected_clubs=[team_club],
+                        metric_value=abs(home - away),
                     ))
 
         return violations
@@ -1401,6 +1404,8 @@ class DrawTester:
                             f"weeks {window_w} (max consecutive: {max_consecutive})"
                         ),
                         week=breach_week,
+                        affected_clubs=[nd_club],
+                        metric_value=window_sum,
                     ))
 
         return violations
@@ -1443,6 +1448,8 @@ class DrawTester:
                             f"(max {max_away_clubs}): {clubs}"
                         ),
                         week=week,
+                        affected_clubs=sorted(clubs),
+                        metric_value=len(clubs),
                     ))
 
         return violations
@@ -1481,7 +1488,8 @@ class DrawTester:
                     if g1 in grades and g2 in grades:
                         violations.append(Violation.create(
                             constraint="ClubGradeAdjacency",
-                            message=f"Club '{club}' has adjacent grades {g1}/{g2} at {date}, slot {slot}"
+                            message=f"Club '{club}' has adjacent grades {g1}/{g2} at {date}, slot {slot}",
+                            affected_clubs=[club],
                         ))
 
                 # Check 2: Same-club same-grade duplicate teams at same timeslot (not playing each other)
@@ -1497,7 +1505,8 @@ class DrawTester:
                         if not playing_each_other:
                             violations.append(Violation.create(
                                 constraint="ClubGradeAdjacency",
-                                message=f"Club '{club}' has duplicate {grade} teams {sorted(teams_in_slot)} at {date}, slot {slot} (not playing each other)"
+                                message=f"Club '{club}' has duplicate {grade} teams {sorted(teams_in_slot)} at {date}, slot {slot} (not playing each other)",
+                                affected_clubs=[club],
                             ))
 
         return violations
@@ -1864,7 +1873,9 @@ class DrawTester:
                             constraint="ClubVsClubAlignment",
                             message=f"Clubs {pair[0]} vs {pair[1]}, grades {grade}/{grade2}: "
                                     f"{len(coincident)} coincident rounds (min {min_required}, "
-                                    f"target {num_games})"
+                                    f"target {num_games})",
+                            affected_clubs=[pair[0], pair[1]],
+                            metric_value=min_required - len(coincident),
                         ))
 
         # Soft: check field alignment on coincident rounds
@@ -1881,7 +1892,9 @@ class DrawTester:
                     violations.append(Violation.create(
                         constraint="ClubVsClubAlignment",
                         message=f"Clubs {pair[0]} vs {pair[1]} round {round_no}, "
-                                f"grades {grade}/{grade2}: using {len(all_fields)} fields ({all_fields}), max 2"
+                                f"grades {grade}/{grade2}: using {len(all_fields)} fields ({all_fields}), max 2",
+                        affected_clubs=[pair[0], pair[1]],
+                        metric_value=len(all_fields),
                     ))
 
         return violations
@@ -1942,7 +1955,9 @@ class DrawTester:
                     message=f"Club '{club}' week {week} ({day}): gap={gap} exceeds upper limit {hard_upper} "
                             f"(slots {slots}, {num_games} games in range {min_slot}-{max_slot})",
                     affected_games=list(all_game_ids)[:5],
-                    week=week
+                    week=week,
+                    affected_clubs=[club],
+                    metric_value=gap - hard_upper,
                 ))
             elif gap < hard_lower:
                 violations.append(Violation.create(
@@ -1951,7 +1966,9 @@ class DrawTester:
                             f"(too many double-ups: {num_games} games in {range_size} slots, "
                             f"club has {T} teams, max overlap={max_overlap})",
                     affected_games=list(all_game_ids)[:5],
-                    week=week
+                    week=week,
+                    affected_clubs=[club],
+                    metric_value=hard_lower - gap,
                 ))
             elif gap > 0:
                 violations.append(Violation.create(

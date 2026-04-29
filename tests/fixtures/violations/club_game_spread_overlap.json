@@ -1,0 +1,52 @@
+{
+  "_violations": ["ClubGameSpread"],
+  "_description": "Tigers club has 3 teams with 3 games stacked into a 1-slot range — large negative gap (-2) is below the dynamic lower limit. Triggers ClubGameSpread overlap violation.",
+  "version": "1.0",
+  "description": "violation fixture: ClubGameSpread overlap",
+  "num_weeks": 1,
+  "num_games": 3,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Tigers PHL",
+      "team2": "Norths PHL",
+      "grade": "PHL",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "EF",
+      "field_location": "Newcastle International Hockey Centre"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Tigers 2nd",
+      "team2": "Norths 2nd",
+      "grade": "2nd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "WF",
+      "field_location": "Newcastle International Hockey Centre"
+    },
+    {
+      "game_id": "G00003",
+      "team1": "Tigers 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "11:30",
+      "day_slot": 3,
+      "field_name": "SF",
+      "field_location": "Newcastle International Hockey Centre"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "_violations": ["FiftyFiftyHomeAway"],
+  "_description": "Maitland 3rd plays Norths 3rd 3 times — all at Maitland Park (3H/0A). Aggregate balance enforces home*2 within total +/- 1; 3H/0A breaks this.",
+  "version": "1.0",
+  "description": "violation fixture: 50/50 home/away imbalance",
+  "num_weeks": 3,
+  "num_games": 3,
+  "games": [
+    {
+      "game_id": "G00001",
+      "team1": "Maitland 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 1,
+      "round_no": 1,
+      "date": "2026-04-05",
+      "day": "Sunday",
+      "time": "12:00",
+      "day_slot": 3,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    },
+    {
+      "game_id": "G00002",
+      "team1": "Maitland 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 2,
+      "round_no": 2,
+      "date": "2026-04-12",
+      "day": "Sunday",
+      "time": "12:00",
+      "day_slot": 3,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    },
+    {
+      "game_id": "G00003",
+      "team1": "Maitland 3rd",
+      "team2": "Norths 3rd",
+      "grade": "3rd",
+      "week": 3,
+      "round_no": 3,
+      "date": "2026-04-19",
+      "day": "Sunday",
+      "time": "12:00",
+      "day_slot": 3,
+      "field_name": "Maitland Main Field",
+      "field_location": "Maitland Park"
+    }
+  ]
+}
