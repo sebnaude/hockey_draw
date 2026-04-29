@@ -128,11 +128,11 @@ motivating example for the whole adjuster mechanism.
 
 | # | Adjuster | Status |
 |---|---|---|
-| 1 | `EqualGames` | ✅ approved: **no adjuster** — formula above explains why |
-| 2 | `EqualMatchUpSpacing` | 🟡 approved spec — implement |
-| 3 | `MaitlandHomeGrouping` (`NonDefaultHomeGrouping`) | 🟡 approved spec — implement (will rename in Phase 6) |
-| 4 | `AwayAtMaitlandGrouping` (`AwayAtNonDefaultGrouping`) | 🟡 approved spec — implement (will rename in Phase 6) |
-| 5 | `ClubVsClubCoincidence` | 🟡 approved spec — implement (the user's worked example) |
+| 1 | `EqualGames` | ✅ no adjuster needed — `sum(team_vars) == num_rounds` is unaffected by FORCED entries (FORCED just pins terms to 1; the sum is unchanged). |
+| 2 | `EqualMatchUpSpacing` | ✅ shipped — `equal_matchup_spacing_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{(t1, t2, grade): set(forced_rounds)}`. `_matchup_spacing_hard` reads it to tighten `min_gap`. |
+| 3 | `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping`) | ✅ shipped — `maitland_home_grouping_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{club: set(forced_home_weeks)}`. `_maitland_grouping_hard` clamps the home indicator to 1 for those weeks. |
+| 4 | `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`) | ✅ shipped — `away_at_maitland_grouping_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{(week, venue): set(away_clubs)}`. `_away_maitland_hard` uses `len(set)` as a per-week floor. |
+| 5 | `ClubVsClubCoincidence` | ✅ shipped — `club_vs_club_coincidence_adjuster` in `constraints/atoms/club_vs_club_coincidence.py`. Returns `{grade: {club_pair: expected_meetings}}`, reducing for FORCED off-Sunday and BLOCKED on-Sunday entries. The atom reads `expected` instead of `num_games` when computing `min_required = max(0, expected - slack)`. |
 
 Each adjuster ships as one commit on `final-form` with: (a) the adjuster
 callable assigned to `CONSTRAINT_REGISTRY[name].forced_blocked_adjuster`, (b)

@@ -24,6 +24,10 @@ from constraints.atoms.club_vs_club_field_limit import ClubVsClubFieldLimit
 from constraints.atoms.club_vs_club_deficit_penalty import ClubVsClubDeficitPenalty
 from constraints.atoms.phl_2nd_back_to_back import PHLAnd2ndBackToBackSameField
 
+# Side-effect import: registers FORCED/BLOCKED count adjusters for the
+# constraints whose atoms haven't been split out yet (Phase 4).
+from constraints.atoms import _adjusters  # noqa: F401
+
 
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,

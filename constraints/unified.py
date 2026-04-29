@@ -641,6 +641,10 @@ class UnifiedConstraintEngine:
         n = 0
         grade_num_teams = {g.name: g.num_teams for g in self.grades}
         config_slack = self.slack.get('EqualMatchUpSpacingConstraint', 0)
+        # Phase 4 adjuster: per-pair forced rounds reduce flexibility.
+        forced_rounds_per_pair = self.data.get('count_adjustments', {}).get(
+            'EqualMatchUpSpacing', {}
+        ) or {}
 
         def get_base_slack(num_teams):
             ideal = num_teams - 1
@@ -652,6 +656,12 @@ class UnifiedConstraintEngine:
                 continue
             space = T - 1
             base_slack = min(get_base_slack(T) + config_slack, T // 2 + 1)
+            forced_rounds = forced_rounds_per_pair.get(
+                (t1, t2, grade)
+            ) or forced_rounds_per_pair.get((t2, t1, grade)) or set()
+            if forced_rounds:
+                # Each FORCED round eats one "free" round of spacing flexibility.
+                base_slack = max(1, base_slack - len(forced_rounds))
             min_gap = max(1, space - base_slack)
 
             active_rounds = sorted(r for r in round_map if round_map[r])
@@ -769,6 +779,11 @@ class UnifiedConstraintEngine:
         n = 0
         slack = self.slack.get('MaitlandHomeGrouping', 0)
         limit = 1 + slack
+        # Phase 4 adjuster: weeks with FORCED Maitland home games are pinned to 1.
+        forced_home_weeks_per_club = self.data.get('count_adjustments', {}).get(
+            'MaitlandHomeGrouping', {}
+        ) or {}
+        forced_maitland_home = forced_home_weeks_per_club.get('Maitland', set())
 
         home_indicators = {}
         for week in sorted(self.maitland_all_week.keys()):
@@ -777,6 +792,9 @@ class UnifiedConstraintEngine:
                 ('maitland_home_ind', week), home_vars,
                 f'u_mait_home_{week}')
             home_indicators[week] = ind
+            if week in forced_maitland_home:
+                self.model.Add(ind == 1)
+                n += 1
 
         sorted_weeks = sorted(home_indicators.keys())
         for i in range(1, len(sorted_weeks)):
@@ -792,6 +810,13 @@ class UnifiedConstraintEngine:
         slack = self.slack.get('AwayAtMaitlandGrouping', 0)
         base_limit = self.data.get('constraint_defaults', {}).get('away_maitland_max_clubs', 3)
         hard_limit = base_limit + slack
+        # Phase 4 adjuster: forced away clubs at this venue/week become a floor.
+        forced_away_per_week = self.data.get('count_adjustments', {}).get(
+            'AwayAtMaitlandGrouping', {}
+        ) or {}
+        # Resolve Maitland venue from home_field_map.
+        home_field_map = self.data.get('home_field_map', {}) or {}
+        maitland_venue = home_field_map.get('Maitland')
 
         for week, club_vars in self.maitland_away_club_week.items():
             club_indicators = []
@@ -805,6 +830,12 @@ class UnifiedConstraintEngine:
                 self.model.Add(nc == sum(club_indicators))
                 self.model.Add(nc <= hard_limit)
                 n += 1
+                # Apply forced floor: at least len(forced_away_clubs) clubs are away.
+                if maitland_venue:
+                    floor = len(forced_away_per_week.get((week, maitland_venue), set()))
+                    if floor > 0:
+                        self.model.Add(nc >= floor)
+                        n += 1
         return n
 
     # ----------------------------------------------------------------

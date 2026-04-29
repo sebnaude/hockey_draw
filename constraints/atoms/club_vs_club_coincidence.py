@@ -11,6 +11,9 @@ seen in both grades, this atom:
    `ClubVsClubFieldLimit` and `ClubVsClubDeficitPenalty` can read it back.
 4. Adds the HARD requirement `sum(coincide_vars) >= num_games - slack`.
 """
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+
 from constraints.atoms.base import Atom
 from constraints.atoms._club_vs_club_shared import (
     COINCIDE_KEY_PREFIX,
@@ -18,6 +21,7 @@ from constraints.atoms._club_vs_club_shared import (
     lower_grade_pairs_to_compare,
     per_team_games,
 )
+from constraints.registry import CONSTRAINT_REGISTRY
 
 
 class ClubVsClubCoincidence(Atom):
@@ -28,6 +32,12 @@ class ClubVsClubCoincidence(Atom):
         n = 0
         slack = data.get('constraint_slack', {}).get('ClubVsClubAlignment', 0)
         games = per_team_games(data)
+
+        # Phase 4 adjuster output: per-grade per-pair expected meetings,
+        # reduced for FORCED off-Sunday and BLOCKED on-Sunday entries.
+        adjustment = (
+            data.get('count_adjustments', {}).get('ClubVsClubCoincidence') or {}
+        )
 
         per_grade_vars = {}
         for grade, _other, _num in lower_grade_pairs_to_compare(data):
@@ -43,6 +53,7 @@ class ClubVsClubCoincidence(Atom):
                 )
             grade_pairs = per_grade_vars[grade]
             other_pairs = per_grade_vars[other_grade]
+            grade_adj = adjustment.get(grade, {}) if isinstance(adjustment, dict) else {}
 
             for club_pair, rounds in grade_pairs.items():
                 if club_pair not in other_pairs:
@@ -74,7 +85,122 @@ class ClubVsClubCoincidence(Atom):
                     coincide_vars.append(coincide)
 
                 if coincide_vars:
-                    min_required = max(0, num_games - slack)
+                    expected = grade_adj.get(club_pair, num_games)
+                    min_required = max(0, expected - slack)
                     model.Add(sum(coincide_vars) >= min_required)
                     n += 1
         return n
+
+
+# ----------------------------------------------------------------------
+# Phase 4 #5 — FORCED/BLOCKED count adjuster for ClubVsClubCoincidence.
+# ----------------------------------------------------------------------
+
+
+def club_vs_club_coincidence_adjuster(
+    data: Dict, forced_games: List, blocked_games: List
+) -> Optional[Dict[str, Dict[Tuple[str, str], int]]]:
+    """User's worked example: ClubVsClubCoincidence counts how many rounds a
+    club-pair meets on Sunday. If FORCED forces N games of a club-pair onto a
+    non-Sunday day, those games never appear in the Sunday alignment block, so
+    the expected coincidence count drops by N. Same for BLOCKED entries that
+    eliminate Sunday vars.
+
+    Returns: { grade: { (club_a, club_b): expected_meetings } } where expected_
+    meetings = total - forced_off_sunday - blocked_on_sunday, clamped to 0.
+    Only pairs with non-zero adjustment are included.
+    """
+    teams = data.get('teams', []) or []
+    if not teams:
+        return None
+
+    from constraints.atoms._adjusters import _resolve_teams_in_entry
+
+    team_club: Dict[str, str] = {t.name: t.club.name for t in teams}
+
+    # Initialise expected counts from per_team_games (matches atom semantics)
+    per_grade = per_team_games(data)
+    grades = data.get('grades', []) or []
+    grade_names = {g.name for g in grades}
+
+    # We only adjust pairs we actually see in forced/blocked entries. The atom
+    # falls back to per_team_games when the adjustment dict has no entry for
+    # a pair, so we don't need to enumerate every pair.
+    adjustments: Dict[str, Dict[Tuple[str, str], int]] = defaultdict(dict)
+
+    def _classify(entry: Dict) -> str:
+        """Classify an entry as 'sunday' / 'non_sunday' / 'unknown'."""
+        day = entry.get('day')
+        if isinstance(day, (list, tuple)):
+            days = set(day)
+            if days == {'Sunday'}:
+                return 'sunday'
+            if 'Sunday' not in days:
+                return 'non_sunday'
+            return 'unknown'
+        if day == 'Sunday':
+            return 'sunday'
+        if day:  # any non-Sunday day
+            return 'non_sunday'
+        return 'unknown'
+
+    # Tally forced games that pin a club-pair off Sunday
+    deltas: Dict[Tuple[str, Tuple[str, str]], int] = defaultdict(int)
+    for entry in forced_games or []:
+        if _classify(entry) != 'non_sunday':
+            continue
+        grade = entry.get('grade')
+        if not grade or grade not in grade_names:
+            continue
+        pairs = _resolve_teams_in_entry(entry, teams)
+        if not pairs:
+            continue
+        # Use entry 'count' as the number of forced occurrences (default 1).
+        count = int(entry.get('count', 1))
+        seen_clubpairs = set()
+        for t1, t2 in pairs:
+            c1, c2 = team_club.get(t1), team_club.get(t2)
+            if not c1 or not c2 or c1 == c2:
+                continue
+            club_pair = tuple(sorted([c1, c2]))
+            if club_pair in seen_clubpairs:
+                continue
+            seen_clubpairs.add(club_pair)
+            deltas[(grade, club_pair)] += count
+
+    for entry in blocked_games or []:
+        # BLOCKED entries removing Sunday vars also reduce expected coincidences.
+        day = entry.get('day')
+        if day != 'Sunday' and not (isinstance(day, (list, tuple)) and 'Sunday' in day):
+            continue
+        grade = entry.get('grade')
+        if not grade or grade not in grade_names:
+            continue
+        pairs = _resolve_teams_in_entry(entry, teams)
+        if not pairs:
+            continue
+        count = int(entry.get('count', 1))
+        seen_clubpairs = set()
+        for t1, t2 in pairs:
+            c1, c2 = team_club.get(t1), team_club.get(t2)
+            if not c1 or not c2 or c1 == c2:
+                continue
+            club_pair = tuple(sorted([c1, c2]))
+            if club_pair in seen_clubpairs:
+                continue
+            seen_clubpairs.add(club_pair)
+            deltas[(grade, club_pair)] += count
+
+    if not deltas:
+        return None
+
+    for (grade, club_pair), delta in deltas.items():
+        baseline = per_grade.get(grade, 0)
+        adjustments[grade][club_pair] = max(0, baseline - delta)
+
+    return {g: dict(p) for g, p in adjustments.items()}
+
+
+CONSTRAINT_REGISTRY['ClubVsClubCoincidence'].forced_blocked_adjuster = (
+    club_vs_club_coincidence_adjuster
+)
