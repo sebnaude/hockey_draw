@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-007-opus claimed=2026-05-17T08:26:04Z -->
 <!-- depends_on: none -->
 
 # spec-007 — Adjacent-grade hard atom → soft; keep only same-grade-same-club hard
