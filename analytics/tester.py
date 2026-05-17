@@ -2376,22 +2376,23 @@ class DrawTester:
                     matching_games.append(game.game_id)
 
             count = len(matching_games)
+            threshold = entry.get('count', 1)
             violated = False
-            if ctype == 'equal' and count != 1:
+            if ctype == 'equal' and count != threshold:
                 violated = True
-                msg = f"Expected exactly 1 game, found {count}"
-            elif ctype == 'lesse' and count > 1:
+                msg = f"Expected exactly {threshold} game(s), found {count}"
+            elif ctype == 'lesse' and count > threshold:
                 violated = True
-                msg = f"Expected at most 1 game, found {count}"
-            elif ctype == 'greatere' and count < 1:
+                msg = f"Expected at most {threshold} game(s), found {count}"
+            elif ctype == 'greatere' and count < threshold:
                 violated = True
-                msg = f"Expected at least 1 game, found {count}"
-            elif ctype == 'greater' and count <= 1:
+                msg = f"Expected at least {threshold} game(s), found {count}"
+            elif ctype == 'greater' and count <= threshold:
                 violated = True
-                msg = f"Expected more than 1 game, found {count}"
-            elif ctype == 'less' and count >= 1:
+                msg = f"Expected more than {threshold} game(s), found {count}"
+            elif ctype == 'less' and count >= threshold:
                 violated = True
-                msg = f"Expected 0 games, found {count}"
+                msg = f"Expected fewer than {threshold} game(s), found {count}"
 
             if violated:
                 violations.append(Violation.create(
