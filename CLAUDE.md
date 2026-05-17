@@ -5,6 +5,7 @@
 **Before answering ANY question or making ANY change, READ:**
 1. `config/season_2026.py` (or relevant season) - the ACTUAL config with all dicts
 2. This file in its entirety
+3. `docs/GOALS.md` - the *why* (product goal + atomization model + doc map)
 
 The system has multiple layers of variable filtering and game restriction. Do NOT guess - READ THE CONFIG.
 
