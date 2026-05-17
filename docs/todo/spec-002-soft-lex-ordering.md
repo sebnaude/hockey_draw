@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-002-impl claimed=2026-05-17T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-002 — Soft lexicographical ordering of matchups across the season
