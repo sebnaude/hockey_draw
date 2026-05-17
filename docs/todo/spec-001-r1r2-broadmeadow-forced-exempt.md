@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=opus-4.7-spec001 claimed=2026-05-17T08:24:41Z -->
 <!-- depends_on: none -->
 
 # spec-001 — Rounds 1–2 Broadmeadow-only rule exempts FORCED games
