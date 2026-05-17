@@ -1,450 +1,79 @@
-# Hockey Draw Scheduling System
+# Hockey Draw Scheduler — Documentation
 
-A constraint programming system for generating hockey competition draws (schedules) using Google OR-Tools' CP-SAT solver. The system handles complex scheduling requirements including team availability, field constraints, home/away balance, and club preferences.
+All project documentation, organised by **audience and lifecycle**. Pick the category that matches who you are and what you need.
 
-## Table of Contents
+## The six categories
 
-- [Overview](#overview)
-- [Installation](#installation)
-- [Required Data Inputs](#required-data-inputs)
-- [File Structure](#file-structure)
-- [Running the System](#running-the-system)
-- [Output Files](#output-files)
-- [Configuration](#configuration)
+| Category | Audience | When to read | When to update |
+|---|---|---|---|
+| **`operator-human/`** | Convenor — using the system | Onboarding, running the system, looking up a rule | When a behaviour visible to the operator changes, or the rules of the competition change |
+| **`operator-ai/`** | AI agents operating the system | Every AI session (after `CLAUDE.md` + `todo/GOALS.md`) | When a CLI flag, config key, file path, or operational procedure changes |
+| **`system/`** | Engineers extending or debugging | Before any non-trivial code change; when looking up atom / helper-var detail | **Every time engineering behaviour changes** — same commit |
+| **`reports/`** | Convenor + stakeholders (clubs, league) | Reviewing what a given season looked like | Once per draw publication cycle. Reports are snapshots, not living docs |
+| **`seasonal/`** | Convenor (+ helping AI) for *this* season | While building / publishing the season | While the season is live; freeze when published |
+| **`todo/`** | Anyone about to implement system work | Before starting an engineering unit | Continuously — every plan moves `not_ready → ready → in_progress → done` |
 
----
+Each category has its own `README.md` with the full contents list and conventions. Read that before adding files to a category.
 
-## Overview
-
-This system generates optimal game schedules for a hockey competition by solving a constraint satisfaction problem. It considers:
-
-- **17+ constraints** ranging from physical necessities (no double-booking) to preferences (club days)
-- **Staged solving** for improved performance and partial solutions
-- **Multiple venues** including home fields for Maitland and Gosford
-- **Analytics generation** for schedule validation
-
----
-
-## Installation
-
-```powershell
-cd refactored
-pip install -r requirements.txt
-```
-
-### Dependencies
-
-- Python 3.8+
-- ortools (Google OR-Tools)
-- pandas
-- pydantic
-- openpyxl / xlsxwriter
-- pytest (for testing)
-
----
-
-## Required Data Inputs
-
-### 1. Team Data Files (CSV)
-
-**Location:** `data/{year}/teams/{club_name}.csv`
-
-Each club requires a CSV file with their teams. One file per club.
-
-| Column | Type | Description | Example |
-|--------|------|-------------|---------|
-| `Club` | string | Club name | `Maitland` |
-| `Grade` | string | Grade level | `PHL`, `2nd`, `3rd`, `4th`, `5th`, `6th` |
-| `Team Name` | string | Team identifier | `Maitland`, `Red`, `Seapigs` |
-
-**Example file:** `data/2025/teams/maitland.csv`
-```csv
-Club,Grade,Team Name
-Maitland,PHL,Maitland
-Maitland,2nd,Maitland
-Maitland,4th,Maitland
-Maitland,5th,Maitland
-Maitland,6th,Maitland
-```
-
-**Team naming convention:** The full team name is constructed as `{Team Name} {Grade}`, e.g., `Maitland PHL`, `Souths 2nd`.
-
----
-
-### 2. Team Unavailability Files (XLSX) - Optional
-
-**Location:** `data/{year}/noplay/{club_name}_noplay.xlsx`
-
-Excel files specifying when teams/clubs cannot play. Each file has 3 sheets:
-
-#### Sheet: `club_noplay`
-Club-wide restrictions (all teams affected)
-
-| Column | Format | Description |
-|--------|--------|-------------|
-| `whole_weekend` | `DD/MM/YYYY` | Block entire weekend (by week number) |
-| `whole_day` | `DD/MM/YYYY` | Block specific day |
-| `timeslot` | `DD/MM/YYYY HH:MM` | Block specific timeslot |
-
-#### Sheet: `teams_noplay`
-Individual team restrictions
-
-| Column | Format | Description |
-|--------|--------|-------------|
-| `team` | string | Full team name (e.g., `Maitland PHL`) |
-| `whole_weekend` | `DD/MM/YYYY` | Block entire weekend |
-| `whole_day` | `DD/MM/YYYY` | Block specific day |
-| `timeslot` | `DD/MM/YYYY HH:MM` | Block specific timeslot |
-
-#### Sheet: `team_conflicts`
-Teams that cannot play at the same time (e.g., shared players)
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `team1` | string | First conflicting team |
-| `team2` | string | Second conflicting team |
-
----
-
-### 3. Field Availability (XLSX) - Optional
-
-**Location:** `data/{year}/field_availability/{venue}_availability.xlsx`
-
-Specifies when fields are unavailable.
-
----
-
-### 4. Configuration Data (Hardcoded in main_staged.py)
-
-The following data points are currently configured in `main_staged.py` and should be updated each season:
-
-#### Playing Fields
-
-```python
-FIELDS = [
-    PlayingField(location='Newcastle International Hockey Centre', name='SF'),  # South Field
-    PlayingField(location='Newcastle International Hockey Centre', name='EF'),  # East Field
-    PlayingField(location='Newcastle International Hockey Centre', name='WF'),  # West Field
-    PlayingField(location='Maitland Park', name='Maitland Main Field'),
-    PlayingField(location='Central Coast Hockey Park', name='Wyong Main Field'),
-]
-```
-
-#### Game Times by Venue/Day
-
-```python
-day_time_map = {
-    'Newcastle International Hockey Centre': {
-        'Sunday': [tm(8, 30), tm(10, 0), tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0), tm(17, 30), tm(19, 0)]
-    },
-    'Maitland Park': {
-        'Sunday': [tm(9, 0), tm(10, 30), tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-    }
-}
-```
-
-#### PHL-Specific Game Times
-
-```python
-phl_game_times = {
-    'Newcastle International Hockey Centre': {
-        'Friday': [tm(19, 0)], 
-        'Sunday': [tm(11, 30), tm(13, 0), tm(14, 30), tm(16, 0)]
-    },
-    'Central Coast Hockey Park': {
-        'Friday': [tm(20, 0)], 
-        'Sunday': [tm(15, 0)]
-    },
-    'Maitland Park': {
-        'Sunday': [tm(12, 0), tm(13, 30), tm(15, 0), tm(16, 30)]
-    }
-}
-```
-
-#### Season Dates
-
-```python
-start = datetime(2025, 3, 21)  # Season start date
-end = datetime(2025, 9, 2)     # Season end date
-max_rounds = 21                # Maximum number of rounds
-```
-
-#### Field Unavailabilities (by venue)
-
-```python
-field_unavailabilities = {
-    'Maitland Park': {
-        'weekends': [datetime(2025, 4, 19), datetime(2025, 4, 12), ...],  # Whole weekends blocked
-        'whole_days': [datetime(2025, 4, 25)],                           # Specific days blocked
-        'part_days': [],                                                  # Partial day blocks
-    },
-    'Newcastle International Hockey Centre': {
-        'weekends': [datetime(2025, 4, 19), datetime(2025, 5, 3), ...],
-        'whole_days': [datetime(2025, 4, 25), datetime(2025, 5, 31)],
-        'part_days': [datetime(2025, 6, 1, 8, 30), datetime(2025, 6, 1, 10, 0), ...],
-    },
-    'Central Coast Hockey Park': {
-        'weekends': [datetime(2025, 4, 19), datetime(2025, 4, 5), ...],
-        'whole_days': [datetime(2025, 4, 25)],
-        'part_days': [],
-    },
-}
-```
-
-#### Club Days (Special events)
-
-```python
-club_days = {
-    'Crusaders': datetime(2025, 6, 22),
-    'Wests': datetime(2025, 7, 13),
-    'University': datetime(2025, 7, 27),
-    'Tigers': datetime(2025, 7, 6),
-    'Port Stephens': datetime(2025, 7, 20)
-}
-```
-
-#### No-Play Preferences (Soft constraints)
-
-```python
-preference_no_play = {
-    'Maitland': [
-        {'date': '2025-07-20', 'field_location': 'Newcastle International Hockey Centre'},
-        {'date': '2025-08-24', 'field_location': 'Newcastle International Hockey Centre'}
-    ],
-    'Norths': [
-        {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '11:30'},
-        {'team_name': 'Norths PHL', 'date': '2025-03-23', 'time': '13:00'},
-    ]
-}
-```
-
----
-
-## File Structure
+## At-a-glance file tree
 
 ```
-├── run.py                      # 🚀 Main CLI entry point
-├── main_staged.py              # Staged solving with checkpoints (+ --simple mode)
-├── models.py                   # Pydantic data models
-├── utils.py                    # Utility functions
-│
-├── constraints/                # Constraint modules
-│   ├── original.py             # Original constraints (READ-ONLY — do not edit)
-│   ├── ai.py                   # AI-enhanced constraints (editable)
-│   ├── soft.py                 # Soft constraint variants
-│   ├── severity.py             # Severity-based relaxation
-│   └── resolver.py             # Infeasibility resolver
-│
-├── analytics/                  # Analytics and testing
-│   ├── storage.py              # Pliable JSON format
-│   ├── reports.py              # ClubReport, GradeReport
-│   └── tester.py               # Modification testing tool
-│
-├── config/                     # Season configuration
-│   ├── season_2025.py
-│   ├── season_2026.py
-│   └── season_template.py
-│
-├── data/
-│   └── {year}/
-│       ├── teams/              # Team CSV files (required)
-│       │   ├── maitland.csv
-│       │   ├── souths.csv
-│       │   └── ...
-│       ├── noplay/             # Unavailability XLSX files (optional)
-│       │   ├── maitland_noplay.xlsx
-│       │   └── ...
-│       └── field_availability/ # Field availability (optional)
-│
-├── scripts/                    # Utility scripts
-├── reports/                    # Generated reports
-├── draws/                      # Output schedules
-├── checkpoints/                # Solver checkpoints
-└── tests/                      # Test suite (420+ tests)
-    ├── test_constraints.py              # Original constraint unit tests
-    ├── test_constraints_ai.py           # AI constraint unit tests
-    ├── test_ai_constraints_comprehensive.py # 70 comprehensive AI tests
-    ├── test_constraints_equivalence.py  # AI vs original equivalence tests
-    ├── test_analytics_*.py              # Analytics module tests
-    ├── test_draw_outcomes.py            # Draw outcome tests
-    └── test_utils.py                    # Utility function tests
+docs/
+  README.md                         ← you are here
+  operator-human/
+    README.md
+    USER_GUIDE.md                   how to install, configure, run
+    CAPABILITIES.md                 what the system can do
+    RULES.md                        the rules, plain English
+    PERENNIAL_RULES.md              standing rules across seasons
+  operator-ai/
+    README.md
+    AI_OPERATIONS_MANUAL.md         master AI-operator reference
+    SYSTEM_OPERATION.md             running, monitoring, troubleshooting
+    SEASON_SETUP.md                 spinning up a new season
+    CONFIGURATION_REFERENCE.md      every config parameter
+    CONSTRAINT_APPLICATION.md       FORCED / BLOCKED / AWAY_VENUE_RULES etc
+    GAME_TIME_DICTIONARIES.md       PHL/2nd time-slot filtering
+  system/
+    README.md
+    SYSTEM_OVERVIEW.md              architecture
+    CONSTRAINT_INVENTORY.md         the atom registry (SSoT, per-atom detail)
+    HARNESS.md                      end-to-end pipeline reference
+    STAGES.md                       SOLVER_STAGES config + CLI flags
+    HELPER_VARS.md                  HelperVarRegistry API
+    COUNT_ADJUSTERS.md              FORCED/BLOCKED count adjuster formulas
+    FORCED_GAMES_AS_COUNT_RULES.md  why per-venue Friday counts → FORCED
+  reports/
+    README.md
+    {year}/                         per-season report bundles (snapshots)
+  seasonal/
+    README.md
+    {year}/
+      convenor_notes.md             working scratchpad
+      club_contacts.md              who-to-call list
+      operational_TODO.md           in-flight ops items for this season
+  todo/
+    README.md
+    GOALS.md                        product + engineering goals + specifications
+    spec-*.md                       individual implementation plans (status-tracked)
+    done/                           completed plans (archival)
 ```
 
----
+## Where do I add a new doc?
 
-## Running the System
+| Question | Answer |
+|---|---|
+| Is it about a *rule* convenors care about? | `operator-human/RULES.md` (high-level) or `system/CONSTRAINT_INVENTORY.md` (technical) |
+| Is it a CLI / config reference? | `operator-ai/` |
+| Is it engineering caveats / atom internals? | `system/` |
+| Is it for *this* season only? | `seasonal/{year}/` |
+| Is it a published report / snapshot? | `reports/{year}/` |
+| Is it a plan for work to be done? | `todo/spec-*.md` |
+| Is it the long-horizon goal? | `todo/GOALS.md` (single file) |
 
-### Using the CLI (Recommended)
+When unsure: ask which category's *audience* would read it first.
 
-```powershell
-cd refactored
+## See also
 
-# Generate a new draw (staged solving: stage1_required → stage2_soft)
-python run.py generate --year 2025
-
-# Generate with simple mode (all constraints at once)
-python run.py generate --year 2025 --simple
-
-# Run only stage 1 (required constraints)
-python run.py generate --year 2025 --stages stage1_required
-
-# Generate with AI constraints (opt-in alternative constraint set)
-python run.py generate --year 2025 --ai
-
-# Generate with AI constraints in simple mode, excluding problematic constraints
-python run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --workers 14
-
-# Resume from a checkpoint
-python run.py generate --year 2025 --resume run_1 stage1_required
-
-# Diagnose infeasibility (find blocking constraint)
-python run.py diagnose --year 2025
-
-# Diagnose with auto-relaxation
-python run.py diagnose --year 2025 --resolve
-
-# Test an existing draw for violations
-python run.py test draws/draw_2025.json --year 2025
-
-# Generate full analytics report
-python run.py analyze draws/draw_2025.json --year 2025
-
-# Generate pre-season configuration report
-python run.py preseason --year 2026
-
-# Get help
-python run.py --help
-python run.py generate --help
-python run.py diagnose --help
-```
-
----
-
-## Output Files
-
-After a successful solve, the following files are generated in `draws/`:
-
-| File | Description |
-|------|-------------|
-| `schedule_{timestamp}.xlsx` | Traditional Excel schedule (one sheet per week) |
-| `draw_{timestamp}.json` | Pliable JSON format for further processing |
-| `analytics_{timestamp}.xlsx` | Comprehensive analytics workbook |
-| `violations_{timestamp}.txt` | Violation report (if any issues found) |
-
-### Analytics Workbook Sheets
-
-| Sheet | Description |
-|-------|-------------|
-| `Summary` | Grade-level statistics |
-| `Compliance Check` | Quick constraint compliance status |
-| `Games Per Team` | Cross-tab of games per team per grade |
-| `Home-Away Analysis` | Home/away/neutral breakdown per team |
-| `Away Team Balance` | Maitland/Gosford home/away balance |
-| `Matchup Matrix` | Team vs team matchup counts per grade |
-| `Field Usage` | Field utilization per week |
-| `Club-{name}` | Complete season schedule per club |
-| `All Games` | Full game list sorted by week |
-
----
-
-## Configuration
-
-### Grade Order
-
-The system assumes grades are ordered as:
-```
-PHL > 2nd > 3rd > 4th > 5th > 6th
-```
-
-### Home Field Mapping
-
-| Club | Home Field |
-|------|------------|
-| Maitland | Maitland Park |
-| Gosford | Central Coast Hockey Park |
-| All others | Newcastle International Hockey Centre |
-
-### Constraint Stages
-
-Constraints are applied in 4 stages (see `DRAW_RULES.md` for details):
-
-1. **Stage 1 - Required**: No double-booking, equal games (must satisfy)
-2. **Stage 2 - Structural**: Home/away balance, adjacency rules
-3. **Stage 3 - Optimization**: Venue efficiency, timeslot choices
-4. **Stage 4 - Soft**: Preferences with penalties
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**"Club {name} does not exist in clubs"**
-- Ensure the club name in `{club}_noplay.xlsx` matches the `Club` column in team CSVs
-
-**"Team {name} does not exist in games"**
-- Check team name format: `{Team Name} {Grade}` (e.g., `Maitland PHL`)
-
-**No solution found in Stage 1**
-- Too many hard constraints; check field unavailabilities don't block all options
-
-**Memory issues**
-- Use staged solving with checkpoints
-- Reduce `max_rounds` for initial testing
-
----
-
-## Stakeholder Reports
-
-### Club Reports
-
-Generate a comprehensive report for a single club:
-
-```powershell
-python run.py club-report draws/draw_2025.json Maitland --output reports/
-```
-
-**Output includes:**
-- All games for the club across all grades
-- Home/away balance per team
-- Bye weeks
-- Opponent frequency
-- Field usage summary
-
-### Grade Reports
-
-```python
-from analytics.reports import GradeReport
-
-report = GradeReport(draw, data, 'PHL')
-report.generate_excel('phl_analysis.xlsx')
-```
-
-### Compliance Certificate
-
-Verify the draw satisfies all constraints:
-
-```powershell
-python run.py cert draws/draw_2025.json --output compliance.xlsx
-```
-
-**Output includes:**
-- Per-constraint pass/fail status
-- Violation counts by severity
-- Detailed violation list (if any)
-- Official timestamp
-
----
-
-## Testing
-
-```powershell
-cd refactored
-pytest tests/ -v
-```
-
----
-
-## License
-
-Internal use only.
+- Repo-root `CLAUDE.md` — mandatory first read for AI sessions, includes category-update rules
+- Repo-root `README.md` — quick-start for new humans

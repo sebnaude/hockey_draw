@@ -75,7 +75,64 @@ out of scope for Phase 6.
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
 | **Total** | **18 solver + 3 tester-only** | **24 solver + 3 tester-only** | **+10** |
 
-## 4. Findings vs the plan's assumptions
+## 4. Per-atom engineering detail
+
+Engineering-level table for every registered atom + non-atomised legacy constraint. The columns answer the questions an engineer asks before touching code: does it skip forced vars? does it skip locked weeks? what slack key does it read? what helper vars does it consume?
+
+**Rule:** when an atom is added or changed, this table gets a row in the same commit. A missing or `?` row is treated as a bug (see `docs/system/README.md`).
+
+| Canonical name | File | Forced-games | Locked-week skip | Dummy-key skip | Slack key | Helper vars | Caveats |
+|---|---|---|---|---|---|---|---|
+| **Atomised (Phase 3) — PHL/2nd cluster** | | | | | | | |
+| `PHLConcurrencyAtBroadmeadow` | `constraints/atoms/phl_concurrency.py` | n/a | yes | yes | — | — | Broadmeadow-only; prevents concurrent PHL games per (week, day_slot) |
+| `PHLAnd2ndConcurrencyAtBroadmeadow` | `constraints/atoms/phl_2nd_concurrency.py` | n/a | yes | yes | — | — | PHL + same-club-2nd no-concurrency at Broadmeadow |
+| `GosfordFridayRoundsForced` | `constraints/atoms/gosford_friday_rounds.py` | n/a | yes | yes | — | — | Reads `CONSTRAINT_DEFAULTS['gosford_friday_rounds']` (currently `{2,4,5,9,10}` per 2026 AGM) |
+| `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | Skipped when locked_weeks includes round 1 |
+| `PreferredDates` | `constraints/atoms/preferred_dates.py` | excluded | yes | yes | — | — | Soft; weight `PENALTY_WEIGHTS['phl_preferences']=10000` |
+| **Atomised (Phase 3) — ClubDay cluster** | | | | | | | |
+| `ClubDayParticipation` | `constraints/atoms/club_day_participation.py` | excluded | yes | yes | — | — | Skips locked-week club days via `parse_club_day_entries` |
+| `ClubDayIntraClubMatchup` | `constraints/atoms/club_day_intra_club_matchup.py` | excluded | yes | yes | — | — | Derby logic when opponent undefined / empty for grade |
+| `ClubDayOpponentMatchup` | `constraints/atoms/club_day_opponent_matchup.py` | excluded | yes | yes | — | — | Cross-club matchups per grade when opponent set |
+| `ClubDaySameField` | `constraints/atoms/club_day_same_field.py` | excluded | yes | yes | `club_day_field_used` | `club_day_field_used` | Channels field indicators via registry |
+| `ClubDayContiguousSlots` | `constraints/atoms/club_day_contiguous_slots.py` | excluded | yes | yes | `club_day_slot_used` | `club_day_slot_used` | Sliding window; requires ≥3 slots to apply |
+| **Atomised (Phase 3) — ClubVsClub cluster** *(to be replaced by spec-005)* | | | | | | | |
+| `ClubVsClubCoincidence` | `constraints/atoms/club_vs_club_coincidence.py` | excluded (via adjuster) | yes | yes | `ClubVsClubAlignment` | `cvc_coincide` | Adjuster reduces expected counts for FORCED off-Sunday / BLOCKED on-Sunday |
+| `ClubVsClubFieldLimit` | `constraints/atoms/club_vs_club_field_limit.py` | n/a (reads coincide vars) | yes | yes | `ClubVsClubAlignment` | `cvc_coincide` (reads) | Soft penalty `ClubVsClubAlignmentField`=50000; hard ≤2 fields |
+| `ClubVsClubDeficitPenalty` | `constraints/atoms/club_vs_club_deficit_penalty.py` | n/a (reads coincide vars) | yes | yes | — | `cvc_coincide` (reads) | Soft penalty into `ClubVsClubAlignment` bucket=100000 |
+| `PHLAnd2ndBackToBackSameField` | `constraints/atoms/phl_2nd_back_to_back.py` | n/a | yes | yes | `ClubVsClubAlignment` | `cvc_phl_btb_coincide` | PHL/2nd Sunday only; back-to-back same-field pairing logic |
+| **Non-atomised (still routed through `constraints/archived/`)** | | | | | | | |
+| `NoDoubleBookingTeams` | `constraints/archived/original.py` | included | yes | yes | — | — | Fundamental; no forced exclusion needed |
+| `NoDoubleBookingFields` | `constraints/archived/original.py` | included | yes | yes | — | — | Uses `date`, not `week`, for slot comparisons |
+| `EqualGamesAndBalanceMatchUps` | `constraints/archived/original.py` | included | yes | yes | — | — | Includes dummy vars (overflow); two distinct tester violation types |
+| `FiftyFiftyHomeandAway` | `constraints/archived/original.py` | included | yes | yes | — | — | **To be replaced by spec-004 atoms.** Aggregate-block parity issue flagged in §5.1 below |
+| `PHLAndSecondGradeAdjacency` | `constraints/archived/original.py` | included | yes | yes | — | — | 180-min window — hardcoded; Phase 5 punch list `phl_adjacency_window_minutes` |
+| `NonDefaultHomeGrouping` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `MaitlandHomeGrouping` | — | Phase-6 generic rename; iterates `home_field_map.keys()`; per-club `AWAY_VENUE_RULES[club]` |
+| `AwayAtNonDefaultGrouping` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `AwayAtMaitlandGrouping` | — | Phase-6 generic rename; iterates `home_field_map.values()` |
+| `TeamConflict` | `constraints/archived/original.py` | included | yes | yes | — | — | Per (team1, team2) in `team_conflicts` |
+| `ClubGradeAdjacency` | `constraints/archived/original.py` | included | yes | yes | — | — | **To be split by spec-007** — adjacent-grade goes soft, same-grade-same-club stays hard |
+| `ClubGameSpread` | `constraints/archived/original.py` | included | yes | yes | `ClubGameSpread` | — | Soft; per (club, week, day) when ≥2 slots used |
+| `MaximiseClubsPerTimeslotBroadmeadow` | `constraints/archived/original.py` | included | yes | yes | `MaximiseClubsPerTimeslotBroadmeadow` | — | Broadmeadow Sat/Sun only |
+| `MinimiseClubsOnAFieldBroadmeadow` | `constraints/archived/original.py` | included | yes | yes | `MinimiseClubsOnAFieldBroadmeadow` | — | Broadmeadow Sat/Sun only |
+| `EnsureBestTimeslotChoices` | `constraints/archived/original.py` | included | yes | yes | — | — | Hardcoded WORST_TIME = `'19:00'`; Phase 5 punch list to migrate to defaults |
+| `PreferredTimes` | `constraints/archived/original.py` | included | yes | yes | — | — | Dual-orderings hack (t1/t2 swap); see §5.8 |
+| `EqualMatchUpSpacing` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `EqualMatchUpSpacingConstraint` | — | Adjuster narrows forced rounds per pair |
+| **Tester-only (no solver enforcement)** | | | | | | | |
+| `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
+| `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
+| `ClubFieldConcentration` | tester only | n/a | n/a | n/a | — | — | Reports clubs concentrated on few fields |
+
+**Forced-games handling glossary:**
+- `excluded` — atom skips variables that match a `FORCED_GAMES` scope (either via shared iterator or local `_get_matching_forced_scopes` check).
+- `excluded (via adjuster)` — atom reads pre-computed `data['count_adjustments'][canonical_name]` to reduce expected counts; raw vars are not skipped but the constraint is loosened to match what FORCED has already pinned.
+- `included` — atom treats FORCED-matched vars like any other; no special handling.
+- `n/a` — atom is structural (count-adjuster framework, tester-only) or doesn't iterate vars.
+
+**Uniformity notes** (apply to ALL atomised entries):
+- Locked-week skip is enforced uniformly via shared iterators (`iter_phl_keys`, `iter_grade_keys`, `collect_*` in `constraints/atoms/_*_shared.py`). The atom-level `yes` reflects that the iterator filters by `data['locked_weeks']`.
+- Dummy-key skip (`len(key) < 11 or not key[3]`) is also at the iterator level.
+- Helper-var declarations are namespaced by `kind` (e.g. `cvc_coincide`); no collisions detected.
+
+## 5. Findings vs the plan's assumptions
 
 While walking the source for this inventory, I noticed:
 

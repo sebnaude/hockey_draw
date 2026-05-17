@@ -5,11 +5,41 @@
 **Before answering ANY question or making ANY change, READ:**
 1. `config/season_2026.py` (or relevant season) - the ACTUAL config with all dicts
 2. This file in its entirety
-3. `docs/GOALS.md` - the *why* (product goal + atomization model + doc map)
+3. `docs/todo/GOALS.md` - the *why* (product goal + atomization model + specifications)
+4. `docs/README.md` - the doc map (six categories + what's where)
 
 The system has multiple layers of variable filtering and game restriction. Do NOT guess - READ THE CONFIG.
 
 **Concurrent AI sessions:** Other AI agents may be editing files in this repo at the same time. If you notice a file has changed since you last read it (e.g. via system reminders about modifications), re-read the file before editing and respect those changes — do not revert them unless the user explicitly asks you to.
+
+---
+
+## Documentation categories (READ THIS BEFORE TOUCHING DOCS)
+
+Docs are organised by **audience and lifecycle** into six categories under `docs/`. Each has a `README.md` with full conventions. Summary:
+
+| Category | Audience | When you update it |
+|---|---|---|
+| `docs/operator-human/` | Convenor — using the system | A user-visible behaviour or rule changes. *No code / atom names live here.* |
+| `docs/operator-ai/` | An AI operating the system | A CLI flag, config key, file path, or operational procedure changes |
+| `docs/system/` | Engineers extending the system | **Same commit as the code change.** Atom registry, helper-vars, stages, harness, count-adjusters live here. |
+| `docs/reports/{year}/` | Convenor + stakeholders | Once per draw publication cycle. Snapshots, not living. |
+| `docs/seasonal/{year}/` | Convenor for *this* season | While the season is live. Convenor notes, club contacts, ops TODOs. |
+| `docs/todo/` | Anyone about to implement system work | Continuously — every plan moves `not_ready → ready → in_progress → done` (see `docs/todo/README.md`) |
+
+**Rules:**
+
+1. **A code change without the matching doc update is incomplete.** When you add an atom, `docs/system/CONSTRAINT_INVENTORY.md` gets a row in the same commit. When you change a CLI flag, `docs/operator-ai/SYSTEM_OPERATION.md` (or wherever) reflects it. The `/basic` skill requires every implementation plan to register the docs it will touch *at plan time*.
+
+2. **Don't cross categories.** A constraint's plain-English description goes in `operator-human/RULES.md`; its per-atom engineering detail (forced-games exempt? slack key? helper vars?) goes in `system/CONSTRAINT_INVENTORY.md`. Don't duplicate either into the other.
+
+3. **Status-track every TODO.** Every `docs/todo/spec-*.md` carries the /basic status header (`not_ready | ready | in_progress | done`). When you finish a plan, move it to `docs/todo/done/`.
+
+4. **Per-season state is scoped.** Anything that only matters for one season (convenor decisions, no-play dates, special weekends) goes in `docs/seasonal/{year}/`. Don't pollute `operator-human/` or `system/` with season-specific data.
+
+5. **Reports are snapshots.** Once a season report lands in `docs/reports/{year}/`, treat it as immutable. New information goes in a new dated file.
+
+When unsure about category, default to the audience test: *who reads this first?*
 
 ---
 
@@ -34,7 +64,7 @@ not invoked by the prod pipeline. Don't add new logic there. The pipeline
 moves them to `constraints/archived/` in Phase 7c.
 
 - Default edit targets: `constraints/atoms/<atom>.py`, `constraints/registry.py`, `tests/atoms/`
-- Read first: `docs/ATOMIZATION_HANDOFF.md`, `docs/ATOMIZATION_PLAN.md`, `docs/HELPER_VARS.md`, `docs/COUNT_ADJUSTERS.md`, `docs/CONSTRAINT_INVENTORY.md`
+- Read first: `docs/system/CONSTRAINT_INVENTORY.md`, `docs/system/HELPER_VARS.md`, `docs/system/COUNT_ADJUSTERS.md`, `docs/todo/done/ATOMIZATION_HANDOFF.md`, `docs/todo/done/ATOMIZATION_PLAN.md`
 - Only edit when user directs: `constraints/original.py`, `constraints/ai.py`, anything under `constraints/archived/`
 
 ### 2. Solver Execution
@@ -84,7 +114,7 @@ If you find yourself writing a hardcoded count constraint (`model.Add(sum(vars) 
 
 The pre-solver `validate_game_config` checks FORCED rule consistency (overlapping scopes with conflicting counts surface there).
 
-See `docs/FORCED_GAMES_AS_COUNT_RULES.md` for the full rationale + migration history.
+See `docs/system/FORCED_GAMES_AS_COUNT_RULES.md` for the full rationale + migration history.
 
 ### 5. Weeks vs Rounds
 The season spans 27 calendar weeks but has fewer playable rounds:
@@ -243,7 +273,7 @@ Currently shipped adjusters: `EqualMatchUpSpacing`, `NonDefaultHomeGrouping`
 (alias `MaitlandHomeGrouping`), `AwayAtNonDefaultGrouping` (alias
 `AwayAtMaitlandGrouping`), `ClubVsClubCoincidence`. `EqualGames` is
 no-op-by-design (FORCED entries pin terms to 1; the per-team game-count sum is
-unchanged). See `docs/COUNT_ADJUSTERS.md` for formulas.
+unchanged). See `docs/system/COUNT_ADJUSTERS.md` for formulas.
 
 ### Generic non-default-home (Phase 6)
 
@@ -291,8 +321,8 @@ worst-club, total-penalty per constraint). Static violation fixtures live in
 `tests/fixtures/violations/`; `tests/test_violation_fixtures.py` walks the
 directory and asserts each fixture's listed `_violations` are flagged.
 
-`docs/CONSTRAINT_INVENTORY.md` is the single source of truth for the table
-mapping legacy classes → atoms. `docs/ATOMIZATION_HANDOFF.md` tracks
+`docs/system/CONSTRAINT_INVENTORY.md` is the single source of truth for the table
+mapping legacy classes → atoms. `docs/todo/done/ATOMIZATION_HANDOFF.md` tracks
 remaining work.
 
 Historical bug fixes carried over from the pre-atomization era:
@@ -577,7 +607,7 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 
 When reviewing, testing, or publishing a draw, always check:
 
-- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case. (Perennial rule — see `docs/PERENNIAL_RULES.md`)
+- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case. (Perennial rule — see `docs/operator-human/PERENNIAL_RULES.md`. NOTE: spec-003 will replace this with a strict field-fill ordering atom — WF first, then EF, then SF.)
 - **Rounds 1-2 at Broadmeadow only**: All games in rounds 1 and 2 must be at NIHC. No Maitland Park or Central Coast games. Enforced via `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`. (Perennial rule)
 - **7pm (19:00) games**: These are the worst timeslot. Flag any non-PHL-Friday games scheduled at 7pm — they should be minimised.
 
@@ -594,11 +624,19 @@ Custom Claude Code skills are available in `.claude/commands/`:
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
-| `docs/PERENNIAL_RULES.md` | Standing rules that apply every season | New season setup, draw review |
-| `docs/COUNT_ADJUSTERS.md` | FORCED/BLOCKED count-adjuster framework + proposed formulas | Adding a count-sensitive atom; reasoning about FORCED/BLOCKED interactions |
-| `docs/ai/AI_OPERATIONS_MANUAL.md` | Complete technical reference | Deep dives |
-| `docs/ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing config |
-| `docs/ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions | Adding constraints |
-| `docs/ai/GAME_TIME_DICTIONARIES.md` | PHL/2nd grade filtering | Modifying game times |
-| `docs/DRAW_RULES.md` | Constraint documentation | Understanding rules |
+| `docs/README.md` | Master doc index — category map | Anytime you don't know where a doc lives |
+| `docs/operator-human/PERENNIAL_RULES.md` | Standing rules that apply every season | New season setup, draw review |
+| `docs/operator-human/RULES.md` | Plain-English rules of the competition | Convenor questions, draw review |
+| `docs/system/CONSTRAINT_INVENTORY.md` | Atom registry with per-atom engineering detail | Adding/changing any atom; debugging |
+| `docs/system/HELPER_VARS.md` | `HelperVarRegistry` API | Declaring shared helper BoolVars/IntVars |
+| `docs/system/COUNT_ADJUSTERS.md` | FORCED/BLOCKED count-adjuster framework + formulas | Adding a count-sensitive atom; FORCED/BLOCKED interactions |
+| `docs/system/STAGES.md` | `SOLVER_STAGES` config + CLI flags | Adding/reordering solver stages |
+| `docs/system/HARNESS.md` | End-to-end solver pipeline | Understanding generate_X → engine → output flow |
+| `docs/operator-ai/AI_OPERATIONS_MANUAL.md` | Complete operational reference for AI | Deep dives |
+| `docs/operator-ai/CONFIGURATION_REFERENCE.md` | All config parameters | Changing config |
+| `docs/operator-ai/CONSTRAINT_APPLICATION.md` | How to apply restrictions (FORCED, BLOCKED, AWAY_VENUE_RULES) | Adding restrictions |
+| `docs/operator-ai/GAME_TIME_DICTIONARIES.md` | PHL/2nd grade filtering | Modifying game times |
+| `docs/todo/GOALS.md` | Product + engineering goals + specifications | Before designing new work |
+| `docs/todo/README.md` | TODO workflow (status header, picking up plans) | Before picking up an implementation plan |
+| `docs/seasonal/{year}/operational_TODO.md` | Per-season ops items (draw fixes, special weekends) | While building this season's draw |
 | `seasons/RULES.md` | Season-specific rules | Season context |
