@@ -120,7 +120,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 
 | ID | Spec | Plan file | Status |
 |---|---|---|---|
-| spec-001 | Rounds 1–2 Broadmeadow-only rule must exempt FORCED games | `spec-001-r1r2-broadmeadow-forced-exempt.md` | ready |
+| spec-001 | Rounds 1–2 Broadmeadow-only rule must exempt FORCED games | `done/spec-001-r1r2-broadmeadow-forced-exempt.md` | done |
 | spec-002 | Soft lexicographical ordering of matchups across the season | `spec-002-soft-lex-ordering.md` | ready |
 | spec-003 | Field-fill ordering (WF → EF → SF) replaces "last-game-WF" rule | `spec-003-field-fill-order.md` | ready |
 | spec-004 | Away-club home/away atoms aligned with FORCED-Friday math | `spec-004-away-club-home-counts.md` | ready |

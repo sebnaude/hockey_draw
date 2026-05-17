@@ -775,23 +775,31 @@ def _check_forced_game_status(key: tuple, forced_rules: dict):
 # FORCED_GAMES: variables matching scope AND matching teams → sum == 1 (ensure game happens)
 # BLOCKED_GAMES: variables matching scope AND matching teams → eliminated (prevent game)
 
-def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
+def _build_blocked_game_rules_with_perennial(blocked_games: list, teams: list) -> tuple:
     """
-    Build lookup structure from BLOCKED_GAMES config for fast variable filtering.
-    
-    Same format as FORCED_GAMES entries. For each scope, collects team matchers.
-    A variable matching both the scope AND a team matcher is eliminated.
-    
+    Build BLOCKED rules and tag which scope_keys came from perennial entries.
+
     Returns:
-        Dict mapping scope_key (frozenset) -> list of team matchers.
-        Each team matcher is ('pair', team1, team2) or ('any', team_name).
+        (rules_dict, perennial_scope_keys)
+        rules_dict: scope_key (frozenset) -> list of team matchers (same shape
+                    as `_build_blocked_game_rules`).
+        perennial_scope_keys: set of scope_keys whose source entry carried
+                    `'perennial': True`. These scopes are eligible to be
+                    overridden by a matching FORCED_GAMES scope in `generate_X`
+                    (see spec-001).
+
+    Note: a single scope_key may be shared by multiple BLOCKED entries
+    (matchers concatenated). If ANY of those entries is marked perennial, the
+    scope_key is treated as perennial — the perennial-source entry's
+    permission-to-be-overridden is preserved.
     """
     if not blocked_games:
-        return {}
+        return {}, set()
 
     team_names_set, team_lookup = _build_team_lookups(teams)
 
     scope_groups = defaultdict(list)
+    perennial_scope_keys: set = set()
 
     for entry in blocked_games:
         grade = entry.get('grade')
@@ -814,6 +822,9 @@ def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
             scope.append((_KEY_INDEX['grade'], tuple(grades)))
 
         scope_key = frozenset(scope)
+
+        if entry.get('perennial') is True:
+            perennial_scope_keys.add(scope_key)
 
         # Build team matchers from 'teams' or 'club' key
         raw_teams = entry.get('teams', [])
@@ -844,26 +855,52 @@ def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
         desc = entry.get('description', entry.get('reason', f"scope={dict(scope)}"))
         matchers = scope_groups[scope_key]
         matcher_desc = f"{len(matchers)} team matcher(s)" if matchers else "ALL teams (no filter)"
-        print(f"  Blocked game rule: {desc} -> {matcher_desc}")
+        perennial_tag = ' [perennial]' if entry.get('perennial') is True else ''
+        print(f"  Blocked game rule: {desc} -> {matcher_desc}{perennial_tag}")
 
-    return dict(scope_groups)
+    return dict(scope_groups), perennial_scope_keys
 
 
-def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
+def _build_blocked_game_rules(blocked_games: list, teams: list) -> dict:
     """
-    Check if a variable key is blocked by no-play rules.
-    
-    A variable is blocked if it matches a rule's SCOPE AND matches
-    ANY of the team matchers for that scope.
-    (Inverse of FORCED_GAMES logic.)
-    
+    Build lookup structure from BLOCKED_GAMES config for fast variable filtering.
+
+    Same format as FORCED_GAMES entries. For each scope, collects team matchers.
+    A variable matching both the scope AND a team matcher is eliminated.
+
+    Returns:
+        Dict mapping scope_key (frozenset) -> list of team matchers.
+        Each team matcher is ('pair', team1, team2) or ('any', team_name).
+
+    This is a back-compat shim around `_build_blocked_game_rules_with_perennial`
+    that discards the perennial scope-key set. Callers that need
+    perennial-aware behaviour (`generate_X`) should use the underlying helper.
+    """
+    rules, _perennial = _build_blocked_game_rules_with_perennial(blocked_games, teams)
+    return rules
+
+
+def _matching_blocked_scope_keys(key: tuple, blocked_rules: dict) -> list:
+    """
+    Return every BLOCKED scope_key whose scope + team matcher matches this var.
+
+    Caller-side helper for perennial-vs-FORCED resolution: `generate_X` needs
+    to know not just *whether* a variable is blocked but *which* scope_keys
+    block it, so it can check whether ALL matching scopes are perennial (and
+    thus overridable) versus any being non-perennial (hard block).
+
     Args:
         key: 11-tuple variable key
-        blocked_rules: Output of _build_blocked_game_rules()
-    
+        blocked_rules: Output of `_build_blocked_game_rules`
+
     Returns:
-        True if the variable should be eliminated.
+        List of scope_keys this variable is blocked by. Empty list means the
+        variable is not blocked.
     """
+    matches = []
+    t1, t2 = key[0], key[1]
+    sorted_pair = tuple(sorted([t1, t2]))
+
     for scope_key, team_matchers in blocked_rules.items():
         # Check if variable matches this scope
         in_scope = True
@@ -877,26 +914,45 @@ def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
                 if key_val != val:
                     in_scope = False
                     break
-        
+
         if not in_scope:
             continue
 
         # No team matchers = block ALL variables in scope
         if not team_matchers:
-            return True
+            matches.append(scope_key)
+            continue
 
         # Variable is in scope — check if it matches ANY team matcher
-        t1, t2 = key[0], key[1]
-        sorted_pair = tuple(sorted([t1, t2]))
         for matcher in team_matchers:
             if matcher[0] == 'pair':
                 if sorted_pair[0] == matcher[1] and sorted_pair[1] == matcher[2]:
-                    return True  # Matches scope AND team — BLOCKED
+                    matches.append(scope_key)
+                    break
             elif matcher[0] == 'any':
                 if t1 == matcher[1] or t2 == matcher[1]:
-                    return True  # Matches scope AND team — BLOCKED
+                    matches.append(scope_key)
+                    break
 
-    return False  # No match — not blocked
+    return matches
+
+
+def _is_blocked_by_no_play(key: tuple, blocked_rules: dict) -> bool:
+    """
+    Check if a variable key is blocked by no-play rules.
+
+    A variable is blocked if it matches a rule's SCOPE AND matches
+    ANY of the team matchers for that scope.
+    (Inverse of FORCED_GAMES logic.)
+
+    Args:
+        key: 11-tuple variable key
+        blocked_rules: Output of _build_blocked_game_rules()
+
+    Returns:
+        True if the variable should be eliminated.
+    """
+    return bool(_matching_blocked_scope_keys(key, blocked_rules))
 
 
 def _diagnose_missing_forced_game(entry: dict, forced_rules: dict, scope_key, data: dict) -> list:
@@ -2772,8 +2828,15 @@ def _check_forced_game_feasibility(data, warnings, fatals):
     phl_only_venues = {'Central Coast Hockey Park'}
     phl_only_days = {'Friday'}
 
-    # Build blocked rules
-    blocked_rules = _build_blocked_game_rules(blocked_games, teams) if blocked_games else {}
+    # Build blocked rules. Track perennial scope_keys so the feasibility
+    # simulation here matches `generate_X`: vars matched only by perennial
+    # BLOCKED scopes are kept when a FORCED scope also matches (spec-001).
+    if blocked_games:
+        blocked_rules, perennial_blocked_scopes = _build_blocked_game_rules_with_perennial(
+            blocked_games, teams,
+        )
+    else:
+        blocked_rules, perennial_blocked_scopes = {}, set()
 
     for entry in forced_games:
         ctype = entry.get('constraint', 'equal')
@@ -2910,10 +2973,20 @@ def _check_forced_game_feasibility(data, warnings, fatals):
                                 ts.time, ts.week, ts.date, ts.round_no,
                                 ts.field.name, ts.field.location)
 
-                    if blocked_rules and _is_blocked_by_no_play(test_key, blocked_rules):
-                        blocked_removed_vars += 1
-                        elimination_reasons['BLOCKED_GAMES filter'] += 1
-                        continue
+                    if blocked_rules:
+                        match_scopes = _matching_blocked_scope_keys(test_key, blocked_rules)
+                        if match_scopes:
+                            # spec-001: if every matching BLOCKED scope is
+                            # perennial, this FORCED entry rescues the var.
+                            # Only non-perennial blocks (or a mix) eliminate.
+                            all_perennial = all(
+                                sk in perennial_blocked_scopes for sk in match_scopes
+                            )
+                            if not all_perennial:
+                                blocked_removed_vars += 1
+                                elimination_reasons['BLOCKED_GAMES filter'] += 1
+                                continue
+                            # else: FORCED overrides perennial — var survives
 
                     surviving_vars += 1
 
@@ -3434,8 +3507,17 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
     # Build forced games lookup from config
     forced_game_rules, forced_constraint_types, forced_constraint_counts = _build_forced_game_rules(data.get('forced_games', []), teams)
 
-    # Build blocked games (no-play) lookup from config
-    blocked_game_rules = _build_blocked_game_rules(data.get('blocked_games', []), teams)
+    # Build blocked games (no-play) lookup from config.
+    # `perennial_blocked_scopes` tracks scope_keys whose source entry was marked
+    # `'perennial': True` (e.g. the rounds-1-2 Broadmeadow-only rule from
+    # `config/defaults.py::PERENNIAL_BLOCKED_GAMES`). A variable matched by a
+    # perennial scope is overridable by any matching FORCED_GAMES scope —
+    # FORCED entries are deliberate convenor exceptions to perennial defaults.
+    # See spec-001 (docs/todo/done/spec-001-r1r2-broadmeadow-forced-exempt.md).
+    blocked_game_rules, perennial_blocked_scopes = _build_blocked_game_rules_with_perennial(
+        data.get('blocked_games', []), teams,
+    )
+    perennial_exempt_count = 0  # vars kept because a FORCED scope beat a perennial block
 
     # Collect forced variables per scope for adding sum==1 constraints
     forced_scope_vars = defaultdict(list)  # scope_key -> [(key, var), ...]
@@ -3521,10 +3603,40 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
             # already solved and will be locked by the downstream locking logic.
             in_locked_week = locked_weeks and t.week in locked_weeks
 
-            # Check blocked game rules FIRST — blocked takes priority over forced.
-            # If a variable is blocked, it's removed even if it matches a forced game scope.
-            # This ensures BLOCKED_GAMES can carve out specific slots from FORCED_GAMES.
-            if blocked_game_rules and not in_locked_week and _is_blocked_by_no_play(key, blocked_game_rules):
+            # Check blocked game rules. Season-specific BLOCKED scopes always
+            # eliminate the variable (no override). Perennial BLOCKED scopes —
+            # those marked `'perennial': True` in their source entry (e.g.
+            # PERENNIAL_BLOCKED_GAMES from config/defaults.py) — are *defaults*
+            # the convenor can override with a matching FORCED_GAMES entry. So
+            # a variable matched by a perennial scope is kept iff it also
+            # matches a FORCED scope. If it's blocked by ANY non-perennial
+            # scope as well, the non-perennial block wins. (spec-001)
+            matched_block_scopes = (
+                _matching_blocked_scope_keys(key, blocked_game_rules)
+                if blocked_game_rules and not in_locked_week else []
+            )
+            if matched_block_scopes:
+                forced_matches_block = (
+                    _get_matching_forced_scopes(key, forced_game_rules)
+                    if forced_game_rules else []
+                )
+                all_perennial = all(
+                    sk in perennial_blocked_scopes for sk in matched_block_scopes
+                )
+                if forced_matches_block and all_perennial:
+                    # FORCED overrides perennial-only block — keep the variable
+                    # and register it against every matching FORCED scope so
+                    # each scope's sum constraint sees it as a candidate.
+                    var = model.NewBoolVar(
+                        f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}'
+                    )
+                    X[key] = var
+                    for scope_key in forced_matches_block:
+                        forced_scope_vars[scope_key].append(var)
+                    forced_vars_forced += 1
+                    perennial_exempt_count += 1
+                    continue
+                # Either no FORCED match or at least one non-perennial block — eliminate.
                 blocked_vars_skipped += 1
                 continue
 
@@ -3635,6 +3747,9 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
             print(f"    scope({scope_desc}): {len(vars_list)} decision vars -> sum {op} {count}")
     if blocked_vars_skipped:
         print(f"  - Blocked games: {blocked_vars_skipped} vars eliminated by {len(data.get('blocked_games', []))} no-play rules")
+    if perennial_exempt_count:
+        print(f"  - Perennial-BLOCKED exemptions: {perennial_exempt_count} vars kept "
+              f"because a FORCED_GAMES scope overrides a perennial BLOCKED scope (spec-001)")
     return X, conflicts
 
 

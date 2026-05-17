@@ -183,19 +183,28 @@ DEFAULT_STAGES = [
 ]
 
 
+# Each PERENNIAL entry carries `'perennial': True`. This flag is read by
+# generate_X (utils.py) as a permission-to-be-overridden marker: a variable
+# that matches BOTH a perennial BLOCKED scope AND any FORCED_GAMES scope is
+# kept (FORCED wins). Non-perennial BLOCKED entries always eliminate the
+# variable, even when a FORCED scope also matches. See spec-001.
 PERENNIAL_BLOCKED_GAMES = [
     # === Rounds 1-2: All games at Broadmeadow only ===
     # No games at Maitland Park or Central Coast in the first two playing rounds.
     {'round_no': 1, 'field_location': 'Maitland Park',
      'description': 'Rounds 1-2 at Broadmeadow only (perennial rule)',
-     'reason': 'All games at central venue for opening rounds'},
+     'reason': 'All games at central venue for opening rounds',
+     'perennial': True},
     {'round_no': 2, 'field_location': 'Maitland Park',
      'description': 'Rounds 1-2 at Broadmeadow only (perennial rule)',
-     'reason': 'All games at central venue for opening rounds'},
+     'reason': 'All games at central venue for opening rounds',
+     'perennial': True},
     {'round_no': 1, 'field_location': 'Central Coast Hockey Park',
      'description': 'Rounds 1-2 at Broadmeadow only (perennial rule)',
-     'reason': 'All games at central venue for opening rounds'},
+     'reason': 'All games at central venue for opening rounds',
+     'perennial': True},
     {'round_no': 2, 'field_location': 'Central Coast Hockey Park',
      'description': 'Rounds 1-2 at Broadmeadow only (perennial rule)',
-     'reason': 'All games at central venue for opening rounds'},
+     'reason': 'All games at central venue for opening rounds',
+     'perennial': True},
 ]

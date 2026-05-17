@@ -14,6 +14,21 @@ All games in rounds 1 and 2 must be scheduled at Newcastle International Hockey 
 
 **Rationale:** Ensures all teams start the season at the central venue for visibility, consistency, and operational simplicity.
 
+**Overridable by FORCED_GAMES (spec-001).** Each `PERENNIAL_BLOCKED_GAMES` entry carries `'perennial': True`, which marks it as a *default* the convenor can override. A variable matched by a perennial BLOCKED scope is **kept** if any `FORCED_GAMES` entry also matches it — so a deliberate opening-round Maitland-vs-Norths game at Maitland Park can be forced without commenting out the perennial rule. Example:
+
+```python
+# season_2026.py
+FORCED_GAMES = [
+    {'teams': ['Maitland', 'Norths'], 'grade': 'PHL',
+     'date': '2026-03-22', 'field_location': 'Maitland Park',
+     'count': 1, 'constraint': 'equal',
+     'description': 'Opening round special — Maitland-vs-Norths at MP'},
+]
+# Perennial BLOCKED still removes every other round 1-2 Maitland Park var.
+```
+
+Season-specific (non-perennial) BLOCKED entries are NOT overridable — they always eliminate even when FORCED also matches.
+
 ---
 
 ### 2. Last game of day on West Field at Broadmeadow (single-field timeslot)

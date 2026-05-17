@@ -62,7 +62,7 @@ out of scope for Phase 6.
 |---|---|---|---|
 | ClubFieldConcentration | tester only | Reports clubs concentrated on a small number of fields (no solver enforcement) | 3 |
 | ForcedGames | enforced via `generate_X` (variable-elimination) | Verifies each FORCED entry's scope sum matches `count` and `constraint` (default sum==1) | 1 |
-| BlockedGames | enforced via `generate_X` (variable-elimination) | Verifies no game key matches a BLOCKED scope+team-matcher | 1 |
+| BlockedGames | enforced via `generate_X` (variable-elimination) | Verifies no game key matches a BLOCKED scope+team-matcher. **spec-001 exemption:** a BLOCKED entry whose source dict carries `'perennial': True` (e.g. every entry in `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`) is *overridable* — a variable matched by a perennial scope is kept iff any `FORCED_GAMES` entry also matches it. Vars matched by ANY non-perennial BLOCKED scope are always eliminated, even when FORCED matches. Implementation: `utils._build_blocked_game_rules_with_perennial` + `_matching_blocked_scope_keys` + the `matched_block_scopes`/`all_perennial` branch in `generate_X`. Validator `_check_forced_game_feasibility` applies the same rule when counting surviving vars for each FORCED entry. | 1 |
 
 ## 3. Atomization summary (count)
 
