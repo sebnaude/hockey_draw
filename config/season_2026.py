@@ -1028,6 +1028,8 @@ PENALTY_WEIGHTS = {
     # Penalty per dummy slot used. Higher = solver avoids dummy slots more strongly.
     # Set to 0 to allow free use of dummy slots (no penalty).
     'dummy_slots':                      1_000_000,
+    # Soft lex matchup ordering: tiny tie-break, never overrides real constraints.
+    'soft_lex_ordering':                        1,
 }
 
 # ============== Season Configuration ==============

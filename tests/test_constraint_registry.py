@@ -59,19 +59,33 @@ class TestRegistryCompleteness:
     def test_registry_has_expected_entry_count(self):
         """Registry contains 21 originals + 5 PHL atoms (Phase 3a) + 5 ClubDay
         atoms (Phase 3b) + 4 ClubVsClub atoms (Phase 3c) + 2 Phase-6 generic
-        aliases (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) = 37."""
-        assert len(CONSTRAINT_REGISTRY) == 37
+        aliases (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) + 1 soft
+        penalty atom (SoftLexMatchupOrdering, spec-002) = 38."""
+        assert len(CONSTRAINT_REGISTRY) == 38
 
     def test_all_entries_have_required_fields(self):
-        """Every ConstraintInfo must have canonical_name and at least one tester method."""
+        """Every ConstraintInfo must have canonical_name and at least one tester method.
+
+        Exception: pure-soft penalty atoms (has_soft_component=True, empty
+        tester_check_methods, no tester_only) contribute only to the objective
+        and have no violation semantics — they may have empty tester lists.
+        """
         for name, info in CONSTRAINT_REGISTRY.items():
             assert info.canonical_name == name
-            assert len(info.tester_check_methods) >= 1, \
-                f"{name}: must have at least one tester_check_method"
-            assert len(info.tester_violation_names) >= 1, \
-                f"{name}: must have at least one tester_violation_name"
             assert 1 <= info.severity_level <= 5, \
                 f"{name}: severity_level must be 1-5, got {info.severity_level}"
+            # Pure-soft penalty atoms (objective-only, no violation checker) are exempt.
+            is_pure_soft = (
+                info.has_soft_component
+                and not info.tester_only
+                and len(info.tester_check_methods) == 0
+                and len(info.tester_violation_names) == 0
+            )
+            if not is_pure_soft:
+                assert len(info.tester_check_methods) >= 1, \
+                    f"{name}: must have at least one tester_check_method"
+                assert len(info.tester_violation_names) >= 1, \
+                    f"{name}: must have at least one tester_violation_name"
 
 
 class TestNormalization:

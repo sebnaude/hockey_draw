@@ -2,7 +2,7 @@
 
 Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` and updated through the Phase-6 generic-home rename. The registry currently has **37 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`).
+Generated against `final-form` and updated through spec-002 (SoftLexMatchupOrdering). The registry currently has **38 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 soft-only penalty atom (`SoftLexMatchupOrdering`).
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -33,6 +33,7 @@ Legend
 | MinimiseClubsOnAFieldBroadmeadow | original.py:MinimiseClubsOnAFieldBroadmeadow | At NIHC Sat/Sun per (week, date, field_name): per-club presence indicator; HARD num_clubs ≤ max_clubs_per_field + slack; SOFT penalty = abs(num_clubs - 2) | 4 | MinimiseClubsOnAFieldBroadmeadow | MinimiseClubsOnAFieldBroadmeadow |
 | EnsureBestTimeslotChoices | original.py:EnsureBestTimeslotChoices | Per (week, day, location): build per-(field, day_slot) max-equality indicators; for adjacent slot pair (curr, next) for every (f, f2): next_used ⇒ curr_used (cross-field stacking + contiguity). SOFT: 7pm games incur penalty 1 each | 5 | — | EnsureBestTimeslotChoices |
 | PreferredTimes | original.py:PreferredTimesConstraint | Normalize PREFERENCE_NO_PLAY (legacy + 2026 structured); for each (entry, club, club_teams, restriction): match X keys via two key orderings; soft penalty = the var when match | 5 | — | PreferredTimes |
+| SoftLexMatchupOrdering | constraints/atoms/soft_lex_matchup_ordering.py (spec-002) | Soft tie-break: for each grade, sort pairs alphabetically (team1, team2). Assign rank r (0-indexed). Penalty = weight * r * X[key] per var. Encourages alphabetically-earlier pairs in earlier rounds. Pure objective; never hard constraint. PENALTY_WEIGHTS['soft_lex_ordering'] defaults to 1 | 5 | — | SoftLexMatchupOrdering (atom, new) |
 
 ## 1b. Phase-6 canonical names + back-compat aliases
 
@@ -73,7 +74,8 @@ out of scope for Phase 6.
 | ClubVsClubAlignment | 1 | 4 | +3 |
 | MaitlandHomeGrouping + MaxMaitlandHomeWeekends | 2 | 1 (NonDefaultHomeGrouping, with per-club AWAY_VENUE_RULES) | -1 |
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
-| **Total** | **18 solver + 3 tester-only** | **24 solver + 3 tester-only** | **+10** |
+| SoftLexMatchupOrdering (spec-002) | 0 (new atom, no legacy class) | 1 — `SoftLexMatchupOrdering` | +1 |
+| **Total** | **18 solver + 3 tester-only** | **25 solver + 3 tester-only** | **+11** |
 
 ## 4. Per-atom engineering detail
 
@@ -116,6 +118,8 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `EnsureBestTimeslotChoices` | `constraints/archived/original.py` | included | yes | yes | — | — | Hardcoded WORST_TIME = `'19:00'`; Phase 5 punch list to migrate to defaults |
 | `PreferredTimes` | `constraints/archived/original.py` | included | yes | yes | — | — | Dual-orderings hack (t1/t2 swap); see §5.8 |
 | `EqualMatchUpSpacing` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `EqualMatchUpSpacingConstraint` | — | Adjuster narrows forced rounds per pair |
+| **Soft-only penalty atoms (no tester violation check)** | | | | | | | |
+| `SoftLexMatchupOrdering` | `constraints/atoms/soft_lex_matchup_ordering.py` | included | yes | yes | — | — | Pure soft tie-break (weight=1 default); no tester violation check; ranks pairs 0-indexed alphabetically per grade |
 | **Tester-only (no solver enforcement)** | | | | | | | |
 | `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
 | `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
