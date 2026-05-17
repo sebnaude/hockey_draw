@@ -1156,6 +1156,7 @@ class DrawTester:
             ('TeamConflict', self._check_team_conflict),
             # Level 3 - MEDIUM
             ('ClubGradeAdjacency', self._check_club_grade_adjacency),
+            ('TeamPairNoConcurrency', self._check_team_pair_no_concurrency),
             ('ClubVsClubAlignment', self._check_club_vs_club_alignment),
             ('ClubGameSpread', self._check_club_game_spread),
             ('ClubFieldConcentration', self._check_club_field_concentration),
@@ -1455,49 +1456,42 @@ class DrawTester:
         return violations
     
     def _check_club_grade_adjacency(self) -> List[Violation]:
-        """Check adjacent grades from same club don't play simultaneously."""
+        """Check that same-grade, same-club teams never play simultaneously.
+
+        spec-007: the adjacent-grade check (e.g. PHL + 2nd same slot) was
+        REMOVED ENTIRELY. The new prod rule is `SameGradeSameClubNoConcurrency`,
+        which only forbids same-grade-same-club concurrency. Violations are
+        still emitted under the `ClubGradeAdjacency` constraint name so
+        existing report templates and the registry's tester mapping keep
+        working without renaming downstream consumers.
+        """
         violations = []
-        
-        adj_pairs = [(self.GRADE_ORDER[i], self.GRADE_ORDER[i+1]) 
-                     for i in range(len(self.GRADE_ORDER)-1)]
-        
+
         games_per_slot = defaultdict(list)
         for game in self.draw.games:
             games_per_slot[(game.date, game.day_slot)].append(game)
 
-        # Build lookup of clubs with multiple teams in the same grade
+        # Build lookup of clubs with multiple teams in the same grade.
         club_grade_teams = defaultdict(list)
         for team in self.teams:
             club_grade_teams[(team.club.name, team.grade)].append(team.name)
         multi_team_clubs = {k: v for k, v in club_grade_teams.items() if len(v) > 1}
 
         for (date, slot), games in games_per_slot.items():
-            club_grades = defaultdict(set)
             club_grade_team_games = defaultdict(lambda: defaultdict(set))
-
             for game in games:
                 for team in [game.team1, game.team2]:
                     club = self._team_to_club.get(team)
                     if club:
-                        club_grades[club].add(game.grade)
                         club_grade_team_games[club][game.grade].add(team)
 
-            for club, grades in club_grades.items():
-                # Check 1: Adjacent grades from same club at same timeslot
-                for g1, g2 in adj_pairs:
-                    if g1 in grades and g2 in grades:
-                        violations.append(Violation.create(
-                            constraint="ClubGradeAdjacency",
-                            message=f"Club '{club}' has adjacent grades {g1}/{g2} at {date}, slot {slot}",
-                            affected_clubs=[club],
-                        ))
-
-                # Check 2: Same-club same-grade duplicate teams at same timeslot (not playing each other)
-                for grade, teams_in_slot in club_grade_team_games[club].items():
+            for club, grade_team_map in club_grade_team_games.items():
+                for grade, teams_in_slot in grade_team_map.items():
                     if (club, grade) not in multi_team_clubs:
                         continue
                     if len(teams_in_slot) >= 2:
-                        # Check if they're playing each other in this slot
+                        # If the two teams are playing each other, that's a
+                        # single shared game — not concurrency.
                         playing_each_other = any(
                             g.team1 in teams_in_slot and g.team2 in teams_in_slot
                             for g in games if g.grade == grade
@@ -1505,12 +1499,60 @@ class DrawTester:
                         if not playing_each_other:
                             violations.append(Violation.create(
                                 constraint="ClubGradeAdjacency",
-                                message=f"Club '{club}' has duplicate {grade} teams {sorted(teams_in_slot)} at {date}, slot {slot} (not playing each other)",
+                                message=(
+                                    f"Club '{club}' has duplicate {grade} teams "
+                                    f"{sorted(teams_in_slot)} at {date}, slot {slot} "
+                                    f"(not playing each other)"
+                                ),
                                 affected_clubs=[club],
                             ))
 
         return violations
-    
+
+
+    def _check_team_pair_no_concurrency(self) -> List[Violation]:
+        """Flag every (week, day_slot) where a TEAM_PAIR_NO_CONCURRENCY pair co-occurs.
+
+        Soft constraint (spec-007). The atom imposes a penalty per
+        co-occurrence; the tester surfaces the same events as informational
+        violations so reports and severity rollups can see them.
+        """
+        violations: List[Violation] = []
+        pairs_raw = self.data.get('constraint_defaults', {}).get(
+            'TEAM_PAIR_NO_CONCURRENCY'
+        )
+        if pairs_raw is None:
+            pairs_raw = self.data.get('TEAM_PAIR_NO_CONCURRENCY', [])
+        if not pairs_raw:
+            return violations
+
+        # Normalise to (team_a, team_b) tuples; ignore weights for tester purposes.
+        pairs: List[tuple] = []
+        for entry in pairs_raw:
+            if len(entry) >= 2:
+                pairs.append(tuple(sorted((entry[0], entry[1]))))
+
+        # Map (team, week, day_slot) -> set of game_ids the team plays in.
+        team_slot_games = defaultdict(set)
+        for game in self.draw.games:
+            slot = (game.week, game.day_slot)
+            team_slot_games[(game.team1, *slot)].add(game.game_id)
+            team_slot_games[(game.team2, *slot)].add(game.game_id)
+
+        # For each declared pair, look for slots where both teams play.
+        all_slots = {(w, s) for (_t, w, s) in team_slot_games}
+        for team_a, team_b in pairs:
+            for w, s in all_slots:
+                if team_slot_games.get((team_a, w, s)) and team_slot_games.get((team_b, w, s)):
+                    violations.append(Violation.create(
+                        constraint='TeamPairNoConcurrency',
+                        message=(
+                            f"'{team_a}' and '{team_b}' both play in week {w}, "
+                            f"day_slot {s} -- soft TEAM_PAIR_NO_CONCURRENCY conflict"
+                        ),
+                    ))
+        return violations
+
     def _check_phl_second_grade_adjacency(self) -> List[Violation]:
         """Check PHL and 2nd grade from same club satisfy the 180-minute adjacency rule.
 

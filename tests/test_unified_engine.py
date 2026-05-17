@@ -378,7 +378,9 @@ class TestStage2Soft:
         penalties = mini_engine.data['penalties']
         expected_keys = [
             'EqualMatchUpSpacing',
-            'ClubGradeAdjacencyConstraint',
+            # spec-007: 'ClubGradeAdjacencyConstraint' bucket removed (the
+            # legacy adjacent-grade soft was deleted; the surviving hard
+            # `SameGradeSameClubNoConcurrency` atom has no penalty bucket).
             'MaitlandHomeGrouping',
             'AwayAtMaitlandGrouping',
             'ClubGameSpread',
@@ -581,7 +583,7 @@ class TestConstraintCoverage:
         penalties = engine.data['penalties']
         expected_penalty_keys = [
             'EqualMatchUpSpacing',
-            'ClubGradeAdjacencyConstraint',
+            # spec-007: 'ClubGradeAdjacencyConstraint' bucket removed.
             'MaitlandHomeGrouping',
             'AwayAtMaitlandGrouping',
             'ClubGameSpread',
@@ -623,6 +625,10 @@ class TestConstraintCoverage:
         engine = UnifiedConstraintEngine(model, X, mini_unified_data)
 
         # Stage 1 methods (hard constraints)
+        # spec-007: `_grade_adjacency_hard` and `_grade_adjacency_soft` were
+        # removed from the engine when ClubGradeAdjacency was split. The
+        # surviving hard rule lives in the `SameGradeSameClubNoConcurrency`
+        # atom (dispatched outside the engine).
         stage_1_methods = [
             '_no_double_booking_teams',
             '_no_double_booking_fields',
@@ -633,7 +639,6 @@ class TestConstraintCoverage:
             '_phl_adjacency_hard',
             '_phl_times_hard',
             '_matchup_spacing_hard',
-            '_grade_adjacency_hard',
             '_club_alignment_hard',
             '_maitland_grouping_hard',
             '_away_maitland_hard',
@@ -645,7 +650,6 @@ class TestConstraintCoverage:
         # Stage 2 methods (soft penalties + optimization)
         stage_2_methods = [
             '_matchup_spacing_soft',
-            '_grade_adjacency_soft',
             '_club_alignment_soft',
             '_maitland_grouping_soft',
             '_away_maitland_soft',

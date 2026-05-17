@@ -174,16 +174,32 @@ Where `space = max_rounds // num_teams`
 
 ---
 
-### Rule 12: Club Grade Adjacency
-**Constraint:** `ClubGradeAdjacencyConstraint`
+### Rule 12: Same-Grade Same-Club No Concurrency (spec-007)
+**Constraint:** `SameGradeSameClubNoConcurrency` (atom; severity 1, hard).
 
-**Description:** Teams from the same club in adjacent grades (e.g., 2nd and 3rd) cannot play at the same timeslot.
+**Description:** When a club fields multiple teams in the same grade (e.g. Tigers
+3rd-A and Tigers 3rd-B), those teams cannot play different opponents at the
+same `(week, day_slot)`. One parent literally cannot watch both at once.
+Intra-club derbies — the two duplicate teams playing each other — are a single
+game with one decision variable and stay feasible.
 
-**Grade Order:** PHL → 2nd → 3rd → 4th → 5th → 6th
+**Enforcement:** Per `(club, grade, week, day_slot)` bucket, the sum of
+cross-club games involving any duplicate-set team from that club must be ≤ 1.
 
-**Enforcement:** For each adjacent grade pair in each club, game sums at same slot must be ≤ 1.
+**spec-007 change to convenor expectations:** the older "your adjacent
+grades cannot share a timeslot" hard rule has been **removed entirely**.
+Convenor experience was that this was over-restrictive — many parents
+handle adjacent-grade kids fine with overlapping slots, and forbidding it
+hard caused infeasibility on tight weeks. There is no replacement soft
+penalty: adjacent-grade concurrency simply happens when the draw needs it
+to. If you have a specific real-world conflict (siblings in non-adjacent
+grades, a coach who runs two teams), declare it as an entry in
+`CONSTRAINT_DEFAULTS['TEAM_PAIR_NO_CONCURRENCY']` and the
+`TeamPairNoConcurrency` soft atom will minimise it.
 
-**Rationale:** Allows players/supporters to watch both teams.
+**Rationale:** Keep the rule that's genuinely fundamental; let the convenor
+opt in to per-pair preferences rather than imposing a blanket adjacent-grade
+ban.
 
 ---
 
@@ -403,7 +419,7 @@ These constraints define the structure of the schedule, primarily for travel fea
 | 7 | `ClubDayConstraint` | Respect special dates (e.g., club days) |
 | 8 | `PHLAndSecondGradeTimes` | PHL timing rules at Broadmeadow |
 | 9 | `PHLAndSecondGradeAdjacency` | PHL/2nd grade play adjacent slots |
-| 10 | `ClubGradeAdjacencyConstraint` | Adjacent grades from same club separated |
+| 10 | `SameGradeSameClubNoConcurrency` (spec-007) | Same-club same-grade duplicate teams cannot share a slot |
 
 **Checkpoint:** `checkpoints/stage_2_structural.bin`
 
@@ -456,7 +472,7 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 │  ├── ClubDayConstraint                                      │
 │  ├── PHLAndSecondGradeTimes                                 │
 │  ├── PHLAndSecondGradeAdjacency                            │
-│  └── ClubGradeAdjacency                                     │
+│  └── SameGradeSameClubNoConcurrency  (spec-007 replacement)  │
 │                    ↓ [Save checkpoint, pass hints]          │
 ├─────────────────────────────────────────────────────────────┤
 │  STAGE 3: Optimization Constraints                          │

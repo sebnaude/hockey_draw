@@ -268,6 +268,40 @@ PREFERENCE_NO_PLAY = {
 
 ---
 
+## TEAM_PAIR_NO_CONCURRENCY (spec-007 soft per-pair conflict)
+
+```python
+CONSTRAINT_DEFAULTS['TEAM_PAIR_NO_CONCURRENCY'] = [
+    ('Tigers 4th', 'Tigers 6th'),                  # base weight (multiplier=1)
+    ('Maitland PHL', 'Maitland 5th', 5),           # weight multiplier 5
+]
+```
+
+Each entry is `(team_a, team_b)` or `(team_a, team_b, weight_multiplier)`.
+
+**Effect:** soft constraint enforced by the `TeamPairNoConcurrency` atom
+(severity 3). For every `(week, day_slot)` where both teams could appear, a
+penalty `raw = max(0, sum(vars_team_a) + sum(vars_team_b) - 1)` is added.
+With the optional multiplier, the contribution is `multiplier * raw`. The
+solver minimises the `TeamPairNoConcurrency` penalty bucket; the base bucket
+weight comes from `PENALTY_WEIGHTS['TeamPairNoConcurrency']` (default 1000).
+
+**Use case:** siblings in non-adjacent grades, particular coach conflicts,
+or any per-team-pair "should not play at the same time" the convenor wants
+the solver to honour when feasible.
+
+**Important — spec-007 behaviour change:** the legacy
+`ClubGradeAdjacencyConstraint` automatically forbade adjacent-grade
+concurrency (e.g. PHL + 2nd) for every club. That hard rule has been
+**removed entirely** — convenor experience was that it was over-restrictive
+and caused infeasibility on tight weeks. If you still want any specific
+adjacent-grade pair to avoid concurrency, declare it explicitly here. The
+genuinely-fundamental same-grade-same-club rule (multiple Tigers 3rd-grade
+teams cannot play simultaneously) is now the dedicated hard atom
+`SameGradeSameClubNoConcurrency` (severity 1) and applies automatically.
+
+---
+
 ## CLUB_DAYS (Special Events)
 
 ```python

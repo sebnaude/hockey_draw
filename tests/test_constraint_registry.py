@@ -59,8 +59,10 @@ class TestRegistryCompleteness:
     def test_registry_has_expected_entry_count(self):
         """Registry contains 21 originals + 5 PHL atoms (Phase 3a) + 5 ClubDay
         atoms (Phase 3b) + 4 ClubVsClub atoms (Phase 3c) + 2 Phase-6 generic
-        aliases (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) = 37."""
-        assert len(CONSTRAINT_REGISTRY) == 37
+        aliases (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) +
+        2 spec-007 atoms (SameGradeSameClubNoConcurrency, TeamPairNoConcurrency)
+        = 39."""
+        assert len(CONSTRAINT_REGISTRY) == 39
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method."""

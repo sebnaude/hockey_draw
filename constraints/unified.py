@@ -165,9 +165,10 @@ class UnifiedConstraintEngine:
         # --- Matchup spacing ---
         self.by_grade_pair_round = defaultdict(lambda: defaultdict(list))
 
-        # --- Club-grade adjacency ---
-        self.by_slot_club_grade = defaultdict(list)
-        self.club_dup_games = defaultdict(list)
+        # --- Club-grade adjacency REMOVED in spec-007.
+        # The legacy hard + soft cluster has been replaced by the
+        # `SameGradeSameClubNoConcurrency` atom (hard, dispatched outside the
+        # engine) and `TeamPairNoConcurrency` (soft). No groupings needed.
 
         # --- Club vs Club alignment ---
         self.by_grade_clubpair_round = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -276,19 +277,11 @@ class UnifiedConstraintEngine:
             # --- EqualMatchUpSpacing ---
             self.by_grade_pair_round[(t1, t2, grade)][round_no].append(var)
 
-            # --- ClubGradeAdjacency ---
-            slot = (week, day_slot)
-            if t1_club and t2_club:
-                if t1_club != t2_club:
-                    self.by_slot_club_grade[(slot, t1_club, grade)].append(var)
-                    self.by_slot_club_grade[(slot, t2_club, grade)].append(var)
-                    # Duplicate-grade tracking
-                    if t1 in self.club_dup_grades.get(t1_club, {}).get(grade, []):
-                        self.club_dup_games[(t1_club, slot, grade)].append(var)
-                    if t2 in self.club_dup_grades.get(t2_club, {}).get(grade, []):
-                        self.club_dup_games[(t2_club, slot, grade)].append(var)
-                else:
-                    self.by_slot_club_grade[(slot, t1_club, grade)].append(var)
+            # --- ClubGradeAdjacency REMOVED (spec-007) ---
+            # The legacy combined cluster has been replaced by
+            # `SameGradeSameClubNoConcurrency` (hard atom, dispatched
+            # outside the engine) and `TeamPairNoConcurrency` (soft atom).
+            # No groupings need to be built here.
 
             # --- ClubVsClubAlignment (3rd-6th only) ---
             if grade not in ['PHL', '2nd'] and t1_club and t2_club:
@@ -423,8 +416,9 @@ class UnifiedConstraintEngine:
             c += self._phl_times_atoms_hard()
         if 'EqualMatchUpSpacing' not in _skip:
             c += self._matchup_spacing_hard()
-        if 'ClubGradeAdjacency' not in _skip:
-            c += self._grade_adjacency_hard()
+        # ClubGradeAdjacency REMOVED (spec-007): the legacy hard rule is now
+        # the `SameGradeSameClubNoConcurrency` atom dispatched via the
+        # non-engine fallback in `constraints/stages.py`. Nothing to do here.
         if 'ClubVsClubAlignment' not in _skip:
             c += self._club_vs_club_atoms_hard()
         if 'MaitlandHomeGrouping' not in _skip:
@@ -685,14 +679,11 @@ class UnifiedConstraintEngine:
                     n += 1
         return n
 
-    def _grade_adjacency_hard(self):
-        """Hard: duplicate teams in same grade can't play simultaneously."""
-        n = 0
-        for (club, slot, grade), vars_ in self.club_dup_games.items():
-            if vars_:
-                self.model.Add(sum(vars_) <= 1)
-                n += 1
-        return n
+    # _grade_adjacency_hard REMOVED (spec-007): hard same-grade-same-club
+    # rule moved to the `SameGradeSameClubNoConcurrency` atom. The legacy
+    # combined `ClubGradeAdjacencyConstraint` lives only in
+    # `constraints/archived/original.py` and is no longer invoked by the
+    # engine.
 
     # ----------------------------------------------------------------
     # ClubVsClub — atom dispatch (Phase 3c, replaces _club_alignment_hard /
@@ -956,8 +947,11 @@ class UnifiedConstraintEngine:
         _skip = self.skip_constraints
         if 'EqualMatchUpSpacing' not in _skip:
             c += self._matchup_spacing_soft()
-        if 'ClubGradeAdjacency' not in _skip:
-            c += self._grade_adjacency_soft()
+        # ClubGradeAdjacency soft REMOVED ENTIRELY (spec-007). The convenor-
+        # facing adjacent-grade penalty was over-restrictive in practice.
+        # If a specific team-pair conflict matters, declare it via
+        # `TEAM_PAIR_NO_CONCURRENCY` (handled by the `TeamPairNoConcurrency`
+        # atom outside the engine).
         if 'ClubVsClubAlignment' not in _skip:
             c += self._club_vs_club_atoms_soft()
         if 'MaitlandHomeGrouping' not in _skip:
@@ -1014,30 +1008,10 @@ class UnifiedConstraintEngine:
                 n += 1
         return n
 
-    def _grade_adjacency_soft(self):
-        """Soft penalty for adjacent grades playing same timeslot."""
-        n = 0
-        weight = self._get_penalty_weight('ClubGradeAdjacencyConstraint', 50000)
-        self.data['penalties']['ClubGradeAdjacencyConstraint'] = {'weight': weight, 'penalties': []}
-        adj_pairs = [(GRADE_ORDER[i], GRADE_ORDER[i + 1]) for i in range(len(GRADE_ORDER) - 1)]
-        idx = 0
-
-        for club in [c.name for c in self.clubs]:
-            club_slots = {k[0] for k in self.by_slot_club_grade if k[1] == club}
-            for slot in club_slots:
-                for g1, g2 in adj_pairs:
-                    v1 = self.by_slot_club_grade.get((slot, club, g1), [])
-                    v2 = self.by_slot_club_grade.get((slot, club, g2), [])
-                    if v1 and v2:
-                        mx = len(v1) + len(v2)
-                        combined = self.model.NewIntVar(0, mx, f'u_adj_comb_{idx}')
-                        self.model.Add(combined == sum(v1) + sum(v2))
-                        penalty = self.model.NewIntVar(0, mx, f'u_adj_pen_{idx}')
-                        self.model.AddMaxEquality(penalty, [combined - 1, self.model.NewConstant(0)])
-                        self.data['penalties']['ClubGradeAdjacencyConstraint']['penalties'].append(penalty)
-                        idx += 1
-                        n += 1
-        return n
+    # _grade_adjacency_soft REMOVED ENTIRELY (spec-007). The convenor-facing
+    # adjacent-grade-same-timeslot penalty was over-restrictive and is no
+    # longer enforced anywhere. For per-team-pair conflicts, use the
+    # `TeamPairNoConcurrency` atom + `TEAM_PAIR_NO_CONCURRENCY` config.
 
     def _club_alignment_soft(self):
         """Soft penalties for coincidence deficit and field excess."""

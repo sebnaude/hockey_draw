@@ -46,15 +46,19 @@ ENGINE_HARD_KEYS: Set[str] = {
     'NoDoubleBookingTeams', 'NoDoubleBookingFields', 'EqualGamesAndBalanceMatchUps',
     'FiftyFiftyHomeandAway', 'TeamConflict', 'MaxMaitlandHomeWeekends',
     'PHLAndSecondGradeAdjacency', 'PHLAndSecondGradeTimes',
-    'EqualMatchUpSpacing', 'ClubGradeAdjacency', 'ClubVsClubAlignment',
+    'EqualMatchUpSpacing', 'ClubVsClubAlignment',
     'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping',
     'ClubDay', 'ClubGameSpread', 'EnsureBestTimeslotChoices',
+    # spec-007: `ClubGradeAdjacency` removed from the engine. Hard portion is
+    # now the `SameGradeSameClubNoConcurrency` atom dispatched via the
+    # non-engine legacy-class fallback; soft adjacent-grade rule was removed.
 }
 
 ENGINE_SOFT_KEYS: Set[str] = {
-    'EqualMatchUpSpacing', 'ClubGradeAdjacency', 'ClubVsClubAlignment',
+    'EqualMatchUpSpacing', 'ClubVsClubAlignment',
     'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping', 'PHLAndSecondGradeTimes',
     'PreferredTimesConstraint', 'EnsureBestTimeslotChoices', 'ClubGameSpread',
+    # spec-007: `ClubGradeAdjacency` soft penalty removed entirely.
 }
 
 ALL_ENGINE_KEYS: Set[str] = ENGINE_HARD_KEYS | ENGINE_SOFT_KEYS
@@ -273,11 +277,31 @@ def apply_solver_stage(
             continue
         constraint = cls()
         prior = len(model.Proto().constraints)
-        constraint.apply(model, X, data)
+        # New atoms (subclasses of `constraints.atoms.base.Atom`) take a
+        # helper-var registry as a fourth arg. Legacy classes take three.
+        from constraints.atoms.base import Atom as _AtomBase
+        if isinstance(constraint, _AtomBase):
+            reg = getattr(engine, 'helper_registry', None) or _ephemeral_registry(model)
+            constraint.apply(model, X, data, reg)
+        else:
+            constraint.apply(model, X, data)
         constraints_added += len(model.Proto().constraints) - prior
 
     applied_atoms.update(new_atoms)
     return constraints_added, new_atoms
+
+
+def _ephemeral_registry(model):
+    """Build a frozen `HelperVarRegistry` for atoms that don't declare helpers.
+
+    Atoms that don't declare any helpers can use a fresh registry per call —
+    no shared state is needed. This avoids requiring the engine to expose a
+    registry attribute when the atom dispatches purely outside it.
+    """
+    from constraints.helper_vars import HelperVarRegistry
+    reg = HelperVarRegistry(model)
+    reg.freeze({}, {})
+    return reg
 
 
 def _resolve_solver_class(canonical_name: str, *, use_ai: bool = False):
@@ -299,16 +323,19 @@ def _resolve_solver_class(canonical_name: str, *, use_ai: bool = False):
 
 
 def _import_solver_class(class_name: str):
-    """Import a solver class by name from `constraints.original` or `constraints.ai`.
+    """Import a solver class by name from `constraints.original`, `.ai`, or `.atoms`.
 
-    After Phase 7c, the source modules become `constraints.archived.*` but
-    the registry keeps the same `solver_class_names`. This helper survives
-    the move — it just changes which module path it tries.
+    Phase 7c moved legacy classes under `constraints/archived/`. For atoms
+    born directly under `constraints/atoms/` (e.g. spec-007's
+    `SameGradeSameClubNoConcurrency` and `TeamPairNoConcurrency`) the lookup
+    also tries the atoms package — those classes are subclasses of
+    `constraints.atoms.base.Atom` and the caller dispatches them with the
+    atom-shaped four-arg `apply` signature.
     """
     # Try AI module first if name ends with AI; else try original first.
-    modules = ('constraints.ai', 'constraints.original')
+    modules = ('constraints.ai', 'constraints.original', 'constraints.atoms')
     if not class_name.endswith('AI'):
-        modules = ('constraints.original', 'constraints.ai')
+        modules = ('constraints.original', 'constraints.ai', 'constraints.atoms')
     for mod_name in modules:
         try:
             mod = __import__(mod_name, fromlist=[class_name])

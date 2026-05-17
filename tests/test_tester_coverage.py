@@ -497,8 +497,14 @@ class TestCheckMaitlandAwayClubsLimit:
 # ============== _check_club_grade_adjacency ==============
 
 class TestCheckClubGradeAdjacency:
-    def test_violation_adjacent_grades_same_slot(self):
-        """Tigers 3rd and Tigers 4th at same date/slot/field -> violation."""
+    def test_no_violation_adjacent_grades_same_slot(self):
+        """spec-007: adjacent-grade concurrency is NO LONGER a violation.
+
+        Tigers 3rd and Tigers 4th at the same date/slot/field used to flag a
+        ClubGradeAdjacency violation pre-spec-007. After spec-007, only
+        same-grade-same-club concurrency flags. Tigers has only one team in
+        each grade here, so no violation should be reported.
+        """
         games = [
             make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
                       day_slot=1, field_name='EF'),
@@ -509,7 +515,10 @@ class TestCheckClubGradeAdjacency:
         tester = DrawTester(make_draw(games), data)
         violations = tester._check_club_grade_adjacency()
         tiger_v = [v for v in violations if 'Tigers' in v.message]
-        assert len(tiger_v) >= 1
+        assert tiger_v == [], (
+            'spec-007 removed adjacent-grade enforcement; expected zero '
+            f'Tigers violations, got: {[v.message for v in tiger_v]}'
+        )
 
     def test_no_violation_different_slots(self):
         games = [
