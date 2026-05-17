@@ -1,7 +1,7 @@
 # Atomization Plan — Unified Constraints, Helper-Var Registry, Generic Home/Away
 
 **Branch:** `final-form` (worktree at `C:/Users/c3205/Documents/Code/python/draw-final-form`)
-**Status:** APPROVED — partially implemented.
+**Status:** APPROVED — all phases shipped.
 
 ## Phase status (as of commit `48f5222`)
 
@@ -15,7 +15,7 @@
 | 3c — Atomize ClubVsClubAlignment | ✅ DONE — 4 atoms (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`, `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) wired via `_club_vs_club_atoms_hard`/`_club_vs_club_atoms_soft`. Re-introduces the PHL/2nd back-to-back same-field rule the pre-atomization unified engine silently dropped (still present in `original.py:1096–1198`). 11 new tests. | `8d2934d` |
 | 4 — FORCED/BLOCKED count adjusters | ✅ DONE — framework (`1521c9b`) + 4 adjuster implementations: `equal_matchup_spacing_adjuster`, `maitland_home_grouping_adjuster`, `away_at_maitland_grouping_adjuster` (in `constraints/atoms/_adjusters.py`), `club_vs_club_coincidence_adjuster` (in `constraints/atoms/club_vs_club_coincidence.py`). #1 EqualGames is no-op-by-design. Each registers via `CONSTRAINT_REGISTRY[name].forced_blocked_adjuster = fn`; legacy unified.py methods `_matchup_spacing_hard`, `_maitland_grouping_hard`, `_away_maitland_hard` and the atom `ClubVsClubCoincidence.apply()` read `data['count_adjustments'][canonical_name]`. 18 new tests. | shipped |
 | 5 — Constants migration | ✅ DONE | `535cac3` |
-| 6 — Generic home-ground rename | ✅ DONE — `AWAY_VENUE_RULES` skeleton (`48f5222`) + Phase-6 rename: `unified.py` build_groupings populates per-club `non_default_*` dicts (alias `maitland_*` retained), `_maitland_grouping_*` and `_away_maitland_*` iterate `home_field_map.keys()` and read per-club `AWAY_VENUE_RULES`. `analytics/tester.py` matches. Registry adds `NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping` aliases. `away_venue_rules` merged onto data via `_merge_away_venue_rules`. Tests: Wyong (3rd club) honoured; Gosford `max_away_clubs=None` skipped; per-club `max_consecutive_home` override respected. 6 new tests. | shipped |
+| 6 — Generic home-ground rename | ✅ DONE — `AWAY_VENUE_RULES` skeleton (`48f5222`) + Phase-6 rename: `unified.py` build_groupings populates per-club `non_default_*` dicts (alias `maitland_*` retained), `_maitland_grouping_*` and `_away_maitland_*` iterate `home_field_map.keys()` and read per-club `AWAY_VENUE_RULES`. `analytics/tester.py` matches. Registry **canonicalised** on `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` (own the `solver_class_names`); `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` retained as back-compat aliases (empty `solver_class_names`, mirror tester/severity/slack). `away_venue_rules` merged onto data via `_merge_away_venue_rules`. Tests: Wyong (3rd club) honoured; Gosford `max_away_clubs=None` skipped; per-club `max_consecutive_home` override respected. 6 new tests. | shipped |
 | 7a — Tests on real sampled data | ✅ DONE — 8 violation fixtures (`tests/fixtures/violations/`) covering NoDoubleBookingTeams/Fields, ClubGradeAdjacency, MaxMaitlandHomeWeekends, ClubGameSpread overlap, AwayAtMaitlandGrouping overflow, ClubVsClubAlignment non-coincident grades, FiftyFiftyHomeAway imbalance. `ViolationBreakdown` dataclass + `ViolationReport.breakdown` property. `Violation.affected_clubs` + `metric_value` populated for ClubGameSpread, MaxMaitlandHomeWeekends, AwayAtMaitlandGrouping, ClubGradeAdjacency, FiftyFiftyHomeAway, ClubVsClubAlignment. 9 metadata tests in `tests/test_violation_metadata.py`. | `4599f01` |
 | 7b — Configurable stages | ✅ DONE — `DEFAULT_STAGES` in `config/defaults.py` + `constraints/stages.py` API + `apply_solver_stage` dispatcher + `StagedScheduleSolver.run_solver_stages_solve` driving the per-stage loop. `severity_solver_stages()` builds severity-grouped stages from the registry. CLI flags `--stages-config`, `--stage-only`, `--skip-stage`, `--list-stages`. Phase 22 `_validate_stages` step in `validate_game_config`. 28 tests across `test_solver_stages.py` + `test_solver_stages_dispatch.py`. Legacy `STAGES`/`STAGES_AI`/`STAGES_SEVERITY[_AI]` dicts deleted. | `dd76a79` + `0140495` |
 | 7c — Move legacy to `constraints/archived/` | ✅ DONE — `constraints/{original,ai,archived_equalspacing_original}.py` moved into `constraints/archived/`. `_normalize_preference_no_play` extracted to `utils.py` so prod modules don't depend on archived code. All prod imports either go through atoms/registry or use `utils.normalize_preference_no_play`. Tests use `constraints.archived.*` for parity comparisons. `tests/test_no_legacy_imports.py` forbids prod imports of `constraints.original`, `constraints.ai`, `constraints.archived_equalspacing_original`, and `constraints.archived.*`. `--ai` CLI flag removed from `generate`/`list-constraints`/`diagnose`. `run_list_constraints` rewritten to print SOLVER_STAGES atoms. `run_diagnose` re-ported to drive the unified engine via `apply_solver_stage` with cluster-level removal testing (commit below). 4 obsolete diagnostic scripts deleted. | `0140495` + diagnose port |
@@ -331,11 +331,17 @@ Audit found these hardcoded constants in `constraints/unified.py` (and similar s
 
 ---
 
-## Phase 6 — Generic Home-Ground — 🟡 PREP DONE (`48f5222`); rename TODO
+## Phase 6 — Generic Home-Ground — ✅ DONE (`48f5222` skeleton + `67474f4` per-club iteration + canonical-flip)
 
-**Skeleton shipped:** `AWAY_VENUE_RULES` dict in `config/defaults.py` keyed by club name with per-club `max_consecutive_home`/`friday_games`/`max_away_clubs`. No constraint reads from it yet.
+**Shipped:**
+- `AWAY_VENUE_RULES` dict in `config/defaults.py` keyed by club name with per-club `max_consecutive_home` / `friday_games` / `max_away_clubs` (`None` = skip that rule for that club).
+- Constraint logic iterates `home_field_map.keys()` and reads per-club tuning from `AWAY_VENUE_RULES` (with fallback to `CONSTRAINT_DEFAULTS`). Hardcoded `'Maitland'` / `'Gosford'` strings removed from the active engine paths in `constraints/unified.py` and `analytics/tester.py`. Adding/removing a non-default-home club is now a config change only.
+- Registry: `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` are the **canonical** names (own the solver class names + tester methods + slack/severity metadata). `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` remain as back-compat aliases (empty `solver_class_names`, otherwise mirror the canonical entry) so older configs, data dicts, slack keys, and tests that look them up by name keep working.
+- `DEFAULT_STAGES` in `config/defaults.py` uses the canonical generic names.
 
-**Still TODO:** rename + per-club iteration. The constraint logic still hardcodes `'Maitland'`/`'Gosford'` strings; the rename touches ~20 files / ~100 references and needs registry aliases preserved for severity/slack lookups. See pickup notes in `docs/ATOMIZATION_HANDOFF.md`.
+**Tests:** `tests/test_phase6_generic_home.py` — 3rd-club inclusion, `max_away_clubs=None` skip, per-club `max_consecutive_home` override. 6 tests passing.
+
+**Note:** the runtime slack key in `data['constraint_slack']` is still spelled `'MaitlandHomeGrouping'` / `'AwayAtMaitlandGrouping'` (literal strings in `unified.py` / `tester.py`). That's an internal name — renaming it is a separate cosmetic change. The CLI `--slack` flag and severity lookups are unaffected by the canonical flip.
 
 
 **Today:** `home_field_map` exists (`{'Maitland': 'Maitland Park', 'Gosford': 'Central Coast Hockey Park'}`) but constraints hard-code "Maitland" / "Gosford" everywhere.

@@ -34,18 +34,27 @@ Legend
 | EnsureBestTimeslotChoices | original.py:EnsureBestTimeslotChoices | Per (week, day, location): build per-(field, day_slot) max-equality indicators; for adjacent slot pair (curr, next) for every (f, f2): next_used ⇒ curr_used (cross-field stacking + contiguity). SOFT: 7pm games incur penalty 1 each | 5 | — | EnsureBestTimeslotChoices |
 | PreferredTimes | original.py:PreferredTimesConstraint | Normalize PREFERENCE_NO_PLAY (legacy + 2026 structured); for each (entry, club, club_teams, restriction): match X keys via two key orderings; soft penalty = the var when match | 5 | — | PreferredTimes |
 
-## 1b. Phase-6 generic aliases (registered on `final-form` after `67474f4`)
+## 1b. Phase-6 canonical names + back-compat aliases
 
-| Canonical name | Aliases | Purpose |
+| Canonical name | Back-compat alias(es) | Purpose |
 |---|---|---|
-| `NonDefaultHomeGrouping` | `MaitlandHomeGrouping`, `MaxMaitlandHomeWeekends` (legacy entries own the reverse lookup) | Generic per-club non-default-home back-to-back constraint. Iterates `home_field_map.keys()`; per-club tuning from `AWAY_VENUE_RULES[club]['max_consecutive_home']` (None disables). Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`. |
+| `NonDefaultHomeGrouping` | `MaitlandHomeGrouping` (also resolves `MaxMaitlandHomeWeekends*` solver classes) | Generic per-club non-default-home back-to-back constraint. Iterates `home_field_map.keys()`; per-club tuning from `AWAY_VENUE_RULES[club]['max_consecutive_home']` (None disables). Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`. |
 | `AwayAtNonDefaultGrouping` | `AwayAtMaitlandGrouping` | Generic per-venue away-clubs-per-week constraint. Iterates `home_field_map.values()`; per-club `AWAY_VENUE_RULES[club]['max_away_clubs']` (None disables). Falls back to `CONSTRAINT_DEFAULTS['away_maitland_max_clubs']`. |
 
-The legacy `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` registry entries
-remain as the canonical names for severity/slack lookups (preserves
-`data['constraint_slack']['MaitlandHomeGrouping']` and
-`CONSTRAINT_TO_SEVERITY` paths). The new aliases exist for `SOLVER_STAGES`
-configs that prefer the generic name.
+The `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` entries are the
+**canonical** ones — they own the `solver_class_names` (incl. the legacy
+`MaitlandHomeGrouping*` / `AwayAtMaitlandGrouping*` class names in
+`constraints/archived/`), so `get_canonical_for_solver_name(...)` resolves
+any legacy class name to the generic canonical.
+
+The `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` entries remain as
+back-compat aliases (empty `solver_class_names`, otherwise mirror the
+canonical entry's tester / severity / slack metadata) so older configs,
+data dicts, slack-key lookups, severity-table walks, and tests that look
+them up by name continue to work. The runtime slack key string in
+`data['constraint_slack']['MaitlandHomeGrouping']` (read literally inside
+`unified.py` / `tester.py`) is kept as-is; renaming it is internal and
+out of scope for Phase 6.
 
 ## 2. Tester-only diagnostics
 

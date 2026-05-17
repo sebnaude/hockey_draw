@@ -84,8 +84,12 @@ class TestNormalization:
         ('EnsureEqualGamesAndBalanceMatchUpsAI', 'EqualGamesAndBalanceMatchUps'),
         ('ClubDayConstraint', 'ClubDay'),
         ('ClubDayConstraintAI', 'ClubDay'),
+        # Phase 6 canonical-flip: the bare alias name passes through (the
+        # alias entry is itself in the registry), but the suffixed solver
+        # class name resolves via `_SOLVER_NAME_TO_CANONICAL` to the new
+        # canonical `NonDefaultHomeGrouping`.
         ('MaitlandHomeGrouping', 'MaitlandHomeGrouping'),
-        ('MaitlandHomeGroupingAI', 'MaitlandHomeGrouping'),
+        ('MaitlandHomeGroupingAI', 'NonDefaultHomeGrouping'),
         ('EqualMatchUpSpacingConstraint', 'EqualMatchUpSpacing'),
         ('EqualMatchUpSpacingConstraintAI', 'EqualMatchUpSpacing'),
         ('PreferredTimesConstraint', 'PreferredTimes'),
@@ -198,10 +202,11 @@ class TestTesterOnlyConstraints:
         assert 'ClubFieldConcentration' in tester_only
 
     def test_non_tester_only_have_solver_names(self):
-        # Phase 6: aliases for the legacy Maitland-named constraints don't
-        # carry their own solver_class_names — the legacy entries own the
-        # reverse lookup. They reference the same logical constraint.
-        ALIAS_NAMES = {'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping'}
+        # Phase 6 canonical-flip: `NonDefaultHomeGrouping` /
+        # `AwayAtNonDefaultGrouping` own the solver_class_names; their legacy
+        # Maitland-named entries are back-compat aliases with empty class
+        # names. They reference the same logical constraint.
+        ALIAS_NAMES = {'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping'}
         for name, info in CONSTRAINT_REGISTRY.items():
             if not info.tester_only and name not in ALIAS_NAMES:
                 assert len(info.solver_class_names) >= 1, \

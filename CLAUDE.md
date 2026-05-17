@@ -192,7 +192,7 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 
 | Level | Name | Constraints | Relaxable? |
 |-------|------|------------|------------|
-| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, MaitlandHomeGrouping, MaxMaitlandHomeWeekends, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | Never |
+| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, NonDefaultHomeGrouping (alias: MaitlandHomeGrouping), PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | Never |
 | 2 | HIGH | ClubDay, AwayAtMaitlandGrouping, TeamConflict | With --relax |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | With --relax |
 | 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | Yes |
@@ -239,18 +239,19 @@ away clubs per week, spacing flexibility) registers a
 `data['count_adjustments'][canonical_name]`. Atoms (or legacy methods that
 haven't been atomised yet) read their entry by canonical name during apply.
 
-Currently shipped adjusters: `EqualMatchUpSpacing`, `MaitlandHomeGrouping`,
-`AwayAtMaitlandGrouping`, `ClubVsClubCoincidence`. `EqualGames` is
+Currently shipped adjusters: `EqualMatchUpSpacing`, `NonDefaultHomeGrouping`
+(alias `MaitlandHomeGrouping`), `AwayAtNonDefaultGrouping` (alias
+`AwayAtMaitlandGrouping`), `ClubVsClubCoincidence`. `EqualGames` is
 no-op-by-design (FORCED entries pin terms to 1; the per-team game-count sum is
 unchanged). See `docs/COUNT_ADJUSTERS.md` for formulas.
 
 ### Generic non-default-home (Phase 6)
 
-Constraints originally hardcoded for Maitland (`MaitlandHomeGrouping`,
-`AwayAtMaitlandGrouping`, `MaxMaitlandHomeWeekends`) now iterate over every
-club in `home_field_map` whose home venue isn't Broadmeadow. Per-club tuning
-comes from `AWAY_VENUE_RULES[club]` (in `config/defaults.py` or season
-overrides):
+The home-grouping constraints are generic: `NonDefaultHomeGrouping` (home
+back-to-back) and `AwayAtNonDefaultGrouping` (away-clubs-per-week-at-venue)
+are the canonical names. They iterate every club in `home_field_map` whose
+home venue isn't Broadmeadow. Per-club tuning comes from
+`AWAY_VENUE_RULES[club]` (in `config/defaults.py` or season overrides):
 - `max_consecutive_home`: per-club sliding-window limit. `None` disables the
   grouping for that club. Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`.
 - `max_away_clubs`: per-club hard cap on distinct away clubs per week at the
@@ -260,9 +261,13 @@ Adding a new non-default home club: add it to `home_field_map` and (optionally)
 `AWAY_VENUE_RULES`. No constraint code changes. Removing a club silences its
 constraints rather than crashing.
 
-The registry exposes both the legacy `MaitlandHomeGrouping` /
-`AwayAtMaitlandGrouping` names (preserving severity/slack lookups) and the
-generic `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` aliases.
+`MaitlandHomeGrouping` and `AwayAtMaitlandGrouping` remain as back-compat
+aliases in the registry — they share tester methods, severity, and slack key
+with the canonical entries, so older configs / data dicts / tests that look
+them up by name keep working. The literal slack key inside
+`data['constraint_slack']` is still spelled `'MaitlandHomeGrouping'` /
+`'AwayAtMaitlandGrouping'` (an internal name used by `unified.py` /
+`tester.py`); the canonical flip is at the registry layer.
 
 ### Configurable solver stages (Phase 7b foundation)
 

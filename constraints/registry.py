@@ -64,12 +64,30 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
     ),
-    'MaitlandHomeGrouping': ConstraintInfo(
-        canonical_name='MaitlandHomeGrouping',
+    # Phase 6: `NonDefaultHomeGrouping` is the canonical name. It owns the
+    # solver class names (incl. legacy `MaitlandHomeGrouping*` classes which
+    # live in `constraints/archived/`) so `_SOLVER_NAME_TO_CANONICAL` resolves
+    # any legacy name to the generic canonical. The `MaitlandHomeGrouping`
+    # entry below is a back-compat alias kept so older configs / data dicts
+    # / tests that look it up by name continue to work.
+    'NonDefaultHomeGrouping': ConstraintInfo(
+        canonical_name='NonDefaultHomeGrouping',
         solver_class_names=[
             'MaitlandHomeGrouping', 'MaitlandHomeGroupingAI',
             'MaxMaitlandHomeWeekends', 'MaxMaitlandHomeWeekendsAI',
         ],
+        tester_check_methods=['_check_maitland_back_to_back'],
+        tester_violation_names=['MaxMaitlandHomeWeekends'],
+        severity_level=1,
+        slack_key='MaitlandHomeGrouping',
+        has_soft_component=True,
+    ),
+    'MaitlandHomeGrouping': ConstraintInfo(
+        canonical_name='MaitlandHomeGrouping',
+        # Deprecated alias for `NonDefaultHomeGrouping`. Empty class names
+        # so `_SOLVER_NAME_TO_CANONICAL` routes through the canonical entry.
+        # Same tester/slack/severity metadata so by-name lookups still work.
+        solver_class_names=[],
         tester_check_methods=['_check_maitland_back_to_back'],
         tester_violation_names=['MaxMaitlandHomeWeekends'],
         severity_level=1,
@@ -190,33 +208,19 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         atom_group='ClubDay',
         required_helpers=['club_day_slot_used'],
     ),
-    'AwayAtMaitlandGrouping': ConstraintInfo(
-        canonical_name='AwayAtMaitlandGrouping',
+    # Phase 6: `AwayAtNonDefaultGrouping` is the canonical name. Owns the
+    # solver class names; `AwayAtMaitlandGrouping` is a back-compat alias.
+    'AwayAtNonDefaultGrouping': ConstraintInfo(
+        canonical_name='AwayAtNonDefaultGrouping',
         solver_class_names=['AwayAtMaitlandGrouping', 'AwayAtMaitlandGroupingAI'],
         tester_check_methods=['_check_maitland_away_clubs_limit'],
         tester_violation_names=['AwayAtMaitlandGrouping'],
         severity_level=2,
         slack_key='AwayAtMaitlandGrouping',
     ),
-    # Phase 6: generic non-default-home aliases. The legacy entries above are
-    # retained for back-compat with severity/slack lookups; new entries below
-    # mirror metadata so SOLVER_STAGES configs can use either name. The
-    # constraints today scope by `home_field_map` and per-club `AWAY_VENUE_RULES`,
-    # so adding/removing a non-default-home club is a config change only.
-    'NonDefaultHomeGrouping': ConstraintInfo(
-        canonical_name='NonDefaultHomeGrouping',
-        # Solver class names left empty — the legacy `MaitlandHomeGrouping` entry
-        # owns the reverse lookup so existing severity/skip-key paths keep working.
-        # This entry exists for SOLVER_STAGES configs that prefer the generic name.
-        solver_class_names=[],
-        tester_check_methods=['_check_maitland_back_to_back'],
-        tester_violation_names=['MaxMaitlandHomeWeekends'],
-        severity_level=1,
-        slack_key='MaitlandHomeGrouping',
-        has_soft_component=True,
-    ),
-    'AwayAtNonDefaultGrouping': ConstraintInfo(
-        canonical_name='AwayAtNonDefaultGrouping',
+    'AwayAtMaitlandGrouping': ConstraintInfo(
+        canonical_name='AwayAtMaitlandGrouping',
+        # Deprecated alias for `AwayAtNonDefaultGrouping`.
         solver_class_names=[],
         tester_check_methods=['_check_maitland_away_clubs_limit'],
         tester_violation_names=['AwayAtMaitlandGrouping'],
