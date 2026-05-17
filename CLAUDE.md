@@ -95,6 +95,8 @@ Two lists control variable filtering:
 
 **A FORCED variable can match multiple scopes.** A var that matches both `{day=Friday, club=Maitland}` count==2 and `{day=Friday, teams=[Norths,Maitland]}` count==1 counts toward BOTH constraints. Use this composability to express "exactly N games of kind X, of which exactly M are kind Y" rules.
 
+**Precedence: FORCED beats PERENNIAL BLOCKED, but season-specific BLOCKED beats FORCED.** A BLOCKED entry marked `'perennial': True` (e.g. `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`) is a *default* the convenor can override — a variable matched by a perennial BLOCKED scope is kept if any FORCED scope also matches it. Non-perennial (season-specific) BLOCKED entries always eliminate, even when FORCED matches. See spec-001 (docs/todo/done/) and `docs/operator-human/PERENNIAL_RULES.md`.
+
 ### 4. Per-venue / per-day game counts use FORCED_GAMES, NOT constraints
 
 Count budgets ("max 3 PHL Fridays at Broadmeadow," "exactly 8 Friday Gosford games per season," "exactly 2 Friday Maitland games per season") are expressed as **`FORCED_GAMES` entries in the season config**, not as constraint classes. Example:
