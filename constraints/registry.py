@@ -335,6 +335,14 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PreferredTimesConstraint'],
         severity_level=5,
     ),
+    'SoftLexMatchupOrdering': ConstraintInfo(
+        canonical_name='SoftLexMatchupOrdering',
+        solver_class_names=['SoftLexMatchupOrdering'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+    ),
     'ForcedGames': ConstraintInfo(
         canonical_name='ForcedGames',
         solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class

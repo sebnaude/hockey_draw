@@ -178,6 +178,7 @@ DEFAULT_STAGES = [
             'ClubVsClubDeficitPenalty', 'PreferredDates',
             'EnsureBestTimeslotChoices', 'PreferredTimes',
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
+            'SoftLexMatchupOrdering',
         ],
     },
 ]

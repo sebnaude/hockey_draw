@@ -288,6 +288,21 @@ These constraints use penalty variables that are minimized in the objective func
 
 ---
 
+### Rule 20: Alphabetical Matchup Ordering (Soft Tie-Break)
+**Constraint:** `SoftLexMatchupOrdering`
+
+**Description:** In the absence of other influences, matchups between teams are scheduled so that alphabetically-earlier matchups tend to appear in earlier rounds. For example, Norths vs Tigers (N before T) will usually appear before Tigers vs Wests (T before W) across the season.
+
+This is a **pure soft tie-break** — it never prevents any match from being scheduled. Its only effect is to make the published draw feel more predictable and structured when multiple scheduling options are otherwise equivalent.
+
+**Penalty:** Proportional to the alphabetical rank of each pair times the number of games scheduled. Weight is kept very small (default 1) so it cannot override any real scheduling constraint.
+
+**Weight:** 1 (deliberately tiny — tie-break only)
+
+**Rationale:** Clubs reading the published draw see a more orderly sequence of matchups. Removes solver-arbitrary ordering that would otherwise vary between runs with no logical explanation.
+
+---
+
 ## Implied Rules
 
 These rules arise from the combination of constraints or data filtering.
