@@ -24,6 +24,10 @@ from constraints.atoms.club_vs_club_field_limit import ClubVsClubFieldLimit
 from constraints.atoms.club_vs_club_deficit_penalty import ClubVsClubDeficitPenalty
 from constraints.atoms.phl_2nd_back_to_back import PHLAnd2ndBackToBackSameField
 from constraints.atoms.soft_lex_matchup_ordering import SoftLexMatchupOrdering
+from constraints.atoms.same_grade_same_club_no_concurrency import (
+    SameGradeSameClubNoConcurrency,
+)
+from constraints.atoms.team_pair_no_concurrency import TeamPairNoConcurrency
 
 # Side-effect import: registers FORCED/BLOCKED count adjusters for the
 # constraints whose atoms haven't been split out yet (Phase 4).
@@ -76,4 +80,6 @@ __all__ = [
     'PHLAnd2ndBackToBackSameField',
     'CLUB_VS_CLUB_ATOMS',
     'SoftLexMatchupOrdering',
+    'SameGradeSameClubNoConcurrency',
+    'TeamPairNoConcurrency',
 ]

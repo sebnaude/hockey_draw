@@ -1,16 +1,22 @@
 {
   "_violations": ["ClubGradeAdjacency"],
-  "_description": "Tigers PHL and Tigers 2nd play in the same Sunday timeslot — adjacent-grade conflict.",
+  "_description": "Tigers fields two teams in 3rd grade (Tigers 3rd-A, Tigers 3rd-B); they play different opponents in the same Sunday slot. spec-007: only same-grade-same-club concurrency violates ClubGradeAdjacency now; adjacent-grade does not.",
+  "_teams_override": {
+    "Norths 3rd":   {"club": "Norths",   "grade": "3rd"},
+    "Tigers 3rd-A": {"club": "Tigers",   "grade": "3rd"},
+    "Tigers 3rd-B": {"club": "Tigers",   "grade": "3rd"},
+    "Wests 3rd":    {"club": "Wests",    "grade": "3rd"}
+  },
   "version": "1.0",
-  "description": "violation fixture: adjacent grades same slot",
+  "description": "violation fixture: same-grade same-club duplicate teams in same slot",
   "num_weeks": 1,
   "num_games": 2,
   "games": [
     {
       "game_id": "G00001",
-      "team1": "Tigers PHL",
-      "team2": "Norths PHL",
-      "grade": "PHL",
+      "team1": "Norths 3rd",
+      "team2": "Tigers 3rd-A",
+      "grade": "3rd",
       "week": 1,
       "round_no": 1,
       "date": "2026-04-05",
@@ -22,9 +28,9 @@
     },
     {
       "game_id": "G00002",
-      "team1": "Tigers 2nd",
-      "team2": "Norths 2nd",
-      "grade": "2nd",
+      "team1": "Tigers 3rd-B",
+      "team2": "Wests 3rd",
+      "grade": "3rd",
       "week": 1,
       "round_no": 1,
       "date": "2026-04-05",

@@ -1,4 +1,4 @@
-<!-- status: in_progress -->
+<!-- status: done -->
 <!-- owner: session=spec-007-opus claimed=2026-05-17T08:26:04Z -->
 <!-- depends_on: none -->
 

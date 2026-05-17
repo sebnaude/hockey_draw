@@ -126,7 +126,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-004 | Away-club home/away atoms aligned with FORCED-Friday math | `spec-004-away-club-home-counts.md` | ready |
 | spec-005 | ClubVsClubAlignment stacks lower grades into upper-grade weekends with club-day-like co-location | `spec-005-clubvsclub-stacking.md` | ready |
 | spec-006 | Preferred / non-preferred weekends for away grounds (NRL-overlap–style) | `spec-006-preferred-weekends-away-grounds.md` | ready |
-| spec-007 | Adjacent-grade hard atom → soft constraint; keep only same-grade-same-club hard | `spec-007-adjacent-grade-soft-replace.md` | ready |
+| spec-007 | Adjacent-grade hard atom → soft constraint; keep only same-grade-same-club hard | `done/spec-007-adjacent-grade-soft-replace.md` | done |
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 

@@ -234,12 +234,43 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['TeamConflict'],
         severity_level=2,
     ),
+    # OBSOLETE (spec-007): the legacy `ClubGradeAdjacencyConstraint` did two
+    # things — (1) a hard same-grade-same-club no-concurrency rule and (2) a
+    # soft adjacent-grade penalty. The soft adjacent-grade portion has been
+    # REMOVED ENTIRELY; the hard portion is now `SameGradeSameClubNoConcurrency`.
+    # This entry remains so legacy solver-class-name lookups still resolve to a
+    # canonical name (the archived class file is still importable for parity
+    # tests), but `ClubGradeAdjacency` is NOT wired into any production stage.
+    # The tester still emits violations under the `ClubGradeAdjacency` name for
+    # the same-grade-same-club case only.
     'ClubGradeAdjacency': ConstraintInfo(
         canonical_name='ClubGradeAdjacency',
         solver_class_names=['ClubGradeAdjacencyConstraint', 'ClubGradeAdjacencyConstraintAI'],
         tester_check_methods=['_check_club_grade_adjacency'],
         tester_violation_names=['ClubGradeAdjacency'],
         severity_level=3,
+    ),
+    # spec-007: hard atom carrying the genuinely-fundamental portion of the
+    # obsolete ClubGradeAdjacency cluster. Same-grade, same-club teams must
+    # not play simultaneously.
+    'SameGradeSameClubNoConcurrency': ConstraintInfo(
+        canonical_name='SameGradeSameClubNoConcurrency',
+        solver_class_names=['SameGradeSameClubNoConcurrency'],
+        tester_check_methods=['_check_club_grade_adjacency'],
+        tester_violation_names=['ClubGradeAdjacency'],
+        severity_level=1,
+        atom_group='ClubGradeAdjacency',
+    ),
+    # spec-007: soft atom for convenor-supplied team pairs that should avoid
+    # concurrent (week, day_slot) appearances (siblings in non-adjacent grades,
+    # specific coach conflicts, etc.). Reads `TEAM_PAIR_NO_CONCURRENCY`.
+    'TeamPairNoConcurrency': ConstraintInfo(
+        canonical_name='TeamPairNoConcurrency',
+        solver_class_names=['TeamPairNoConcurrency'],
+        tester_check_methods=['_check_team_pair_no_concurrency'],
+        tester_violation_names=['TeamPairNoConcurrency'],
+        severity_level=3,
+        has_soft_component=True,
     ),
     'ClubVsClubAlignment': ConstraintInfo(
         canonical_name='ClubVsClubAlignment',

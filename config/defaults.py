@@ -120,6 +120,11 @@ CONSTRAINT_DEFAULTS = {
     'phl_adjacency_window_minutes': 180,
     # Worst timeslot (penalised by EnsureBestTimeslotChoices)
     'worst_timeslot_time': '19:00',
+    # spec-007: TeamPairNoConcurrency convenor list. Each entry is
+    # (team_a, team_b) or (team_a, team_b, weight_multiplier). Empty by
+    # default — season configs append entries when there's a real-world
+    # conflict (e.g. siblings in non-adjacent grades).
+    'TEAM_PAIR_NO_CONCURRENCY': [],
 }
 
 
@@ -142,6 +147,9 @@ DEFAULT_STAGES = [
             'EqualGamesAndBalanceMatchUps',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
             'GosfordFridayRoundsForced', 'PHLRoundOnePlay',
+            # spec-007: hard same-grade-same-club rule (was the hard portion
+            # of the obsolete `ClubGradeAdjacency` cluster).
+            'SameGradeSameClubNoConcurrency',
         ],
     },
     {
@@ -156,7 +164,9 @@ DEFAULT_STAGES = [
         'name': 'club_alignment',
         'description': 'Cross-grade coincidence + field limits',
         'atoms': [
-            'ClubGradeAdjacency',
+            # spec-007: `ClubGradeAdjacency` removed entirely. Hard portion is
+            # `SameGradeSameClubNoConcurrency` (in `critical_feasibility`); the
+            # soft adjacent-grade portion is gone.
             'ClubVsClubCoincidence', 'ClubVsClubFieldLimit',
             'PHLAnd2ndBackToBackSameField',
         ],
@@ -178,7 +188,10 @@ DEFAULT_STAGES = [
             'ClubVsClubDeficitPenalty', 'PreferredDates',
             'EnsureBestTimeslotChoices', 'PreferredTimes',
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
+            # spec-002: predictable alphabetical matchup tie-break.
             'SoftLexMatchupOrdering',
+            # spec-007: convenor-supplied per-team-pair no-concurrency soft.
+            'TeamPairNoConcurrency',
         ],
     },
 ]

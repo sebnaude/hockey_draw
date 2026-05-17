@@ -25,11 +25,12 @@ from models import Club, Grade, Team
 FIXTURES_DIR = Path(__file__).parent / 'fixtures' / 'violations'
 
 
-def _load_fixture(path: Path) -> tuple[List[str], DrawStorage, str]:
+def _load_fixture(path: Path) -> tuple[List[str], DrawStorage, str, Dict[str, Any]]:
     with open(path) as f:
         raw = json.load(f)
     expected = raw.pop('_violations', [])
     desc = raw.pop('_description', '')
+    overrides = raw.pop('_teams_override', None)
     games = [StoredGame(**g) for g in raw['games']]
     draw = DrawStorage(
         description=raw.get('description', path.stem),
@@ -37,21 +38,35 @@ def _load_fixture(path: Path) -> tuple[List[str], DrawStorage, str]:
         num_games=len(games),
         games=games,
     )
-    return expected, draw, desc
+    return expected, draw, desc, overrides
 
 
-def _build_data_for_fixture(games: List[StoredGame]) -> Dict[str, Any]:
-    """Build a minimal data dict from the team names that appear in games."""
+def _build_data_for_fixture(
+    games: List[StoredGame],
+    teams_override: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build a minimal data dict from the team names that appear in games.
+
+    `teams_override` lets a fixture declare team -> (club, grade) explicitly,
+    bypassing the simple "club is everything before the last space" parser
+    used by fixtures whose team names follow the canonical convention. Useful
+    for fixtures that need multiple teams in the same (club, grade) bucket
+    (e.g. spec-007's same-grade-same-club concurrency check).
+    """
     team_names = set()
     for g in games:
         team_names.add(g.team1)
         team_names.add(g.team2)
-    # Infer club from team-name prefix (the season convention is "ClubName GradeLabel").
     clubs_by_name: Dict[str, Club] = {}
     teams: List[Team] = []
     for team_name in sorted(team_names):
-        parts = team_name.rsplit(' ', 1)
-        club_name, grade = parts[0], parts[1] if len(parts) == 2 else 'PHL'
+        if teams_override and team_name in teams_override:
+            entry = teams_override[team_name]
+            club_name = entry['club']
+            grade = entry['grade']
+        else:
+            parts = team_name.rsplit(' ', 1)
+            club_name, grade = parts[0], parts[1] if len(parts) == 2 else 'PHL'
         if club_name not in clubs_by_name:
             home = (
                 'Maitland Park' if club_name == 'Maitland'
@@ -94,10 +109,10 @@ def _all_fixtures() -> List[Path]:
 @pytest.mark.parametrize('fixture_path', _all_fixtures(), ids=lambda p: p.stem)
 def test_fixture_flags_expected_violations(fixture_path: Path):
     """Each fixture's `_violations` list must be a subset of the actual violations flagged."""
-    expected, draw, _desc = _load_fixture(fixture_path)
+    expected, draw, _desc, overrides = _load_fixture(fixture_path)
     assert expected, f'Fixture {fixture_path.name} has no _violations declared'
 
-    data = _build_data_for_fixture(draw.games)
+    data = _build_data_for_fixture(draw.games, teams_override=overrides)
     tester = DrawTester(draw, data)
     report = tester.run_violation_check()
     flagged = {v.constraint for v in report.violations}

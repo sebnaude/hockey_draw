@@ -24,6 +24,7 @@ def _load(name: str):
         raw = json.load(f)
     raw.pop('_violations', None)
     raw.pop('_description', None)
+    overrides = raw.pop('_teams_override', None)
     games = [StoredGame(**g) for g in raw['games']]
     draw = DrawStorage(
         description=raw.get('description', name),
@@ -31,12 +32,12 @@ def _load(name: str):
         num_games=len(games),
         games=games,
     )
-    return draw
+    return draw, overrides
 
 
 def _run(name: str):
-    draw = _load(name)
-    data = _build_data_for_fixture(draw.games)
+    draw, overrides = _load(name)
+    data = _build_data_for_fixture(draw.games, teams_override=overrides)
     return DrawTester(draw, data).run_violation_check()
 
 
