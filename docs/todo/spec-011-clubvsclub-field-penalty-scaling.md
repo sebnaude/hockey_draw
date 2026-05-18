@@ -1,6 +1,18 @@
-<!-- status: ready -->
+<!-- status: not_ready -->
 <!-- owner: unassigned -->
-<!-- depends_on: spec-005 (interacts; see Coordination) -->
+<!-- depends_on: spec-005 (must resolve before this is pickable) -->
+
+<!--
+NOT READY rationale: This plan is contingent on spec-005 (ClubVsClubStackedAlignment).
+If spec-005 is shipped first, this entire spec is absorbed into it (the field-penalty
+scaling + double-up requirements move into spec-005's DoD as sub-criteria), and this
+file moves to docs/todo/done/ with a "absorbed by spec-005" note instead of new code.
+
+If spec-005 is explicitly abandoned or deferred indefinitely, flip this spec to ready
+and ship it as the interim improvement it describes.
+
+Either way, do NOT pick this up while spec-005's outcome is undecided.
+-->
 
 # spec-011 — ClubVsClubFieldLimit penalty scales with games on 2nd field; double-up handling
 
