@@ -16,6 +16,22 @@
 > The remainder of this document is preserved as the historical
 > design rationale and migration plan.
 
+---
+
+## End-to-end verification (spec-009 — 2026-05-18)
+
+All three behavioural claims in this document have been verified end-to-end
+by new test files on the `spec-009-forced-count-verification` branch:
+
+| Check | Description | Test file | Verdict |
+|---|---|---|---|
+| 1 | FORCED total + per-pair share one variable (multi-scope); total doesn't inflate | `tests/test_forced_total_plus_per_pair.py` | **PASS** |
+| 2 | PHL Friday FORCED entries exempt from `ClubVsClubCoincidence` Sunday count via Adjuster #5 | `tests/atoms/test_cvc_coincidence_phl_friday_adjuster.py` | **PASS** |
+| 3 | Same-grade-same-club double-ups: concurrent play blocked; coincidence atom sees distinct matchups | `tests/atoms/test_double_up_handling.py` | **PASS** |
+
+No bugs found. The shipped code matches the spec exactly. Test bar after adding
+15 new tests: **1438 passed** (was 1423).
+
 ## TL;DR
 
 The user's design decision: **per-venue / per-day game-count limits are NOT hardcoded atoms — they are `FORCED_GAMES` entries in the season config.** `FORCED_GAMES` already supports partial-key matching plus `constraint` + `count` overrides, so an entry like
