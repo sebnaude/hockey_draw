@@ -93,18 +93,42 @@ These fundamental rules ensure the draw is valid and playable.
 
 ---
 
-### Rule 6: 50/50 Home and Away Balance
-**Constraint:** `FiftyFiftyHomeandAway`
+### Rule 6: Away-Club Home/Away Expectations (spec-004)
 
-**Description:** Teams from away venues (Maitland, Gosford) should play approximately 50% of their games at home and 50% away **per opponent pair**. Each (team, opponent) pair is individually balanced, but aggregate home/away totals can be lopsided if most odd-meeting pairs land on the same side.
+For any club whose home ground is NOT Broadmeadow (currently Maitland and
+Gosford; any future expansion clubs automatically inherit the same treatment),
+the system enforces three cooperating expectations:
 
-**Enforcement (per pair):**
-```
-home_games * 2 >= total_games - 1
-home_games * 2 <= total_games + 1
-```
+1. **Per-opponent balance.** For every pair of teams, the number of games
+   played at the away-club's home ground equals exactly half of their season
+   meetings — rounded either way for odd totals. With 3 meetings each pair
+   gets 2H/1A or 1H/2A; with 6 meetings each pair gets 3H/3A.
 
-**Rationale:** Ensures fairness for teams that must travel significant distances.
+2. **Per-team aggregate balance.** Across all of an away-club team's games,
+   home and away totals are within ±1 of each other. Prevents the corner case
+   where every odd-meeting pair lands on the same side and the team ends up,
+   say, 12H/6A across the season.
+
+3. **Per-club home weekend total — FORCED-Friday aware.** The number of
+   weekends the club appears at its home ground equals the maximum games-
+   required across its grades (e.g. PHL plays 18 + 3rd plays 20 → 20 weekend
+   appearances). Sundays vs Fridays are tracked separately: each PHL
+   Friday-night fixture the convenor pins to the home ground via FORCED_GAMES
+   reduces the required Sunday count by one (no point adding Sundays on top
+   of an already-claimed weekend). When another grade requires more games
+   than PHL, the FORCED Fridays are absorbed into the other-grade-driven
+   total — they don't add weekends, they just label some of them Friday.
+
+**Constraints involved:**
+
+- `AwayClubHomeWeekendsCount` — enforces (3).
+- `AwayClubPerOpponentAndAggregateHomeBalance` — enforces (1) + (2).
+- Together these supersede the legacy combined `FiftyFiftyHomeandAway`
+  class, which is retained only for backwards-compat parity tests.
+
+**Rationale:** Ensures fairness for teams that must travel significant
+distances AND keeps the away-ground's Sundays densely populated rather than
+diluted with extra home games beyond what the season actually needs.
 
 ---
 

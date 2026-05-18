@@ -159,7 +159,13 @@ DEFAULT_STAGES = [
         'name': 'home_away_balance',
         'description': 'Per-pair home/away + non-default-home grouping',
         'atoms': [
-            'FiftyFiftyHomeandAway',
+            # spec-004: replaces the obsolete `FiftyFiftyHomeandAway`. Two atoms
+            # in cooperation — `AwayClubHomeWeekendsCount` pins per-club Friday
+            # / Sunday / total home-weekend counts (FORCED-Friday aware);
+            # `AwayClubPerOpponentAndAggregateHomeBalance` enforces per-pair +
+            # per-team aggregate home/away balance.
+            'AwayClubHomeWeekendsCount',
+            'AwayClubPerOpponentAndAggregateHomeBalance',
             'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping',
         ],
     },

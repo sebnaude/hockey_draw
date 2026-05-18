@@ -1,5 +1,5 @@
-<!-- status: in_progress -->
-<!-- owner: session=opus-4-7-spec004 claimed=2026-05-18T00:00:00Z -->
+<!-- status: done -->
+<!-- owner: session=opus-4-7-spec004 claimed=2026-05-18T00:00:00Z completed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-004 — Away-club home/away atoms aligned (FORCED-Friday aware)

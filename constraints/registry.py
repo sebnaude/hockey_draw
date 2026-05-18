@@ -57,9 +57,38 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['EqualGames', 'BalancedMatchups'],
         severity_level=1,
     ),
+    # OBSOLETE (spec-004): superseded by `AwayClubHomeWeekendsCount` +
+    # `AwayClubPerOpponentAndAggregateHomeBalance`. The legacy combined class
+    # remains importable in `constraints/archived/` for parity reference, but
+    # `FiftyFiftyHomeandAway` is NOT wired into any production stage.
+    # Registry entry kept so legacy solver-class-name lookups still resolve
+    # and the tester can keep emitting violations under the same name for the
+    # per-pair balance case.
     'FiftyFiftyHomeandAway': ConstraintInfo(
         canonical_name='FiftyFiftyHomeandAway',
         solver_class_names=['FiftyFiftyHomeandAway', 'FiftyFiftyHomeandAwayAI'],
+        tester_check_methods=['_check_fifty_fifty_home_away'],
+        tester_violation_names=['FiftyFiftyHomeAway'],
+        severity_level=1,
+    ),
+    # spec-004: FORCED-Friday aware home-weekend count atom. For each
+    # away-based club (non-Broadmeadow home venue), pins three sums:
+    # friday-home weekends, sunday-home weekends, and total-home weekends.
+    # Replaces the home-weekend logic historically in `FiftyFiftyHomeandAway`
+    # + `MaxMaitlandHomeWeekends`. Reuses the existing `_check_maitland_back_
+    # _to_back` tester method which observes per-club home-weekend totals.
+    'AwayClubHomeWeekendsCount': ConstraintInfo(
+        canonical_name='AwayClubHomeWeekendsCount',
+        solver_class_names=['AwayClubHomeWeekendsCount'],
+        tester_check_methods=['_check_maitland_back_to_back'],
+        tester_violation_names=['MaxMaitlandHomeWeekends'],
+        severity_level=1,
+    ),
+    # spec-004: per-opponent + aggregate home/away balance atom. Replaces the
+    # per-pair and aggregate blocks of the obsolete `FiftyFiftyHomeandAway`.
+    'AwayClubPerOpponentAndAggregateHomeBalance': ConstraintInfo(
+        canonical_name='AwayClubPerOpponentAndAggregateHomeBalance',
+        solver_class_names=['AwayClubPerOpponentAndAggregateHomeBalance'],
         tester_check_methods=['_check_fifty_fifty_home_away'],
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
