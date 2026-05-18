@@ -70,12 +70,6 @@ from utils import (
 _CandidateKey = Tuple
 
 
-def _away_club_home_venue(data: Dict, club: str) -> Optional[str]:
-    """Return the club's away/home venue from `home_field_map`, or None."""
-    home_field_map: Dict[str, str] = data.get('home_field_map', {}) or {}
-    return home_field_map.get(club)
-
-
 def _grade_required_games(data: Dict, grade: str) -> int:
     """Return the per-team games required for `grade` from `data['num_rounds']`.
 

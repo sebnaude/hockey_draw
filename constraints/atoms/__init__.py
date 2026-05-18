@@ -33,6 +33,12 @@ from constraints.atoms.nihc_fill_ef_before_sf import NIHCFillEFBeforeSF
 from constraints.atoms.preferred_weekends_away_ground import (
     PreferredWeekendsAwayGround,
 )
+from constraints.atoms.away_club_home_weekends_count import (
+    AwayClubHomeWeekendsCount,
+)
+from constraints.atoms.away_club_home_balance import (
+    AwayClubPerOpponentAndAggregateHomeBalance,
+)
 
 # Side-effect import: registers FORCED/BLOCKED count adjusters for the
 # constraints whose atoms haven't been split out yet (Phase 4).
@@ -97,4 +103,6 @@ __all__ = [
     'NIHCFillEFBeforeSF',
     'NIHC_FIELD_FILL_ORDER_ATOMS',
     'PreferredWeekendsAwayGround',
+    'AwayClubHomeWeekendsCount',
+    'AwayClubPerOpponentAndAggregateHomeBalance',
 ]

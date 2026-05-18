@@ -63,9 +63,11 @@ class TestRegistryCompleteness:
         1 spec-002 soft penalty atom (SoftLexMatchupOrdering) +
         2 spec-007 atoms (SameGradeSameClubNoConcurrency, TeamPairNoConcurrency) +
         2 spec-003 atoms (NIHCFillWFBeforeEF, NIHCFillEFBeforeSF) +
-        1 spec-006 soft penalty atom (PreferredWeekendsAwayGround)
-        = 43."""
-        assert len(CONSTRAINT_REGISTRY) == 43
+        1 spec-006 soft penalty atom (PreferredWeekendsAwayGround) +
+        2 spec-004 atoms (AwayClubHomeWeekendsCount,
+        AwayClubPerOpponentAndAggregateHomeBalance)
+        = 45."""
+        assert len(CONSTRAINT_REGISTRY) == 45
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
