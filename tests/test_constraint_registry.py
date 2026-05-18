@@ -70,9 +70,10 @@ class TestRegistryCompleteness:
         2 spec-005 atoms (ClubVsClubStackedWeekends,
         ClubVsClubStackedCoLocation — replaces the 4 Phase-3c atoms in the
         production stage list while leaving them in the registry as
-        parity reference)
-        = 47."""
-        assert len(CONSTRAINT_REGISTRY) == 47
+        parity reference) +
+        1 spec-012 soft penalty atom (MaitlandAlternateHomeAway)
+        = 48."""
+        assert len(CONSTRAINT_REGISTRY) == 48
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.

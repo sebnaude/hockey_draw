@@ -35,6 +35,13 @@ def normalize_preference_no_play(noplay: dict, teams: list, clubs: list) -> list
       - 2025 legacy format: ``{'ClubName': [{'date': '...', ...}, ...]}``
       - 2026 structured format: ``{'EntryKey': {'club': 'ClubName',
         'dates': [datetime, ...], 'grade': '...' | 'grades': [...]}}``
+      - spec-012 time-only / day-only / field-only filters:
+        ``{'EntryKey': {'club': 'ClubName', 'time': '08:30'}}``. Any combination
+        of ``time``, ``day``, ``day_slot``, ``week``, ``field_name``,
+        ``field_location`` may be added alongside (or instead of) ``date`` /
+        ``dates``. When NO date is supplied, a single normalized restriction is
+        emitted carrying the non-date filters — the consumer applies it across
+        every week.
 
     Used by `constraints/soft.py`, `constraints/unified.py`, and
     `constraints.archived.ai`'s `PreferredTimesConstraintAI`. Lives here in
@@ -42,6 +49,13 @@ def normalize_preference_no_play(noplay: dict, teams: list, clubs: list) -> list
     `constraints/archived/` lockdown line.
     """
     from datetime import datetime as _dt
+
+    # Keys that travel into the restriction dict alongside (or instead of)
+    # 'date'. The consumer (unified.py::_preferred_times, soft.py::
+    # PreferredTimesConstraintSoft) matches them against X-key columns via
+    # `dict(zip(allowed_keys, game_key))`.
+    _FILTER_KEYS = ('time', 'day', 'day_slot', 'week',
+                    'field_name', 'field_location')
 
     normalized = []
     club_names_lower = [c.name.lower() for c in clubs]
@@ -61,12 +75,25 @@ def normalize_preference_no_play(noplay: dict, teams: list, clubs: list) -> list
             elif 'grades' in value:
                 grades = [g.lower() for g in value['grades']]
                 club_teams = [t for t in club_teams if any(g in t.lower() for g in grades)]
-            for date in dates:
-                if isinstance(date, _dt):
-                    date_str = date.strftime('%Y-%m-%d')
-                else:
-                    date_str = str(date)
-                normalized.append((key, club_name, club_teams, {'date': date_str}))
+
+            # spec-012: collect non-date filters that should travel with each
+            # emitted restriction.
+            extra_filters = {k: value[k] for k in _FILTER_KEYS if k in value}
+
+            if dates:
+                for date in dates:
+                    if isinstance(date, _dt):
+                        date_str = date.strftime('%Y-%m-%d')
+                    else:
+                        date_str = str(date)
+                    restriction = {'date': date_str, **extra_filters}
+                    normalized.append((key, club_name, club_teams, restriction))
+            elif extra_filters:
+                # spec-012: no dates but at least one time/day/field filter.
+                # Emit a single restriction without a 'date' key — the
+                # consumer applies it across every week.
+                normalized.append((key, club_name, club_teams, dict(extra_filters)))
+            # else: entry has neither dates nor filters → silently no-op.
         elif isinstance(value, list):
             club_name = key
             if club_name.lower() not in club_names_lower:

@@ -261,10 +261,48 @@ PREFERENCE_NO_PLAY = {
         'dates': [datetime(2026, 5, 24)],
         'reason': 'U18 State Championships',
     },
+    # spec-012: time-only (and day-only, field-only, …) filters.
+    # Entries WITHOUT a `date`/`dates` key apply across EVERY playable week,
+    # filtered by the remaining keys (time / day / field_name / field_location
+    # / grade / grades). The structured format already accepts `'club'`; the
+    # spec-012 work added pass-through of `time`, `day`, `day_slot`, `week`,
+    # `field_name`, `field_location` from the entry into the matched
+    # restriction dict.
+    'maitland_no_8_30am': {
+        'club': 'Maitland',
+        'time': '08:30',                # filters X-vars where key[5] == '08:30'
+        'description': 'Maitland teams prefer not to play at 08:30',
+    },
+    'port_stephens_no_8_30am': {
+        'club': 'Port Stephens',
+        'time': '08:30',
+        'description': 'Port Stephens teams prefer not to play at 08:30',
+    },
 }
 ```
 
-**Effect:** Adds penalty to PreferredTimesConstraint (severity 4) - SOFT constraint.
+**Supported entry keys** (structured 2026 format, `value` is a dict with `'club'`):
+
+| Key | Purpose | Required? |
+|---|---|---|
+| `club` | The club whose teams are penalised. Must match `Club.name` exactly. | yes |
+| `grade` | Single grade filter (`'PHL'`, `'2nd'`, …). | no |
+| `grades` | List of grades (mutually exclusive with `grade`). | no |
+| `date` | Single date (string `'YYYY-MM-DD'` or `datetime`). | one of `date` / `dates` / a non-date filter |
+| `dates` | List of dates. | (see above) |
+| `time` | Time filter `'HH:MM'`, matches X-key column `time`. | no |
+| `day` | Day filter (`'Sunday'`, `'Friday'`). | no |
+| `day_slot` | Day-slot integer (1-indexed). | no |
+| `week` | Week-number integer. | no |
+| `field_name` | Field name (`'EF'`, `'WF'`, `'Maitland Main Field'`, …). | no |
+| `field_location` | Venue (`'Maitland Park'`, `'Newcastle International Hockey Centre'`, …). | no |
+| `reason` / `description` | Human-readable note, ignored by solver. | no |
+
+An entry must have either at least one date OR at least one non-date filter
+— a bare `{'club': 'X'}` entry is silently a no-op (it would penalise every
+game and is almost certainly a config typo).
+
+**Effect:** Adds penalty to `PreferredTimesConstraint` (severity 5) — SOFT constraint.
 
 ---
 

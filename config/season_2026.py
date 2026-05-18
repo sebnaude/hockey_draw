@@ -183,8 +183,31 @@ CLUB_DAYS = {
 }
 
 # ============== No-Play Preferences (Soft Constraints) ==============
+# spec-012: time-only preferences. Maitland and Port Stephens both ask not to
+# play at 08:30. Entries without a 'date' apply across every playable week —
+# any X-var for the named club at the named time accrues a PreferredTimes
+# penalty in the soft stage.
+#
+# Entry shape (2026 structured format, see utils.normalize_preference_no_play):
+#   'key': {
+#       'club': 'ClubName',                # required (or 'dates' format)
+#       'time': 'HH:MM',                   # optional, time-only filter
+#       'date'/'dates': ...,               # optional, date filter
+#       'grade'/'grades': ...,             # optional, grade filter
+#       'description': '...',              # ignored by solver
+#   }
 
 PREFERENCE_NO_PLAY = {
+    'maitland_no_8_30am': {
+        'club': 'Maitland',
+        'time': '08:30',
+        'description': 'Maitland teams prefer not to play at 08:30 (spec-012)',
+    },
+    'port_stephens_no_8_30am': {
+        'club': 'Port Stephens',
+        'time': '08:30',
+        'description': 'Port Stephens teams prefer not to play at 08:30 (spec-012)',
+    },
 }
 
 # ============== Blocked Games (Hard No-Play Variable Removal) ==============
@@ -1092,6 +1115,12 @@ PENALTY_WEIGHTS = {
     # Each 'avoid' entry incurs this penalty per game scheduled at the venue on that date.
     # Each 'prefer' entry incurs this penalty per game MISSING from the venue on that date.
     'preferred_weekends_away_ground':           1_000,
+    # spec-012: penalty per consecutive Maitland weekend pair where both are
+    # home (HH) or both are away (AA). HH already hard-forbidden by
+    # NonDefaultHomeGrouping; the AA branch does the work. Weight chosen so
+    # the atom influences the soft objective without overwhelming
+    # ClubVsClubAlignment (50_000) or PreferredTimesConstraint (200_000).
+    'maitland_alternate_home_away':            10_000,
 }
 
 # ============== Season Configuration ==============
