@@ -160,3 +160,69 @@ def test_adjuster_reduces_expected_meetings(self):
     out = my_adjuster(data, data['forced_games'], data['blocked_games'])
     assert out[('Maitland', 'Norths')]['PHL'] == total_meetings - 2
 ```
+
+## 6. FORCED-Friday helper (spec-004)
+
+`AwayClubHomeWeekendsCount` (and spec-005's PHL Sunday budget atom) do not
+register through the `forced_blocked_adjuster` callback because they need to
+be queryable from multiple call sites WITHOUT pre-running an engine-managed
+dispatch step. Instead they consume a shared, pure-function helper module:
+`constraints/atoms/_phl_forced_friday_helper.py`.
+
+The helper exports three functions, all accepting `(data, club)`:
+
+```
+phl_forced_friday_count(data, club) -> int
+    Distinct count of PHL Friday games the club WILL play this season.
+    Multi-scope-safe: when one FORCED_GAMES entry's matched-set is a strict
+    subset of another's, the subset entry contributes 0. Implementation walks
+    candidate (game, timeslot) X-keys filtered to (PHL, Friday, club involved)
+    and greedy-partitions them by `_get_matching_forced_scopes` matched-set.
+
+away_club_required_sundays(data, club) -> int
+    max(phl_required - phl_forced_friday_count(data, club),
+        max(other_grade_required))
+
+    The CALCULATED number of Sundays the club needs at its home ground AFTER
+    subtracting FORCED PHL Fridays. Strictly <= away_club_total_weekends.
+
+away_club_total_weekends(data, club) -> int
+    max(phl_required, max(other_grade_required))
+
+    The ORIGINAL (unadjusted) max games across grades, ignoring FORCED Fridays.
+    Total number of home-ground appearances (Friday + Sunday combined).
+```
+
+### Why "count variables, NOT sum FORCED entry counts"
+
+A convenor with these two FORCED entries:
+
+```python
+{'grade': 'PHL', 'day': 'Friday', 'club': 'Maitland',
+ 'count': 2, 'constraint': 'equal'},  # umbrella: 2 Maitland Fridays anywhere
+{'grade': 'PHL', 'day': 'Friday',
+ 'teams': ['Maitland', 'Tigers']},   # per-pair: 1 Mait-vs-Tigers Friday
+```
+
+is committing to **2 Maitland Friday PHL games total** (not 3). The per-pair
+entry forces one specific matchup; that matchup is one of the umbrella's
+two. The helper's greedy algorithm walks the umbrella (largest matched-set
+first), claims its 2-var contribution, then walks the per-pair scope, sees
+its matched-set is fully covered, and contributes 0.
+
+For disjoint scopes (e.g. Maitland Park count=2 + NIHC count=1 per-pair) the
+matched-sets don't overlap (different `field_location` slots), so both
+contribute: total = 2 + 1 = 3.
+
+### Edge case: PHL=18, 3rd=20
+
+When another grade requires MORE games than PHL has, FORCED PHL Fridays don't
+reduce the Sunday count — they're absorbed into the same weekend total:
+
+- `phl_required = 18`, `max_other = 20`, `phl_forced_friday_count = 2`
+- `away_club_required_sundays = max(18 - 2, 20) = 20`
+- `away_club_total_weekends   = max(18, 20) = 20`
+
+The atom's three sums in this case land at: Friday-home=2, Sunday-home=20,
+all-home=20 — meaning the 2 Friday-home weeks must each have a Sunday-home
+game too (the OR-indicator collapses them to one weekend each).
