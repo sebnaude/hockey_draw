@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-009-agent claimed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-009 — FORCED count rules + adjusters — end-to-end verification
