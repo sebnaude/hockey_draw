@@ -12,10 +12,34 @@
 
 Today, `NonDefaultHomeGrouping` and `FiftyFiftyHomeandAway` together approximate per-club home/away balance, but they don't account for FORCED PHL Friday games. Naive math counts PHL Fridays as Sunday weekend slots, leading to over-counted home weekends and sparse Sunday draws. The convenor manually fudges. Codifying as registry atoms with shared adjuster math fixes it once for all away clubs (current: Maitland, Gosford; future: any).
 
+### Clarification (added 2026-05-18 research session)
+
+The math must distinguish two distinct counts, not one:
+
+- **`total_weekends_required`** = the ORIGINAL maximum across all grades for this club, ignoring FORCED Fridays. For Maitland, this is `max(phl_games_required, max_other_grade_games)` and represents the total number of home-ground appearances the club should make across the season (Friday + Sunday combined).
+- **`total_sundays_required`** = the CALCULATED number of Sundays the club needs at its home ground, AFTER subtracting forced PHL Fridays. Formula: `max(phl_games_required - forced_phl_fridays, max_other_grade_games)`. This is strictly less than or equal to `total_weekends_required`.
+
+The convenor's reasoning: PHL Friday games consume a "weekend" (Friday counts as part of that weekend), so adding extra Sundays on top of the Fridays just to satisfy the original max would dilute the density of away-team appearances at Maitland Park. The Sunday count should reflect *only* what's actually needed once Friday consumption is accounted for.
+
+The atom must enforce **both relationships** explicitly (do not collapse them into one number):
+- `sum(sunday_home_indicators) == total_sundays_required`
+- `sum(friday_home_indicators) == forced_phl_fridays`
+- `sum(all_home_indicators) == total_weekends_required` (this follows from the previous two if and only if `phl_games_required >= max_other_grade_games`; otherwise the equality is an inequality `sum(all_home_indicators) >= max_other_grade_games + forced_phl_fridays` — see note below).
+
+**Edge case to handle:** if another grade requires *more* games than PHL has (e.g. PHL plays 18, 3rd plays 20), then `total_sundays_required = 20` (driven by 3rd grade) and `total_weekends_required = 20` — the forced PHL Fridays are absorbed into the same 20 weekend slots, and Friday vs. Sunday matters per-week but not for the total. The helper must return *both* counts so the atom can pick the right invariant.
+
 ## Definition of Done
 
-1. New helper module `constraints/atoms/_phl_forced_friday_helper.py` exporting `phl_forced_friday_count(data, club)` and `away_club_required_sundays(data, club)` — both FORCED-aware, both handle the duplicate-counting case (one variable matching multiple FORCED scopes counts as ONE Friday game).
-2. New atom `AwayClubHomeWeekendsCount` — forces `sum(home_weekend_indicator) == away_club_required_sundays(data, club) + forced_friday_count` for each away-based club. A Friday game counts as that weekend.
+1. New helper module `constraints/atoms/_phl_forced_friday_helper.py` exporting:
+   - `phl_forced_friday_count(data, club)` — FORCED-aware count of Friday PHL games for the club, handling the duplicate-counting case (one variable matching multiple FORCED scopes counts as ONE Friday game).
+   - `away_club_required_sundays(data, club)` — the CALCULATED Sunday count: `max(phl_games_required - forced_fridays, max_other_grade_games)`.
+   - `away_club_total_weekends(data, club)` — the ORIGINAL (unadjusted) max: `max(phl_games_required, max_other_grade_games)`.
+   See the "Clarification" block above for why both are needed.
+2. New atom `AwayClubHomeWeekendsCount` — enforces (per club):
+   - `sum(sunday_home_indicators) == away_club_required_sundays(data, club)` (Sunday density).
+   - `sum(friday_home_indicators) == phl_forced_friday_count(data, club)` (Friday density follows from FORCED entries directly).
+   - `sum(all_home_indicators) == away_club_total_weekends(data, club)` (total weekend appearances).
+   These three must be consistent; if the test fixture creates an over-constrained system, the helpers must surface that as a validate-time error, not a runtime infeasibility.
 3. New atom `AwayClubPerOpponentAndAggregateHomeBalance` — for each team in each away-based club, for each opponent in its grade: `home_games_against_opponent` is an IntVar bounded `[floor(total/2), ceil(total/2)]`; AND aggregate `home_games_total` is an IntVar bounded `[floor(total_games/2), ceil(total_games/2)]`. Both bounds applied as `model.Add(...)`.
 4. Both atoms registered with severity 1 (CRITICAL).
 5. The old `FiftyFiftyHomeandAway` legacy class is marked obsolete in the registry — kept callable for parity but not in any `DEFAULT_STAGES` entry once these atoms ship.
