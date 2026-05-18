@@ -29,6 +29,8 @@ FORCED_GAMES = [
 
 Season-specific (non-perennial) BLOCKED entries are NOT overridable — they always eliminate even when FORCED also matches.
 
+**Override via FORCED_GAMES applies to ALL grades (spec-010).** The grade-agnostic implementation means a 2nd-grade (or any-grade) forced opening-round game at Maitland Park is overridden by the same mechanism as PHL. Example: forcing a 2nd-grade Maitland-vs-Norths game at Maitland Park in round 1 is expressed identically to the PHL case — set `grade: '2nd'` in the FORCED entry.
+
 ---
 
 ### 2. NIHC field-fill order: WF before EF before SF

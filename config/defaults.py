@@ -146,7 +146,10 @@ DEFAULT_STAGES = [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGamesAndBalanceMatchUps',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            'GosfordFridayRoundsForced', 'PHLRoundOnePlay',
+            # spec-010: PHLRoundOnePlay removed — convenor uses FORCED_GAMES to
+            # express "team X plays round 1" when needed. The atom file is kept
+            # on disk as parity reference; registry entry emptied (solver_class_names=[]).
+            'GosfordFridayRoundsForced',
             # spec-007: hard same-grade-same-club rule (was the hard portion
             # of the obsolete `ClubGradeAdjacency` cluster).
             'SameGradeSameClubNoConcurrency',

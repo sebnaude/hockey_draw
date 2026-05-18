@@ -162,9 +162,15 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
     ),
+    # OBSOLETE (spec-010): "every PHL team plays round 1" removed. The convenor
+    # uses FORCED_GAMES entries to express deliberate round-1 placement when
+    # needed. The atom file `constraints/atoms/phl_round_one_play.py` is kept
+    # on disk as parity reference. Registry entry kept (with empty
+    # `solver_class_names`) so legacy solver-class-name lookups still resolve
+    # gracefully and the entry count stays stable.
     'PHLRoundOnePlay': ConstraintInfo(
         canonical_name='PHLRoundOnePlay',
-        solver_class_names=['PHLRoundOnePlay'],
+        solver_class_names=[],  # emptied by spec-010 — atom no longer dispatched
         tester_check_methods=['_check_phl_second_grade_times'],
         tester_violation_names=['PHLAndSecondGradeTimes'],
         severity_level=1,

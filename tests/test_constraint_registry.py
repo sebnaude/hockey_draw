@@ -231,7 +231,13 @@ class TestTesterOnlyConstraints:
         # `AwayAtNonDefaultGrouping` own the solver_class_names; their legacy
         # Maitland-named entries are back-compat aliases with empty class
         # names. They reference the same logical constraint.
-        ALIAS_NAMES = {'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping'}
+        # spec-010: `PHLRoundOnePlay` is obsolete — atom file kept on disk as
+        # parity reference, `solver_class_names` emptied so legacy CLI flag
+        # lookups don't accidentally redispatch it. Exempt like Phase-6 aliases.
+        ALIAS_NAMES = {
+            'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping',
+            'PHLRoundOnePlay',  # spec-010 obsolete; parity reference only
+        }
         for name, info in CONSTRAINT_REGISTRY.items():
             if not info.tester_only and name not in ALIAS_NAMES:
                 assert len(info.solver_class_names) >= 1, \

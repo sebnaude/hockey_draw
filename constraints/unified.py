@@ -566,11 +566,13 @@ class UnifiedConstraintEngine:
     # _phl_times_soft). Legacy methods retained below for parity reference.
     # ----------------------------------------------------------------
 
+    # spec-010: PHLRoundOnePlay removed from hard atoms. Convenor uses
+    # FORCED_GAMES to express round-1 intent when needed. File kept on disk
+    # for parity reference; import retained so parity tests still work.
     _PHL_HARD_ATOMS = (
         PHLConcurrencyAtBroadmeadow,
         PHLAnd2ndConcurrencyAtBroadmeadow,
         GosfordFridayRoundsForced,
-        PHLRoundOnePlay,
     )
     _PHL_SOFT_ATOMS = (PreferredDates,)
 

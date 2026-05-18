@@ -54,11 +54,12 @@ from constraints.atoms.away_club_home_balance import (
 from constraints.atoms import _adjusters  # noqa: F401
 
 
+# spec-010: PHLRoundOnePlay removed from the dispatched-atom list. The class
+# remains importable for parity tests; import kept above.
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
     GosfordFridayRoundsForced,
-    PHLRoundOnePlay,
     PreferredDates,
 ]
 
