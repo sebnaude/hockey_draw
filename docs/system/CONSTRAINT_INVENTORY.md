@@ -2,7 +2,7 @@
 
 Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` and updated through spec-002 + spec-007 + spec-003. The registry currently has **42 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`) + 2 spec-003 atoms (`NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`).
+Generated against `final-form` and updated through spec-002 + spec-003 + spec-006 + spec-007. The registry currently has **43 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`) + 2 spec-003 atoms (`NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`) + 1 spec-006 soft-only penalty atom (`PreferredWeekendsAwayGround`).
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -38,6 +38,7 @@ Legend
 | SoftLexMatchupOrdering | constraints/atoms/soft_lex_matchup_ordering.py (spec-002) | Soft tie-break: for each grade, sort pairs alphabetically (team1, team2). Assign rank r (0-indexed). Penalty = weight * r * X[key] per var. Encourages alphabetically-earlier pairs in earlier rounds. Pure objective; never hard constraint. PENALTY_WEIGHTS['soft_lex_ordering'] defaults to 1 | 5 | — | SoftLexMatchupOrdering (atom, new) |
 | NIHCFillWFBeforeEF | constraints/atoms/nihc_fill_wf_before_ef.py (spec-003) | Per (date, day_slot) at NIHC where BOTH WF and EF have at least one decision var: channel `wf_used = max(WF vars)` and `ef_used = max(EF vars)`, then `model.Add(ef_used <= wf_used)`. Skips buckets where either field has no variables (i.e. not a real slot that day). | 1 | — | NIHCFillWFBeforeEF (atom, new — atom_group `NIHCFieldFillOrder`) |
 | NIHCFillEFBeforeSF | constraints/atoms/nihc_fill_ef_before_sf.py (spec-003) | Per (date, day_slot) at NIHC where BOTH EF and SF have at least one decision var: same channeling pattern, then `model.Add(sf_used <= ef_used)`. Together with `NIHCFillWFBeforeEF` transitively gives `SF_used -> WF_used` — no third atom needed. Shares the `nihc_field_used` helper kind with the WF/EF atom so the EF indicator is built once. | 1 | — | NIHCFillEFBeforeSF (atom, new — atom_group `NIHCFieldFillOrder`) |
+| PreferredWeekendsAwayGround | constraints/atoms/preferred_weekends_away_ground.py (spec-006) | Soft penalty for scheduling (avoid) or missing (prefer) games at a specific away venue on specific dates. Reads `data['preferred_weekends']` from season config. avoid: penalty = weight × games_at_venue_on_date. prefer: penalty = weight × max(0, target_count - games_at_venue_on_date). Never hard. PENALTY_WEIGHTS['preferred_weekends_away_ground'] defaults to 1000. 2026: 6 NRL-Knights-at-Maitland dates as avoid entries. | 5 | — | PreferredWeekendsAwayGround (atom, new) |
 
 ## 1b. Phase-6 canonical names + back-compat aliases
 
@@ -81,7 +82,8 @@ out of scope for Phase 6.
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
 | SoftLexMatchupOrdering (spec-002) | 0 (new atom, no legacy class) | 1 — `SoftLexMatchupOrdering` | +1 |
 | NIHCFieldFillOrder (spec-003) | 0 (new atoms, no legacy class; replaces a review-only perennial rule) | 2 — `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF` | +2 |
-| **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** | **+14** |
+| PreferredWeekendsAwayGround (spec-006) | 0 (new atom, no legacy class) | 1 — `PreferredWeekendsAwayGround` | +1 |
+| **Total** | **18 solver + 3 tester-only** | **30 solver + 3 tester-only** | **+15** |
 
 ## 4. Per-atom engineering detail
 
@@ -131,6 +133,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `NIHCFillEFBeforeSF` | `constraints/atoms/nihc_fill_ef_before_sf.py` | included | yes | yes | — | `nihc_field_used` | Same shape as the WF/EF atom; `sf_used <= ef_used`. Shares the `nihc_field_used` helper cache so the EF indicator is channeled once and reused. The two atoms transitively imply `SF_used -> WF_used` — no third atom needed. |
 | **Soft-only penalty atoms (no tester violation check)** | | | | | | | |
 | `SoftLexMatchupOrdering` | `constraints/atoms/soft_lex_matchup_ordering.py` | included | yes | yes | — | — | Pure soft tie-break (weight=1 default); no tester violation check; ranks pairs 0-indexed alphabetically per grade |
+| `PreferredWeekendsAwayGround` | `constraints/atoms/preferred_weekends_away_ground.py` | n/a | yes | yes | — | — | Pure soft; reads `data['preferred_weekends']`; no tester violation check. Penalty key `preferred_weekends_away_ground` (default 1000). avoid mode: penalises each game at venue on date. prefer mode: penalises shortage vs target_count. |
 | **Tester-only (no solver enforcement)** | | | | | | | |
 | `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
 | `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |

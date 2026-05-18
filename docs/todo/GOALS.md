@@ -125,7 +125,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-003 | Field-fill ordering (WF → EF → SF) replaces "last-game-WF" rule | `done/spec-003-field-fill-order.md` | done |
 | spec-004 | Away-club home/away atoms aligned with FORCED-Friday math | `spec-004-away-club-home-counts.md` | ready |
 | spec-005 | ClubVsClubAlignment stacks lower grades into upper-grade weekends with club-day-like co-location | `spec-005-clubvsclub-stacking.md` | ready |
-| spec-006 | Preferred / non-preferred weekends for away grounds (NRL-overlap–style) | `spec-006-preferred-weekends-away-grounds.md` | ready |
+| spec-006 | Preferred / non-preferred weekends for away grounds (NRL-overlap–style) | `done/spec-006-preferred-weekends-away-grounds.md` | done |
 | spec-007 | Adjacent-grade hard atom → soft constraint; keep only same-grade-same-club hard | `done/spec-007-adjacent-grade-soft-replace.md` | done |
 | spec-008 | Spacing: byes as first-class + intuitive gap semantics | `spec-008-spacing-byes-and-intuitive-gap.md` | ready |
 | spec-009 | FORCED count rules + adjusters — end-to-end verification | `spec-009-forced-count-rules-verification.md` | ready |

@@ -999,6 +999,64 @@ CONSTRAINT_DEFAULTS = {
     'max_friday_broadmeadow': 3,           # PHLAndSecondGradeTimes: max Friday PHL games at NIHC (Broadmeadow)
 }
 
+# ============== Preferred / Avoided Weekends at Away Grounds (spec-006) ==============
+# Soft preferences for scheduling (or not scheduling) games at a specific
+# away venue on specific dates.  Read by the `PreferredWeekendsAwayGround`
+# atom in the `soft_optimisation` stage.  Never blocks feasibility.
+#
+# Entry format:
+#   'date'           — single date string 'YYYY-MM-DD'
+#   'dates'          — OR a list of date strings (mutually exclusive with 'date')
+#   'field_location' — venue string matching field_location in decision variable keys
+#   'field_name'     — optional; venue-level if omitted (any field at the location)
+#   'mode'           — 'avoid': penalty per game scheduled there on that date
+#                      'prefer': penalty for each game MISSING (target_count default = 1)
+#   'weight'         — optional per-entry override; default from PENALTY_WEIGHTS
+#   'description'    — human-readable label (ignored by solver)
+#
+# 2026 NRL Knights home games at Maitland Park
+# Maitland HC does not want to play on these dates due to NRL home matches.
+# Source: docs/seasonal/2026/operational_TODO.md [DONE: implemented in spec-006]
+
+PREFERRED_WEEKENDS = [
+    {
+        'date': '2026-04-05',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Raiders at Maitland (Maitland HC prefers not to play)',
+    },
+    {
+        'date': '2026-04-26',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Panthers at Maitland (Maitland HC prefers not to play)',
+    },
+    {
+        'date': '2026-05-03',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Rabbitohs at Maitland (Maitland HC prefers not to play)',
+    },
+    {
+        'date': '2026-06-28',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Wests Tigers at Maitland (Maitland HC prefers not to play)',
+    },
+    {
+        'date': '2026-07-05',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Dolphins at Maitland (Maitland HC prefers not to play)',
+    },
+    {
+        'date': '2026-08-16',
+        'field_location': 'Maitland Park',
+        'mode': 'avoid',
+        'description': 'NRL Knights vs Titans at Maitland (Maitland HC prefers not to play)',
+    },
+]
+
 # ============== Soft Constraint Penalty Weights ==============
 # These weights control relative priority between soft constraints.
 #
@@ -1030,6 +1088,10 @@ PENALTY_WEIGHTS = {
     'dummy_slots':                      1_000_000,
     # Soft lex matchup ordering: tiny tie-break, never overrides real constraints.
     'soft_lex_ordering':                        1,
+    # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
+    # Each 'avoid' entry incurs this penalty per game scheduled at the venue on that date.
+    # Each 'prefer' entry incurs this penalty per game MISSING from the venue on that date.
+    'preferred_weekends_away_ground':           1_000,
 }
 
 # ============== Season Configuration ==============
@@ -1076,6 +1138,9 @@ SEASON_CONFIG = {
     # Preferences
     'preference_no_play': PREFERENCE_NO_PLAY,
     'phl_preferences': PHL_PREFERENCES,
+
+    # Preferred / avoided away-ground weekends (spec-006)
+    'preferred_weekends': PREFERRED_WEEKENDS,
     
     # Special games
     'special_games': SPECIAL_GAMES,
