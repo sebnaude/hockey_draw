@@ -187,6 +187,18 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=1,
         slack_key='EqualMatchUpSpacingConstraint',
     ),
+    # spec-008 Part B: byes are first-class. A team's bye rounds are spread
+    # across the season using the same `_spacing.ideal_bye_gap` math as
+    # repeat matchups. HARD severity 2; separate slack key
+    # `BalancedByeSpacing` so the convenor can loosen one without the other.
+    'BalancedByeSpacing': ConstraintInfo(
+        canonical_name='BalancedByeSpacing',
+        solver_class_names=['BalancedByeSpacing'],
+        tester_check_methods=['_check_balanced_bye_spacing'],
+        tester_violation_names=['BalancedByeSpacing'],
+        severity_level=2,
+        slack_key='BalancedByeSpacing',
+    ),
     'ClubDay': ConstraintInfo(
         canonical_name='ClubDay',
         solver_class_names=['ClubDayConstraint', 'ClubDayConstraintAI'],

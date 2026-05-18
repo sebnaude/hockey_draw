@@ -268,6 +268,25 @@ PREFERENCE_NO_PLAY = {
 
 ---
 
+## Spacing slack keys (spec-008)
+
+Two HARD spacing atoms each own an independent slack channel:
+
+| Slack key (used in `constraint_slack` and `--slack N`) | Atom | Default base slack (in `CONSTRAINT_DEFAULTS`) | Effect |
+|---|---|---|---|
+| `EqualMatchUpSpacingConstraint` | `EqualMatchUpSpacing` (legacy class name preserved) | `spacing_base_slack` (default 0) | Each unit reduces S (the "free rounds between meetings" threshold) by 1, clamped at 0. |
+| `BalancedByeSpacing` | `BalancedByeSpacing` (spec-008 Part B atom) | `bye_spacing_base_slack` (default 0) | Each unit reduces S for the bye-rounds threshold by 1, clamped at 0. |
+
+The CLI `--slack N` flag (see `run.py::run_generate`) writes `N` into both keys
+(and into every other slack-aware constraint's key). Set just one of them in
+`data['constraint_slack']` to loosen one dimension without the other.
+
+Math reference: `constraints/atoms/_spacing.py::ideal_gap(T)` and
+`ideal_bye_gap(R, byes)`. See `docs/system/COUNT_ADJUSTERS.md` (spec-008
+note section) for the full semantics.
+
+---
+
 ## TEAM_PAIR_NO_CONCURRENCY (spec-007 soft per-pair conflict)
 
 ```python

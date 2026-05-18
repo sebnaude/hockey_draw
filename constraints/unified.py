@@ -641,39 +641,56 @@ class UnifiedConstraintEngine:
         return n
 
     def _matchup_spacing_hard(self):
-        """Pairwise forbidden gaps only (no sliding window penalty)."""
+        """Pairwise forbidden gaps only (no sliding window penalty).
+
+        spec-008 Part A: uses the intuitive "S played rounds between
+        meetings" semantics via `ideal_gap(T)` from
+        `constraints.atoms._spacing`. A pair's gap `r2 - r1` is forbidden
+        when `gap <= S` where S = effective_spacing(T, base_slack, config_slack +
+        forced_rounds_consumed). This is the spec-008 off-by-one fix:
+        old code forbade `gap < min_gap`; the new rule forbids `gap <= S`
+        with `S = min_gap - 1` so the physical schedule is unchanged at
+        default slack while the input number's meaning is now "rounds in
+        between" rather than "calendar distance."
+        """
+        from constraints.atoms._spacing import effective_spacing
+
         n = 0
         grade_num_teams = {g.name: g.num_teams for g in self.grades}
-        config_slack = self.slack.get('EqualMatchUpSpacingConstraint', 0)
+        defaults = self.data.get('constraint_defaults', {})
+        base_slack_config = int(defaults.get('spacing_base_slack', 0) or 0)
+        config_slack = int(self.slack.get('EqualMatchUpSpacingConstraint', 0) or 0)
         # Phase 4 adjuster: per-pair forced rounds reduce flexibility.
         forced_rounds_per_pair = self.data.get('count_adjustments', {}).get(
             'EqualMatchUpSpacing', {}
         ) or {}
 
-        def get_base_slack(num_teams):
-            ideal = num_teams - 1
-            return max(1, ideal - 2 * ideal // 3)
-
         for (t1, t2, grade), round_map in self.by_grade_pair_round.items():
             T = grade_num_teams.get(grade, 0)
-            if T < 2:
+            if T < 3:
+                # ideal_gap is 0 for T<3 — no meaningful spacing.
                 continue
-            space = T - 1
-            base_slack = min(get_base_slack(T) + config_slack, T // 2 + 1)
             forced_rounds = forced_rounds_per_pair.get(
                 (t1, t2, grade)
             ) or forced_rounds_per_pair.get((t2, t1, grade)) or set()
-            if forced_rounds:
-                # Each FORCED round eats one "free" round of spacing flexibility.
-                base_slack = max(1, base_slack - len(forced_rounds))
-            min_gap = max(1, space - base_slack)
+            # Each FORCED round eats one "free" round of spacing flexibility:
+            # the remaining unpinned meetings have less room to spread out,
+            # so the constraint tightens. Subtracting the forced count from
+            # total slack achieves this — `effective_spacing` accepts
+            # negative slack, in which case S grows above ideal_gap(T).
+            forced_tighten = len(forced_rounds)
+            net_slack = base_slack_config + config_slack - forced_tighten
+            S = effective_spacing(T, base_slack=net_slack, config_slack=0)
+            if S <= 0:
+                # Slack has fully relaxed the constraint for this pair.
+                continue
 
             active_rounds = sorted(r for r in round_map if round_map[r])
             for i, r1 in enumerate(active_rounds):
                 vars_r1 = round_map[r1]
                 for r2 in active_rounds[i + 1:]:
                     gap = r2 - r1
-                    if gap >= min_gap:
+                    if gap > S:
                         break
                     self.model.Add(sum(vars_r1) + sum(round_map[r2]) <= 1)
                     n += 1

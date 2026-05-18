@@ -1159,6 +1159,8 @@ class DrawTester:
             ('PHLAndSecondGradeAdjacency', self._check_phl_second_grade_adjacency),
             ('PHLAndSecondGradeTimes', self._check_phl_second_grade_times),
             ('EqualMatchUpSpacing', self._check_equal_matchup_spacing),
+            # spec-008 Part B: byes-as-first-class spacing.
+            ('BalancedByeSpacing', self._check_balanced_bye_spacing),
             # Level 2 - HIGH
             ('AwayAtMaitlandGrouping', self._check_maitland_away_clubs_limit),
             ('ClubDay', self._check_club_day),
@@ -1810,16 +1812,21 @@ class DrawTester:
     def _check_equal_matchup_spacing(self) -> List[Violation]:
         """Check matchup spacing: consecutive meetings of the same pair should be spread out.
 
-        Hard check: For each (team1, team2, grade) pair, the gap between consecutive
-        meetings must be >= min_gap.
-        min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - config_slack)
-
-        Also reports soft penalty info: sliding window density.
+        spec-008 Part A: uses `constraints.atoms._spacing.effective_spacing`
+        so the tester and the solver agree on the threshold. The hard rule
+        forbids `gap = r2 - r1 <= S`, where S is the convenor-facing
+        "rounds between meetings" number. With default slack, S equals
+        `ideal_gap(T)` which is `legacy_min_gap - 1` — the off-by-one
+        fix preserves the physical schedule a healthy solver produces.
         """
+        from constraints.atoms._spacing import effective_spacing
+
         violations = []
         defaults = self.data.get('constraint_defaults', {})
-        base_slack = defaults.get('spacing_base_slack', 0)
-        config_slack = self.constraint_slack.get('EqualMatchUpSpacingConstraint', 0)
+        base_slack = int(defaults.get('spacing_base_slack', 0) or 0)
+        config_slack = int(
+            self.constraint_slack.get('EqualMatchUpSpacingConstraint', 0) or 0
+        )
 
         # Build per-grade team counts
         grade_team_counts = {}
@@ -1836,20 +1843,96 @@ class DrawTester:
             T = grade_team_counts.get(grade, 0)
             if T < 3:
                 continue
-
-            ideal = T - 2
-            floor_val = min(T // 2, T - 2)
-            min_gap = max(floor_val, ideal - base_slack - config_slack)
+            S = effective_spacing(
+                T, base_slack=base_slack, config_slack=config_slack
+            )
+            if S <= 0:
+                continue
 
             sorted_rounds = sorted(rounds)
             for i in range(len(sorted_rounds) - 1):
                 gap = sorted_rounds[i + 1] - sorted_rounds[i]
-                if gap < min_gap:
+                if gap <= S:
                     violations.append(Violation.create(
                         constraint="EqualMatchUpSpacing",
-                        message=f"{pair[0]} vs {pair[1]} ({grade}): gap of {gap} rounds between meetings at rounds {sorted_rounds[i]} and {sorted_rounds[i+1]} (min {min_gap})"
+                        message=(
+                            f"{pair[0]} vs {pair[1]} ({grade}): gap of {gap} rounds "
+                            f"between meetings at rounds {sorted_rounds[i]} and "
+                            f"{sorted_rounds[i+1]} (need gap > {S} — at least "
+                            f"{S} round(s) between meetings)"
+                        )
                     ))
 
+        return violations
+
+    def _check_balanced_bye_spacing(self) -> List[Violation]:
+        """spec-008 Part B: each team's bye rounds should be spread evenly.
+
+        Mirrors the solver atom `constraints.atoms.balanced_bye_spacing.
+        BalancedByeSpacing`. For each team in each grade:
+          R           = number of playable rounds (data['num_rounds']['max'])
+          games_t     = games per team for the team's grade
+          byes_t      = R - games_t
+          S           = max(0, ideal_bye_gap(R, byes_t) - base_slack - config_slack)
+        A team's bye-rounds are the rounds in which it does not appear in
+        the published draw. The check flags every pair of consecutive byes
+        whose gap is `<= S`.
+        """
+        from constraints.atoms._spacing import ideal_bye_gap
+
+        violations = []
+        defaults = self.data.get('constraint_defaults', {}) or {}
+        base_slack = int(defaults.get('bye_spacing_base_slack', 0) or 0)
+        config_slack = int(
+            self.constraint_slack.get('BalancedByeSpacing', 0) or 0
+        )
+
+        grade_team_counts: Dict[str, int] = {}
+        per_grade_team_names: Dict[str, List[str]] = defaultdict(list)
+        for grade in self.grades:
+            grade_team_counts[grade.name] = grade.num_teams
+            per_grade_team_names[grade.name] = list(grade.teams)
+
+        # Per-team rounds in which they appeared.
+        team_rounds: Dict[Tuple[str, str], set] = defaultdict(set)
+        for game in self.draw.games:
+            team_rounds[(game.team1, game.grade)].add(game.round_no)
+            if game.team2 != game.team1:
+                team_rounds[(game.team2, game.grade)].add(game.round_no)
+
+        num_rounds = self.data.get('num_rounds') or {}
+        override = self.data.get('GRADE_ROUNDS_OVERRIDE') or {}
+        max_r = int(num_rounds.get('max', 0) or 0)
+        if max_r <= 0:
+            return violations
+        all_rounds = list(range(1, max_r + 1))
+
+        for grade_name, team_names in per_grade_team_names.items():
+            if grade_name in override:
+                games_t = int(override[grade_name])
+            else:
+                games_t = int(num_rounds.get(grade_name, max_r))
+            byes_t = max_r - games_t
+            if byes_t < 2:
+                continue
+            S = max(0, ideal_bye_gap(max_r, byes_t) - base_slack - config_slack)
+            if S <= 0:
+                continue
+            for team in team_names:
+                played = team_rounds.get((team, grade_name), set())
+                byes = sorted(r for r in all_rounds if r not in played)
+                for i in range(len(byes) - 1):
+                    gap = byes[i + 1] - byes[i]
+                    if gap <= S:
+                        violations.append(Violation.create(
+                            constraint='BalancedByeSpacing',
+                            message=(
+                                f"{team} ({grade_name}): bye gap of {gap} rounds "
+                                f"between bye-rounds {byes[i]} and {byes[i+1]} "
+                                f"(need gap > {S} — at least {S} round(s) between "
+                                f"byes; {byes_t} byes across {max_r} rounds)"
+                            )
+                        ))
         return violations
 
     def _check_team_conflict(self) -> List[Violation]:

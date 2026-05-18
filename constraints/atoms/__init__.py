@@ -48,6 +48,8 @@ from constraints.atoms.away_club_home_weekends_count import (
 from constraints.atoms.away_club_home_balance import (
     AwayClubPerOpponentAndAggregateHomeBalance,
 )
+# spec-008 Part B: byes-as-first-class spacing atom.
+from constraints.atoms.balanced_bye_spacing import BalancedByeSpacing
 
 # Side-effect import: registers FORCED/BLOCKED count adjusters for the
 # constraints whose atoms haven't been split out yet (Phase 4).
@@ -126,4 +128,5 @@ __all__ = [
     'PreferredWeekendsAwayGround',
     'AwayClubHomeWeekendsCount',
     'AwayClubPerOpponentAndAggregateHomeBalance',
+    'BalancedByeSpacing',
 ]

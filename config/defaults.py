@@ -101,6 +101,9 @@ GRADE_ORDER = ['PHL', '2nd', '3rd', '4th', '5th', '6th']
 CONSTRAINT_DEFAULTS = {
     # Spacing
     'spacing_base_slack': 0,
+    # spec-008 Part B: bye-spacing base slack (own knob, separate from
+    # matchup `spacing_base_slack`). Loosens the per-team bye spread.
+    'bye_spacing_base_slack': 0,
     # Friday-night game counts
     'max_friday_broadmeadow': 3,
     'gosford_friday_games': 8,
@@ -153,6 +156,9 @@ DEFAULT_STAGES = [
             # spec-003: NIHC field-fill ordering — WF before EF, EF before SF.
             # The two implications transitively imply SF -> WF (no third atom).
             'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF',
+            # spec-008 Part B: byes spread evenly across the season for
+            # every team in every grade (HARD, own slack key).
+            'BalancedByeSpacing',
         ],
     },
     {
