@@ -1,5 +1,5 @@
-<!-- status: in_progress -->
-<!-- owner: session=spec-003-opus claimed=2026-05-18T00:00:00Z -->
+<!-- status: done -->
+<!-- owner: session=spec-003-opus claimed=2026-05-18T00:00:00Z completed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-003 — NIHC field-fill ordering (WF → EF → SF) replaces last-game-WF rule

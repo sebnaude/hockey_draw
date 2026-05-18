@@ -122,7 +122,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 |---|---|---|---|
 | spec-001 | Rounds 1–2 Broadmeadow-only rule must exempt FORCED games | `done/spec-001-r1r2-broadmeadow-forced-exempt.md` | done |
 | spec-002 | Soft lexicographical ordering of matchups across the season | `done/spec-002-soft-lex-ordering.md` | done |
-| spec-003 | Field-fill ordering (WF → EF → SF) replaces "last-game-WF" rule | `spec-003-field-fill-order.md` | ready |
+| spec-003 | Field-fill ordering (WF → EF → SF) replaces "last-game-WF" rule | `done/spec-003-field-fill-order.md` | done |
 | spec-004 | Away-club home/away atoms aligned with FORCED-Friday math | `spec-004-away-club-home-counts.md` | ready |
 | spec-005 | ClubVsClubAlignment stacks lower grades into upper-grade weekends with club-day-like co-location | `spec-005-clubvsclub-stacking.md` | ready |
 | spec-006 | Preferred / non-preferred weekends for away grounds (NRL-overlap–style) | `spec-006-preferred-weekends-away-grounds.md` | ready |
