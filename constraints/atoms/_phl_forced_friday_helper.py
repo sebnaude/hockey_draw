@@ -3,8 +3,9 @@
 This module computes the per-away-club totals required by:
   * `AwayClubHomeWeekendsCount` (spec-004) — needs total Sundays, total weekends,
     and the FORCED-Friday count.
-  * `ClubVsClubStackedPHLSundayBudget` (spec-005) — needs forced-Friday meeting
-    counts per club-pair, layered on top of `phl_forced_friday_count`.
+  * `ClubVsClubStackedAlignment` (spec-005) — needs forced-Friday meeting
+    counts per club-pair (`phl_forced_friday_meetings(data, a, b)`), layered
+    on top of the per-club `phl_forced_friday_count`.
 
 ## The convenor's distinction (see spec-004 "Clarification (added 2026-05-18)")
 
@@ -214,6 +215,151 @@ def _entry_count(entry: Dict) -> int:
     return int(entry.get('count', 1))
 
 
+def _iter_candidate_friday_phl_keys_for_pair(
+    data: Dict, club_a: str, club_b: str,
+):
+    """Yield candidate 11-tuple X-keys for PHL Friday games WHERE both teams
+    belong to {club_a, club_b}.
+
+    Same shape as `_iter_candidate_friday_phl_keys`, narrowed to per-pair
+    candidates. Used by `phl_forced_friday_meetings(data, club_a, club_b)`
+    (spec-005) to compute the FORCED-Friday meeting count between a specific
+    pair of clubs without double-counting umbrella + per-pair scopes.
+    """
+    a_phl_teams = _club_team_names(data, club_a, grade='PHL')
+    b_phl_teams = _club_team_names(data, club_b, grade='PHL')
+    if not a_phl_teams or not b_phl_teams:
+        return
+
+    for (t1, t2, grade) in data.get('games', []):
+        if grade != 'PHL':
+            continue
+        cross = (
+            (t1 in a_phl_teams and t2 in b_phl_teams)
+            or (t1 in b_phl_teams and t2 in a_phl_teams)
+        )
+        if not cross:
+            continue
+        for ts in data.get('timeslots', []):
+            if not ts.day or ts.day != 'Friday':
+                continue
+            key = (
+                t1, t2, grade, ts.day, ts.day_slot, ts.time,
+                ts.week, ts.date, ts.round_no, ts.field.name, ts.field.location,
+            )
+            yield key
+
+
+def _entry_targets_pair_phl_friday(
+    entry: Dict, club_a: str, club_b: str, data: Dict
+) -> bool:
+    """True iff the FORCED entry specifically pins PHL Friday games between
+    BOTH `club_a` and `club_b`.
+
+    Per-pair semantics (spec-005): an umbrella scope like `{club: Maitland,
+    day: Friday, count: 2}` does NOT guarantee any Maitland-vs-Norths Friday
+    — those 2 could all be Maitland-vs-Tigers. So per-pair helpers credit
+    only entries whose scope **names both** clubs (`teams=[A, B]` or
+    `team1=A, team2=B`, accepting team names or club names for either side).
+
+    The per-CLUB helper (`phl_forced_friday_count`) is broader: it counts
+    Maitland total Fridays, where the umbrella does contribute.
+
+    Returns False for umbrella scopes — the per-pair helper deliberately
+    UNDER-counts rather than over-counting "what's pinned between the pair."
+    """
+    a_phl_teams = _club_team_names(data, club_a, grade='PHL')
+    b_phl_teams = _club_team_names(data, club_b, grade='PHL')
+    if not a_phl_teams or not b_phl_teams:
+        return False
+
+    def _names_belong_to_a_b():
+        raw_teams = entry.get('teams') or []
+        team1 = entry.get('team1')
+        team2 = entry.get('team2')
+        # Build the two-sided team list.
+        sides = []
+        if len(raw_teams) >= 2:
+            sides = [raw_teams[0], raw_teams[1]]
+        elif team1 is not None and team2 is not None:
+            sides = [team1, team2]
+        if len(sides) != 2:
+            return False
+        # Each side must resolve to either club_a or club_b's PHL team(s).
+        def _side_club(name: str) -> str | None:
+            if name == club_a or name in a_phl_teams:
+                return club_a
+            if name == club_b or name in b_phl_teams:
+                return club_b
+            return None
+        c1 = _side_club(sides[0])
+        c2 = _side_club(sides[1])
+        if c1 is None or c2 is None:
+            return False
+        return {c1, c2} == {club_a, club_b}
+
+    return _names_belong_to_a_b()
+
+
+def phl_forced_friday_meetings(data: Dict, club_a: str, club_b: str) -> int:
+    """Number of PHL Friday games FORCED to be played between `club_a` and
+    `club_b`, FORCED-aware (no double-counting across umbrella + per-pair
+    scopes).
+
+    spec-005 helper: used by `ClubVsClubStackedAlignment` to compute the PHL
+    Sunday budget per club pair. `total_phl_meetings(A,B) -
+    phl_forced_friday_meetings(A,B)` is the number of PHL Sunday weekends
+    available for stacking.
+
+    Returns 0 if either club has no PHL teams, if the pair has no FORCED
+    Friday entries that resolve to them, or if no candidate Friday slot
+    exists for the pair.
+    """
+    if club_a == club_b:
+        return 0
+    a_phl_teams = _club_team_names(data, club_a, grade='PHL')
+    b_phl_teams = _club_team_names(data, club_b, grade='PHL')
+    if not a_phl_teams or not b_phl_teams:
+        return 0
+
+    forced_games = data.get('forced_games') or []
+    relevant_entries = [
+        e for e in _friday_phl_forced_entries(forced_games)
+        if _entry_targets_pair_phl_friday(e, club_a, club_b, data)
+    ]
+    if not relevant_entries:
+        return 0
+
+    candidate_keys = list(_iter_candidate_friday_phl_keys_for_pair(
+        data, club_a, club_b,
+    ))
+    if not candidate_keys:
+        return 0
+
+    scoped: List[Tuple[Set[_CandidateKey], int]] = []
+    for entry in relevant_entries:
+        matched = _matched_var_keys_for_entry(entry, candidate_keys, data)
+        if not matched:
+            continue
+        scoped.append((matched, _entry_count(entry)))
+
+    if not scoped:
+        return 0
+
+    # Greedy partition (same algorithm as phl_forced_friday_count) — broadest
+    # scope wins; subset scopes contribute 0.
+    scoped.sort(key=lambda sc: len(sc[0]), reverse=True)
+    claimed: Set[_CandidateKey] = set()
+    total = 0
+    for matched, count in scoped:
+        unclaimed = matched - claimed
+        if not unclaimed:
+            continue
+        total += count
+        claimed |= matched
+    return total
+
+
 def phl_forced_friday_count(data: Dict, club: str) -> int:
     """Count of PHL Friday games this club WILL play, FORCED-aware.
 
@@ -304,6 +450,7 @@ def away_club_required_sundays(data: Dict, club: str) -> int:
 
 __all__ = [
     'phl_forced_friday_count',
+    'phl_forced_friday_meetings',
     'away_club_required_sundays',
     'away_club_total_weekends',
 ]
