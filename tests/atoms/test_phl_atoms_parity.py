@@ -3,8 +3,15 @@
 After the FORCED-as-count migration (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`),
 per-venue Friday count atoms (`BroadmeadowFridayCount`, `GosfordFridayCount`,
 `MaitlandFridayCount`) are gone — those budgets live in `FORCED_GAMES` config
-entries now. The atom dispatch therefore adds **fewer** constraints than the
-legacy `_phl_times_hard()`, by exactly the count of those venue-Friday blocks.
+entries now.
+
+After spec-010, `PHLRoundOnePlay` is also removed from `_PHL_HARD_ATOMS`. The
+legacy `_phl_times_hard()` still includes it, so the gap between legacy and atom
+dispatch grows by 1 per PHL team (5 teams in the fixture → +5 constraints).
+
+Baseline gap: 2 (Broadmeadow + Gosford Friday blocks via FORCED_GAMES).
+spec-010 additional gap: 5 (one per-team round-1 constraint in PHLRoundOnePlay).
+Total expected gap: 7.
 
 Tests below verify the structural relationship and that core feasibility
 behaviour matches once the FORCED count rules are added back as config.
@@ -27,9 +34,19 @@ def _engine(data):
 
 
 class TestPHLAtomsParityWithLegacy:
-    def test_atoms_count_below_legacy_by_two_venue_blocks(self, phl_data):
-        """Atom dispatch adds two fewer hard constraints than legacy: the
-        Broadmeadow- and Gosford-Friday count blocks now live in FORCED_GAMES."""
+    def test_atoms_count_below_legacy_by_venue_blocks_and_r1(self, phl_data):
+        """Atom dispatch adds fewer hard constraints than legacy. Three gaps:
+        1. Broadmeadow Friday cap (1 constraint) — lives in FORCED_GAMES.
+        2. Gosford Friday equality (1 constraint) — lives in FORCED_GAMES.
+        3. PHLRoundOnePlay: 1 constraint per PHL team (5 teams) — removed by
+           spec-010. Convenor uses FORCED_GAMES for round-1 intent.
+
+        Hand-computed oracle:
+          - Fixture has 5 PHL teams (Tigers, Wests, Norths, Maitland, Gosford).
+          - Legacy adds 1 (Broadmeadow) + 1 (Gosford) + 5 (round-1 per team) = 7
+            more constraints than the current atom dispatch.
+          - Total expected gap: 7.
+        """
         engine_atoms = _engine(phl_data)
         atom_count = engine_atoms._phl_times_atoms_hard()
 
@@ -38,10 +55,10 @@ class TestPHLAtomsParityWithLegacy:
         engine_legacy = _engine(legacy_data)
         legacy_count = engine_legacy._phl_times_hard()
 
-        # Legacy adds Broadmeadow Friday cap + Gosford Friday equality
-        # on top of the four atoms still in dispatch. Difference is exactly 2.
-        assert legacy_count - atom_count == 2, (
-            f"expected legacy = atom + 2; got atom={atom_count} legacy={legacy_count}"
+        # Hand-computed: 2 (Friday-count blocks via FORCED) + 5 (PHLRoundOnePlay
+        # spec-010 removal; 1 per PHL team in fixture) = 7.
+        assert legacy_count - atom_count == 7, (
+            f"expected legacy = atom + 7; got atom={atom_count} legacy={legacy_count}"
         )
 
     def test_atoms_solve_feasibly_on_clean_fixture(self, phl_data):

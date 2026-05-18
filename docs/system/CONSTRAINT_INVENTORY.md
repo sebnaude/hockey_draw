@@ -78,7 +78,7 @@ out of scope for Phase 6.
 
 | Cluster | Legacy classes | Atoms after split | Net change |
 |---|---|---|---|
-| PHLAndSecondGradeTimes | 1 | 5 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay`, `PreferredDates` (per-venue Friday counts moved to FORCED_GAMES entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | +4 |
+| PHLAndSecondGradeTimes | 1 | 5 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay` (**OBSOLETE spec-010**, parity reference only), `PreferredDates` (per-venue Friday counts moved to FORCED_GAMES entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | +4 |
 | ClubDayConstraint | 1 | 5 | +4 |
 | ClubVsClubAlignment | 1 | 4 (Phase 3c — OBSOLETE per spec-005, parity reference only) | +3 |
 | ClubVsClubStackedAlignment (spec-005) | 0 (new cluster — replaces the 4 Phase-3c atoms in `DEFAULT_STAGES`) | 2 — `ClubVsClubStackedWeekends`, `ClubVsClubStackedCoLocation` | +2 |
@@ -102,7 +102,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `PHLConcurrencyAtBroadmeadow` | `constraints/atoms/phl_concurrency.py` | n/a | yes | yes | — | — | Broadmeadow-only; prevents concurrent PHL games per (week, day_slot) |
 | `PHLAnd2ndConcurrencyAtBroadmeadow` | `constraints/atoms/phl_2nd_concurrency.py` | n/a | yes | yes | — | — | PHL + same-club-2nd no-concurrency at Broadmeadow |
 | `GosfordFridayRoundsForced` | `constraints/atoms/gosford_friday_rounds.py` | n/a | yes | yes | — | — | Reads `CONSTRAINT_DEFAULTS['gosford_friday_rounds']` (currently `{2,4,5,9,10}` per 2026 AGM) |
-| `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | Skipped when locked_weeks includes round 1 |
+| `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | **OBSOLETE (spec-010).** Removed from `critical_feasibility` stage and `_PHL_HARD_ATOMS`; `solver_class_names` emptied in registry. File kept on disk as parity reference. Convenor uses `FORCED_GAMES` entries to express deliberate round-1 placement when needed. |
 | `PreferredDates` | `constraints/atoms/preferred_dates.py` | excluded | yes | yes | — | — | Soft; weight `PENALTY_WEIGHTS['phl_preferences']=10000` |
 | **Atomised (Phase 3) — ClubDay cluster** | | | | | | | |
 | `ClubDayParticipation` | `constraints/atoms/club_day_participation.py` | excluded | yes | yes | — | — | Skips locked-week club days via `parse_club_day_entries` |

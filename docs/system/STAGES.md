@@ -31,7 +31,8 @@ DEFAULT_STAGES = [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGamesAndBalanceMatchUps',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            'GosfordFridayRoundsForced', 'PHLRoundOnePlay',
+            # spec-010: PHLRoundOnePlay removed — convenor uses FORCED_GAMES.
+            'GosfordFridayRoundsForced',
         ],
     },
     {
