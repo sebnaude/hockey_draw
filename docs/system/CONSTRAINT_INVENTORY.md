@@ -2,7 +2,7 @@
 
 Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` and updated through spec-002 + spec-007. The registry currently has **40 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`).
+Generated against `final-form` and updated through spec-002 + spec-006 + spec-007. The registry currently has **41 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`) + 1 spec-006 atom (`PreferredWeekendsAwayGround`).
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -36,6 +36,7 @@ Legend
 | EnsureBestTimeslotChoices | original.py:EnsureBestTimeslotChoices | Per (week, day, location): build per-(field, day_slot) max-equality indicators; for adjacent slot pair (curr, next) for every (f, f2): next_used ⇒ curr_used (cross-field stacking + contiguity). SOFT: 7pm games incur penalty 1 each | 5 | — | EnsureBestTimeslotChoices |
 | PreferredTimes | original.py:PreferredTimesConstraint | Normalize PREFERENCE_NO_PLAY (legacy + 2026 structured); for each (entry, club, club_teams, restriction): match X keys via two key orderings; soft penalty = the var when match | 5 | — | PreferredTimes |
 | SoftLexMatchupOrdering | constraints/atoms/soft_lex_matchup_ordering.py (spec-002) | Soft tie-break: for each grade, sort pairs alphabetically (team1, team2). Assign rank r (0-indexed). Penalty = weight * r * X[key] per var. Encourages alphabetically-earlier pairs in earlier rounds. Pure objective; never hard constraint. PENALTY_WEIGHTS['soft_lex_ordering'] defaults to 1 | 5 | — | SoftLexMatchupOrdering (atom, new) |
+| PreferredWeekendsAwayGround | constraints/atoms/preferred_weekends_away_ground.py (spec-006) | Soft penalty for scheduling (avoid) or missing (prefer) games at a specific away venue on specific dates. Reads `data['preferred_weekends']` from season config. avoid: penalty = weight × games_at_venue_on_date. prefer: penalty = weight × max(0, target_count - games_at_venue_on_date). Never hard. PENALTY_WEIGHTS['preferred_weekends_away_ground'] defaults to 1000. 2026: 6 NRL-Knights-at-Maitland dates as avoid entries. | 5 | — | PreferredWeekendsAwayGround (atom, new) |
 
 ## 1b. Phase-6 canonical names + back-compat aliases
 
@@ -78,7 +79,8 @@ out of scope for Phase 6.
 | ClubGradeAdjacency (spec-007) | 1 | 1 hard (`SameGradeSameClubNoConcurrency`) + 1 new soft (`TeamPairNoConcurrency`). Adjacent-grade soft rule removed entirely (net +1 atom vs cluster, +1 from the new convenor-list atom). | +1 |
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
 | SoftLexMatchupOrdering (spec-002) | 0 (new atom, no legacy class) | 1 — `SoftLexMatchupOrdering` | +1 |
-| **Total** | **18 solver + 3 tester-only** | **27 solver + 3 tester-only** | **+12** |
+| PreferredWeekendsAwayGround (spec-006) | 0 (new atom, no legacy class) | 1 — `PreferredWeekendsAwayGround` | +1 |
+| **Total** | **18 solver + 3 tester-only** | **28 solver + 3 tester-only** | **+13** |
 
 ## 4. Per-atom engineering detail
 
@@ -125,6 +127,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `EqualMatchUpSpacing` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `EqualMatchUpSpacingConstraint` | — | Adjuster narrows forced rounds per pair |
 | **Soft-only penalty atoms (no tester violation check)** | | | | | | | |
 | `SoftLexMatchupOrdering` | `constraints/atoms/soft_lex_matchup_ordering.py` | included | yes | yes | — | — | Pure soft tie-break (weight=1 default); no tester violation check; ranks pairs 0-indexed alphabetically per grade |
+| `PreferredWeekendsAwayGround` | `constraints/atoms/preferred_weekends_away_ground.py` | n/a | yes | yes | — | — | Pure soft; reads `data['preferred_weekends']`; no tester violation check. Penalty key `preferred_weekends_away_ground` (default 1000). avoid mode: penalises each game at venue on date. prefer mode: penalises shortage vs target_count. |
 | **Tester-only (no solver enforcement)** | | | | | | | |
 | `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
 | `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |

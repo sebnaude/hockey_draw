@@ -4009,6 +4009,8 @@ def build_season_data(config: dict) -> dict:
         # Include any extra config values that constraints might need
         'home_field_map': home_field_map,
         'special_games': config.get('special_games', {}),
+        # spec-006: preferred / avoided away-ground weekends (e.g. NRL clashes).
+        'preferred_weekends': config.get('preferred_weekends', []),
         'forced_games': config.get('forced_games', []),
         'blocked_games': config.get('blocked_games', []),
         'penalty_weights': config.get('penalty_weights', {}),

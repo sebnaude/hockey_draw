@@ -28,6 +28,9 @@ from constraints.atoms.same_grade_same_club_no_concurrency import (
     SameGradeSameClubNoConcurrency,
 )
 from constraints.atoms.team_pair_no_concurrency import TeamPairNoConcurrency
+from constraints.atoms.preferred_weekends_away_ground import (
+    PreferredWeekendsAwayGround,
+)
 
 # Side-effect import: registers FORCED/BLOCKED count adjusters for the
 # constraints whose atoms haven't been split out yet (Phase 4).
@@ -82,4 +85,5 @@ __all__ = [
     'SoftLexMatchupOrdering',
     'SameGradeSameClubNoConcurrency',
     'TeamPairNoConcurrency',
+    'PreferredWeekendsAwayGround',
 ]

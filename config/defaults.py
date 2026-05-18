@@ -192,6 +192,8 @@ DEFAULT_STAGES = [
             'SoftLexMatchupOrdering',
             # spec-007: convenor-supplied per-team-pair no-concurrency soft.
             'TeamPairNoConcurrency',
+            # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
+            'PreferredWeekendsAwayGround',
         ],
     },
 ]

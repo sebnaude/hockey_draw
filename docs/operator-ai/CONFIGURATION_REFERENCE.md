@@ -302,6 +302,49 @@ teams cannot play simultaneously) is now the dedicated hard atom
 
 ---
 
+## PREFERRED_WEEKENDS (spec-006)
+
+Soft preferences for scheduling (or avoiding) games at a specific away venue on specific dates. Read by the `PreferredWeekendsAwayGround` atom (severity 5, `soft_optimisation` stage). Never blocks feasibility.
+
+```python
+PREFERRED_WEEKENDS = [
+    {
+        # Required: one of 'date' (single) or 'dates' (list). Mutually exclusive.
+        'date':           '2026-04-05',          # YYYY-MM-DD
+        # 'dates':        ['2026-04-05', '2026-04-26'],  # alternative: list of dates
+
+        # Required: venue name matching field_location in decision variable keys.
+        'field_location': 'Maitland Park',
+
+        # Optional: specific field at the venue. Omit for venue-level (any field).
+        # 'field_name':   'Maitland Main Field',
+
+        # Required: 'avoid' (penalise games here) or 'prefer' (penalise missing games).
+        'mode':           'avoid',
+
+        # Optional: per-entry weight override. Defaults to PENALTY_WEIGHTS['preferred_weekends_away_ground'].
+        # 'weight':       2000,
+
+        # Human-readable; ignored by solver.
+        'description':    'NRL Knights vs Raiders at Maitland',
+    },
+]
+```
+
+**mode semantics:**
+- `avoid`: for each game scheduled at `field_location` (and `field_name` if set) on `date`, the solver incurs `weight × 1` penalty. Use when the convenor wants the solver to prefer scheduling games elsewhere that weekend.
+- `prefer`: solver is penalised for *not* having a game at the venue on that date. Penalty = `weight × max(0, target_count - actual_games)`. Default `target_count = 1`. Use when the convenor wants the solver to prefer scheduling games at that venue.
+
+**Conflicting entries** (prefer + avoid same date/venue): no crash — penalties accumulate independently. Solver finds the least-total-penalty assignment.
+
+**Hard block vs soft avoid:** `PREFERRED_WEEKENDS` with `mode: avoid` is a *soft* preference. For a hard guarantee of no games at a venue on a date, use `BLOCKED_GAMES` instead.
+
+**Default weight:** `PENALTY_WEIGHTS['preferred_weekends_away_ground']` (default `1000`). Per-entry `weight` key overrides this.
+
+**2026 config:** The 6 NRL-Knights-at-Maitland dates are pre-configured in `config/season_2026.py::PREFERRED_WEEKENDS` as `avoid` entries for `field_location: 'Maitland Park'`.
+
+---
+
 ## CLUB_DAYS (Special Events)
 
 ```python

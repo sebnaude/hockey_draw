@@ -19,7 +19,14 @@ Maitland doesn't want to play on these dates due to Newcastle Knights home games
 - Sunday, 5 July 2026 – Knights vs Dolphins
 - Sunday, 16 August 2026 – Knights vs Titans
 
-**Status:** Need to verify where/how this is enforced. Suspected variable removal in generate_X or field unavailabilities, but mechanism not yet located.
+**Status:** [DONE: implemented in spec-006] — All 6 dates are now migrated to
+`config/season_2026.py::PREFERRED_WEEKENDS` as `'mode': 'avoid'` entries for
+`'field_location': 'Maitland Park'`. The `PreferredWeekendsAwayGround` soft atom
+(severity 5, `soft_optimisation` stage) applies a penalty of
+`PENALTY_WEIGHTS['preferred_weekends_away_ground']` (default 1000) for each game
+scheduled at Maitland Park on these dates. This is a **soft** constraint — the
+solver avoids these dates when feasibly possible but will schedule there if no
+other feasible assignment exists. For a hard block, use `BLOCKED_GAMES` instead.
 
 ## Norths v Wests Weekend – 12-14 June 2026
 

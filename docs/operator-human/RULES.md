@@ -319,6 +319,24 @@ This is a **pure soft tie-break** — it never prevents any match from being sch
 
 ---
 
+### Rule 21: Preferred / Avoided Weekends at Away Grounds
+**Constraint:** `PreferredWeekendsAwayGround`
+
+**Description:** The convenor can declare specific dates where a particular away venue is *preferred* or *avoided*. Two modes:
+
+- **Avoid:** The solver tries not to schedule any games at that venue on that date. For example, if Newcastle Knights are playing an NRL home game at Maitland Park on a given Sunday, Maitland HC prefers not to host hockey that day (traffic, facilities, parking). The solver will schedule Maitland Park games on other dates if feasibly possible.
+- **Prefer:** The solver tries to schedule at least one game at that venue on that date. For example, if extra foot traffic is expected, the convenor may want to make use of the venue.
+
+This is a **soft constraint** — the solver will respect it when feasible, but may schedule (or not schedule) at the venue anyway if no other feasible assignment exists. For a **hard** block, use `BLOCKED_GAMES` instead.
+
+**Configuration:** `PREFERRED_WEEKENDS` list in the season config. Each entry specifies a date (or list of dates), a venue (`field_location`), an optional specific field (`field_name`), and a mode (`'avoid'` or `'prefer'`). An optional `weight` overrides the default penalty.
+
+**2026:** Six NRL-Knights home games at Maitland Park are pre-configured as `avoid` entries (5 April, 26 April, 3 May, 28 June, 5 July, 16 August). Maitland HC does not want to play on these dates.
+
+**Weight:** 1,000 (default `PENALTY_WEIGHTS['preferred_weekends_away_ground']`). Moderate — the solver will look for alternatives but will not sacrifice other important constraints to avoid a clashing date.
+
+---
+
 ## Implied Rules
 
 These rules arise from the combination of constraints or data filtering.

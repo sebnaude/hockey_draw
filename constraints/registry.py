@@ -374,6 +374,17 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=5,
         has_soft_component=True,
     ),
+    # spec-006: soft penalty for preferred / avoided weekends at away grounds
+    # (e.g. NRL-Knights home games at Maitland Park). Pure soft: never blocks
+    # feasibility. Reads `data['preferred_weekends']` set by the season config.
+    'PreferredWeekendsAwayGround': ConstraintInfo(
+        canonical_name='PreferredWeekendsAwayGround',
+        solver_class_names=['PreferredWeekendsAwayGround'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+    ),
     'ForcedGames': ConstraintInfo(
         canonical_name='ForcedGames',
         solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class
