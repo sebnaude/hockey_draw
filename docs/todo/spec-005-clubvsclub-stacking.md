@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-005-opus-2026-05-18 claimed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none (spec-004 helper landed in 8ed24f9 — `_phl_forced_friday_helper.py`) -->
 
 # spec-005 — ClubVsClubAlignment as precise grade-stacking with co-location
