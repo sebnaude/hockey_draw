@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-010-agent claimed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-010 — Remove "every PHL team plays round 1"; verify R1/R2 carve-out for 2nd grade
