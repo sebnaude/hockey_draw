@@ -609,7 +609,7 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 
 When reviewing, testing, or publishing a draw, always check:
 
-- **Last game of the day on West Field**: If only one field is being used for the last timeslot of the day at NIHC (Broadmeadow), that game should be on West Field (WF), not East Field (EF). Flag this to the user if it's not the case. (Perennial rule — see `docs/operator-human/PERENNIAL_RULES.md`. NOTE: spec-003 will replace this with a strict field-fill ordering atom — WF first, then EF, then SF.)
+- **NIHC field-fill order (WF → EF → SF)**: Enforced by atoms `NIHCFillWFBeforeEF` and `NIHCFillEFBeforeSF` (spec-003) in the `critical_feasibility` stage. The tester also flags violations via `_check_nihc_fill_wf_before_ef` / `_check_nihc_fill_ef_before_sf`. No manual review needed — if a draw passes the tester it conforms. See `docs/operator-human/PERENNIAL_RULES.md` for the operator-facing rule.
 - **Rounds 1-2 at Broadmeadow only**: All games in rounds 1 and 2 must be at NIHC. No Maitland Park or Central Coast games. Enforced via `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`. (Perennial rule)
 - **7pm (19:00) games**: These are the worst timeslot. Flag any non-PHL-Friday games scheduled at 7pm — they should be minimised.
 

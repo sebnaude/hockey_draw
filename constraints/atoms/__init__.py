@@ -28,6 +28,8 @@ from constraints.atoms.same_grade_same_club_no_concurrency import (
     SameGradeSameClubNoConcurrency,
 )
 from constraints.atoms.team_pair_no_concurrency import TeamPairNoConcurrency
+from constraints.atoms.nihc_fill_wf_before_ef import NIHCFillWFBeforeEF
+from constraints.atoms.nihc_fill_ef_before_sf import NIHCFillEFBeforeSF
 
 # Side-effect import: registers FORCED/BLOCKED count adjusters for the
 # constraints whose atoms haven't been split out yet (Phase 4).
@@ -60,6 +62,12 @@ CLUB_VS_CLUB_ATOMS = [
 ]
 
 
+NIHC_FIELD_FILL_ORDER_ATOMS = [
+    NIHCFillWFBeforeEF,
+    NIHCFillEFBeforeSF,
+]
+
+
 __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
@@ -82,4 +90,7 @@ __all__ = [
     'SoftLexMatchupOrdering',
     'SameGradeSameClubNoConcurrency',
     'TeamPairNoConcurrency',
+    'NIHCFillWFBeforeEF',
+    'NIHCFillEFBeforeSF',
+    'NIHC_FIELD_FILL_ORDER_ATOMS',
 ]

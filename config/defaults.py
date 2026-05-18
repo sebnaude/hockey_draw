@@ -150,6 +150,9 @@ DEFAULT_STAGES = [
             # spec-007: hard same-grade-same-club rule (was the hard portion
             # of the obsolete `ClubGradeAdjacency` cluster).
             'SameGradeSameClubNoConcurrency',
+            # spec-003: NIHC field-fill ordering — WF before EF, EF before SF.
+            # The two implications transitively imply SF -> WF (no third atom).
+            'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF',
         ],
     },
     {

@@ -31,13 +31,21 @@ Season-specific (non-perennial) BLOCKED entries are NOT overridable — they alw
 
 ---
 
-### 2. Last game of day on West Field at Broadmeadow (single-field timeslot)
+### 2. NIHC field-fill order: WF before EF before SF
 
-If only one field is being used for the last timeslot of a day at Broadmeadow (NIHC), that game should be on West Field (WF), not East Field (EF).
+At Newcastle International Hockey Centre (Broadmeadow), within any single (date, day_slot) bucket the fields must be filled in priority order: **West Field → East Field → South Field**. Concretely, for every (date, day_slot) where multiple NIHC fields are valid slot options:
 
-**Enforcement:** Constraint (to be implemented). Flag during draw review if not satisfied.
+- If East Field has a game, West Field must also have a game.
+- If South Field has a game, East Field must also have a game.
+- The two together transitively imply: if South Field has a game, West Field must also have a game.
 
-**Rationale:** Operational preference for West Field when only one game is running at end of day.
+This generalises the historical "last game of the day on West Field" preference — that rule was a special case of field-fill ordering. The general form gives correct behaviour for *every* slot of the day, not only the last one (e.g. a midday slot with only one game also lands on WF rather than EF).
+
+**Enforcement:** Hard constraint — two CRITICAL atoms `NIHCFillWFBeforeEF` and `NIHCFillEFBeforeSF` in `constraints/atoms/` (spec-003). Both atoms are wired into the `critical_feasibility` stage in `DEFAULT_STAGES` so they apply on every solver run. A matching tester check (`_check_nihc_fill_wf_before_ef` + `_check_nihc_fill_ef_before_sf`) catches the same violations on already-published draws.
+
+**Edge case:** if WF (or EF) isn't a valid slot for a given (date, day_slot) — e.g. a field unavailability that day — the atoms skip the bucket rather than assert an impossible implication. The detection key is "does any decision variable exist for that field at that slot?" — if not, the field wasn't an option and the rule doesn't fire.
+
+**Rationale:** Operational preference for West Field over East over South; ground staff have a fixed walk-up routine; spectators learn where the headline games live. Generalising removes the historical manual-review footnote.
 
 ---
 
