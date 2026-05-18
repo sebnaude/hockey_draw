@@ -1,6 +1,6 @@
 <!-- status: ready -->
 <!-- owner: unassigned -->
-<!-- depends_on: none -->
+<!-- depends_on: spec-004 (helper module _phl_forced_friday_helper.py — in flight) -->
 
 # spec-005 — ClubVsClubAlignment as precise grade-stacking with co-location
 
