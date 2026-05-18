@@ -68,7 +68,9 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'FiftyFiftyHomeAway': 1,
     'MaxMaitlandHomeWeekends': 1,
     'MaitlandHomeGrouping': 1,  # Has hard element: no back-to-back Maitland home games
-    
+    'NIHCFillWFBeforeEF': 1,    # spec-003: WF must fill before EF at NIHC
+    'NIHCFillEFBeforeSF': 1,    # spec-003: EF must fill before SF at NIHC
+
     'EqualMatchUpSpacing': 1,
 
     # Level 2 - HIGH (structural, club-specific)
@@ -1143,6 +1145,13 @@ class DrawTester:
             # Level 1 - CRITICAL
             ('NoDoubleBookingTeams', self._check_no_double_booking_teams),
             ('NoDoubleBookingFields', self._check_no_double_booking_fields),
+            # spec-003: NIHC field-fill ordering (WF -> EF -> SF). One method
+            # covers both implications and returns per (date, day_slot)
+            # violations tagged with the firing implication. Each canonical
+            # name routes through `_check_nihc_field_fill_order` filtered to
+            # its own implication so violations aren't double-counted.
+            ('NIHCFillWFBeforeEF', self._check_nihc_fill_wf_before_ef),
+            ('NIHCFillEFBeforeSF', self._check_nihc_fill_ef_before_sf),
             ('EqualGamesAndBalanceMatchUps', self._check_equal_games),
             ('EqualGamesAndBalanceMatchUps', self._check_balanced_matchups),
             ('FiftyFiftyHomeandAway', self._check_fifty_fifty_home_away),
@@ -1244,7 +1253,7 @@ class DrawTester:
         for game in self.draw.games:
             key = (game.date, game.day_slot, game.field_name)
             field_games[key].append(game.game_id)
-        
+
         for (week, slot, field), games in field_games.items():
             if len(games) > 1:
                 violations.append(Violation.create(
@@ -1253,9 +1262,110 @@ class DrawTester:
                     affected_games=games,
                     week=week
                 ))
-        
+
         return violations
-    
+
+    # ------------------------------------------------------------------
+    # spec-003: NIHC field-fill order (WF -> EF -> SF).
+    # ------------------------------------------------------------------
+
+    def _nihc_field_usage(
+        self,
+    ) -> 'Dict[Tuple[str, int], Dict[str, List[str]]]':
+        """Build {(date, day_slot): {field_name: [game_ids]}} for NIHC games.
+
+        Cached on the instance so the WF/EF and EF/SF checks share work.
+        The set of fields *appearing* in this map is the only source of
+        truth for "is this field a real slot for this (date, day_slot)?"
+        -- a field whose slot doesn't exist for the day simply has no
+        scheduled games and therefore no entry. This mirrors the atom's
+        skip rule.
+        """
+        cache = getattr(self, '_nihc_usage_cache', None)
+        if cache is not None:
+            return cache
+        from constraints.atoms.base import BROADMEADOW
+        usage: Dict[Tuple[str, int], Dict[str, List[str]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for game in self.draw.games:
+            if game.field_location != BROADMEADOW:
+                continue
+            usage[(game.date, game.day_slot)][game.field_name].append(
+                game.game_id
+            )
+        cache = {k: dict(v) for k, v in usage.items()}
+        self._nihc_usage_cache = cache
+        return cache
+
+    def _check_nihc_fill_wf_before_ef(self) -> List[Violation]:
+        """Per (date, day_slot) at NIHC: violation if EF has a game and WF
+        does not.
+
+        Only applies where BOTH WF and EF would normally appear in the
+        day's schedule. If WF is not a real slot for the day (i.e. no
+        game at WF appears across the entire date in any draw, which we
+        cannot reliably infer from a single (date, day_slot)), we still
+        flag because at NIHC every slot has WF available. A real
+        unavailability (e.g. field unavailability) is handled by the
+        atom skipping the bucket -- since this is a tester-side check
+        against a produced draw, the absence of any WF game across all
+        slots of a date is the heuristic for "WF wasn't an option."
+        """
+        violations: List[Violation] = []
+        usage = self._nihc_field_usage()
+        # Build set of dates that had ANY WF game at all (used as a proxy
+        # for "WF was a real option this day"). If WF was completely
+        # unavailable across a date, we don't flag the bucket.
+        wf_dates = {date for (date, _), fields in usage.items() if 'WF' in fields}
+
+        for (date, day_slot), fields_at_slot in sorted(usage.items()):
+            if 'EF' not in fields_at_slot:
+                continue  # nothing on the LHS
+            if 'WF' in fields_at_slot:
+                continue  # WF used at this slot -> implication holds
+            if date not in wf_dates:
+                continue  # WF wasn't a real option this date at all
+            ef_games = fields_at_slot['EF']
+            violations.append(Violation.create(
+                constraint='NIHCFillWFBeforeEF',
+                message=(
+                    f"NIHC field-fill order: date {date} slot {day_slot} "
+                    f"uses EF without WF (WF must fill before EF)"
+                ),
+                affected_games=ef_games,
+            ))
+        return violations
+
+    def _check_nihc_fill_ef_before_sf(self) -> List[Violation]:
+        """Per (date, day_slot) at NIHC: violation if SF has a game and EF
+        does not.
+
+        Same heuristic as the WF/EF check: a date with no EF game at all
+        is treated as "EF wasn't an option," so the bucket is skipped.
+        """
+        violations: List[Violation] = []
+        usage = self._nihc_field_usage()
+        ef_dates = {date for (date, _), fields in usage.items() if 'EF' in fields}
+
+        for (date, day_slot), fields_at_slot in sorted(usage.items()):
+            if 'SF' not in fields_at_slot:
+                continue
+            if 'EF' in fields_at_slot:
+                continue
+            if date not in ef_dates:
+                continue
+            sf_games = fields_at_slot['SF']
+            violations.append(Violation.create(
+                constraint='NIHCFillEFBeforeSF',
+                message=(
+                    f"NIHC field-fill order: date {date} slot {day_slot} "
+                    f"uses SF without EF (EF must fill before SF)"
+                ),
+                affected_games=sf_games,
+            ))
+        return violations
+
     def _check_equal_games(self) -> List[Violation]:
         """Check each team plays the expected number of games."""
         violations = []

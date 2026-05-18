@@ -2,7 +2,7 @@
 
 Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` and updated through spec-002 + spec-007. The registry currently has **40 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`).
+Generated against `final-form` and updated through spec-002 + spec-007 + spec-003. The registry currently has **42 entries**: 21 originals + 5 PHL atoms (3a) + 5 ClubDay atoms (3b) + 4 ClubVsClub atoms (3c) + 2 Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`) + 1 spec-002 soft-only penalty atom (`SoftLexMatchupOrdering`) + 2 spec-007 atoms (`SameGradeSameClubNoConcurrency`, `TeamPairNoConcurrency`) + 2 spec-003 atoms (`NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`).
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -36,6 +36,8 @@ Legend
 | EnsureBestTimeslotChoices | original.py:EnsureBestTimeslotChoices | Per (week, day, location): build per-(field, day_slot) max-equality indicators; for adjacent slot pair (curr, next) for every (f, f2): next_used ⇒ curr_used (cross-field stacking + contiguity). SOFT: 7pm games incur penalty 1 each | 5 | — | EnsureBestTimeslotChoices |
 | PreferredTimes | original.py:PreferredTimesConstraint | Normalize PREFERENCE_NO_PLAY (legacy + 2026 structured); for each (entry, club, club_teams, restriction): match X keys via two key orderings; soft penalty = the var when match | 5 | — | PreferredTimes |
 | SoftLexMatchupOrdering | constraints/atoms/soft_lex_matchup_ordering.py (spec-002) | Soft tie-break: for each grade, sort pairs alphabetically (team1, team2). Assign rank r (0-indexed). Penalty = weight * r * X[key] per var. Encourages alphabetically-earlier pairs in earlier rounds. Pure objective; never hard constraint. PENALTY_WEIGHTS['soft_lex_ordering'] defaults to 1 | 5 | — | SoftLexMatchupOrdering (atom, new) |
+| NIHCFillWFBeforeEF | constraints/atoms/nihc_fill_wf_before_ef.py (spec-003) | Per (date, day_slot) at NIHC where BOTH WF and EF have at least one decision var: channel `wf_used = max(WF vars)` and `ef_used = max(EF vars)`, then `model.Add(ef_used <= wf_used)`. Skips buckets where either field has no variables (i.e. not a real slot that day). | 1 | — | NIHCFillWFBeforeEF (atom, new — atom_group `NIHCFieldFillOrder`) |
+| NIHCFillEFBeforeSF | constraints/atoms/nihc_fill_ef_before_sf.py (spec-003) | Per (date, day_slot) at NIHC where BOTH EF and SF have at least one decision var: same channeling pattern, then `model.Add(sf_used <= ef_used)`. Together with `NIHCFillWFBeforeEF` transitively gives `SF_used -> WF_used` — no third atom needed. Shares the `nihc_field_used` helper kind with the WF/EF atom so the EF indicator is built once. | 1 | — | NIHCFillEFBeforeSF (atom, new — atom_group `NIHCFieldFillOrder`) |
 
 ## 1b. Phase-6 canonical names + back-compat aliases
 
@@ -78,7 +80,8 @@ out of scope for Phase 6.
 | ClubGradeAdjacency (spec-007) | 1 | 1 hard (`SameGradeSameClubNoConcurrency`) + 1 new soft (`TeamPairNoConcurrency`). Adjacent-grade soft rule removed entirely (net +1 atom vs cluster, +1 from the new convenor-list atom). | +1 |
 | All other entries | 13 | 13 (1:1, with renames in Phase 6) | 0 |
 | SoftLexMatchupOrdering (spec-002) | 0 (new atom, no legacy class) | 1 — `SoftLexMatchupOrdering` | +1 |
-| **Total** | **18 solver + 3 tester-only** | **27 solver + 3 tester-only** | **+12** |
+| NIHCFieldFillOrder (spec-003) | 0 (new atoms, no legacy class; replaces a review-only perennial rule) | 2 — `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF` | +2 |
+| **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** | **+14** |
 
 ## 4. Per-atom engineering detail
 
@@ -123,6 +126,9 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `EnsureBestTimeslotChoices` | `constraints/archived/original.py` | included | yes | yes | — | — | Hardcoded WORST_TIME = `'19:00'`; Phase 5 punch list to migrate to defaults |
 | `PreferredTimes` | `constraints/archived/original.py` | included | yes | yes | — | — | Dual-orderings hack (t1/t2 swap); see §5.8 |
 | `EqualMatchUpSpacing` | `constraints/archived/original.py` | excluded (via adjuster) | yes | yes | `EqualMatchUpSpacingConstraint` | — | Adjuster narrows forced rounds per pair |
+| **Atomised (spec-003) — NIHC field-fill order** | | | | | | | |
+| `NIHCFillWFBeforeEF` | `constraints/atoms/nihc_fill_wf_before_ef.py` | included | yes | yes | — | `nihc_field_used` | Per (date, day_slot) at NIHC where BOTH WF and EF have ≥1 decision var; `ef_used <= wf_used`. Buckets skipped when either field has no real variables that slot (e.g. field unavailability) — prevents asserting "WF must be used" when WF isn't a real option. |
+| `NIHCFillEFBeforeSF` | `constraints/atoms/nihc_fill_ef_before_sf.py` | included | yes | yes | — | `nihc_field_used` | Same shape as the WF/EF atom; `sf_used <= ef_used`. Shares the `nihc_field_used` helper cache so the EF indicator is channeled once and reused. The two atoms transitively imply `SF_used -> WF_used` — no third atom needed. |
 | **Soft-only penalty atoms (no tester violation check)** | | | | | | | |
 | `SoftLexMatchupOrdering` | `constraints/atoms/soft_lex_matchup_ordering.py` | included | yes | yes | — | — | Pure soft tie-break (weight=1 default); no tester violation check; ranks pairs 0-indexed alphabetically per grade |
 | **Tester-only (no solver enforcement)** | | | | | | | |

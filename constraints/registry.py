@@ -272,6 +272,28 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=3,
         has_soft_component=True,
     ),
+    # spec-003: NIHC field-fill order. Two atoms per (date, day_slot) at
+    # Broadmeadow forcing WF -> EF -> SF fill priority. Replaces the legacy
+    # perennial "last game of day on WF" review-only rule with a hard
+    # constraint that holds for every slot.
+    'NIHCFillWFBeforeEF': ConstraintInfo(
+        canonical_name='NIHCFillWFBeforeEF',
+        solver_class_names=['NIHCFillWFBeforeEF'],
+        tester_check_methods=['_check_nihc_fill_wf_before_ef'],
+        tester_violation_names=['NIHCFillWFBeforeEF'],
+        severity_level=1,
+        atom_group='NIHCFieldFillOrder',
+        required_helpers=['nihc_field_used'],
+    ),
+    'NIHCFillEFBeforeSF': ConstraintInfo(
+        canonical_name='NIHCFillEFBeforeSF',
+        solver_class_names=['NIHCFillEFBeforeSF'],
+        tester_check_methods=['_check_nihc_fill_ef_before_sf'],
+        tester_violation_names=['NIHCFillEFBeforeSF'],
+        severity_level=1,
+        atom_group='NIHCFieldFillOrder',
+        required_helpers=['nihc_field_used'],
+    ),
     'ClubVsClubAlignment': ConstraintInfo(
         canonical_name='ClubVsClubAlignment',
         solver_class_names=['ClubVsClubAlignment', 'ClubVsClubAlignmentAI'],
@@ -514,6 +536,7 @@ HELPER_VAR_CATALOG: Set[str] = {
     'club_day_field_used',    # (club, field_name)
     'club_day_slot_used',     # (club, day_slot)
     'phl_2nd_btb_pair',       # (clubs, round_no, field, slot1, slot2) — back-to-back same-field indicator
+    'nihc_field_used',        # (date, day_slot, field_name) — spec-003 NIHC fill-order shared indicator
 }
 
 
