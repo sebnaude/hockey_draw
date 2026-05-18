@@ -1,5 +1,5 @@
-<!-- status: in_progress -->
-<!-- owner: session=spec-008-opus claimed=2026-05-18T00:00:00Z -->
+<!-- status: done -->
+<!-- owner: session=spec-008-opus claimed=2026-05-18T00:00:00Z completed=2026-05-19T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-008 — Spacing: byes as first-class + intuitive gap semantics
