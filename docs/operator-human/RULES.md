@@ -188,13 +188,38 @@ diluted with extra home games beyond what the season actually needs.
 
 **Description:** Matchups between the same teams should be evenly spaced across rounds.
 
-**Enforcement:** Uses round sum calculations with bounds:
-- Minimum spacing: `space - SLACK` rounds
-- Maximum spacing: `space + SLACK` rounds
+**Enforcement (spec-008):** Reads the convenor-facing number `S` as
+"the number of rounds you want **between** two meetings of the same pair."
+So `S=2` means "at least two whole rounds between meetings" — rounds 1 and
+4 are fine; rounds 1 and 3 are not (only one round, round 2, between them).
 
-Where `space = max_rounds // num_teams`
+By default `S = ideal_gap(T)` for grade size `T`. The CLI flag `--slack N`
+loosens this by `N` rounds (the convenor accepts the gap shrinking by `N`).
 
-**Rationale:** Prevents teams from playing each other in consecutive weeks.
+**Rationale:** Prevents teams from playing each other in close succession.
+
+---
+
+### Rule 11b: Balanced Byes (spec-008)
+**Constraint:** `BalancedByeSpacing`
+
+**Description:** If your team has byes (rounds where it doesn't play),
+they'll be spread across the season just like repeat matchups — no team
+gets three byes in a row early then has to play every round after.
+
+**Enforcement:** For each team in each grade, the rounds in which the team
+doesn't play must sit at least `S` rounds apart, where
+`S = ideal_bye_gap(R, byes) = max(0, R // byes - 1)`. E.g. a 20-round
+season with 2 byes per team forces those byes at least 9 rounds apart.
+
+**Slack:** Use `--slack N` from the CLI to loosen by `N` rounds, or set a
+permanent default via `CONSTRAINT_DEFAULTS['bye_spacing_base_slack']`.
+The slack key `BalancedByeSpacing` is independent of matchup spacing —
+you can loosen one without touching the other.
+
+**Rationale:** Convenor request — byes are part of the schedule too;
+spreading them prevents stretches of "play every weekend" or "bye every
+weekend" pile-ups.
 
 ---
 

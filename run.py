@@ -462,6 +462,10 @@ def run_generate(args):
             'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
             'MinimiseClubsOnAFieldBroadmeadow': slack_value,
             'ClubGameSpread': slack_value,
+            # spec-008 Part B: bye spacing has its own slack key. Mirror the
+            # CLI's --slack N here so a one-shot loosen affects both matchup
+            # and bye spacing in step.
+            'BalancedByeSpacing': slack_value,
         }
         print(f"\n[*] Constraint slack override: +{slack_value}")
     

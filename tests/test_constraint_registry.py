@@ -71,9 +71,11 @@ class TestRegistryCompleteness:
         ClubVsClubStackedCoLocation — replaces the 4 Phase-3c atoms in the
         production stage list while leaving them in the registry as
         parity reference) +
-        1 spec-012 soft penalty atom (MaitlandAlternateHomeAway)
-        = 48."""
-        assert len(CONSTRAINT_REGISTRY) == 48
+        1 spec-012 soft penalty atom (MaitlandAlternateHomeAway) +
+        1 spec-008 atom (BalancedByeSpacing — byes-as-first-class
+          spacing, HARD severity 2, own slack key)
+        = 49."""
+        assert len(CONSTRAINT_REGISTRY) == 49
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
@@ -208,6 +210,9 @@ class TestSlackKeys:
             'MaximiseClubsPerTimeslotBroadmeadow',
             'MinimiseClubsOnAFieldBroadmeadow',
             'ClubGameSpread',
+            # spec-008 Part B: separate slack for byes spacing — convenor
+            # can loosen one without touching matchup spacing.
+            'BalancedByeSpacing',
         }
         for info in CONSTRAINT_REGISTRY.values():
             if info.slack_key:

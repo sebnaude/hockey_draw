@@ -77,6 +77,34 @@ forced_rounds_per_pair = {(t1,t2,grade): set of forced rounds}
 effective_T = T - len(forced_rounds_per_pair[pair])
 ```
 
+#### spec-008 note — intuitive gap semantics
+
+As of spec-008 (Part A) the input number `S` for `EqualMatchUpSpacing`
+means **"S played rounds between meetings"** (not the old "calendar
+distance" interpretation). The hard rule now forbids `gap = r2 - r1 <= S`
+(equivalently `r2 - r1 - 1 < S`), not the old `gap < min_gap`.
+
+The math is unified in `constraints/atoms/_spacing.py`:
+
+- `ideal_gap(T) = legacy_min_gap(T) - 1` — the default S for grade size T.
+- `effective_spacing(T, base_slack, config_slack)` — clamped at 0, used
+  by both the solver (`unified.py::_matchup_spacing_hard`) and the
+  tester (`analytics/tester.py::_check_equal_matchup_spacing`).
+- `CONSTRAINT_DEFAULTS['spacing_base_slack']` reduces S by `base_slack`
+  rounds; CLI `--slack N` (via `data['constraint_slack'][...]`) reduces
+  by another `N`. Each unit of slack lets the gap shrink by one round
+  from ideal; the physical schedule a healthy solver produces at default
+  slack is **unchanged** (forbidden-gaps set is identical).
+- Each FORCED meeting in `forced_rounds_per_pair[pair]` surfaces as
+  **negative net slack** to `effective_spacing` so S grows above
+  `ideal_gap(T)` — i.e. tighter — rather than relaxing it.
+
+Part B adds a sibling atom `BalancedByeSpacing` with its own helper
+`ideal_bye_gap(R, byes)` and its own slack key (`bye_spacing_base_slack`
+default + `constraint_slack['BalancedByeSpacing']` from `--slack N`).
+The two atoms are independent dimensions and share `_spacing.py` only
+for the shape of the math.
+
 ### 3. `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping` in Phase 6)
 
 **Problem:** if FORCED forces a Maitland home weekend into week W, the

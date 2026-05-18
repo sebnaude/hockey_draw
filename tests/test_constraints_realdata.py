@@ -194,14 +194,46 @@ class TestMaitlandBackToBack:
 
 
 class TestEqualMatchUpSpacing:
-    """Matchups should be evenly spaced across rounds."""
+    """Matchups should be evenly spaced across rounds.
 
-    def test_known_violation(self, tester):
+    spec-008 (Part A) aligned the tester's threshold with the solver's
+    threshold via `constraints.atoms._spacing.effective_spacing`. The
+    convenor-facing number S = "free rounds between meetings" and the
+    hard rule forbids `gap = r2 - r1 <= S`.
+
+    For 3rd grade (T=6 in the 2026 fixture):
+      ideal_gap(6) = legacy_min_gap(6) - 1 = 3 - 1 = 2
+    so a gap of 3 is allowed (3 > 2). The previous tester used `ideal=T-2`
+    with `floor=min(T//2, T-2)` which over-reported a gap of 3 as a
+    violation (its min was 4) even though the solver itself accepted gap=3
+    — the tester was strictly tighter than the solver. The spec-008 fix
+    removes that false positive, so the previous "Maitland 3rd vs Wests
+    3rd gap of 3" entry is no longer flagged.
+    """
+
+    def test_no_false_positive_at_legacy_min_gap(self, tester):
+        """Gaps >= the new solver threshold must NOT be flagged.
+
+        Hand calc for the fixture: 3rd has T=6 teams; ideal_gap(6) = 2;
+        hard rule forbids gap <= 2. The fixture's tightest 3rd-grade
+        repeat (gap=3) sits above the threshold, so the tester emits
+        zero violations under the spec-008-aligned math.
+        """
         violations = tester._check_equal_matchup_spacing()
-        assert len(violations) >= 1
-        # Known: Maitland 3rd vs Wests 3rd gap of 3 (min 4)
-        mait = [v for v in violations if 'Maitland 3rd' in v.message and 'Wests 3rd' in v.message]
-        assert len(mait) >= 1, f"Expected Maitland 3rd vs Wests 3rd spacing violation"
+        # Any remaining violations must be real (gap <= 2 = ideal_gap(6))
+        # for a T=6 grade. Filter the messages to confirm none are at
+        # gap=3 (the legacy false-positive band).
+        for v in violations:
+            # Message: "...gap of N rounds...". Pull the integer that
+            # follows "gap of" — guard against trailing punctuation.
+            import re
+            m = re.search(r'gap of (\d+)', v.message)
+            assert m, f"Unexpected message format: {v.message}"
+            gap = int(m.group(1))
+            assert gap <= 2, (
+                f"Tester reported gap={gap} as a violation but the spec-008 "
+                f"solver threshold for T=6 is gap<=2; got: {v.message}"
+            )
 
 
 # ============== Level 2: HIGH ==============
