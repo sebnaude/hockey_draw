@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-006-agent claimed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-006 — Preferred / non-preferred weekends for away grounds
