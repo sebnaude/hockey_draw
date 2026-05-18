@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: unassigned -->
+<!-- status: in_progress -->
+<!-- owner: session=spec-012-opus claimed=2026-05-18T00:00:00Z -->
 <!-- depends_on: none -->
 
 # spec-012 — Team time preferences + Maitland home/away weekend preference (verify + wire up)
