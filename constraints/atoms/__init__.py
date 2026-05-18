@@ -23,6 +23,15 @@ from constraints.atoms.club_vs_club_coincidence import ClubVsClubCoincidence
 from constraints.atoms.club_vs_club_field_limit import ClubVsClubFieldLimit
 from constraints.atoms.club_vs_club_deficit_penalty import ClubVsClubDeficitPenalty
 from constraints.atoms.phl_2nd_back_to_back import PHLAnd2ndBackToBackSameField
+# spec-005: replacement cluster `ClubVsClubStackedAlignment`. The four
+# atoms above are kept on disk for parity reference but removed from the
+# default stage list — see `config/defaults.py::DEFAULT_STAGES`.
+from constraints.atoms.club_vs_club_stacked_weekends import (
+    ClubVsClubStackedWeekends,
+)
+from constraints.atoms.club_vs_club_stacked_co_location import (
+    ClubVsClubStackedCoLocation,
+)
 from constraints.atoms.soft_lex_matchup_ordering import SoftLexMatchupOrdering
 from constraints.atoms.same_grade_same_club_no_concurrency import (
     SameGradeSameClubNoConcurrency,
@@ -71,6 +80,15 @@ CLUB_VS_CLUB_ATOMS = [
 ]
 
 
+# spec-005 replacement cluster. ORDER MATTERS: `ClubVsClubStackedWeekends`
+# must run first so the co-location atom can read the `play` indicators
+# from the helper-var registry.
+CLUB_VS_CLUB_STACKED_ATOMS = [
+    ClubVsClubStackedWeekends,
+    ClubVsClubStackedCoLocation,
+]
+
+
 NIHC_FIELD_FILL_ORDER_ATOMS = [
     NIHCFillWFBeforeEF,
     NIHCFillEFBeforeSF,
@@ -96,6 +114,9 @@ __all__ = [
     'ClubVsClubDeficitPenalty',
     'PHLAnd2ndBackToBackSameField',
     'CLUB_VS_CLUB_ATOMS',
+    'ClubVsClubStackedWeekends',
+    'ClubVsClubStackedCoLocation',
+    'CLUB_VS_CLUB_STACKED_ATOMS',
     'SoftLexMatchupOrdering',
     'SameGradeSameClubNoConcurrency',
     'TeamPairNoConcurrency',

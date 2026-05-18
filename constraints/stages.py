@@ -271,6 +271,22 @@ def apply_solver_stage(
         applied_engine_keys.update(new_engine_keys)
 
     # Legacy-class fallback for atoms not handled by the engine.
+    #
+    # For Atom subclasses we MUST share a single helper-var registry across
+    # every atom in the same stage call: the spec-005
+    # `ClubVsClubStackedCoLocation` reads helper vars registered by
+    # `ClubVsClubStackedWeekends`, so an ephemeral-per-atom registry would
+    # silently break the cross-atom lookup. Prefer the engine's registry
+    # (used for stages that mix engine + atom dispatch); fall back to a
+    # single ephemeral registry built once per stage call.
+    from constraints.atoms.base import Atom as _AtomBase
+    stage_registry = (
+        getattr(engine, 'helper_registry', None)
+        or getattr(engine, 'registry', None)
+    )
+    if stage_registry is None:
+        stage_registry = _ephemeral_registry(model)
+
     for atom in non_engine:
         cls = _resolve_solver_class(atom, use_ai=data.get('_use_ai', False))
         if cls is None:
@@ -279,10 +295,8 @@ def apply_solver_stage(
         prior = len(model.Proto().constraints)
         # New atoms (subclasses of `constraints.atoms.base.Atom`) take a
         # helper-var registry as a fourth arg. Legacy classes take three.
-        from constraints.atoms.base import Atom as _AtomBase
         if isinstance(constraint, _AtomBase):
-            reg = getattr(engine, 'helper_registry', None) or _ephemeral_registry(model)
-            constraint.apply(model, X, data, reg)
+            constraint.apply(model, X, data, stage_registry)
         else:
             constraint.apply(model, X, data)
         constraints_added += len(model.Proto().constraints) - prior

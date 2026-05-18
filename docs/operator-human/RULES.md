@@ -227,14 +227,64 @@ ban.
 
 ---
 
-### Rule 13: Club vs Club Alignment
-**Constraint:** `ClubVsClubAlignment`
+### Rule 13: Club vs Club Stacked Alignment
 
-**Description:** When clubs face each other across multiple grades, games should be aligned to the same round and field.
+**Constraints:** `ClubVsClubStackedWeekends` + `ClubVsClubStackedCoLocation` (spec-005)
 
-**Enforcement:** Uses indicator variables to ensure coincidence of matchups across grades, with field alignment constraints.
+**Description (the convenor's intent):** When our two clubs play, expect
+the bigger-grade group to bring along the smaller grades for the day,
+back-to-back on one field. If Maitland visits Norths in PHL on a given
+Sunday and 2nd grade also plays Maitland-vs-Norths that day, those games
+will be on the same field with no slot gap between them. The same holds
+for 3rd / 4th / 5th / 6th if they're also playing the pair that day.
 
-**Rationale:** Simplifies organization and enhances rivalry weekends.
+**The stacking pattern:**
+
+For each unordered pair of clubs `(A, B)` compute per-grade meeting counts
+(the number of Maitland-vs-Norths PHL meetings, the number of
+Maitland-vs-Norths 2nd grade meetings, ...). The draw is built so the
+higher-count grades' meeting weeks are a **strict superset** of the
+lower-count grades' meeting weeks. Example with PHL=4, 2nd=3, 3rd=2,
+4th=2, 5th=1, 6th=0:
+
+| Weekend | Active grades for this pair                |
+|---------|--------------------------------------------|
+| W1      | {PHL, 2nd, 3rd, 4th, 5th}                  |
+| W2      | {PHL, 2nd, 3rd, 4th}                       |
+| W3      | {PHL, 2nd}                                 |
+| W4      | {PHL}                                      |
+
+Totals: PHL=4 ✓, 2nd=3 ✓, 3rd=2 ✓, 4th=2 ✓, 5th=1 ✓. No "stray" pair
+weekend where a lower grade plays without every higher grade also playing.
+
+**Co-location on every stacked weekend (≥ 2 grades active):**
+
+- All those games on the **same field** (no splitting across EF/WF).
+- **Contiguous day_slots** — no empty slot between two active games.
+  Adjacent grades end up on adjacent timeslots, so a parent watching
+  multiple grades stays on one field without gaps.
+
+**PHL Friday handling:** PHL Friday-night forced games consume the
+per-pair meeting count but cannot satisfy Sunday stacking. The Sunday
+budget for PHL stacking = `total PHL meetings(A, B) - FORCED PHL Friday
+games(A, B)`. If the convenor pins 2 Maitland-vs-Norths PHL Fridays via
+`FORCED_GAMES`, the stacking pretends PHL meetings = total - 2 (the
+remaining Sundays).
+
+**Multi-team-per-club-per-grade:** if one club fields 2 teams in 3rd
+grade and the other fields 1, that's 2 distinct matchups for the pair in
+3rd grade — and the stacking math uses 2 × per-matchup-meetings (not 1).
+
+**Enforcement:** All HARD. The Sunday count per (pair, grade) is pinned
+by `sum_w play[g, w] == sunday_budget(g)`; the implication chain
+`play[lower, w] <= play[higher, w]` forces the strict-superset structure.
+The co-location atom enforces same-field + contiguous-slot only when ≥ 2
+grades coincide.
+
+**Rationale:** Clubs travel once per matchup weekend; parents watching
+multiple grades of their club versus the same opponent do so contiguously
+on one field. Replaces a looser pre-spec-005 implementation that only
+asked for "≥ N coincident rounds" without precise stacking or co-location.
 
 ---
 

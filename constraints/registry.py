@@ -332,6 +332,15 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         slack_key='ClubVsClubAlignment',
     ),
     # --- Atoms split from ClubVsClubAlignment (Phase 3c) ---
+    # OBSOLETE (spec-005): the four Phase-3c atoms below are superseded by
+    # the spec-005 `ClubVsClubStackedAlignment` cluster
+    # (`ClubVsClubStackedWeekends` + `ClubVsClubStackedCoLocation`). They
+    # remain in the registry + on disk as parity reference only — removed
+    # from `DEFAULT_STAGES` in `config/defaults.py` so the production
+    # pipeline doesn't dispatch them. The legacy engine method
+    # `_club_vs_club_atoms_hard` in `constraints/unified.py` still routes
+    # through them for any caller that explicitly opts into the old engine
+    # path, but the default stage list now goes through spec-005.
     'ClubVsClubCoincidence': ConstraintInfo(
         canonical_name='ClubVsClubCoincidence',
         solver_class_names=['ClubVsClubCoincidence'],
@@ -370,6 +379,41 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         slack_key='ClubVsClubAlignment',
         has_soft_component=True,
         atom_group='ClubVsClubAlignment',
+    ),
+    # spec-005: replacement cluster `ClubVsClubStackedAlignment`. Two atoms
+    # cooperate via `STACK_PLAY_PREFIX` helper-var keys:
+    #   - `ClubVsClubStackedWeekends` (HARD): pins per-(pair, grade) Sunday
+    #     meetings and enforces a strict nested-superset implication chain
+    #     across weeks (higher-count grades play whenever lower-count
+    #     grades play for the same pair on the same Sunday).
+    #   - `ClubVsClubStackedCoLocation` (HARD): on every Sunday where ≥ 2
+    #     grades play for a pair, all those games must be on the same field
+    #     with contiguous day_slots (no internal gaps).
+    # PHL Sunday budget is FORCED-Friday-aware via the per-pair helper
+    # `phl_forced_friday_meetings(data, a, b)` added to
+    # `constraints/atoms/_phl_forced_friday_helper.py`.
+    'ClubVsClubStackedWeekends': ConstraintInfo(
+        canonical_name='ClubVsClubStackedWeekends',
+        solver_class_names=['ClubVsClubStackedWeekends'],
+        tester_check_methods=['_check_club_vs_club_alignment'],
+        tester_violation_names=['ClubVsClubAlignment'],
+        severity_level=3,
+        slack_key='ClubVsClubAlignment',
+        atom_group='ClubVsClubStackedAlignment',
+        required_helpers=['cvc_stack_play'],
+    ),
+    'ClubVsClubStackedCoLocation': ConstraintInfo(
+        canonical_name='ClubVsClubStackedCoLocation',
+        solver_class_names=['ClubVsClubStackedCoLocation'],
+        tester_check_methods=['_check_club_vs_club_alignment'],
+        tester_violation_names=['ClubVsClubAlignment'],
+        severity_level=3,
+        slack_key='ClubVsClubAlignment',
+        atom_group='ClubVsClubStackedAlignment',
+        required_helpers=[
+            'cvc_stack_play', 'cvc_stack_field_used', 'cvc_stack_slot_used',
+            'cvc_stack_active',
+        ],
     ),
     'ClubGameSpread': ConstraintInfo(
         canonical_name='ClubGameSpread',
@@ -577,6 +621,13 @@ HELPER_VAR_CATALOG: Set[str] = {
     'club_day_slot_used',     # (club, day_slot)
     'phl_2nd_btb_pair',       # (clubs, round_no, field, slot1, slot2) — back-to-back same-field indicator
     'nihc_field_used',        # (date, day_slot, field_name) — spec-003 NIHC fill-order shared indicator
+    # spec-005 ClubVsClubStackedAlignment helpers. Parallel to the
+    # `club_day_*` family but keyed per (club_pair, week) rather than
+    # (club, ...) — different semantics, no collision.
+    'cvc_stack_play',         # (pair, grade, week) — does this grade play this Sunday for the pair?
+    'cvc_stack_field_used',   # (pair, week, field_name) — pair using this field this Sunday
+    'cvc_stack_slot_used',    # (pair, week, day_slot) — pair using this slot this Sunday
+    'cvc_stack_active',       # (pair, week) — stacking active this Sunday (≥ 2 grades coincide)
 }
 
 

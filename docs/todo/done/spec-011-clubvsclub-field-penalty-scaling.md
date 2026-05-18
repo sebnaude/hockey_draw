@@ -1,17 +1,20 @@
-<!-- status: not_ready -->
-<!-- owner: unassigned -->
-<!-- depends_on: spec-005 (must resolve before this is pickable) -->
+<!-- status: done -->
+<!-- owner: session=spec-005-opus-2026-05-18 (absorbed) -->
+<!-- depends_on: spec-005 (RESOLVED — spec-005 shipped and absorbed this spec) -->
 
 <!--
-NOT READY rationale: This plan is contingent on spec-005 (ClubVsClubStackedAlignment).
-If spec-005 is shipped first, this entire spec is absorbed into it (the field-penalty
-scaling + double-up requirements move into spec-005's DoD as sub-criteria), and this
-file moves to docs/todo/done/ with a "absorbed by spec-005" note instead of new code.
+ABSORBED BY spec-005 (shipped 2026-05-18). spec-005's `ClubVsClubStackedCoLocation`
+atom enforces `sum(field_used) <= 1` HARD on every stacked weekend — so the
+soft "scale penalty with secondary-field games" requirement is structurally
+moot (secondary-field games can't exist when the stacking is active). The
+double-up requirement is handled by `per_pair_grade_matchup_counts`
+(distinct matchups, not 1). The structural-feasibility carve-out becomes
+a `ValueError` at apply-time when a pair's Sunday budget exceeds available
+weeks.
 
-If spec-005 is explicitly abandoned or deferred indefinitely, flip this spec to ready
-and ship it as the interim improvement it describes.
-
-Either way, do NOT pick this up while spec-005's outcome is undecided.
+No separate code needed. This file is preserved in `docs/todo/done/` for
+historical reference — the spec-011 DoD is fully met by spec-005's atoms,
+verified by tests/atoms/test_club_vs_club_stacked_alignment.py.
 -->
 
 # spec-011 — ClubVsClubFieldLimit penalty scales with games on 2nd field; double-up handling

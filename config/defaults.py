@@ -171,13 +171,21 @@ DEFAULT_STAGES = [
     },
     {
         'name': 'club_alignment',
-        'description': 'Cross-grade coincidence + field limits',
+        'description': 'Cross-grade stacked weekends + co-location',
         'atoms': [
             # spec-007: `ClubGradeAdjacency` removed entirely. Hard portion is
             # `SameGradeSameClubNoConcurrency` (in `critical_feasibility`); the
             # soft adjacent-grade portion is gone.
-            'ClubVsClubCoincidence', 'ClubVsClubFieldLimit',
-            'PHLAnd2ndBackToBackSameField',
+            #
+            # spec-005: replaces the four obsolete Phase-3c atoms
+            # (`ClubVsClubCoincidence`, `ClubVsClubFieldLimit`,
+            # `ClubVsClubDeficitPenalty`, `PHLAnd2ndBackToBackSameField`) with
+            # the precise stacking-and-co-location pair. The old atoms remain
+            # in the registry + on disk as parity reference; they are NOT in
+            # any production stage. ORDER MATTERS — Weekends must run before
+            # CoLocation so the `cvc_stack_play` indicators exist when the
+            # co-location atom looks them up.
+            'ClubVsClubStackedWeekends', 'ClubVsClubStackedCoLocation',
         ],
     },
     {
@@ -194,7 +202,11 @@ DEFAULT_STAGES = [
         'soft_only': True,
         'atoms': [
             'EqualMatchUpSpacing', 'ClubGameSpread',
-            'ClubVsClubDeficitPenalty', 'PreferredDates',
+            # spec-005: `ClubVsClubDeficitPenalty` removed — the soft deficit
+            # penalty is unnecessary because the stacking atom enforces the
+            # exact Sunday-meeting count via a HARD `sum == budget`
+            # constraint (no deficit possible at solve time).
+            'PreferredDates',
             'EnsureBestTimeslotChoices', 'PreferredTimes',
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
             # spec-002: predictable alphabetical matchup tie-break.

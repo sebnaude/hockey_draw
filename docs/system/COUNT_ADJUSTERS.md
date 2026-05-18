@@ -169,7 +169,7 @@ be queryable from multiple call sites WITHOUT pre-running an engine-managed
 dispatch step. Instead they consume a shared, pure-function helper module:
 `constraints/atoms/_phl_forced_friday_helper.py`.
 
-The helper exports three functions, all accepting `(data, club)`:
+The helper exports four functions:
 
 ```
 phl_forced_friday_count(data, club) -> int
@@ -178,6 +178,17 @@ phl_forced_friday_count(data, club) -> int
     subset of another's, the subset entry contributes 0. Implementation walks
     candidate (game, timeslot) X-keys filtered to (PHL, Friday, club involved)
     and greedy-partitions them by `_get_matching_forced_scopes` matched-set.
+
+phl_forced_friday_meetings(data, club_a, club_b) -> int     # spec-005
+    Number of PHL Friday games FORCED to be played between this SPECIFIC pair
+    of clubs. Differs from `phl_forced_friday_count` in that umbrella scopes
+    (no `team1/team2/teams` filter naming both clubs) contribute 0 — they
+    don't guarantee any Friday is BETWEEN this pair, they only guarantee a
+    total per-club. The per-pair helper deliberately UNDER-counts (only
+    credits entries whose scope names both clubs) so spec-005's PHL Sunday
+    budget = `total_pair_meetings - phl_forced_friday_meetings` is a LOWER
+    bound on Sunday meetings — the solver may schedule MORE Sundays for the
+    pair, but not fewer.
 
 away_club_required_sundays(data, club) -> int
     max(phl_required - phl_forced_friday_count(data, club),
@@ -192,6 +203,25 @@ away_club_total_weekends(data, club) -> int
     The ORIGINAL (unadjusted) max games across grades, ignoring FORCED Fridays.
     Total number of home-ground appearances (Friday + Sunday combined).
 ```
+
+### spec-005 PHL Sunday budget formula
+
+`ClubVsClubStackedWeekends` uses `phl_forced_friday_meetings` to compute
+the **per-pair** Sunday budget for PHL stacking:
+
+```
+pair_grade_sunday_meetings(data, pair, 'PHL')
+    = total_phl_meetings(pair) - phl_forced_friday_meetings(data, *pair)
+
+pair_grade_sunday_meetings(data, pair, other_grade)
+    = total_meetings(pair, other_grade)   # other grades don't play Friday
+```
+
+where `total_phl_meetings(pair)` comes from
+`per_pair_grade_meeting_counts(data, pair)['PHL']` (= matchups × per_matchup,
+where per_matchup = `num_rounds['PHL'] // (T-1)` for even T or `// T` for
+odd T). The atom pins `sum_w play[PHL, w] for Sunday vars == sunday_budget`
+HARD.
 
 ### Why "count variables, NOT sum FORCED entry counts"
 

@@ -23,6 +23,7 @@ from constraints.atoms._phl_forced_friday_helper import (
     away_club_required_sundays,
     away_club_total_weekends,
     phl_forced_friday_count,
+    phl_forced_friday_meetings,
 )
 
 
@@ -252,3 +253,104 @@ class TestAwayClubRequiredSundays:
 
     def test_given_unknown_club_when_querying_then_zero(self, phl_data):
         assert away_club_required_sundays(phl_data, 'NoSuchClub') == 0
+
+
+# ---------------------------------------------------------------------------
+# phl_forced_friday_meetings — spec-005 per-pair Friday count
+# ---------------------------------------------------------------------------
+
+
+class TestPhlForcedFridayMeetings:
+    """Per-pair Friday count for `ClubVsClubStackedPHLSundayBudget` (spec-005).
+
+    Same FORCED-aware greedy partition as `phl_forced_friday_count`, but
+    narrowed to candidate vars between TWO specific clubs. Verifies:
+      - Umbrella (count=2) for one club + per-pair (count=1) for that pair
+        → 1 (the per-pair entry pins one of the umbrella's two; total
+        Maitland Fridays = 2 but only 1 is vs the specific opponent).
+      - Per-pair-only entry → its count.
+      - Entry naming other clubs → 0.
+      - Self-pair (A == B) → 0.
+    """
+
+    def test_given_no_forced_games_returns_zero(self, phl_data):
+        """No FORCED → 0."""
+        phl_data['forced_games'] = []
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 0
+
+    def test_given_pair_explicit_when_counting_returns_entry_count(self, phl_data):
+        """One per-pair Maitland-vs-Norths Friday entry, count=2 → 2."""
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Friday',
+             'teams': ['Maitland', 'Norths'],
+             'count': 2, 'constraint': 'equal',
+             'description': 'Maitland-vs-Norths PHL Friday count = 2'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 2
+
+    def test_given_umbrella_and_per_pair_returns_per_pair_count(self, phl_data):
+        """Umbrella `count=2 Maitland Fridays` + per-pair `count=1 Maitland-vs-Norths`.
+
+        Hand-computed: the umbrella `{club: Maitland, count: 2}` doesn't
+        guarantee any Maitland-vs-Norths Friday (the 2 forced games could
+        all be Maitland-vs-Tigers). Only the per-pair entry pins a
+        Maitland-vs-Norths Friday. Result = 1 (the per-pair entry's count).
+
+        This is the per-PAIR helper. The per-CLUB helper
+        `phl_forced_friday_count(Maitland) == 2` — they answer different
+        questions. See `_entry_targets_pair_phl_friday` docstring.
+        """
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Friday', 'club': 'Maitland',
+             'count': 2, 'constraint': 'equal',
+             'description': 'Maitland total Friday PHL count == 2'},
+            {'grade': 'PHL', 'day': 'Friday',
+             'teams': ['Maitland', 'Norths'],
+             'count': 1,
+             'description': 'Maitland-vs-Norths Friday'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 1
+
+    def test_given_other_pair_entry_returns_zero(self, phl_data):
+        """A Norths-vs-Wests entry does NOT involve Maitland-vs-Norths.
+
+        Hand-computed: candidate vars for (Maitland, Norths) don't intersect
+        the (Norths, Wests) entry's matched set. Result = 0.
+        """
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Friday',
+             'teams': ['Norths', 'Wests'],
+             'count': 1,
+             'description': 'Norths-vs-Wests Friday — no Maitland'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 0
+
+    def test_given_self_pair_returns_zero(self, phl_data):
+        """A==B is a degenerate input: a club doesn't play itself. Result = 0."""
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Friday', 'club': 'Maitland',
+             'count': 2, 'constraint': 'equal',
+             'description': 'Doesnt matter for self-pair'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Maitland') == 0
+
+    def test_given_club_without_phl_teams_returns_zero(self, phl_data):
+        """If either club has no PHL teams, no candidate vars exist → 0."""
+        phl_data['teams'] = [t for t in phl_data['teams'] if t.club.name != 'Norths']
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Friday',
+             'teams': ['Maitland', 'Norths'],
+             'count': 1,
+             'description': 'Norths has no teams'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 0
+
+    def test_given_sunday_entry_returns_zero(self, phl_data):
+        """Sunday FORCED for the pair → 0 (Friday-only helper)."""
+        phl_data['forced_games'] = [
+            {'grade': 'PHL', 'day': 'Sunday',
+             'teams': ['Maitland', 'Norths'],
+             'count': 2,
+             'description': 'Sunday — not Friday'},
+        ]
+        assert phl_forced_friday_meetings(phl_data, 'Maitland', 'Norths') == 0
