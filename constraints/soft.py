@@ -1067,12 +1067,21 @@ class PreferredTimesConstraintSoft(SoftConstraint):
             print(f"Warning: {e} - skipping PreferredTimesConstraintSoft")
             return
         
-        # Enforce no-play times with penalties
+        # Enforce no-play times with penalties.
+        # spec-012: support time-only (date-less) entries. Without a date the
+        # entry penalises matching X-vars across every week. At least one
+        # matchable filter must be present.
+        _matchable = ('time', 'date', 'day', 'day_slot', 'week',
+                      'field_name', 'field_location', 'grade',
+                      'team_name', 'team1', 'team2')
         for entry_key, club_name, club_teams, constraint in normalized:
-            if 'date' not in constraint:
+            if not any(k in constraint for k in _matchable):
                 continue
-            
-            if get_nearest_week_by_date(constraint['date'], data['timeslots']) in locked_weeks:
+
+            if 'date' in constraint and (
+                get_nearest_week_by_date(constraint['date'], data['timeslots'])
+                in locked_weeks
+            ):
                 continue
 
             for i, game_key in enumerate(X):

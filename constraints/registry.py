@@ -486,6 +486,19 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=5,
         has_soft_component=True,
     ),
+    # spec-012: soft penalty for non-alternating Maitland weekends.
+    # Penalises consecutive playable-week pairs where both are home (HH) OR
+    # both are away (AA). HH is already hard-forbidden by NonDefaultHomeGrouping
+    # with default slack, so the AA branch does the work. Pure soft, severity
+    # 4. Reads `data['penalty_weights']['maitland_alternate_home_away']`.
+    'MaitlandAlternateHomeAway': ConstraintInfo(
+        canonical_name='MaitlandAlternateHomeAway',
+        solver_class_names=['MaitlandAlternateHomeAway'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=4,
+        has_soft_component=True,
+    ),
     'ForcedGames': ConstraintInfo(
         canonical_name='ForcedGames',
         solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class

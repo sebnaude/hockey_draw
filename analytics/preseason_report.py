@@ -185,15 +185,34 @@ class PreSeasonReport:
                         'type': 'soft'
                     })
             elif isinstance(pref, dict):
-                # 2026 format: dict with club, dates, reason keys
+                # 2026 format: dict with club, optional dates/date, optional
+                # time/day filters (spec-012 added time-only support — entries
+                # without a 'date' apply across every week, filtered by 'time'
+                # / 'day' / etc.).
                 dates = pref.get('dates', [])
+                if not dates and pref.get('date'):
+                    dates = [pref['date']]
+                date_strs = []
+                for d in dates:
+                    if hasattr(d, 'strftime'):
+                        date_strs.append(d.strftime('%Y-%m-%d'))
+                    else:
+                        date_strs.append(str(d))
+                if not date_strs:
+                    filt_bits = []
+                    if pref.get('time'):
+                        filt_bits.append(f"time={pref['time']}")
+                    if pref.get('day'):
+                        filt_bits.append(f"day={pref['day']}")
+                    if filt_bits:
+                        date_strs = [f"(every week, {', '.join(filt_bits)})"]
                 result['no_play_dates'].append({
                     'key': key,
                     'club': pref.get('club', 'Unknown'),
                     'grade': pref.get('grade', pref.get('grades', 'All')),
-                    'dates': [d.strftime('%Y-%m-%d') for d in dates] if dates else [],
-                    'reason': pref.get('reason', ''),
-                    'type': 'soft'
+                    'dates': date_strs,
+                    'reason': pref.get('reason', pref.get('description', '')),
+                    'type': 'soft',
                 })
         
         # Field Unavailabilities (hard constraints) - these affect all teams

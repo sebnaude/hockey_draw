@@ -218,6 +218,10 @@ DEFAULT_STAGES = [
             'TeamPairNoConcurrency',
             # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
             'PreferredWeekendsAwayGround',
+            # spec-012: soft penalty per consecutive Maitland weekend pair of
+            # the same type (HH or AA). HH is already hard-forbidden by
+            # NonDefaultHomeGrouping; the AA branch discourages long away runs.
+            'MaitlandAlternateHomeAway',
         ],
     },
 ]

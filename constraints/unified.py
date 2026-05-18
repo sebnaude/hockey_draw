@@ -1204,10 +1204,23 @@ class UnifiedConstraintEngine:
         allowed_keys2 = ['team1', 'team_name', 'grade', 'day', 'day_slot', 'time', 'week', 'date', 'field_name', 'field_location']
 
         normalized = _normalize_preference_no_play(noplay, self.teams, self.clubs)
+        # spec-012: support time-only (date-less) preference entries.
+        # Previously this method silently skipped any entry without 'date',
+        # making a `{'club': 'Maitland', 'time': '08:30'}` entry a no-op.
+        # Now: only the locked-week short-circuit requires 'date'. Without a
+        # date the entry penalises matching X-vars across every week. At
+        # least one matchable filter is required (otherwise the entry would
+        # penalise every game for the club and gridlock the objective).
+        _matchable = ('time', 'date', 'day', 'day_slot', 'week',
+                      'field_name', 'field_location', 'grade',
+                      'team_name', 'team1', 'team2')
         for entry_key, club_name, club_teams, constraint in normalized:
-            if 'date' not in constraint:
+            if not any(k in constraint for k in _matchable):
                 continue
-            if get_nearest_week_by_date(constraint['date'], self.timeslots) in self.locked_weeks:
+            if 'date' in constraint and (
+                get_nearest_week_by_date(constraint['date'], self.timeslots)
+                in self.locked_weeks
+            ):
                 continue
             for i, game_key in enumerate(self.X):
                 if len(game_key) < 11:
