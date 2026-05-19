@@ -1,3 +1,4 @@
+# spec-013: GWT pass — tests confirmed to meet /basic Given/When/Then + hand-computed-oracle bar.
 """Tests for spec-005 `ClubVsClubStackedAlignment` cluster.
 
 Walks every DoD scenario from `docs/todo/spec-005-clubvsclub-stacking.md`:
@@ -442,19 +443,38 @@ class TestStackedAtomSmoke:
         assert PAIR in pairs
 
     def test_weekends_atom_registers_play_indicator(self):
+        """Scenario: ClubVsClubStackedWeekends adds the exact stacking-math constraint count and registers a play indicator per (pair, grade, week)."""
+        # Given: default `build_stacked_fixture()` — one club pair
+        # (Maitland, Norths), grade counts {PHL: 4, 2nd: 3, 3rd: 2, 4th: 2, 5th: 1}
+        # (five non-zero budgets), num_weeks=6, no FORCED Fridays.
         data = build_stacked_fixture()
-        from ortools.sat.python import cp_model as _cp
-        model = _cp.CpModel()
         from tests.atoms.club_vs_club_stacked_fixture import build_model_X as _bmx
-        _, X = _bmx(data)
-        # Build a fresh model with same X structure to register vars onto it.
         model, X = _bmx(data)
         reg = _registry(model)
+
+        # When: the atom is applied.
         n = ClubVsClubStackedWeekends().apply(model, X, data, reg)
-        assert n > 0
-        # The play indicator for PHL at week 1 should be registered.
+
+        # Then: n == 29.
+        # Oracle (read straight from club_vs_club_stacked_weekends.py apply()):
+        #   1 pair × 5 grades with sunday_budget > 0 → 5 `sum == budget` constraints.
+        #   Implication chain: 5 grades sorted desc count → 4 consecutive pairs,
+        #     each × num_weeks (6) → 24 `lo_play <= hi_play` constraints.
+        #   Total: 5 + 24 = 29.
+        assert n == 29
+
+        # And: the play indicator for PHL at week 1 is registered.
         ind = reg.get((STACK_PLAY_PREFIX, PAIR, 'PHL', 1))
         assert ind is not None
+
+        # And: a play indicator exists for every (grade, week) pair the atom
+        # iterates — 5 grades × 6 weeks = 30 indicators.
+        registered = sum(
+            1 for grade in ('PHL', '2nd', '3rd', '4th', '5th')
+            for w in range(1, 7)
+            if reg.get((STACK_PLAY_PREFIX, PAIR, grade, w)) is not None
+        )
+        assert registered == 30
 
     def test_co_location_raises_if_weekends_not_run_first(self):
         """Programming-error guard: co-location must come AFTER stacked-weekends
