@@ -1,3 +1,4 @@
+# spec-013: GWT pass — tests confirmed to meet /basic Given/When/Then + hand-computed-oracle bar.
 """spec-009 Check 3 — Same-grade-same-club double-ups (a club with 2 teams in
 one grade).
 
@@ -253,33 +254,34 @@ class TestSameGradeSameClubDoublup:
 
 class TestCoincidenceCountsDistinctMatchups:
     def test_collect_grade_pair_round_vars_sees_two_a_b_matchups(self):
-        """Given: double-up fixture, 3rd grade vars built.
-        When: collect_grade_pair_round_vars called for 3rd grade.
-        Then: the ('A','B') club pair appears in the output, with round vars
-              covering both the (A-1, B) matchup AND the (A-2, B) matchup.
-
-        Hand-computed: keys for 3rd grade include:
-          (A-1 3rd, B 3rd, ...) and (A-2 3rd, B 3rd, ...).
-          Both have c1=A, c2=B → club_pair = ('A','B').
-          For week 1, round_no=1, both vars land in out[('A','B')][1].
-          So len(out[('A','B')][1]) >= 2 (one per field per matchup per
-          timeslot).
-        """
+        """Scenario: collect_grade_pair_round_vars aggregates ALL A-B 3rd-grade vars in round 1 — both matchups × every timeslot."""
+        # Given: the double-up fixture has 3rd-grade games
+        #   (A-1 3rd, B 3rd) and (A-2 3rd, B 3rd) — both with club_pair ('A','B').
+        # Timeslots in week 1 are 2 fields (EF, WF) × 4 day_slots = 8 slots.
+        # Intra-A derby (A-1, A-2) lands in club_pair ('A','A') and is excluded.
+        # The (A-1, C) / (A-2, C) / (B, C) matchups don't contribute to ('A','B').
+        # Oracle: ('A','B') round-1 var count = 2 matchups × 8 timeslots = 16.
         data = _build_double_up_fixture()
         model, X = _build_X(data)
+
+        # When: collect_grade_pair_round_vars is invoked for 3rd grade.
         grade_pair_round = collect_grade_pair_round_vars(X, data, '3rd')
 
-        assert ('A', 'B') in grade_pair_round, (
-            'Club pair (A, B) must appear in grade_pair_round for 3rd grade'
-        )
-        # Round 1 should have at least 2 vars: one from A-1 vs B and one
-        # from A-2 vs B (each across 2 fields × 4 slots = 8 vars per pair,
-        # but at least 2 distinct matchup-derived vars).
+        # Then: the ('A','B') club pair appears in the output map.
+        assert ('A', 'B') in grade_pair_round
+
+        # And: round-1 vars for ('A','B') equal the hand-computed total of 16.
         round1_vars = grade_pair_round[('A', 'B')].get(1, [])
-        assert len(round1_vars) >= 2, (
-            f'Expected at least 2 vars for (A, B) in round 1 (A-1 vs B and '
-            f'A-2 vs B). Got {len(round1_vars)}'
+        assert len(round1_vars) == 16, (
+            f'Expected 16 vars (2 matchups × 8 timeslots) for (A,B) round 1; '
+            f'got {len(round1_vars)}'
         )
+
+        # And: the ('A','A') intra-club pair is recorded separately — confirms
+        # the function bucketed by sorted club pair (and didn't merge into A-B).
+        # Hand-computed: 1 matchup (A-1, A-2) × 8 timeslots = 8.
+        intra_a_round1 = grade_pair_round.get(('A', 'A'), {}).get(1, [])
+        assert len(intra_a_round1) == 8
 
     def test_coincidence_atom_feasible_with_double_up(self):
         """Given: double-up fixture. ClubVsClubCoincidence applied.

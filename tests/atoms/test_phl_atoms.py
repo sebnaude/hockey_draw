@@ -1,3 +1,4 @@
+# spec-013: GWT pass — tests confirmed to meet /basic Given/When/Then + hand-computed-oracle bar.
 """Solo-clean + solo-violation tests for the PHLAndSecondGradeTimes atoms.
 
 spec-010: PHLRoundOnePlay was removed from production stages. Its tests are
@@ -207,16 +208,55 @@ class TestPreferredDates:
         assert n == 0
 
     def test_records_penalty_for_preferred_dates(self, phl_data):
+        """Scenario: PreferredDates records exactly one penalty entry per preferred date that has PHL candidate vars."""
+        # Given: the conftest `_build_phl_fixture` produces 5 PHL teams
+        # (Tigers, Wests, Norths, Maitland, Gosford) → C(5,2)=10 PHL pairings.
+        # For each pairing, build_model_X(allow_2nd=False) creates Sunday vars
+        # on dates 2026-03-22 (round 1), 2026-03-29 (round 2), and three later
+        # dates. Two preferred dates are pinned: 2026-03-22 and 2026-03-29.
+        # Both dates have many PHL vars (10 pairs × 8 Sunday slot/field combos
+        # at NIHC + 2 Gosford slots + 4 Maitland slots subject to home filter,
+        # but home filter only restricts Maitland Park / Gosford venues — NIHC
+        # is open so each pairing has 8 NIHC Sunday vars per date).
         from datetime import datetime as _dt
         phl_data['phl_preferences'] = {
             'preferred_dates': [_dt(2026, 3, 22), _dt(2026, 3, 29)],
         }
         model, X = build_model_X(phl_data, allow_2nd=False)
+
+        # And: count actual PHL vars on each preferred date — confirms BOTH
+        # dates have at least one PHL candidate (the atom only emits a penalty
+        # for dates that do).
+        phl_vars_on_d1 = sum(
+            1 for k in X
+            if k[2] == 'PHL' and k[7] == '2026-03-22'
+        )
+        phl_vars_on_d2 = sum(
+            1 for k in X
+            if k[2] == 'PHL' and k[7] == '2026-03-29'
+        )
+        assert phl_vars_on_d1 > 0 and phl_vars_on_d2 > 0, (
+            'fixture must have PHL vars on both preferred dates'
+        )
+
+        # When: the atom is applied.
         n = PreferredDates().apply(model, X, phl_data, _registry(model))
-        assert n >= 1
+
+        # Then: the atom returns 2 — one penalty IntVar per preferred date.
+        # Oracle: the atom (constraints/atoms/preferred_dates.py) loops over
+        # `per_date.items()`, creating one `pen = |sum(vars_list) - 1|` per
+        # date with vars. Two preferred dates × both have vars → n == 2.
+        # Locked weeks are empty in the conftest fixture so no date is skipped.
+        assert n == 2
+
+        # And: the penalty bucket carries default weight 10000 (atom default
+        # when `penalty_weights['phl_preferences']` is unset in the fixture).
         pen_block = phl_data['penalties']['phl_preferences']
         assert pen_block['weight'] == 10000
-        assert len(pen_block['penalties']) >= 1
+
+        # And: bucket length matches n exactly — one IntVar per preferred date.
+        # Hand-computed: 2 preferred dates × 1 entry per date = 2 entries.
+        assert len(pen_block['penalties']) == 2
 
     def test_invalid_preference_key_raises(self, phl_data):
         phl_data['phl_preferences'] = {'unsupported_key': []}
