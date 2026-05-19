@@ -1,5 +1,5 @@
-<!-- status: in_progress -->
-<!-- owner: session=spec-013-orchestrator claimed=2026-05-19T08:48:57Z -->
+<!-- status: done -->
+<!-- owner: session=spec-013-orchestrator claimed=2026-05-19T08:48:57Z completed=2026-05-19T09:35:00Z -->
 <!-- depends_on: none -->
 
 # spec-013 — Doc drift fixes + atom-test GWT compliance pass

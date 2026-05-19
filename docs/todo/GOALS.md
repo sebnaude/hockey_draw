@@ -132,6 +132,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-010 | Remove `PHLRoundOnePlay`; verify R1/R2 carve-out for 2nd grade | `done/spec-010-first-week-rework.md` | done |
 | spec-011 | `ClubVsClubFieldLimit` penalty scales with games on 2nd field; double-up handling | `done/spec-011-clubvsclub-field-penalty-scaling.md` | done (absorbed by spec-005 — `ClubVsClubStackedCoLocation` enforces single-field on every stacked weekend, making "scale penalty with secondary-field games" structurally moot) |
 | spec-012 | Team time preferences + Maitland H/A weekend alternation | `done/spec-012-team-time-and-home-preferences.md` | done |
+| spec-013 | Doc drift fixes (STAGES / GOALS / RULES) + atom-test GWT compliance pass | `done/spec-013-docs-and-test-alignment.md` | done |
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 
