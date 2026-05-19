@@ -73,23 +73,25 @@ These fundamental rules ensure the draw is valid and playable.
 
 ---
 
-### Rule 5: PHL and 2nd Grade Time Separation
-**Constraint:** `PHLAndSecondGradeTimes`
+### Rule 5: PHL and 2nd Grade Times at Broadmeadow
 
-**Description:** 
-- PHL games cannot occur simultaneously at Newcastle International Hockey Centre (Broadmeadow)
-- 2nd grade and PHL from the same club cannot occur at the same timeslot at Broadmeadow
-- Maximum 3 Friday night PHL games at Broadmeadow (`CONSTRAINT_DEFAULTS['max_friday_broadmeadow']`)
-- Exactly 8 Friday night PHL games at Gosford (Central Coast Hockey Park) - AGM decision 2026 (`CONSTRAINT_DEFAULTS['gosford_friday_games']`)
-- Exactly 2 Friday night PHL games at Maitland Park - Gosford vs Maitland only (`CONSTRAINT_DEFAULTS['maitland_friday_games']`)
-- NIHC Friday matchups limited to specific dates/teams via `FORCED_GAMES`:
+**Description:**
+- PHL and 2nd grade games at Broadmeadow run back-to-back on the same field.
+- Both grades play only inside their restricted PHL/2nd-grade time slots — no
+  scattering across the day.
+- Two PHL games cannot run simultaneously at Broadmeadow.
+- A club's PHL and 2nd grade teams cannot share a Broadmeadow timeslot.
+- Friday night PHL game counts per venue are pinned by the season config:
+  max 3 at Broadmeadow, exactly 8 at Gosford (Central Coast Hockey Park —
+  2026 AGM decision), exactly 2 at Maitland Park (Gosford vs Maitland only).
+- NIHC Friday matchups are pinned to specific dates:
   - May 8: Norths vs Maitland
   - June 19: Tigers vs Wests
-  - July 24: Norths vs TBC (any opponent)
+  - July 24: Norths vs any opponent
 
-**Enforcement:** Uses timeslot indicators and sum constraints per location/club combination. Friday game counts are configured via `CONSTRAINT_DEFAULTS` (`gosford_friday_games`, `max_friday_broadmeadow`). NIHC Friday matchups are filtered at variable generation time using `FORCED_GAMES` and `BLOCKED_GAMES`.
-
-**Rationale:** Prevents spectator/player conflicts and ensures fair distribution of prime-time slots. The Gosford Friday requirement was confirmed at the 2026 AGM. NIHC Friday matchups are pre-scheduled to align with Junior Boys program and special events.
+**Rationale:** Keeps PHL and 2nd grade fixtures together for parents,
+players and spectators; prevents prime-time clashes; respects the AGM
+Friday-night agreements and NIHC's Junior Boys / special-event scheduling.
 
 ---
 
@@ -118,13 +120,6 @@ the system enforces three cooperating expectations:
    of an already-claimed weekend). When another grade requires more games
    than PHL, the FORCED Fridays are absorbed into the other-grade-driven
    total — they don't add weekends, they just label some of them Friday.
-
-**Constraints involved:**
-
-- `AwayClubHomeWeekendsCount` — enforces (3).
-- `AwayClubPerOpponentAndAggregateHomeBalance` — enforces (1) + (2).
-- Together these supersede the legacy combined `FiftyFiftyHomeandAway`
-  class, which is retained only for backwards-compat parity tests.
 
 **Rationale:** Ensures fairness for teams that must travel significant
 distances AND keeps the away-ground's Sundays densely populated rather than
@@ -169,7 +164,6 @@ diluted with extra home games beyond what the season actually needs.
 ---
 
 ### Rule 10: Club Day Requirements
-**Constraint:** `ClubDayConstraint`
 
 **Description:** On designated club days:
 - Every club team must play at least one game
@@ -318,7 +312,6 @@ asked for "≥ N coincident rounds" without precise stacking or co-location.
 These constraints use penalty variables that are minimized in the objective function.
 
 ### Rule 14: Maitland Home Grouping
-**Constraint:** `MaitlandHomeGrouping`
 
 **Description:**
 - Encourages all Maitland games in a week to be either all home or all away
@@ -335,7 +328,6 @@ These constraints use penalty variables that are minimized in the objective func
 ---
 
 ### Rule 15: Away at Maitland Grouping
-**Constraint:** `AwayAtMaitlandGrouping`
 
 **Description:**
 - Encourages minimal variety in away clubs visiting Maitland each weekend
@@ -400,7 +392,6 @@ matching scheduled game and will avoid those slots when feasible.
 ---
 
 ### Rule 19: PHL Preferred Dates
-**Part of:** `PHLAndSecondGradeTimes`
 
 **Description:** PHL games should occur on preferred dates when possible.
 
@@ -468,9 +459,9 @@ either neighbour.
 **Penalty:** 1 per consecutive same-type pair.
 
 **Weight:** `PENALTY_WEIGHTS['maitland_alternate_home_away']` — 10,000 in
-the 2026 season config. Tuned so the atom shapes the alternation without
-overwhelming `ClubVsClubAlignment` (50,000) or `PreferredTimesConstraint`
-(200,000).
+the 2026 season config. Tuned so the alternation rule shapes the pattern
+without overwhelming the club-vs-club alignment penalty (50,000) or the
+preferred-times penalty (200,000).
 
 **Scope:** Maitland only. Gosford has its own home/away semantics
 (Friday-night PHL forced count + sparse Sunday slots) and is intentionally
@@ -515,7 +506,7 @@ These rules arise from the combination of constraints or data filtering.
 ---
 
 ### Implied Rule 5: Friday Night Restrictions
-**Source:** Decision variable generation + `PHLAndSecondGradeTimes` constraint + `FORCED_GAMES` / `BLOCKED_GAMES`
+**Source:** Decision variable generation + PHL Friday-night rules + `FORCED_GAMES` / `BLOCKED_GAMES`
 
 **Description:**
 - Friday games are PHL-only (only PHL grade plays on Fridays)
@@ -538,164 +529,44 @@ These rules arise from the combination of constraints or data filtering.
 
 ## Constraint Interactions
 
-### Interaction 1: PHL + 2nd Grade Constraints
-`PHLAndSecondGradeAdjacency` and `PHLAndSecondGradeTimes` work together to ensure:
-- No time conflicts between PHL and 2nd grade from same club
+### Interaction 1: PHL + 2nd Grade
+The PHL/2nd grade timing rules and the PHL/2nd adjacency rule work together
+to ensure:
+- No time conflicts between PHL and 2nd grade from the same club
 - Adequate travel time between venues
-- No simultaneous PHL games at main venue
+- No simultaneous PHL games at the main venue
 
 ### Interaction 2: Home/Away Balance
-`FiftyFiftyHomeandAway`, `MaitlandHomeGrouping`, and `AwayAtMaitlandGrouping` combine to:
+The per-pair home/away balance, the Maitland home-grouping rule, and the
+away-clubs-per-Maitland-weekend rule combine to:
 - Ensure fair home/away distribution
 - Group home games for efficiency
-- Limit away team variety per weekend
+- Limit away-team variety per weekend
 
 ### Interaction 3: Field Optimization
-`EnsureBestTimeslotChoices`, `MinimiseClubsOnAFieldBroadmeadow`, and `MaximiseClubsPerTimeslotBroadmeadow` balance:
+The contiguous-slot rule, the same-field continuity rule, and the
+per-timeslot club-diversity rule balance:
 - Contiguous timeslot usage
 - Club continuity on fields
 - Diversity within timeslots
 
 ### Interaction 4: Club Day Integration
-`ClubDayConstraint` interacts with most other constraints, requiring:
+The club-day rule interacts with most other rules, requiring:
 - Temporary relaxation of grade adjacency (intra-club matchups)
 - Field concentration instead of distribution
 - Priority scheduling for club teams
 
 ---
 
-## Constraint Application Stages
+## How the solver applies these rules
 
-The solver applies constraints in four stages, each building on the previous solution. This staged approach improves solver performance and allows partial solutions if soft constraints cannot be fully satisfied.
+The solver works through the rules in stages — first the physical
+must-haves (no double-booking, equal games), then the structural rules
+(home/away balance, PHL/2nd timing, club days), then the venue-shaping
+rules (away-club grouping, slot diversity, club-vs-club alignment), and
+finally the soft preferences (Maitland home grouping, matchup spacing,
+preferred times). Each stage builds on the previous one's solution.
 
-### Stage 1: Required Constraints (Must Satisfy)
-
-These constraints are physical necessities - the draw is invalid without them.
-
-| Order | Constraint | Why Required |
-|-------|-----------|--------------|
-| 1 | `NoDoubleBookingTeamsConstraint` | A team cannot play two games at once |
-| 2 | `NoDoubleBookingFieldsConstraint` | A field cannot host two games at once |
-| 3 | `EnsureEqualGamesAndBalanceMatchUps` | Core fairness - every team gets equal games |
-| 4 | `TeamConflictConstraint` | User-specified conflicts (e.g., shared players) |
-
-**Checkpoint:** `checkpoints/stage_1_required.bin`
-
----
-
-### Stage 2: Structural Constraints (Strong Requirements)
-
-These constraints define the structure of the schedule, primarily for travel feasibility and venue fairness.
-
-| Order | Constraint | Purpose |
-|-------|-----------|---------|
-| 5 | `FiftyFiftyHomeandAway` | Away teams (Maitland/Gosford) get balanced home/away |
-| 6 | `MaxMaitlandHomeWeekends` | No back-to-back Maitland home weekends |
-| 7 | `ClubDayConstraint` | Respect special dates (e.g., club days) |
-| 8 | `PHLAndSecondGradeTimes` | PHL timing rules at Broadmeadow |
-| 9 | `PHLAndSecondGradeAdjacency` | PHL/2nd grade play adjacent slots |
-| 10 | `SameGradeSameClubNoConcurrency` (spec-007) | Same-club same-grade duplicate teams cannot share a slot |
-
-**Checkpoint:** `checkpoints/stage_2_structural.bin`
-
----
-
-### Stage 3: Optimization Constraints (Venue & Distribution)
-
-These constraints optimize for venue efficiency and even distribution.
-
-| Order | Constraint | Purpose |
-|-------|-----------|---------|
-| 11 | `AwayAtMaitlandGrouping` | Max 3 away clubs at Maitland per weekend |
-| 12 | `MinimiseClubsOnAFieldBroadmeadow` | Reduce club switching on Broadmeadow fields |
-| 13 | `EnsureBestTimeslotChoices` | Teams get their best available timeslots |
-| 14 | `MaximiseClubsPerTimeslotBroadmeadow` | Maximize club diversity per timeslot |
-| 15 | `ClubVsClubAlignment` | Align rivalry/paired club matchups |
-
-**Checkpoint:** `checkpoints/stage_3_optimization.bin`
-
----
-
-### Stage 4: Soft Constraints (Preferences)
-
-These are "nice to have" preferences applied with penalties. The solver will satisfy as many as possible.
-
-| Order | Constraint | Purpose |
-|-------|-----------|---------|
-| 16 | `MaitlandHomeGrouping` | Group Maitland home games for travel efficiency |
-| 17 | `EqualMatchUpSpacingConstraint` | Space out repeat matchups across season |
-| 18 | `PreferredTimesConstraint` | Satisfy club/team preferred times |
-
-**Checkpoint:** `checkpoints/stage_4_soft.bin`
-
----
-
-### Staged Solving Workflow
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE 1: Required Constraints                              │
-│  ├── NoDoubleBookingTeams                                   │
-│  ├── NoDoubleBookingFields                                  │
-│  ├── EnsureEqualGamesAndBalanceMatchUps                    │
-│  └── TeamConflict                                           │
-│                    ↓ [Save checkpoint, pass hints]          │
-├─────────────────────────────────────────────────────────────┤
-│  STAGE 2: Structural Constraints                            │
-│  ├── FiftyFiftyHomeAway                                     │
-│  ├── MaxMaitlandHomeWeekends                                │
-│  ├── ClubDayConstraint                                      │
-│  ├── PHLAndSecondGradeTimes                                 │
-│  ├── PHLAndSecondGradeAdjacency                            │
-│  └── SameGradeSameClubNoConcurrency  (spec-007 replacement)  │
-│                    ↓ [Save checkpoint, pass hints]          │
-├─────────────────────────────────────────────────────────────┤
-│  STAGE 3: Optimization Constraints                          │
-│  ├── AwayAtMaitlandGrouping                                 │
-│  ├── MinimiseClubsOnAField                                  │
-│  ├── EnsureBestTimeslotChoices                              │
-│  ├── MaximiseClubsPerTimeslot                               │
-│  └── ClubVsClubAlignment                                    │
-│                    ↓ [Save checkpoint, pass hints]          │
-├─────────────────────────────────────────────────────────────┤
-│  STAGE 4: Soft Preferences                                  │
-│  ├── MaitlandHomeGrouping                                   │
-│  ├── EqualMatchUpSpacing                                    │
-│  └── PreferredTimes                                         │
-│                    ↓ [Final solution]                       │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Constraint Group Summary Table
-
-| Stage | Type | Count | Checkpoint |
-|-------|------|-------|------------|
-| 1 | Required | 4 | `stage_1_required.bin` |
-| 2 | Structural | 6 | `stage_2_structural.bin` |
-| 3 | Optimization | 5 | `stage_3_optimization.bin` |
-| 4 | Soft/Preferences | 3 | `stage_4_soft.bin` |
-| **Total** | | **18** | |
-
----
-
-## Appendix: Variable Key Structure
-
-Game decision variables use the following key structure:
-```python
-(team1, team2, grade, day, day_slot, time, week, date, round_no, field_name, field_location)
-```
-
-Indices:
-- 0: team1
-- 1: team2
-- 2: grade
-- 3: day
-- 4: day_slot
-- 5: time
-- 6: week
-- 7: date
-- 8: round_no
-- 9: field_name
-- 10: field_location
+For the engineering view of the stages — the atom registry, the exact
+stage order, checkpoint files and CLI flags — see
+`docs/system/STAGES.md` and `docs/system/CONSTRAINT_INVENTORY.md`.
