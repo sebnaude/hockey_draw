@@ -22,57 +22,22 @@ A stage is a dict with these keys:
 
 ## Default stages (`config/defaults.py::DEFAULT_STAGES`)
 
-```python
-DEFAULT_STAGES = [
-    {
-        'name': 'critical_feasibility',
-        'description': 'Hard feasibility — every constraint that must hold for a valid draw',
-        'atoms': [
-            'NoDoubleBookingTeams', 'NoDoubleBookingFields',
-            'EqualGamesAndBalanceMatchUps',
-            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            # spec-010: PHLRoundOnePlay removed — convenor uses FORCED_GAMES.
-            'GosfordFridayRoundsForced',
-        ],
-    },
-    {
-        'name': 'home_away_balance',
-        'description': 'Per-pair home/away + non-default-home grouping',
-        'atoms': [
-            'FiftyFiftyHomeandAway',
-            'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping',
-        ],
-    },
-    {
-        'name': 'club_alignment',
-        'description': 'Cross-grade coincidence + field limits',
-        'atoms': [
-            'ClubGradeAdjacency',
-            'ClubVsClubCoincidence', 'ClubVsClubFieldLimit',
-            'PHLAnd2ndBackToBackSameField',
-        ],
-    },
-    {
-        'name': 'club_day',
-        'description': 'Per-club day-of-week constraints',
-        'atoms': [
-            'ClubDayParticipation', 'ClubDayIntraClubMatchup',
-            'ClubDayOpponentMatchup', 'ClubDaySameField', 'ClubDayContiguousSlots',
-        ],
-    },
-    {
-        'name': 'soft_optimisation',
-        'description': 'Soft penalties and optimisation',
-        'soft_only': True,
-        'atoms': [
-            'EqualMatchUpSpacing', 'ClubGameSpread',
-            'ClubVsClubDeficitPenalty', 'PreferredDates',
-            'EnsureBestTimeslotChoices', 'PreferredTimes',
-            'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
-        ],
-    },
-]
-```
+The live default stage list is defined in `config/defaults.py::DEFAULT_STAGES`
+(starting at line 144); this document deliberately does not duplicate the atom
+membership of each stage to avoid drift. Read the config file directly when you
+need the current canonical atom names for a stage.
+
+The default pipeline ships five stages, in the order they run. Each stage's
+*intent* — what the stage exists to enforce in the solve, independent of which
+atoms currently implement it — is summarised below.
+
+| Stage name | Intent |
+|---|---|
+| `critical_feasibility` | Hard feasibility prerequisites for any valid draw — no team or field is double-booked, every team plays its required games against the right opponents, season-wide PHL / 2nd-grade concurrency rules at Broadmeadow hold, Gosford Friday rounds land where the convenor pinned them, byes are spread evenly across the season, and the NIHC field-fill ordering between fields is respected. Anything in this stage is non-negotiable; failure here means the draw cannot be published. |
+| `home_away_balance` | Home/away fairness for clubs whose home venue is not Broadmeadow. Enforces the per-pair and per-team aggregate balance of home vs away games, pins per-club season totals for home weekends (Friday / Sunday / overall), caps how many consecutive home weeks a non-default-home club may run, and caps how many away clubs may visit a given non-default venue in the same week. |
+| `club_alignment` | Cross-grade, same-club / same-opponent alignment at Broadmeadow. Decides which weekends two clubs' grades stack together at the venue and, when they do stack, how their games co-locate on fields and timeslots. Order-sensitive within the stage: the stacking decision must be made before the co-location decision that depends on it. |
+| `club_day` | Per-club day-of-week scheduling preferences. For each club that has a preferred playing day, governs which of its teams participate that day, how same-club matchups slot in, how opponents are routed onto that day, field consistency across the day, and contiguity of the club's slots so a club's day reads as a single block. |
+| `soft_optimisation` | Soft penalties and optimisation only — no new hard constraints. Spreads each pair's meetings evenly across the season, smooths each club's game density, honours preferred / avoided dates and weekends, biases the solver toward the better Broadmeadow timeslot choices and the convenor's preferred times, encourages multiple clubs per Broadmeadow timeslot while keeping any one field from being monopolised by a single club, applies a stable alphabetical tie-break for matchups, honours convenor-supplied per-team-pair no-concurrency requests, and discourages long unbroken away runs for non-default-home clubs. |
 
 Season configs may override by setting `'solver_stages'` in their
 `SEASON_CONFIG` dict. The override fully replaces `DEFAULT_STAGES` (no merge).
