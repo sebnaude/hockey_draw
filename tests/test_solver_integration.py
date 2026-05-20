@@ -37,6 +37,13 @@ from constraints.archived.original import (
     EqualMatchUpSpacingConstraint,
 )
 from tests.conftest import create_model_and_vars, solve_with_timeout, count_scheduled_games
+from config.defaults import DEFAULT_STAGES
+from constraints.stages import (
+    validate_solver_stages,
+    severity_solver_stages,
+    _resolve_solver_class,
+)
+from constraints.registry import CONSTRAINT_REGISTRY
 
 
 # ============== Fixtures ==============
@@ -456,7 +463,6 @@ class TestCheckpointMetadata:
             "constraint_slack": {"Foo": 1},
             "_excluded_constraints": ["Bar"],
             "_solver_mode": "simple",
-            "_use_ai": False,
         }
 
         solution = {("T1", "T2", "3rd", 0): 1, ("T3", "T4", "4th", 1): 0}
@@ -465,10 +471,14 @@ class TestCheckpointMetadata:
         loaded = cm.load_stage(run_dir, "meta_test")
         meta = loaded["metadata"]
 
+        # Atomization removed the AI/non-AI split at stage level, so `use_ai`
+        # is no longer part of the checkpoint metadata schema (the writer in
+        # main_staged.py::save_stage no longer emits it). The schema is the
+        # field set written at main_staged.py:356.
         required_fields = [
             "stage", "status", "solve_time", "timestamp",
             "num_scheduled_games", "total_variables", "run_id",
-            "year", "mode", "use_ai", "locked_weeks",
+            "year", "mode", "locked_weeks",
             "excluded_constraints", "constraint_slack",
         ]
         for field in required_fields:
@@ -481,7 +491,6 @@ class TestCheckpointMetadata:
         assert meta["total_variables"] == 2
         assert meta["year"] == 2025
         assert meta["mode"] == "simple"
-        assert meta["use_ai"] is False
         assert sorted(meta["locked_weeks"]) == [1, 2]
         assert meta["excluded_constraints"] == ["Bar"]
 
@@ -608,29 +617,68 @@ class TestHelperFunctions:
 # ============== Stage Definition Tests ==============
 
 class TestStageDefinitions:
+    """Post-atomization, stages are the config-driven `DEFAULT_STAGES` list
+    (each a dict with `name` + `atoms` of canonical registry names), not the
+    legacy `STAGES` / `STAGES_AI` / `STAGES_SEVERITY` class-list dicts. The
+    AI/non-AI split moved to per-atom resolution (`_resolve_solver_class`),
+    so there is no separate AI stage table to mirror.
+    """
 
-    def test_stages_have_constraints(self):
-        """All stage definitions should have non-empty constraint lists."""
-        for stage_name, stage_config in STAGES.items():
-            assert "constraints" in stage_config, f"{stage_name} missing 'constraints'"
-            assert len(stage_config["constraints"]) > 0, f"{stage_name} has empty constraints"
+    def test_default_stages_all_have_atoms(self):
+        """Scenario: every default stage carries a non-empty atom list."""
+        # Given: the live DEFAULT_STAGES from config/defaults.py.
+        # Oracle: there are exactly 5 stages (critical_feasibility,
+        # home_away_balance, club_alignment, club_day, soft_optimisation),
+        # each with a non-empty `atoms` list.
+        # When / Then:
+        assert len(DEFAULT_STAGES) == 5
+        names = [s["name"] for s in DEFAULT_STAGES]
+        assert names == [
+            "critical_feasibility", "home_away_balance",
+            "club_alignment", "club_day", "soft_optimisation",
+        ]
+        # And: each stage's atoms list is present and non-empty.
+        for stage in DEFAULT_STAGES:
+            assert isinstance(stage.get("atoms"), list), f"{stage['name']} atoms not a list"
+            assert len(stage["atoms"]) > 0, f"{stage['name']} has empty atoms"
 
-    def test_stages_ai_mirror_stages(self):
-        """STAGES_AI should have the same stage keys as STAGES."""
-        assert set(STAGES.keys()) == set(STAGES_AI.keys())
+    def test_default_stages_validate_clean(self):
+        """Scenario: DEFAULT_STAGES passes registry validation with no errors."""
+        # Given: DEFAULT_STAGES. When: validate_solver_stages runs.
+        errors = validate_solver_stages(DEFAULT_STAGES)
+        # Then: zero errors. Oracle: [] — every atom is a registered canonical
+        # name, names are unique, no atom appears in two stages.
+        assert errors == [], f"DEFAULT_STAGES validation errors: {errors}"
 
-    def test_stages_severity_have_constraints(self):
-        """All severity stages should have non-empty constraint lists."""
-        for stage_name, stage_config in STAGES_SEVERITY.items():
-            assert "constraints" in stage_config
-            assert len(stage_config["constraints"]) > 0
+    def test_severity_stages_validate_clean(self):
+        """Scenario: the severity-grouped stage list is also valid + non-empty."""
+        # Given: severity_solver_stages() built from CONSTRAINT_REGISTRY.
+        stages = severity_solver_stages()
+        # When / Then: non-empty list of stages, each with non-empty atoms.
+        assert len(stages) > 0
+        for stage in stages:
+            assert len(stage["atoms"]) > 0, f"{stage['name']} has empty atoms"
+        # And: validation reports no errors. Oracle: [].
+        assert validate_solver_stages(stages) == []
 
-    def test_all_constraints_are_instantiable(self):
-        """Every constraint class in STAGES can be instantiated."""
-        for stage_name, stage_config in STAGES.items():
-            for cls in stage_config["constraints"]:
-                instance = cls()
-                assert hasattr(instance, "apply"), f"{cls.__name__} missing apply()"
+    def test_all_stage_atoms_resolve_or_are_atom_only(self):
+        """Scenario: every atom in every default stage either resolves to an
+        instantiable solver class with apply(), or is a registered atom-only /
+        tester-only entry (resolver returns None by design)."""
+        # Given: every atom name across all DEFAULT_STAGES.
+        # When: look it up in the registry and resolve its solver class.
+        for stage in DEFAULT_STAGES:
+            for atom in stage["atoms"]:
+                # Then: the atom is a registered canonical name.
+                assert atom in CONSTRAINT_REGISTRY, (
+                    f"{atom} (stage {stage['name']}) not in CONSTRAINT_REGISTRY"
+                )
+                cls = _resolve_solver_class(atom)
+                # And: if it resolves to a class, that class instantiates and
+                # exposes apply(); None is acceptable (atom-only / alias).
+                if cls is not None:
+                    instance = cls()
+                    assert hasattr(instance, "apply"), f"{cls.__name__} missing apply()"
 
 
 # ============== StagedScheduleSolver.build_objective Tests ==============
