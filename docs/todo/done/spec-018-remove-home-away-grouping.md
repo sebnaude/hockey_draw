@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: done -->
+<!-- owner: session=goal-final-form claimed=2026-05-21 -->
 <!-- depends_on: none (LARGEST shared-file footprint — touches registry.py, unified.py, stages.py, severity.py, tester.py, _adjusters.py, defaults.py. Sequence LAST relative to spec-014..017 and rebase before merge.) -->
 
 # spec-018 — Delete the venue back-to-back / alternation rules: `NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `MaitlandAlternateHomeAway`
