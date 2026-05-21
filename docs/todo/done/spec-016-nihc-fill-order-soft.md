@@ -1,5 +1,12 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: done -->
+<!-- owner: session=goal-final-form claimed=2026-05-21 -->
+<!-- DECISION (Unit A gate): proceeding with the spec's baked-in recommendation
+     to make fill-order SOFT. Rationale: the convenor's own framing in the Why
+     section is that field choice is symmetry-breaking (which physical field a
+     slot lands on is interchangeable), and a hard ordering risks infeasibility
+     against FORCED placements. Executed autonomously under /goal; trivially
+     reversible (move atoms back to critical_feasibility + restore the hard
+     implication) if the convenor wants it hard. -->
 <!-- depends_on: none (shares config/defaults.py DEFAULT_STAGES + constraints/registry.py + constraints/stages.py with spec-014/015/017/018; rebase + re-run validate_solver_stages before merge) -->
 
 # spec-016 — NIHC field-fill ordering (WF→EF→SF) becomes SOFT symmetry-breaking

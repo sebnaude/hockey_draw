@@ -315,12 +315,17 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
     # Broadmeadow forcing WF -> EF -> SF fill priority. Replaces the legacy
     # perennial "last game of day on WF" review-only rule with a hard
     # constraint that holds for every slot.
+    # spec-016: re-leveled from hard severity 1 to SOFT severity 5. The two
+    # atoms now add a `nihc_fill_order` penalty term (out-of-order fill)
+    # instead of a hard implication — a symmetry-breaker, not a feasibility
+    # rule. has_soft_component=True; they live in `soft_optimisation`.
     'NIHCFillWFBeforeEF': ConstraintInfo(
         canonical_name='NIHCFillWFBeforeEF',
         solver_class_names=['NIHCFillWFBeforeEF'],
         tester_check_methods=['_check_nihc_fill_wf_before_ef'],
         tester_violation_names=['NIHCFillWFBeforeEF'],
-        severity_level=1,
+        severity_level=5,
+        has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
     ),
@@ -329,7 +334,8 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         solver_class_names=['NIHCFillEFBeforeSF'],
         tester_check_methods=['_check_nihc_fill_ef_before_sf'],
         tester_violation_names=['NIHCFillEFBeforeSF'],
-        severity_level=1,
+        severity_level=5,
+        has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
     ),

@@ -68,8 +68,9 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'FiftyFiftyHomeAway': 1,
     'MaxMaitlandHomeWeekends': 1,
     'MaitlandHomeGrouping': 1,  # Has hard element: no back-to-back Maitland home games
-    'NIHCFillWFBeforeEF': 1,    # spec-003: WF must fill before EF at NIHC
-    'NIHCFillEFBeforeSF': 1,    # spec-003: EF must fill before SF at NIHC
+    # spec-016: NIHC fill order is now a SOFT symmetry-breaker (severity 5,
+    # was 1), reported as soft pressure (see the metric_value on its
+    # violations). Listed at level 5 below.
 
     'EqualMatchUpSpacing': 1,
 
@@ -90,6 +91,9 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # Level 5 - VERY LOW (timeslot preferences)
     'EnsureBestTimeslotChoices': 5,
     'PreferredTimesConstraint': 5,
+    # spec-016: NIHC field-fill order — soft symmetry-breaker.
+    'NIHCFillWFBeforeEF': 5,
+    'NIHCFillEFBeforeSF': 5,
 
     # Config-driven checks
     'ForcedGames': 1,   # CRITICAL - forced games must happen
@@ -1333,9 +1337,12 @@ class DrawTester:
                 constraint='NIHCFillWFBeforeEF',
                 message=(
                     f"NIHC field-fill order: date {date} slot {day_slot} "
-                    f"uses EF without WF (WF must fill before EF)"
+                    f"uses EF without WF (prefer WF before EF — soft)"
                 ),
                 affected_games=ef_games,
+                # spec-016: soft symmetry-breaker. metric_value rolls this into
+                # the soft_pressure breakdown rather than a hard-failure count.
+                metric_value=1.0,
             ))
         return violations
 
@@ -1362,9 +1369,11 @@ class DrawTester:
                 constraint='NIHCFillEFBeforeSF',
                 message=(
                     f"NIHC field-fill order: date {date} slot {day_slot} "
-                    f"uses SF without EF (EF must fill before SF)"
+                    f"uses SF without EF (prefer EF before SF — soft)"
                 ),
                 affected_games=sf_games,
+                # spec-016: soft symmetry-breaker — rolls into soft_pressure.
+                metric_value=1.0,
             ))
         return violations
 

@@ -35,19 +35,19 @@ Season-specific (non-perennial) BLOCKED entries are NOT overridable — they alw
 
 ### 2. NIHC field-fill order: WF before EF before SF
 
-At Newcastle International Hockey Centre (Broadmeadow), within any single (date, day_slot) bucket the fields must be filled in priority order: **West Field → East Field → South Field**. Concretely, for every (date, day_slot) where multiple NIHC fields are valid slot options:
+At Newcastle International Hockey Centre (Broadmeadow), within any single (date, day_slot) bucket the fields are *preferred* to fill in priority order: **West Field → East Field → South Field**. Concretely, for every (date, day_slot) where multiple NIHC fields are valid slot options:
 
-- If East Field has a game, West Field must also have a game.
-- If South Field has a game, East Field must also have a game.
-- The two together transitively imply: if South Field has a game, West Field must also have a game.
+- East Field used while West Field is empty is discouraged (a small penalty).
+- South Field used while East Field is empty is discouraged (a small penalty).
+- The two together push the canonical order WF → EF → SF.
 
 This generalises the historical "last game of the day on West Field" preference — that rule was a special case of field-fill ordering. The general form gives correct behaviour for *every* slot of the day, not only the last one (e.g. a midday slot with only one game also lands on WF rather than EF).
 
-**Enforcement:** Hard constraint — two CRITICAL atoms `NIHCFillWFBeforeEF` and `NIHCFillEFBeforeSF` in `constraints/atoms/` (spec-003). Both atoms are wired into the `critical_feasibility` stage in `DEFAULT_STAGES` so they apply on every solver run. A matching tester check (`_check_nihc_fill_wf_before_ef` + `_check_nihc_fill_ef_before_sf`) catches the same violations on already-published draws.
+**Enforcement (spec-016):** SOFT symmetry-breaker, not a hard rule. Which physical field a slot lands on is interchangeable; we just want a canonical fill order (the same role `SoftLexMatchupOrdering` plays for matchups). The two atoms `NIHCFillWFBeforeEF` and `NIHCFillEFBeforeSF` (severity 5) add a small `nihc_fill_order` penalty per out-of-order fill and live in the `soft_optimisation` stage. A hard ordering risked infeasibility against FORCED placements (e.g. a game pinned to EF when WF is empty that slot), so it's a tie-break in the objective instead. The tester checks (`_check_nihc_fill_wf_before_ef` + `_check_nihc_fill_ef_before_sf`) still flag out-of-order fills on published draws, but as **soft pressure**, not hard failures.
 
-**Edge case:** if WF (or EF) isn't a valid slot for a given (date, day_slot) — e.g. a field unavailability that day — the atoms skip the bucket rather than assert an impossible implication. The detection key is "does any decision variable exist for that field at that slot?" — if not, the field wasn't an option and the rule doesn't fire.
+**Edge case:** if WF (or EF) isn't a valid slot for a given (date, day_slot) — e.g. a field unavailability that day — the atoms skip the bucket. The detection key is "does any decision variable exist for that field at that slot?" — if not, the field wasn't an option and no penalty applies.
 
-**Rationale:** Operational preference for West Field over East over South; ground staff have a fixed walk-up routine; spectators learn where the headline games live. Generalising removes the historical manual-review footnote.
+**Rationale:** Operational preference for West Field over East over South; ground staff have a fixed walk-up routine; spectators learn where the headline games live. Soft because field choice is genuinely symmetric — a strict ordering shouldn't be allowed to make a draw infeasible.
 
 ---
 

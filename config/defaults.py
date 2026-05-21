@@ -168,9 +168,8 @@ DEFAULT_STAGES = [
             # spec-007: hard same-grade-same-club rule (was the hard portion
             # of the obsolete `ClubGradeAdjacency` cluster).
             'SameGradeSameClubNoConcurrency',
-            # spec-003: NIHC field-fill ordering — WF before EF, EF before SF.
-            # The two implications transitively imply SF -> WF (no third atom).
-            'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF',
+            # spec-016: NIHC field-fill ordering (WF→EF→SF) moved to
+            # soft_optimisation as a SOFT symmetry-breaker (was hard here).
             # spec-008 Part B: byes spread evenly across the season for
             # every team in every grade (HARD, own slack key).
             'BalancedByeSpacing',
@@ -232,6 +231,9 @@ DEFAULT_STAGES = [
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
             # spec-002: predictable alphabetical matchup tie-break.
             'SoftLexMatchupOrdering',
+            # spec-016: NIHC field-fill ordering (WF→EF→SF) as a soft
+            # symmetry-breaker — penalises out-of-order field fill.
+            'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF',
             # spec-007: convenor-supplied per-team-pair no-concurrency soft.
             'TeamPairNoConcurrency',
             # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).

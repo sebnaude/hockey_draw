@@ -1111,6 +1111,11 @@ PENALTY_WEIGHTS = {
     'dummy_slots':                      1_000_000,
     # Soft lex matchup ordering: tiny tie-break, never overrides real constraints.
     'soft_lex_ordering':                        1,
+    # spec-016: NIHC field-fill order (WF→EF→SF) soft symmetry-breaker.
+    # Penalty per out-of-order fill (EF without WF, or SF without EF). Small —
+    # just above soft_lex_ordering so field order wins over the pure
+    # alphabetical tie-break, but never dominates real soft constraints.
+    'nihc_fill_order':                          5,
     # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
     # Each 'avoid' entry incurs this penalty per game scheduled at the venue on that date.
     # Each 'prefer' entry incurs this penalty per game MISSING from the venue on that date.
