@@ -70,21 +70,21 @@ class TestSpacingOnRealData:
     """Test the spacing constraint using real 2026 season data."""
 
     def test_soft_spacing_is_feasible_and_minimised_on_real_data(self):
-        """Scenario: spacing, applied the way production applies it (SOFT, in the
-        soft_only `soft_optimisation` stage), is feasible on real 2026 data and
-        the solver minimises spacing penalties.
+        """Scenario: the SOFT spacing pass, applied in ISOLATION (soft-only,
+        as the `soft_optimisation` stage dispatches it), is feasible on real
+        2026 data and the solver minimises spacing penalties.
 
-        Why this is soft, not hard: `EqualMatchUpSpacing` is an engine atom
-        present in both ENGINE_HARD_KEYS and ENGINE_SOFT_KEYS. In the default
-        `soft_optimisation` stage (`soft_only=True`), `apply_solver_stage`
-        SKIPS `apply_stage_1_hard()` and runs only `apply_stage_2_soft()` —
-        so the hard pairwise-forbidden-gap clause is never added in the
-        production default path. (The hard clause IS exercised, in isolation,
-        by `test_rejects_tight_gaps_on_real_data`.) The hard clause over the
-        FULL 2026 model is infeasible at every slack level (the floor min_gap
-        is clamped by slack>=4 and even that is infeasible), because the 2026
-        config has many no-play weeks / blocked games; this test therefore
-        verifies the production-faithful soft application, not a hard one.
+        NOTE (spec-017): production now ALSO applies the HARD pairwise-gap
+        clause — `EqualMatchUpSpacing` moved to the `critical_feasibility`
+        stage, so `apply_solver_stage` runs both `apply_stage_1_hard()` and
+        `apply_stage_2_soft()` for it. This test deliberately drives the soft
+        path on its own (it sets `skip_constraints` to leave only the target
+        soft pass) to verify the soft penalties are well-formed and feasible —
+        it is no longer a model of "the production default path." The hard
+        clause is exercised by `test_rejects_tight_gaps_on_real_data` and by
+        `tests/test_spacing_promoted_hard.py`. The hard clause over the FULL
+        2026 model can be infeasible at low slack (many no-play weeks / blocked
+        games), which is why this isolated soft check stays soft.
         """
         data = load_2026_data()
         model = cp_model.CpModel()

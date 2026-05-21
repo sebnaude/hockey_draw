@@ -136,9 +136,11 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-014 | PHL/2nd adjacency rewrite — force same-club back-to-back; real-time ≥3h cross-venue gap; atomize; minimal vars | `done/spec-014-phl-2nd-adjacency-rewrite.md` | done |
 | spec-015 | Delete `GosfordFridayRoundsForced`; rely on generic FORCED_GAMES count rules (scope + count + equality type) | `done/spec-015-gosford-friday-rounds-to-forced.md` | done |
 | spec-016 | NIHC field-fill ordering (WF→EF→SF) becomes a SOFT symmetry-breaker | `done/spec-016-nihc-fill-order-soft.md` | done |
-| spec-017 | Promote `EqualMatchUpSpacing` to HARD beside `BalancedByeSpacing`; keep byes a separate atom | `spec-017-promote-matchup-spacing-hard.md` | ready |
+| spec-017 | Promote `EqualMatchUpSpacing` to HARD beside `BalancedByeSpacing`; keep byes a separate atom | `done/spec-017-promote-matchup-spacing-hard.md` | done |
 | spec-018 | Delete venue back-to-back/alternation rules (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `MaitlandAlternateHomeAway`); keep spec-004 counts/balance | `spec-018-remove-home-away-grouping.md` | ready |
 | spec-019 | Regression-test `ClubVsClubStackedWeekends` per-pair FORCED-Friday budget (verify-only) | `spec-019-verify-clubvsclub-friday-aware.md` | ready |
+| spec-020 | `PreferredGames`: soft, weighted analogue of the whole FORCED_GAMES grammar (penalty-on-deviation); delete `PreferredDates` | `spec-020-soft-forced-games.md` | ready |
+| spec-020 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `spec-020-unify-helper-var-pathway.md` | ready |
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 

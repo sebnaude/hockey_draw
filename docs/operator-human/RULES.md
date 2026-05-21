@@ -184,13 +184,19 @@ diluted with extra home games beyond what the season actually needs.
 
 **Description:** Matchups between the same teams should be evenly spaced across rounds.
 
-**Enforcement (spec-008):** Reads the convenor-facing number `S` as
-"the number of rounds you want **between** two meetings of the same pair."
-So `S=2` means "at least two whole rounds between meetings" — rounds 1 and
-4 are fine; rounds 1 and 3 are not (only one round, round 2, between them).
+**Enforcement (spec-008, HARD since spec-017):** Reads the convenor-facing
+number `S` as "the number of rounds you want **between** two meetings of the
+same pair." So `S=2` means "at least two whole rounds between meetings" —
+rounds 1 and 4 are fine; rounds 1 and 3 are not (only one round, round 2,
+between them). This is now a **hard** constraint in production (spec-017 moved
+it into the `critical_feasibility` stage; before that its hard part was wired
+only into a soft-only stage and never actually applied). A soft density
+penalty also still applies, smoothing meetings within a sliding window.
 
-By default `S = ideal_gap(T)` for grade size `T`. The CLI flag `--slack N`
-loosens this by `N` rounds (the convenor accepts the gap shrinking by `N`).
+By default `S = ideal_gap(T)` for grade size `T`. The CLI flag
+`--slack EqualMatchUpSpacingConstraint N` loosens this by `N` rounds (the
+convenor accepts the gap shrinking by `N`); at enough slack the hard rule
+relaxes away entirely.
 
 **Rationale:** Prevents teams from playing each other in close succession.
 
@@ -563,11 +569,13 @@ The club-day rule interacts with most other rules, requiring:
 ## How the solver applies these rules
 
 The solver works through the rules in stages — first the physical
-must-haves (no double-booking, equal games), then the structural rules
-(home/away balance, PHL/2nd timing, club days), then the venue-shaping
-rules (away-club grouping, slot diversity, club-vs-club alignment), and
-finally the soft preferences (Maitland home grouping, matchup spacing,
-preferred times). Each stage builds on the previous one's solution.
+must-haves (no double-booking, equal games, byes spread out, **matchup
+spacing**), then the structural rules (home/away balance, PHL/2nd timing,
+club days), then the venue-shaping rules (slot diversity, club-vs-club
+alignment), and finally the soft preferences (preferred times, the canonical
+NIHC field-fill order, alphabetical tie-breaks). Each stage builds on the
+previous one's solution. (Matchup spacing is a hard must-have since spec-017,
+not a soft preference.)
 
 For the engineering view of the stages — the atom registry, the exact
 stage order, checkpoint files and CLI flags — see

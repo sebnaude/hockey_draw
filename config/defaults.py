@@ -173,6 +173,14 @@ DEFAULT_STAGES = [
             # spec-008 Part B: byes spread evenly across the season for
             # every team in every grade (HARD, own slack key).
             'BalancedByeSpacing',
+            # spec-017: matchup-spacing promoted to HARD here (was only in the
+            # soft_only stage, so its hard part never applied in production).
+            # Sits right after BalancedByeSpacing — same "spread it out" intent.
+            # Both its hard (forbidden gaps) and soft (density penalty) parts
+            # now apply, since apply_solver_stage always runs apply_stage_2_soft.
+            # Slack via --slack EqualMatchUpSpacingConstraint N. Byes stay a
+            # separate atom with their own slack key (deliberate, not merged).
+            'EqualMatchUpSpacing',
         ],
     },
     {
@@ -221,7 +229,10 @@ DEFAULT_STAGES = [
         'description': 'Soft penalties and optimisation',
         'soft_only': True,
         'atoms': [
-            'EqualMatchUpSpacing', 'ClubGameSpread',
+            # spec-017: 'EqualMatchUpSpacing' moved to critical_feasibility so
+            # its HARD part actually applies (this stage is soft_only, which
+            # skips apply_stage_1_hard). Its soft part still runs there.
+            'ClubGameSpread',
             # spec-005: `ClubVsClubDeficitPenalty` removed — the soft deficit
             # penalty is unnecessary because the stacking atom enforces the
             # exact Sunday-meeting count via a HARD `sum == budget`
