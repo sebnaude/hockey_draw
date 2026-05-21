@@ -77,8 +77,10 @@ class TestRegistryCompleteness:
         = 44.
 
         spec-014 renamed the `PHLAndSecondGradeAdjacency` entry to the
-        `PHLAnd2ndAdjacency` atom (1:1 replacement) — count unchanged."""
-        assert len(CONSTRAINT_REGISTRY) == 44
+        `PHLAnd2ndAdjacency` atom (1:1 replacement) — count unchanged.
+        spec-015 DELETED `GosfordFridayRoundsForced` (its per-round sum==1 rule
+        is now a generic FORCED_GAMES count entry): 44 - 1 = 43."""
+        assert len(CONSTRAINT_REGISTRY) == 43
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.

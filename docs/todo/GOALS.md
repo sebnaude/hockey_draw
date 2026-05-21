@@ -134,7 +134,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-012 | Team time preferences + Maitland H/A weekend alternation | `done/spec-012-team-time-and-home-preferences.md` | done |
 | spec-013 | Doc drift fixes (STAGES / GOALS / RULES) + atom-test GWT compliance pass | `done/spec-013-docs-and-test-alignment.md` | done |
 | spec-014 | PHL/2nd adjacency rewrite — force same-club back-to-back; real-time ≥3h cross-venue gap; atomize; minimal vars | `done/spec-014-phl-2nd-adjacency-rewrite.md` | done |
-| spec-015 | Delete `GosfordFridayRoundsForced`; rely on generic FORCED_GAMES count rules (scope + count + equality type) | `spec-015-gosford-friday-rounds-to-forced.md` | ready |
+| spec-015 | Delete `GosfordFridayRoundsForced`; rely on generic FORCED_GAMES count rules (scope + count + equality type) | `done/spec-015-gosford-friday-rounds-to-forced.md` | done |
 | spec-016 | NIHC field-fill ordering (WF→EF→SF) becomes a SOFT symmetry-breaker | `spec-016-nihc-fill-order-soft.md` | ready |
 | spec-017 | Promote `EqualMatchUpSpacing` to HARD beside `BalancedByeSpacing`; keep byes a separate atom | `spec-017-promote-matchup-spacing-hard.md` | ready |
 | spec-018 | Delete venue back-to-back/alternation rules (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `MaitlandAlternateHomeAway`); keep spec-004 counts/balance | `spec-018-remove-home-away-grouping.md` | ready |

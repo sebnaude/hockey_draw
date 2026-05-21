@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: done -->
+<!-- owner: session=goal-final-form claimed=2026-05-21 -->
 <!-- depends_on: none (shares config/defaults.py DEFAULT_STAGES + constraints/registry.py with spec-014/016/017/018; rebase + re-run validate_solver_stages before merge) -->
 
 # spec-015 — Delete `GosfordFridayRoundsForced`; rely on generic FORCED_GAMES count rules

@@ -94,7 +94,7 @@ class TestAtomToEngineKey:
     def test_phl_atom_maps_to_combined_name(self):
         from constraints.stages import atom_to_engine_key
         assert atom_to_engine_key('PHLConcurrencyAtBroadmeadow') == 'PHLAndSecondGradeTimes'
-        assert atom_to_engine_key('GosfordFridayRoundsForced') == 'PHLAndSecondGradeTimes'
+        # spec-015: GosfordFridayRoundsForced deleted.
 
     def test_club_day_atom_maps_to_combined_name(self):
         from constraints.stages import atom_to_engine_key

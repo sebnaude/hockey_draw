@@ -124,7 +124,6 @@ def _build_phl_fixture() -> Dict:
             'max_friday_broadmeadow': 3,
             'gosford_friday_games': 2,
             'maitland_friday_games': 1,
-            'gosford_friday_rounds': [2, 4],
         },
     }
 

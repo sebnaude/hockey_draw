@@ -27,7 +27,6 @@ from constraints.registry import run_count_adjusters
 from constraints.atoms import (
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
-    GosfordFridayRoundsForced,
     PreferredDates,
     ClubDayParticipation,
     ClubDayIntraClubMatchup,
@@ -543,10 +542,11 @@ class UnifiedConstraintEngine:
     # spec-010: PHLRoundOnePlay removed from hard atoms. Convenor uses
     # FORCED_GAMES to express round-1 intent when needed. File kept on disk
     # for parity reference; import retained so parity tests still work.
+    # spec-015: GosfordFridayRoundsForced removed — Gosford Friday rounds are
+    # now FORCED_GAMES count entries in the season config, not a code atom.
     _PHL_HARD_ATOMS = (
         PHLConcurrencyAtBroadmeadow,
         PHLAnd2ndConcurrencyAtBroadmeadow,
-        GosfordFridayRoundsForced,
     )
     _PHL_SOFT_ATOMS = (PreferredDates,)
 

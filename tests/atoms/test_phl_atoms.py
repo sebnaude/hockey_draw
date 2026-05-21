@@ -17,7 +17,6 @@ from __future__ import annotations
 from ortools.sat.python import cp_model
 
 from constraints.atoms import (
-    GosfordFridayRoundsForced,
     PHLAnd2ndConcurrencyAtBroadmeadow,
     PHLConcurrencyAtBroadmeadow,
     PreferredDates,
@@ -106,26 +105,10 @@ class TestPHLAnd2ndConcurrencyAtBroadmeadow:
 
 
 # ----------------------------------------------------------------------
-# GosfordFridayRoundsForced
+# spec-015: GosfordFridayRoundsForced was DELETED. Its per-round `sum == 1`
+# rule is now expressed via generic FORCED_GAMES count entries; that generic
+# capability is tested in tests/test_forced_games_count_rules.py.
 # ----------------------------------------------------------------------
-
-
-class TestGosfordFridayRoundsForced:
-    def test_solo_clean_feasible(self, phl_data):
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        GosfordFridayRoundsForced().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-
-    def test_rules_force_at_least_one_in_each_required_round(self, phl_data):
-        phl_data['constraint_defaults']['gosford_friday_rounds'] = [2]
-        model, X = build_model_X(phl_data, allow_2nd=False)
-        for k in [k for k in X if k[2] == 'PHL' and k[3] == 'Friday'
-                  and k[10] == GOSFORD and k[8] == 2]:
-            model.Add(X[k] == 0)
-        GosfordFridayRoundsForced().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status == cp_model.INFEASIBLE
 
 
 # ----------------------------------------------------------------------

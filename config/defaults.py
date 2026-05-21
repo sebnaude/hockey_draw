@@ -108,7 +108,9 @@ CONSTRAINT_DEFAULTS = {
     'max_friday_broadmeadow': 3,
     'gosford_friday_games': 8,
     'maitland_friday_games': 2,
-    'gosford_friday_rounds': [2, 4, 5, 9, 10],
+    # spec-015: 'gosford_friday_rounds' removed — it only fed the deleted
+    # GosfordFridayRoundsForced atom. Gosford Friday rounds are now FORCED_GAMES
+    # count entries in the season config (see FORCED_GAMES_AS_COUNT_RULES.md).
     # Maitland home-game grouping
     'maitland_max_consecutive_home': 1,
     'away_maitland_max_clubs': 3,
@@ -161,7 +163,8 @@ DEFAULT_STAGES = [
             'PHLAnd2ndAdjacency',
             # spec-010: PHLRoundOnePlay removed (atom + registry entry deleted)
             # — convenor uses FORCED_GAMES to express "team X plays round 1".
-            'GosfordFridayRoundsForced',
+            # spec-015: GosfordFridayRoundsForced removed — Gosford Friday rounds
+            # are FORCED_GAMES count entries (see FORCED_GAMES_AS_COUNT_RULES.md).
             # spec-007: hard same-grade-same-club rule (was the hard portion
             # of the obsolete `ClubGradeAdjacency` cluster).
             'SameGradeSameClubNoConcurrency',

@@ -160,14 +160,11 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
     ),
-    'GosfordFridayRoundsForced': ConstraintInfo(
-        canonical_name='GosfordFridayRoundsForced',
-        solver_class_names=['GosfordFridayRoundsForced'],
-        tester_check_methods=['_check_phl_second_grade_times'],
-        tester_violation_names=['PHLAndSecondGradeTimes'],
-        severity_level=1,
-        atom_group='PHLAndSecondGradeTimes',
-    ),
+    # spec-015: GosfordFridayRoundsForced entry removed. The per-round
+    # `sum == 1` rule is expressed generically via FORCED_GAMES count entries
+    # (scope + count + constraint type) in the season config — see
+    # docs/system/FORCED_GAMES_AS_COUNT_RULES.md. The bespoke atom was a second
+    # source of truth for the same capability.
     # OBSOLETE (spec-010): "every PHL team plays round 1" removed; the atom
     # file and registry entry were subsequently DELETED. The convenor uses
     # FORCED_GAMES entries to express deliberate round-1 placement when needed.

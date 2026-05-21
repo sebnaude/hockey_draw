@@ -12,7 +12,6 @@ def test_perennial_defaults_have_required_keys():
         'max_friday_broadmeadow',
         'gosford_friday_games',
         'maitland_friday_games',
-        'gosford_friday_rounds',
         'maitland_max_consecutive_home',
         'away_maitland_max_clubs',
         'max_clubs_per_field',
@@ -68,12 +67,10 @@ def test_season_2026_inherits_perennials_for_unset_keys():
     assert cd['max_friday_broadmeadow'] == 3
     # Keys 2026 doesn't set should come from defaults
     assert cd['phl_2nd_cross_venue_min_minutes'] == CONSTRAINT_DEFAULTS['phl_2nd_cross_venue_min_minutes']
-    assert cd['gosford_friday_rounds'] == CONSTRAINT_DEFAULTS['gosford_friday_rounds']
     assert cd['worst_timeslot_time'] == CONSTRAINT_DEFAULTS['worst_timeslot_time']
 
-
-def test_gosford_friday_rounds_drives_unified_engine_behavior():
-    """Override rounds to a different set; engine should respect new value via constraint_defaults."""
-    overrides = {'gosford_friday_rounds': [3, 7]}
-    merged = _merge_constraint_defaults(overrides)
-    assert merged['gosford_friday_rounds'] == [3, 7]
+# spec-015: removed test_gosford_friday_rounds_drives_unified_engine_behavior —
+# the 'gosford_friday_rounds' default was deleted (it only fed the deleted
+# GosfordFridayRoundsForced atom). Gosford Friday rounds are now FORCED_GAMES
+# count entries; the generic capability is covered by
+# tests/test_forced_games_count_rules.py.

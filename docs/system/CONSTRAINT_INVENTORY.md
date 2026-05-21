@@ -80,7 +80,7 @@ out of scope for Phase 6.
 
 | Cluster | Legacy classes | Atoms after split | Net change |
 |---|---|---|---|
-| PHLAndSecondGradeTimes | 1 | 5 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `GosfordFridayRoundsForced`, `PHLRoundOnePlay` (**OBSOLETE spec-010**, parity reference only), `PreferredDates` (per-venue Friday counts moved to FORCED_GAMES entries — see `docs/FORCED_GAMES_AS_COUNT_RULES.md`) | +4 |
+| PHLAndSecondGradeTimes | 1 | 3 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `PreferredDates`. (`PHLRoundOnePlay` deleted spec-010; `GosfordFridayRoundsForced` deleted spec-015 — both expressed as FORCED_GAMES entries, see `docs/system/FORCED_GAMES_AS_COUNT_RULES.md`) | +2 |
 | ClubDayConstraint | 1 | 5 | +4 |
 | ClubVsClubAlignment | 1 | 4 (Phase 3c — OBSOLETE per spec-005, parity reference only) | +3 |
 | ClubVsClubStackedAlignment (spec-005) | 0 (new cluster — replaces the 4 Phase-3c atoms in `DEFAULT_STAGES`) | 2 — `ClubVsClubStackedWeekends`, `ClubVsClubStackedCoLocation` | +2 |
@@ -103,7 +103,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | **Atomised (Phase 3) — PHL/2nd cluster** | | | | | | | |
 | `PHLConcurrencyAtBroadmeadow` | `constraints/atoms/phl_concurrency.py` | n/a | yes | yes | — | — | Broadmeadow-only; prevents concurrent PHL games per (week, day_slot) |
 | `PHLAnd2ndConcurrencyAtBroadmeadow` | `constraints/atoms/phl_2nd_concurrency.py` | n/a | yes | yes | — | — | PHL + same-club-2nd no-concurrency at Broadmeadow |
-| `GosfordFridayRoundsForced` | `constraints/atoms/gosford_friday_rounds.py` | n/a | yes | yes | — | — | Reads `CONSTRAINT_DEFAULTS['gosford_friday_rounds']` (currently `{2,4,5,9,10}` per 2026 AGM) |
+| `GosfordFridayRoundsForced` | _deleted (spec-015)_ | n/a | n/a | n/a | — | — | **DELETED (spec-015).** Per-round `sum == 1` Gosford-Friday rule is now a generic `FORCED_GAMES` count entry (scope + count + constraint type) in the season config — see `FORCED_GAMES_AS_COUNT_RULES.md`. Atom file, registry entry, and `CONSTRAINT_DEFAULTS['gosford_friday_rounds']` removed. |
 | `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | **OBSOLETE (spec-010).** Removed from `critical_feasibility` stage and `_PHL_HARD_ATOMS`; `solver_class_names` emptied in registry. File kept on disk as parity reference. Convenor uses `FORCED_GAMES` entries to express deliberate round-1 placement when needed. |
 | `PreferredDates` | `constraints/atoms/preferred_dates.py` | excluded | yes | yes | — | — | Soft; weight `PENALTY_WEIGHTS['phl_preferences']=10000` |
 | **Atomised (Phase 3) — ClubDay cluster** | | | | | | | |
@@ -168,7 +168,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 While walking the source for this inventory, I noticed:
 
 1. **`FiftyFiftyHomeandAway` aggregate block — RESOLVED (spec-004).** The legacy class is now obsolete. The aggregate block is intentionally preserved in `AwayClubPerOpponentAndAggregateHomeBalance` because the convenor wanted both per-pair AND per-team aggregate balance (the intersection gives the best outcome — see spec-004 DoD #3). The earlier "removed deliberately by design" claim in `CLAUDE.md` was inaccurate; the spec-004 plan locks in retaining the aggregate constraint.
-2. **Gosford Friday rounds {2, 4, 5, 9, 10}** are hardcoded in `PHLAndSecondGradeTimes` (line 355). Phase 5 punch list flags this for migration to `CONSTRAINT_DEFAULTS['gosford_friday_rounds']`. The atomized `GosfordFridayRoundsForced` atom (added separately from the count atom because it enforces per-round forced placement, not the total) should consume that config key.
+2. **Gosford Friday rounds {2, 4, 5, 9, 10} — RESOLVED (spec-015).** The bespoke `GosfordFridayRoundsForced` atom (and `CONSTRAINT_DEFAULTS['gosford_friday_rounds']`) were DELETED. The per-round `sum == 1` rule is now a generic `FORCED_GAMES` count entry (scope + count + constraint type) in the season config — see `FORCED_GAMES_AS_COUNT_RULES.md`. Pinned by `tests/test_forced_games_count_rules.py`.
 3. **PHL preferred-dates handling uses `phl_preferences['preferred_dates']` only** — `PHLAndSecondGradeTimes` raises if any other key is present. Confirms Phase 3 atom `PreferredDates` keeps the same single-key contract; expansion to other prefs is a separate behavior change.
 4. **`PHLAndSecondGradeTimes` HACK lines (~242-301)**: locked-week PHL Friday counts are accumulated from `data['locked_keys_set']` with substring matching on location (`'Central Coast'`, `'Maitland'`, `'Newcastle'`). Phase 4 should replace substring matching with `home_field_map` lookups so the adjuster works for any non-default-home venue.
 5. **`ClubDayConstraint` opponent semantics**: matches `original.py` only — `ai.py`'s simpler date-only form was a regression (Decision #4 already documents this).

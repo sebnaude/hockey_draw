@@ -5,9 +5,9 @@
 > validation) and `5cfae6c` (atom retirement). Three Friday-count atoms
 > (`BroadmeadowFridayCount`, `GosfordFridayCount`, `MaitlandFridayCount`)
 > are gone; their budgets live in `season_2026.py:FORCED_GAMES` now.
-> `GosfordFridayRoundsForced` was RETAINED — its per-round
-> enforcement isn't yet covered by per-round FORCED entries.
-> Test bar: 1272 passed, 1 skipped (was 1268).
+> `GosfordFridayRoundsForced` was DELETED too (**spec-015**) — its per-round
+> `sum == 1` rule is a generic `FORCED_GAMES` count entry (scope + count +
+> constraint type), pinned by `tests/test_forced_games_count_rules.py`.
 >
 > The convention going forward is documented in:
 > - `CLAUDE.md` §3-§4 (FORCED `club=` filter + per-venue counts use FORCED)

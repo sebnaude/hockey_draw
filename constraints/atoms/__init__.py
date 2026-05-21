@@ -11,7 +11,9 @@ Atoms are instantiated and dispatched by `UnifiedConstraintEngine`. Their
 from constraints.atoms.base import Atom
 from constraints.atoms.phl_concurrency import PHLConcurrencyAtBroadmeadow
 from constraints.atoms.phl_2nd_concurrency import PHLAnd2ndConcurrencyAtBroadmeadow
-from constraints.atoms.gosford_friday_rounds import GosfordFridayRoundsForced
+# spec-015: GosfordFridayRoundsForced deleted — its per-round sum==1 rule is
+# expressed generically via FORCED_GAMES count entries (scope + count +
+# constraint type). See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
 from constraints.atoms.preferred_dates import PreferredDates
 from constraints.atoms.club_day_participation import ClubDayParticipation
 from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchup
@@ -59,7 +61,6 @@ from constraints.atoms import _adjusters  # noqa: F401
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
-    GosfordFridayRoundsForced,
     PreferredDates,
 ]
 
@@ -92,7 +93,6 @@ __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
     'PHLAnd2ndConcurrencyAtBroadmeadow',
-    'GosfordFridayRoundsForced',
     'PreferredDates',
     'PHL_TIMES_ATOMS',
     'ClubDayParticipation',
