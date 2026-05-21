@@ -1002,8 +1002,6 @@ GRADE_SCHEDULING_METHOD = {
 #
 # Formula per constraint:
 #   EqualMatchUpSpacing:  min_gap = max(T//2+1, T-2 - spacing_base_slack - slack)
-#   MaitlandHomeGrouping: max_consecutive = maitland_max_consecutive_home + slack
-#   AwayAtMaitlandGrouping: max_away_clubs = away_maitland_max_clubs + slack
 #   ClubVsClubAlignment:  (no base limit config — slack reduces required coincidences)
 #   MaximiseClubsPerTimeslotBroadmeadow: min_clubs = floor(games/2) - slack
 #   MinimiseClubsOnAFieldBroadmeadow: max_clubs = max_clubs_per_field + slack
@@ -1011,8 +1009,8 @@ GRADE_SCHEDULING_METHOD = {
 
 CONSTRAINT_DEFAULTS = {
     'spacing_base_slack': 2,               # EqualMatchUpSpacing: additional base slack (0 = start at ideal)
-    'maitland_max_consecutive_home': 3,    # MaitlandHomeGrouping: max consecutive home weeks (1 = no back-to-back)
-    'away_maitland_max_clubs': 2,          # AwayAtMaitlandGrouping: max away clubs at Maitland per week
+    # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs removed
+    # (venue-sequencing rules deleted).
     'max_clubs_per_field': 5,              # MinimiseClubsOnAFieldBroadmeadow: max clubs sharing a field per day
     'club_game_spread_max_gap': 1,         # ClubGameSpread: max allowed gap (spread) per club per day (+ slack at runtime)
     'club_game_spread_max_overlap': 0,     # ClubGameSpread: max allowed double-ups (+ slack at runtime; 0 = no overlap)
@@ -1094,8 +1092,8 @@ PREFERRED_WEEKENDS = [
 # The solver maximizes: scheduled_games - sum(normalized_penalties).
 
 PENALTY_WEIGHTS = {
-    'MaitlandHomeGrouping':             1_000_000,
-    'AwayAtMaitlandGrouping':             100_000,
+    # spec-018: MaitlandHomeGrouping / AwayAtMaitlandGrouping penalty weights
+    # removed — venue-sequencing soft penalties deleted.
     'ClubVsClubAlignment':                 50_000,
     'EqualMatchUpSpacing':                100_000,
     'ClubGameSpread':                     100_000,
@@ -1120,12 +1118,8 @@ PENALTY_WEIGHTS = {
     # Each 'avoid' entry incurs this penalty per game scheduled at the venue on that date.
     # Each 'prefer' entry incurs this penalty per game MISSING from the venue on that date.
     'preferred_weekends_away_ground':           1_000,
-    # spec-012: penalty per consecutive Maitland weekend pair where both are
-    # home (HH) or both are away (AA). HH already hard-forbidden by
-    # NonDefaultHomeGrouping; the AA branch does the work. Weight chosen so
-    # the atom influences the soft objective without overwhelming
-    # ClubVsClubAlignment (50_000) or PreferredTimesConstraint (200_000).
-    'maitland_alternate_home_away':            10_000,
+    # spec-018: 'maitland_alternate_home_away' (spec-012) removed — the
+    # alternation soft penalty was deleted.
 }
 
 # ============== Season Configuration ==============

@@ -248,13 +248,13 @@ TEAM_CONFLICTS = [
 
 ### Maitland/Gosford 50/50 Split
 
-Automatic via `FiftyFiftyHomeandAway` constraint. No configuration needed.
+Automatic via the spec-004 atoms `AwayClubPerOpponentAndAggregateHomeBalance`
+(per-pair + aggregate balance) and `AwayClubHomeWeekendsCount` (per-club
+home-weekend totals). No configuration needed.
 
-### Maitland Home Grouping
-
-Automatic via `MaitlandHomeGrouping`:
-- All Maitland teams home OR all away each week
-- No back-to-back home weekends
+**Maitland home grouping / away-club clustering / H-A-H-A alternation are NO
+LONGER ENFORCED (spec-018).** Back-to-back home weekends and long away runs are
+both fine — there is no weekend-sequencing rule any more.
 
 ---
 
@@ -301,7 +301,7 @@ Automatic via `ClubGameSpreadAI`:
 | Level | Name | Example Constraints | Relaxation |
 |-------|------|---------------------|------------|
 | 1 | CRITICAL | NoDoubleBooking, EqualGames, PHLAdjacency | Never |
-| 2 | HIGH | ClubDay, TeamConflict, Maitland grouping, MatchupSpacing | Last resort |
+| 2 | HIGH | ClubDay, TeamConflict, MatchupSpacing | Last resort |
 | 3 | MEDIUM | GradeAdjacency, ClubVsClub | If needed |
 | 4 | LOW | ClubDensity, ClubGameSpread | First to relax |
 | 5 | VERY LOW | Timeslot choices, PreferredTimes | First to relax |
@@ -323,8 +323,6 @@ For specific constraints where hardcoded limits may be too restrictive, use the 
 | Constraint | Base Limit | Effect of --slack N |
 |------------|------------|---------------------|
 | `EqualMatchUpSpacingConstraint` | ±1 round from ideal | Allow ±(1+N) rounds |
-| `AwayAtMaitlandGrouping` | Max 3 away clubs per Maitland weekend | Max 3+N away clubs |
-| `MaitlandHomeGrouping` | No back-to-back home weekends | Allow N back-to-back pairs |
 | `ClubGameSpread` | Max 2 gap slots per club/day | Max 2+N gap slots |
 
 ### How It Works

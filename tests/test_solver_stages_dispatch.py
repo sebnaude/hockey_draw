@@ -100,10 +100,10 @@ class TestAtomToEngineKey:
         from constraints.stages import atom_to_engine_key
         assert atom_to_engine_key('ClubDayParticipation') == 'ClubDay'
 
-    def test_phase6_alias_maps_to_legacy_name(self):
+    def test_alias_maps_to_legacy_name(self):
         from constraints.stages import atom_to_engine_key
-        assert atom_to_engine_key('NonDefaultHomeGrouping') == 'MaitlandHomeGrouping'
-        assert atom_to_engine_key('AwayAtNonDefaultGrouping') == 'AwayAtMaitlandGrouping'
+        # spec-018: NonDefaultHomeGrouping / AwayAtNonDefaultGrouping aliases
+        # removed (their rules were deleted). PreferredTimes alias remains.
         assert atom_to_engine_key('PreferredTimes') == 'PreferredTimesConstraint'
 
     def test_self_canonical(self):

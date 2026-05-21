@@ -11,9 +11,7 @@ from typing import Dict, List
 import pytest
 
 from constraints.atoms._adjusters import (
-    away_at_maitland_grouping_adjuster,
     equal_matchup_spacing_adjuster,
-    maitland_home_grouping_adjuster,
 )
 from constraints.registry import CONSTRAINT_REGISTRY, run_count_adjusters
 from models import Club, Grade, PlayingField, Team, Timeslot
@@ -93,88 +91,10 @@ class TestEqualMatchUpSpacingAdjuster:
         assert out is None
 
 
-# ----------------------------------------------------------------------
-# #3 MaitlandHomeGrouping adjuster
-# ----------------------------------------------------------------------
-
-
-class TestMaitlandHomeGroupingAdjuster:
-    def test_no_forced_returns_none(self):
-        data = _build_data()
-        out = maitland_home_grouping_adjuster(data, [], [])
-        assert out is None
-
-    def test_forced_home_weekend_recorded(self):
-        data = _build_data()
-        forced = [{
-            'grade': 'PHL',
-            'teams': ['Maitland', 'Norths'],
-            'field_location': 'Maitland Park',
-            'week': 5,
-        }]
-        out = maitland_home_grouping_adjuster(data, forced, [])
-        assert out == {'Maitland': {5}}
-
-    def test_no_team_match_skipped(self):
-        data = _build_data()
-        # Forced entry at Maitland Park but neither team is from Maitland.
-        forced = [{
-            'grade': '3rd',
-            'teams': ['Norths', 'Norths'],
-            'field_location': 'Maitland Park',
-            'week': 5,
-        }]
-        out = maitland_home_grouping_adjuster(data, forced, [])
-        # No Maitland team in any pair → no home weekend recorded.
-        assert out is None
-
-    def test_non_default_venue_ignored(self):
-        data = _build_data()
-        forced = [{
-            'grade': 'PHL',
-            'teams': ['Maitland', 'Norths'],
-            'field_location': 'Newcastle International Hockey Centre',
-            'week': 5,
-        }]
-        out = maitland_home_grouping_adjuster(data, forced, [])
-        assert out is None
-
-
-# ----------------------------------------------------------------------
-# #4 AwayAtMaitlandGrouping adjuster
-# ----------------------------------------------------------------------
-
-
-class TestAwayAtMaitlandGroupingAdjuster:
-    def test_no_forced_returns_none(self):
-        data = _build_data()
-        out = away_at_maitland_grouping_adjuster(data, [], [])
-        assert out is None
-
-    def test_forced_away_recorded(self):
-        data = _build_data()
-        forced = [{
-            'grade': 'PHL',
-            'teams': ['Maitland', 'Norths'],
-            'field_location': 'Maitland Park',
-            'week': 7,
-        }]
-        out = away_at_maitland_grouping_adjuster(data, forced, [])
-        assert out == {(7, 'Maitland Park'): {'Norths'}}
-
-    def test_multiple_away_clubs_aggregated(self):
-        data = _build_data()
-        # Add a third club so we have two distinct away clubs.
-        data['clubs'].append(Club(name='Souths', home_field='Newcastle International Hockey Centre'))
-        data['teams'].append(Team(name='Souths PHL', club=data['clubs'][-1], grade='PHL'))
-        forced = [
-            {'grade': 'PHL', 'teams': ['Maitland', 'Norths'],
-             'field_location': 'Maitland Park', 'week': 7},
-            {'grade': 'PHL', 'teams': ['Maitland', 'Souths'],
-             'field_location': 'Maitland Park', 'week': 7},
-        ]
-        out = away_at_maitland_grouping_adjuster(data, forced, [])
-        assert out == {(7, 'Maitland Park'): {'Norths', 'Souths'}}
+# spec-018: TestMaitlandHomeGroupingAdjuster and
+# TestAwayAtMaitlandGroupingAdjuster removed — the
+# `maitland_home_grouping_adjuster` / `away_at_maitland_grouping_adjuster`
+# adjusters were deleted along with the venue-sequencing rules they fed.
 
 
 # ----------------------------------------------------------------------
@@ -184,34 +104,30 @@ class TestAwayAtMaitlandGroupingAdjuster:
 
 class TestRegistryDispatch:
     def test_all_adjusters_registered(self):
+        # spec-018: MaitlandHomeGrouping / AwayAtMaitlandGrouping adjusters
+        # removed; only EqualMatchUpSpacing remains.
         for name in (
             'EqualMatchUpSpacing',
-            'MaitlandHomeGrouping',
-            'AwayAtMaitlandGrouping',
         ):
             assert CONSTRAINT_REGISTRY[name].forced_blocked_adjuster is not None, (
                 f'Adjuster missing for {name}'
             )
 
-    def test_run_count_adjusters_populates_all(self):
+    def test_run_count_adjusters_populates_spacing(self):
         data = _build_data()
+        # A FORCED PHL Maitland-vs-Norths entry pinned to round 5 feeds the
+        # EqualMatchUpSpacing adjuster (per-pair forced rounds).
         data['forced_games'] = [
             {
                 'grade': 'PHL',
                 'teams': ['Maitland', 'Norths'],
-                'field_location': 'Maitland Park',
-                'week': 5,
-            },
-            {
-                'grade': 'PHL',
-                'teams': ['Maitland', 'Norths'],
-                'field_location': 'Central Coast Hockey Park',
-                'day': 'Friday',
-                'count': 2,
+                'round_no': 5,
             },
         ]
         adjustments = run_count_adjusters(data)
-        # MaitlandHomeGrouping registered week 5 from entry 1.
-        assert adjustments['MaitlandHomeGrouping'] == {'Maitland': {5}}
-        # AwayAtMaitlandGrouping recorded Norths in week 5.
-        assert adjustments['AwayAtMaitlandGrouping'][(5, 'Maitland Park')] == {'Norths'}
+        # spec-018: MaitlandHomeGrouping / AwayAtMaitlandGrouping entries gone.
+        assert 'MaitlandHomeGrouping' not in adjustments
+        assert 'AwayAtMaitlandGrouping' not in adjustments
+        # EqualMatchUpSpacing recorded round 5 for the Maitland/Norths PHL pair.
+        spacing = adjustments.get('EqualMatchUpSpacing', {})
+        assert any(5 in rounds for rounds in spacing.values())

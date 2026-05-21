@@ -6,9 +6,10 @@ Each adjuster is a free function:
 
 Engine calls every registered adjuster once during
 `UnifiedConstraintEngine.build_groupings()` and stashes the result under
-`data['count_adjustments'][canonical_name]`. The legacy `_matchup_spacing_*`,
-`_maitland_grouping_*`, `_away_maitland_*` methods on `UnifiedConstraintEngine`
-read their entry by canonical name during apply.
+`data['count_adjustments'][canonical_name]`. The legacy `_matchup_spacing_*`
+methods on `UnifiedConstraintEngine` read their entry by canonical name during
+apply. (spec-018 removed the `_maitland_grouping_*` / `_away_maitland_*`
+adjusters along with the venue-sequencing rules they fed.)
 
 Adjusters for atoms that already exist (e.g. `ClubVsClubCoincidence`) live next
 to their atom file. This module collects the ones whose atoms are still inside
@@ -127,99 +128,9 @@ def equal_matchup_spacing_adjuster(
     return dict(forced_rounds_per_pair)
 
 
-# ----------------------------------------------------------------------
-# #3 — MaitlandHomeGrouping adjuster (will rename to NonDefaultHomeGrouping)
-# ----------------------------------------------------------------------
-
-
-def maitland_home_grouping_adjuster(
-    data: Dict, forced_games: List, blocked_games: List
-) -> Optional[Dict[str, Set[int]]]:
-    """For each FORCED entry that pins a game at a non-default home venue with
-    a team of that home club, accumulate the week as a definite home weekend.
-
-    Returns: { club_name: set of forced home weeks }.
-    """
-    teams = data.get('teams', []) or []
-    home_field_map = data.get('home_field_map', {}) or {}
-    if not forced_games or not teams or not home_field_map:
-        return None
-
-    venue_to_club = {v: c for c, v in home_field_map.items()}
-
-    forced_home: Dict[str, Set[int]] = defaultdict(set)
-    for entry in forced_games:
-        venue = entry.get('field_location')
-        if venue not in venue_to_club:
-            continue
-        home_club = venue_to_club[venue]
-        weeks = _entry_weeks(entry, data)
-        if not weeks:
-            continue
-        pairs = _resolve_teams_in_entry(entry, teams)
-        if not pairs:
-            # 'all' entry — any team plays at this venue this week. We can't
-            # know which club is home so skip.
-            continue
-        for t1, t2 in pairs:
-            c1 = _team_club(t1, teams)
-            c2 = _team_club(t2, teams)
-            if home_club in (c1, c2):
-                forced_home[home_club].update(weeks)
-
-    if not forced_home:
-        return None
-    return {c: set(ws) for c, ws in forced_home.items()}
-
-
-# ----------------------------------------------------------------------
-# #4 — AwayAtMaitlandGrouping adjuster (will rename to AwayAtNonDefaultGrouping)
-# ----------------------------------------------------------------------
-
-
-def away_at_maitland_grouping_adjuster(
-    data: Dict, forced_games: List, blocked_games: List
-) -> Optional[Dict[Tuple[int, str], Set[str]]]:
-    """For each FORCED entry that pins a game at a non-default home venue,
-    record the away team's club. The atom uses len(set) per (week, venue) as a
-    floor for the away-clubs-per-week count.
-
-    Returns: { (week, venue): set of away club names }.
-    """
-    teams = data.get('teams', []) or []
-    home_field_map = data.get('home_field_map', {}) or {}
-    if not forced_games or not teams or not home_field_map:
-        return None
-
-    venue_to_club = {v: c for c, v in home_field_map.items()}
-
-    forced_away: Dict[Tuple[int, str], Set[str]] = defaultdict(set)
-    for entry in forced_games:
-        venue = entry.get('field_location')
-        if venue not in venue_to_club:
-            continue
-        home_club = venue_to_club[venue]
-        weeks = _entry_weeks(entry, data)
-        if not weeks:
-            continue
-        pairs = _resolve_teams_in_entry(entry, teams)
-        if not pairs:
-            continue
-        for t1, t2 in pairs:
-            c1 = _team_club(t1, teams)
-            c2 = _team_club(t2, teams)
-            if c1 == home_club and c2 and c2 != home_club:
-                away = c2
-            elif c2 == home_club and c1 and c1 != home_club:
-                away = c1
-            else:
-                continue
-            for w in weeks:
-                forced_away[(w, venue)].add(away)
-
-    if not forced_away:
-        return None
-    return {k: set(v) for k, v in forced_away.items()}
+# spec-018: `maitland_home_grouping_adjuster` (NonDefaultHomeGrouping) and
+# `away_at_maitland_grouping_adjuster` (AwayAtNonDefaultGrouping) deleted —
+# the venue-sequencing rules they fed were removed.
 
 
 # ----------------------------------------------------------------------
@@ -229,10 +140,4 @@ def away_at_maitland_grouping_adjuster(
 
 CONSTRAINT_REGISTRY['EqualMatchUpSpacing'].forced_blocked_adjuster = (
     equal_matchup_spacing_adjuster
-)
-CONSTRAINT_REGISTRY['MaitlandHomeGrouping'].forced_blocked_adjuster = (
-    maitland_home_grouping_adjuster
-)
-CONSTRAINT_REGISTRY['AwayAtMaitlandGrouping'].forced_blocked_adjuster = (
-    away_at_maitland_grouping_adjuster
 )

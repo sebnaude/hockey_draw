@@ -91,10 +91,9 @@ def _build_data_for_fixture(
         'grades': grades,
         'num_rounds': {g.name: 1 for g in grades} | {'max': 10},
         'timeslots': [],
-        'constraint_defaults': {
-            'maitland_max_consecutive_home': 1,
-            'away_maitland_max_clubs': 3,
-        },
+        # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
+        # removed (venue-sequencing rules deleted).
+        'constraint_defaults': {},
         'home_field_map': home_field_map,
         'away_venue_rules': {},
     }
@@ -131,8 +130,10 @@ def test_violation_fixtures_present():
     Adding more is good; the bar here is that we have the agreed coverage.
     """
     fixtures = _all_fixtures()
-    assert len(fixtures) >= 8, (
-        f'Phase 7a (expanded) expects at least 8 violation fixtures; found {len(fixtures)}'
+    # spec-018 removed the two Maitland-grouping fixtures (maitland_back_to_back +
+    # away_at_maitland_overflow) when the venue-sequencing rules were deleted.
+    assert len(fixtures) >= 6, (
+        f'Phase 7a expects at least 6 violation fixtures; found {len(fixtures)}'
     )
 
 

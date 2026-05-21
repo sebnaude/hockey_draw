@@ -74,14 +74,18 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
     # spec-004: FORCED-Friday aware home-weekend count atom. For each
     # away-based club (non-Broadmeadow home venue), pins three sums:
     # friday-home weekends, sunday-home weekends, and total-home weekends.
-    # Replaces the home-weekend logic historically in `FiftyFiftyHomeandAway`
-    # + `MaxMaitlandHomeWeekends`. Reuses the existing `_check_maitland_back_
-    # _to_back` tester method which observes per-club home-weekend totals.
+    # Replaces the home-weekend logic historically in `FiftyFiftyHomeandAway`.
+    # spec-018: the venue-sequencing rules were deleted along with the
+    # `_check_maitland_back_to_back` tester method this entry used to reuse.
+    # Per-club home-weekend counts are verified by this atom's own no-mock
+    # CP-SAT unit test (tests/atoms/test_away_club_home_weekends_count.py); the
+    # registry maps it to the live per-pair/aggregate balance check, which is
+    # the closest standing tester check covering away-club home/away semantics.
     'AwayClubHomeWeekendsCount': ConstraintInfo(
         canonical_name='AwayClubHomeWeekendsCount',
         solver_class_names=['AwayClubHomeWeekendsCount'],
-        tester_check_methods=['_check_maitland_back_to_back'],
-        tester_violation_names=['MaxMaitlandHomeWeekends'],
+        tester_check_methods=['_check_fifty_fifty_home_away'],
+        tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
     ),
     # spec-004: per-opponent + aggregate home/away balance atom. Replaces the
@@ -93,36 +97,12 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
     ),
-    # Phase 6: `NonDefaultHomeGrouping` is the canonical name. It owns the
-    # solver class names (incl. legacy `MaitlandHomeGrouping*` classes which
-    # live in `constraints/archived/`) so `_SOLVER_NAME_TO_CANONICAL` resolves
-    # any legacy name to the generic canonical. The `MaitlandHomeGrouping`
-    # entry below is a back-compat alias kept so older configs / data dicts
-    # / tests that look it up by name continue to work.
-    'NonDefaultHomeGrouping': ConstraintInfo(
-        canonical_name='NonDefaultHomeGrouping',
-        solver_class_names=[
-            'MaitlandHomeGrouping', 'MaitlandHomeGroupingAI',
-            'MaxMaitlandHomeWeekends', 'MaxMaitlandHomeWeekendsAI',
-        ],
-        tester_check_methods=['_check_maitland_back_to_back'],
-        tester_violation_names=['MaxMaitlandHomeWeekends'],
-        severity_level=1,
-        slack_key='MaitlandHomeGrouping',
-        has_soft_component=True,
-    ),
-    'MaitlandHomeGrouping': ConstraintInfo(
-        canonical_name='MaitlandHomeGrouping',
-        # Deprecated alias for `NonDefaultHomeGrouping`. Empty class names
-        # so `_SOLVER_NAME_TO_CANONICAL` routes through the canonical entry.
-        # Same tester/slack/severity metadata so by-name lookups still work.
-        solver_class_names=[],
-        tester_check_methods=['_check_maitland_back_to_back'],
-        tester_violation_names=['MaxMaitlandHomeWeekends'],
-        severity_level=1,
-        slack_key='MaitlandHomeGrouping',
-        has_soft_component=True,
-    ),
+    # spec-018: `NonDefaultHomeGrouping` (alias `MaitlandHomeGrouping`;
+    # solver classes `MaitlandHomeGrouping*` / `MaxMaitlandHomeWeekends*`)
+    # DELETED — the convenor no longer wants the solver enforcing the
+    # *sequence* of an away-based club's home/away weekends (back-to-back home
+    # weekends and long away runs are both fine). Per-club home-weekend counts
+    # are still enforced by the spec-004 `AwayClubHomeWeekendsCount` atom.
     # spec-014: rewrite of the legacy `PHLAndSecondGradeAdjacency`. The old
     # engine method `_phl_adjacency_hard` only *forbade* two bad +/-180-min
     # patterns; the new atom *forces* same-club PHL/2nd back-to-back at one
@@ -247,25 +227,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         atom_group='ClubDay',
         required_helpers=['club_day_slot_used'],
     ),
-    # Phase 6: `AwayAtNonDefaultGrouping` is the canonical name. Owns the
-    # solver class names; `AwayAtMaitlandGrouping` is a back-compat alias.
-    'AwayAtNonDefaultGrouping': ConstraintInfo(
-        canonical_name='AwayAtNonDefaultGrouping',
-        solver_class_names=['AwayAtMaitlandGrouping', 'AwayAtMaitlandGroupingAI'],
-        tester_check_methods=['_check_maitland_away_clubs_limit'],
-        tester_violation_names=['AwayAtMaitlandGrouping'],
-        severity_level=2,
-        slack_key='AwayAtMaitlandGrouping',
-    ),
-    'AwayAtMaitlandGrouping': ConstraintInfo(
-        canonical_name='AwayAtMaitlandGrouping',
-        # Deprecated alias for `AwayAtNonDefaultGrouping`.
-        solver_class_names=[],
-        tester_check_methods=['_check_maitland_away_clubs_limit'],
-        tester_violation_names=['AwayAtMaitlandGrouping'],
-        severity_level=2,
-        slack_key='AwayAtMaitlandGrouping',
-    ),
+    # spec-018: `AwayAtNonDefaultGrouping` (alias `AwayAtMaitlandGrouping`;
+    # solver classes `AwayAtMaitlandGrouping*`) DELETED — the convenor no
+    # longer caps how many distinct away clubs may visit a non-default venue
+    # in one weekend.
     'TeamConflict': ConstraintInfo(
         canonical_name='TeamConflict',
         solver_class_names=['TeamConflictConstraint', 'TeamConflictConstraintAI'],
@@ -452,19 +417,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=5,
         has_soft_component=True,
     ),
-    # spec-012: soft penalty for non-alternating Maitland weekends.
-    # Penalises consecutive playable-week pairs where both are home (HH) OR
-    # both are away (AA). HH is already hard-forbidden by NonDefaultHomeGrouping
-    # with default slack, so the AA branch does the work. Pure soft, severity
-    # 4. Reads `data['penalty_weights']['maitland_alternate_home_away']`.
-    'MaitlandAlternateHomeAway': ConstraintInfo(
-        canonical_name='MaitlandAlternateHomeAway',
-        solver_class_names=['MaitlandAlternateHomeAway'],
-        tester_check_methods=[],
-        tester_violation_names=[],
-        severity_level=4,
-        has_soft_component=True,
-    ),
+    # spec-018: `MaitlandAlternateHomeAway` (spec-012 soft) DELETED — its whole
+    # purpose was to push an H-A-H-A weekend pattern, the sequencing the
+    # convenor is discarding. Removed alongside `NonDefaultHomeGrouping`.
     'ForcedGames': ConstraintInfo(
         canonical_name='ForcedGames',
         solver_class_names=[],  # Enforced by generate_X variable elimination, not a Constraint class

@@ -79,8 +79,11 @@ class TestRegistryCompleteness:
         spec-014 renamed the `PHLAndSecondGradeAdjacency` entry to the
         `PHLAnd2ndAdjacency` atom (1:1 replacement) — count unchanged.
         spec-015 DELETED `GosfordFridayRoundsForced` (its per-round sum==1 rule
-        is now a generic FORCED_GAMES count entry): 44 - 1 = 43."""
-        assert len(CONSTRAINT_REGISTRY) == 43
+        is now a generic FORCED_GAMES count entry): 44 - 1 = 43.
+        spec-018 DELETED the venue-sequencing entries `NonDefaultHomeGrouping`,
+        `MaitlandHomeGrouping`, `AwayAtNonDefaultGrouping`,
+        `AwayAtMaitlandGrouping` and `MaitlandAlternateHomeAway`: 43 - 5 = 38."""
+        assert len(CONSTRAINT_REGISTRY) == 38
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
@@ -117,12 +120,8 @@ class TestNormalization:
         ('EnsureEqualGamesAndBalanceMatchUpsAI', 'EqualGamesAndBalanceMatchUps'),
         ('ClubDayConstraint', 'ClubDay'),
         ('ClubDayConstraintAI', 'ClubDay'),
-        # Phase 6 canonical-flip: the bare alias name passes through (the
-        # alias entry is itself in the registry), but the suffixed solver
-        # class name resolves via `_SOLVER_NAME_TO_CANONICAL` to the new
-        # canonical `NonDefaultHomeGrouping`.
-        ('MaitlandHomeGrouping', 'MaitlandHomeGrouping'),
-        ('MaitlandHomeGroupingAI', 'NonDefaultHomeGrouping'),
+        # spec-018: MaitlandHomeGrouping* normalization cases removed — the
+        # entries and their solver classes were deleted.
         ('EqualMatchUpSpacingConstraint', 'EqualMatchUpSpacing'),
         ('EqualMatchUpSpacingConstraintAI', 'EqualMatchUpSpacing'),
         ('PreferredTimesConstraint', 'PreferredTimes'),
@@ -195,9 +194,9 @@ class TestSlackKeys:
     """Test get_slack_key."""
 
     def test_known_slack_keys(self):
-        assert get_slack_key('MaitlandHomeGrouping') == 'MaitlandHomeGrouping'
+        # spec-018: MaitlandHomeGrouping / AwayAtMaitlandGrouping slack keys
+        # removed along with their rules.
         assert get_slack_key('EqualMatchUpSpacing') == 'EqualMatchUpSpacingConstraint'
-        assert get_slack_key('AwayAtMaitlandGrouping') == 'AwayAtMaitlandGrouping'
         assert get_slack_key('ClubGameSpread') == 'ClubGameSpread'
         assert get_slack_key('ClubVsClubAlignment') == 'ClubVsClubAlignment'
 
@@ -209,8 +208,7 @@ class TestSlackKeys:
         """All slack keys in the registry should be recognizable slack dict keys."""
         known_slack_keys = {
             'EqualMatchUpSpacingConstraint',
-            'AwayAtMaitlandGrouping',
-            'MaitlandHomeGrouping',
+            # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping removed.
             'ClubVsClubAlignment',
             'MaximiseClubsPerTimeslotBroadmeadow',
             'MinimiseClubsOnAFieldBroadmeadow',
@@ -238,15 +236,13 @@ class TestTesterOnlyConstraints:
         assert 'ClubFieldConcentration' in tester_only
 
     def test_non_tester_only_have_solver_names(self):
-        # Phase 6 canonical-flip: `NonDefaultHomeGrouping` /
-        # `AwayAtNonDefaultGrouping` own the solver_class_names; their legacy
-        # Maitland-named entries are back-compat aliases with empty class
-        # names. They reference the same logical constraint.
+        # spec-018: the Phase-6 Maitland-named alias entries
+        # (`MaitlandHomeGrouping`, `AwayAtMaitlandGrouping`) were deleted along
+        # with their rules.
         # spec-010: `PHLRoundOnePlay` is obsolete — atom file kept on disk as
         # parity reference, `solver_class_names` emptied so legacy CLI flag
-        # lookups don't accidentally redispatch it. Exempt like Phase-6 aliases.
+        # lookups don't accidentally redispatch it.
         ALIAS_NAMES = {
-            'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping',
             'PHLRoundOnePlay',  # spec-010 obsolete; parity reference only
         }
         for name, info in CONSTRAINT_REGISTRY.items():

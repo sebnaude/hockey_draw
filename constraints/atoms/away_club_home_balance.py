@@ -30,8 +30,9 @@ the per-pair, per-team-aggregate, AND per-club-weekend balance.
 
 ## What's NOT here
 
-Per-club home-weekend totals live in `AwayClubHomeWeekendsCount`. Consecutive
-home weekends spacing lives in `NonDefaultHomeGrouping`. Locked weeks are
+Per-club home-weekend totals live in `AwayClubHomeWeekendsCount`. Consecutive-
+home-weekend *sequencing* is no longer constrained at all (spec-018 deleted
+`NonDefaultHomeGrouping`; back-to-back home weekends are fine). Locked weeks are
 handled the same way as the legacy class — the sums see the locked vars as
 constants (the solver will already have fixed them via `model.Add(X[k]==1)`).
 """

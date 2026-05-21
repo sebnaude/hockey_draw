@@ -461,14 +461,10 @@ CLASS_TO_REGISTRY = {
     'PHLAndSecondGradeTimesAI': 'PHLAndSecondGradeTimes',
     'FiftyFiftyHomeandAway': 'FiftyFiftyHomeAway',
     'FiftyFiftyHomeandAwayAI': 'FiftyFiftyHomeAway',
-    'MaxMaitlandHomeWeekends': 'MaxMaitlandHomeWeekends',
-    'MaxMaitlandHomeWeekendsAI': 'MaxMaitlandHomeWeekends',
-    'MaitlandHomeGrouping': 'MaitlandHomeGrouping',
-    'MaitlandHomeGroupingAI': 'MaitlandHomeGrouping',
+    # spec-018: `MaxMaitlandHomeWeekends*` / `MaitlandHomeGrouping*` /
+    # `AwayAtMaitlandGrouping*` removed — venue-sequencing rules deleted.
     'ClubDayConstraint': 'ClubDayConstraint',
     'ClubDayConstraintAI': 'ClubDayConstraint',
-    'AwayAtMaitlandGrouping': 'AwayAtMaitlandGrouping',
-    'AwayAtMaitlandGroupingAI': 'AwayAtMaitlandGrouping',
     'TeamConflictConstraint': 'TeamConflict',
     'TeamConflictConstraintAI': 'TeamConflict',
     'EqualMatchUpSpacingConstraint': 'EqualMatchUpSpacing',

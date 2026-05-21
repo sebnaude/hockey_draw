@@ -224,8 +224,8 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 
 | Level | Name | Constraints | Relaxable? |
 |-------|------|------------|------------|
-| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, NonDefaultHomeGrouping (alias: MaitlandHomeGrouping), PHLAnd2ndAdjacency, PHLAndSecondGradeTimes | Never |
-| 2 | HIGH | ClubDay, AwayAtMaitlandGrouping, TeamConflict | With --relax |
+| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAnd2ndAdjacency, PHLAndSecondGradeTimes | Never |
+| 2 | HIGH | ClubDay, TeamConflict | With --relax |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | With --relax |
 | 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | Yes |
@@ -234,8 +234,6 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 
 The `--slack` CLI flag loosens specific constraints. Applied to:
 - `EqualMatchUpSpacingConstraint`: reduces min_gap toward floor. Formula: `min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - slack)`. Config: `spacing_base_slack` in `CONSTRAINT_DEFAULTS` (default 0)
-- `AwayAtMaitlandGrouping`: max away clubs = 3 + slack
-- `MaitlandHomeGrouping`: max consecutive home weeks = 1 + slack (sliding window)
 - `ClubVsClubAlignment`: loosens alignment requirement
 - `MaximiseClubsPerTimeslotBroadmeadow`: reduces minimum
 - `MinimiseClubsOnAFieldBroadmeadow`: increases maximum
@@ -247,7 +245,7 @@ Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `Dra
 
 **FiftyFiftyHomeandAway**: Enforces per-PAIR balance (each Maitland/Gosford team vs each opponent individually), NOT aggregate balance. With odd meeting counts (e.g., 3 meetings), all pairs may land 1H/2A causing aggregate imbalance. This is by design.
 
-**MaitlandHomeGrouping**: Uses sliding window of size (max_consecutive + 1) to enforce max N consecutive home weeks. With slack=0, no back-to-back; slack=3, max 4 consecutive.
+**Home/away weekend sequencing — REMOVED (spec-018)**: the former `NonDefaultHomeGrouping` (consecutive-home-weekend cap), `AwayAtMaitlandGrouping` (away-clubs-per-weekend cap) and `MaitlandAlternateHomeAway` (H-A-H-A soft penalty) are all deleted. Back-to-back home weekends and long away runs are both fine now. Only the home/away *balance* (`AwayClubPerOpponentAndAggregateHomeBalance`) and per-club home-weekend *totals* (`AwayClubHomeWeekendsCount`) from spec-004 remain.
 
 **PHLAnd2ndAdjacency** (spec-014, atom): per (club, week, day) where the club fields BOTH a PHL and a 2nd game — **same venue** ⇒ same field + adjacent day_slots (back-to-back); **different venue** ⇒ start times ≥ `phl_2nd_cross_venue_min_minutes` (180, real minutes) apart. Replaces the legacy ±180-min forbid window, which never *forced* adjacency.
 
@@ -271,35 +269,26 @@ away clubs per week, spacing flexibility) registers a
 `data['count_adjustments'][canonical_name]`. Atoms (or legacy methods that
 haven't been atomised yet) read their entry by canonical name during apply.
 
-Currently shipped adjusters: `EqualMatchUpSpacing`, `NonDefaultHomeGrouping`
-(alias `MaitlandHomeGrouping`), `AwayAtNonDefaultGrouping` (alias
-`AwayAtMaitlandGrouping`), `ClubVsClubCoincidence`. `EqualGames` is
-no-op-by-design (FORCED entries pin terms to 1; the per-team game-count sum is
-unchanged). See `docs/system/COUNT_ADJUSTERS.md` for formulas.
+Currently shipped adjusters: `EqualMatchUpSpacing`, `ClubVsClubCoincidence`.
+`EqualGames` is no-op-by-design (FORCED entries pin terms to 1; the per-team
+game-count sum is unchanged). (The `NonDefaultHomeGrouping` /
+`AwayAtNonDefaultGrouping` adjusters were removed in spec-018 along with their
+constraints.) See `docs/system/COUNT_ADJUSTERS.md` for formulas.
 
-### Generic non-default-home (Phase 6)
+### Home/away weekend sequencing — REMOVED (spec-018)
 
-The home-grouping constraints are generic: `NonDefaultHomeGrouping` (home
-back-to-back) and `AwayAtNonDefaultGrouping` (away-clubs-per-week-at-venue)
-are the canonical names. They iterate every club in `home_field_map` whose
-home venue isn't Broadmeadow. Per-club tuning comes from
-`AWAY_VENUE_RULES[club]` (in `config/defaults.py` or season overrides):
-- `max_consecutive_home`: per-club sliding-window limit. `None` disables the
-  grouping for that club. Falls back to `CONSTRAINT_DEFAULTS['maitland_max_consecutive_home']`.
-- `max_away_clubs`: per-club hard cap on distinct away clubs per week at the
-  venue. `None` disables. Falls back to `CONSTRAINT_DEFAULTS['away_maitland_max_clubs']`.
-
-Adding a new non-default home club: add it to `home_field_map` and (optionally)
-`AWAY_VENUE_RULES`. No constraint code changes. Removing a club silences its
-constraints rather than crashing.
-
-`MaitlandHomeGrouping` and `AwayAtMaitlandGrouping` remain as back-compat
-aliases in the registry — they share tester methods, severity, and slack key
-with the canonical entries, so older configs / data dicts / tests that look
-them up by name keep working. The literal slack key inside
-`data['constraint_slack']` is still spelled `'MaitlandHomeGrouping'` /
-`'AwayAtMaitlandGrouping'` (an internal name used by `unified.py` /
-`tester.py`); the canonical flip is at the registry layer.
+The generic home-grouping constraints (`NonDefaultHomeGrouping` /
+`AwayAtNonDefaultGrouping` and their `MaitlandHomeGrouping` /
+`AwayAtMaitlandGrouping` aliases) and the soft `MaitlandAlternateHomeAway`
+were **deleted in spec-018**, along with their registry entries, engine
+methods, adjusters, severity entries, tester checks, slack keys, the
+`maitland_alternate_home_away` penalty weight, and the
+`maitland_max_consecutive_home` / `away_maitland_max_clubs` config keys. The
+convenor no longer wants ANY sequencing of home/away weekends — consecutive
+home weekends and long away runs are both acceptable. The only home/away
+rules left are the spec-004 atoms `AwayClubHomeWeekendsCount` (per-club
+home-weekend totals) and `AwayClubPerOpponentAndAggregateHomeBalance`
+(per-pair + aggregate 50/50 balance), which `home_field_map` still drives.
 
 ### Configurable solver stages (Phase 7b foundation)
 
@@ -352,8 +341,6 @@ data = load_season_data(2026)
 # IMPORTANT: Set constraint_slack to match the solver run's --slack value
 data['constraint_slack'] = {
     'EqualMatchUpSpacingConstraint': 3,
-    'AwayAtMaitlandGrouping': 3,
-    'MaitlandHomeGrouping': 3,
     'ClubVsClubAlignment': 3,
     'MaximiseClubsPerTimeslotBroadmeadow': 3,
     'MinimiseClubsOnAFieldBroadmeadow': 3,
@@ -380,8 +367,6 @@ The tester runs these checks (matching solver constraint behavior):
 - `EqualGames` — each team plays expected games (from `num_rounds`)
 - `BalancedMatchups` — pair meetings within base/base+1
 - `FiftyFiftyHomeAway` — per-pair home/away balance for Maitland/Gosford
-- `MaxMaitlandHomeWeekends` — sliding window consecutive home weeks (slack-aware)
-- `AwayAtMaitlandGrouping` — max away clubs per week (slack-aware)
 - `ClubGradeAdjacency` — adjacent grades same club not same timeslot
 - `PHLAnd2ndAdjacency` — same-club PHL/2nd back-to-back at one venue, or ≥180-min start gap across venues (spec-014)
 
@@ -602,7 +587,7 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 - **Home/away** - determined by venue (field_location), NOT by team1/team2 position in variable key
 - **Week vs date** - a single week can have both Friday and Sunday games; always use `date` not `week` when comparing game slots
 - **Per-pair vs aggregate** - FiftyFiftyHomeAway is per-pair; aggregate home/away can be imbalanced even when all pairs are balanced
-- **Slack >= 1 effects** - MaitlandHomeGrouping uses sliding window (correct); check constraint docstrings for slack semantics
+- **Slack >= 1 effects** - check constraint docstrings for slack semantics (per-constraint, not uniform)
 - **Bastardised constraints (2026 locked-week workarounds)**: `EqualMatchUpSpacingConstraint` in `original.py` — only applies to PHL/2nd when locked_weeks active (conditional, safe for normal runs). `ClubVsClubAlignment` — hacked to only apply to PHL/2nd. `PHLAndSecondGradeTimes` — skips locked weeks for Friday counting (totals adjusted by subtracting locked counts) and round 1 enforcement. `PHLAnd2ndAdjacency` (spec-014; was `PHLAndSecondGradeAdjacency`) — must be EXCLUDED via `--exclude PHLAnd2ndAdjacency` when running with locked weeks (causes infeasibility due to Gosford PHL having zero margin). The atom self-skips locked weeks, but the cross-venue/back-to-back rule can still over-constrain Gosford PHL. `locked_keys_set` is stored in `data` by `main_staged.py`/`main_simple`. The AI versions in `ai.py` were NOT changed. Revert hacks if running a full unconstrained solve.
 
 ## Draw Review Checklist

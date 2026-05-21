@@ -59,7 +59,7 @@ Current catalog (extend as Phase 3 atoms need new kinds):
 | `pair_plays_on_date` | `(team1, team2, date, grade)` | OR over date's timeslot vars | new `ClubVsClubCoincidence` atom |
 | `club_plays_on_date_at_field` | `(club, date, field)` | OR over teams from club at that field | `ClubDaySameField` atom |
 | `club_grade_in_slot` | `(club, grade, week, day, day_slot)` | OR over teams of (club,grade) in slot | `ClubGradeAdjacency` |
-| `home_game` | `(team, week, opponent)` | indicator: team played at home | `FiftyFifty`, `NonDefaultHomeGrouping` |
+| `home_game` | `(team, week, opponent)` | indicator: team played at home | `AwayClubPerOpponentAndAggregateHomeBalance`, `AwayClubHomeWeekendsCount` (the `NonDefaultHomeGrouping` consumer was removed in spec-018) |
 | `is_phl_friday` | `(week,)` | indicator: PHL plays Friday this week | PHL Friday count atoms |
 | `club_day_field_used` | `(club, field_name)` | indicator: any club_day game on field_name | `ClubDaySameField` |
 | `club_day_slot_used` | `(club, day_slot)` | indicator: any club_day game at day_slot | `ClubDayContiguousSlots` |

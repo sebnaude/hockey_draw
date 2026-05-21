@@ -42,18 +42,10 @@ def _run(name: str):
 
 
 class TestAffectedClubsPopulated:
-    def test_maitland_back_to_back_flags_maitland(self):
-        report = _run('maitland_back_to_back.json')
-        v = next(v for v in report.violations if v.constraint == 'MaxMaitlandHomeWeekends')
-        assert 'Maitland' in v.affected_clubs
-        assert v.metric_value is not None and v.metric_value >= 2
-
-    def test_away_at_maitland_overflow_flags_clubs(self):
-        report = _run('away_at_maitland_overflow.json')
-        v = next(v for v in report.violations if v.constraint == 'AwayAtMaitlandGrouping')
-        # 4 distinct away clubs visited Maitland Park
-        assert v.metric_value == 4
-        assert len(v.affected_clubs) >= 3
+    # spec-018: test_maitland_back_to_back_flags_maitland /
+    # test_away_at_maitland_overflow_flags_clubs removed — the
+    # MaxMaitlandHomeWeekends / AwayAtMaitlandGrouping checks and their
+    # fixtures were deleted.
 
     def test_home_away_imbalance_flags_team_club(self):
         report = _run('home_away_imbalance.json')
@@ -84,23 +76,15 @@ class TestBreakdownRollups:
     the fields populated above."""
 
     def test_breakdown_by_club_aggregates(self):
-        report = _run('away_at_maitland_overflow.json')
+        report = _run('club_vs_club_non_coincident.json')
         breakdown = report.breakdown
-        # Multiple away clubs visited Maitland Park — they all show up under by_club.
+        # The non-coincident club pair shows up under by_club.
         assert breakdown.by_club, 'breakdown.by_club empty'
-        # Maitland is the host club. The visiting clubs are flagged.
         flagged_clubs = set(breakdown.by_club.keys())
-        assert any(c in flagged_clubs for c in ['Tigers', 'Wests', 'Norths', 'Easts'])
+        assert any(c in flagged_clubs for c in ['Tigers', 'Norths'])
 
-    def test_soft_pressure_records_metric(self):
-        report = _run('maitland_back_to_back.json')
-        breakdown = report.breakdown
-        # MaxMaitlandHomeWeekends entry should appear in soft_pressure with non-zero metric.
-        assert 'MaxMaitlandHomeWeekends' in breakdown.soft_pressure
-        bucket = breakdown.soft_pressure['MaxMaitlandHomeWeekends']
-        assert bucket['over_limit'] >= 1
-        assert bucket['worst_value'] is not None
-        assert bucket['worst_club'] == 'Maitland'
+    # spec-018: test_soft_pressure_records_metric removed — it depended on the
+    # deleted MaxMaitlandHomeWeekends soft-pressure bucket / fixture.
 
     def test_breakdown_by_type_groups_per_constraint(self):
         report = _run('club_vs_club_non_coincident.json')

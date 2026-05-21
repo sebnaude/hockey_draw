@@ -59,27 +59,24 @@ HOME_FIELD_MAP = {
 }
 
 # ============== Per-Club Away-Venue Rules ==============
-# Per-club tuning for the generic "non-default-home" constraints (Phase 6).
-# Adding/removing a club here is the only change needed to scope all
-# Maitland-style and Gosford-style constraints to a new club. Keys not set
-# fall back to perennial CONSTRAINT_DEFAULTS values.
+# Per-club tuning for away-ground (non-default-home) venues. Adding/removing
+# a club here scopes the venue-specific Friday-game counts to a new club. Keys
+# not set fall back to perennial CONSTRAINT_DEFAULTS values.
 #
-#   max_consecutive_home — max consecutive home weeks (NonDefaultHomeGrouping)
-#   friday_games         — exact PHL Friday games at this venue per season
-#   max_away_clubs       — max distinct away clubs at this venue per week
-#                          (AwayAtNonDefaultGrouping)
+#   friday_games — exact PHL Friday games at this venue per season
+#
+# spec-018: `max_consecutive_home` / `max_away_clubs` removed — the
+# venue-sequencing rules (`NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping`)
+# that read them were deleted.
 
 AWAY_VENUE_RULES = {
     'Maitland': {
         # No explicit overrides — Maitland falls back to CONSTRAINT_DEFAULTS
-        # (`maitland_max_consecutive_home`, `away_maitland_max_clubs`,
-        # `maitland_friday_games`). Season configs may override here per-club
+        # (`maitland_friday_games`). Season configs may override here per-club
         # without touching the global defaults.
     },
     'Gosford': {
-        'max_consecutive_home': 2,    # Gosford allows 2 consecutive home weekends
         'friday_games': 8,
-        'max_away_clubs': None,       # no per-week away-clubs cap at Gosford
     },
 }
 
@@ -111,9 +108,8 @@ CONSTRAINT_DEFAULTS = {
     # spec-015: 'gosford_friday_rounds' removed — it only fed the deleted
     # GosfordFridayRoundsForced atom. Gosford Friday rounds are now FORCED_GAMES
     # count entries in the season config (see FORCED_GAMES_AS_COUNT_RULES.md).
-    # Maitland home-game grouping
-    'maitland_max_consecutive_home': 1,
-    'away_maitland_max_clubs': 3,
+    # spec-018: `maitland_max_consecutive_home` / `away_maitland_max_clubs`
+    # removed — the venue-sequencing rules they tuned were deleted.
     # Broadmeadow field counts
     'max_clubs_per_field': 5,
     # Club game spread
@@ -192,9 +188,12 @@ DEFAULT_STAGES = [
             # / Sunday / total home-weekend counts (FORCED-Friday aware);
             # `AwayClubPerOpponentAndAggregateHomeBalance` enforces per-pair +
             # per-team aggregate home/away balance.
+            # spec-018: `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping`
+            # removed — the convenor no longer wants venue-sequencing enforced.
+            # Per-club home-weekend counts + per-pair/aggregate 50/50 balance
+            # (the two atoms above) are KEPT.
             'AwayClubHomeWeekendsCount',
             'AwayClubPerOpponentAndAggregateHomeBalance',
-            'NonDefaultHomeGrouping', 'AwayAtNonDefaultGrouping',
         ],
     },
     {
@@ -249,10 +248,9 @@ DEFAULT_STAGES = [
             'TeamPairNoConcurrency',
             # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
             'PreferredWeekendsAwayGround',
-            # spec-012: soft penalty per consecutive Maitland weekend pair of
-            # the same type (HH or AA). HH is already hard-forbidden by
-            # NonDefaultHomeGrouping; the AA branch discourages long away runs.
-            'MaitlandAlternateHomeAway',
+            # spec-018: `MaitlandAlternateHomeAway` (spec-012) removed — its
+            # purpose was to push an H-A-H-A sequence, the venue-sequencing the
+            # convenor is discarding.
         ],
     },
 ]

@@ -130,15 +130,16 @@ Each variable is a boolean: 1 = game scheduled at this slot, 0 = not scheduled.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ Stage 1: stage1_required (MUST satisfy) - 14 constraints       │
+│ Stage 1: stage1_required (MUST satisfy) - 11 constraints       │
 │   • NoDoubleBookingTeams, NoDoubleBookingFields                │
 │   • EnsureEqualGamesAndBalanceMatchUps                         │
 │   • PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes         │
 │   • FiftyFiftyHomeandAway, TeamConflictConstraint              │
-│   • MaxMaitlandHomeWeekends, ClubDayConstraint                 │
+│   • ClubDayConstraint                                          │
 │   • EqualMatchUpSpacingConstraint, ClubGradeAdjacencyConstraint│
-│   • ClubVsClubAlignment, MaitlandHomeGrouping                  │
-│   • AwayAtMaitlandGrouping                                     │
+│   • ClubVsClubAlignment                                        │
+│   (MaxMaitlandHomeWeekends, MaitlandHomeGrouping,              │
+│    AwayAtMaitlandGrouping removed — spec-018)                  │
 │                         ↓ checkpoint                           │
 ├────────────────────────────────────────────────────────────────┤
 │ Stage 2: stage2_soft (Soft preferences) - 4 constraints        │
@@ -249,8 +250,10 @@ All 18 constraint pairs have been audited for parity. Use `--ai` to select the A
 | `FiftyFiftyHomeAway` | Hard | Away teams get balanced home/away |
 | `PHLAndSecondGradeAdjacency` | Hard | PHL/2nd play adjacent slots |
 | `ClubGradeAdjacency` | Hard | Adjacent grades don't overlap |
-| `MaitlandHomeGrouping` | Soft | Group Maitland home games |
 | `PreferredTimes` | Soft | Honor club preferences |
+
+(`MaitlandHomeGrouping` and the other home/away weekend-grouping constraints
+were removed in spec-018.)
 
 ### Analytics (`analytics/`)
 

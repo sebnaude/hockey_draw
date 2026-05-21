@@ -426,8 +426,7 @@ class ComplianceCertificate:
         'EqualGames': 'Each team plays the expected number of games',
         'BalancedMatchups': 'Each pair of teams meets a balanced number of times',
         'FiftyFiftyHomeAway': 'Away teams (Maitland/Gosford) have balanced home/away',
-        'MaxMaitlandHomeWeekends': 'No back-to-back Maitland home weekends',
-        'AwayAtMaitlandGrouping': 'Maximum 3 away clubs at Maitland per week',
+        # spec-018: MaxMaitlandHomeWeekends / AwayAtMaitlandGrouping removed.
         'ClubGradeAdjacency': 'Adjacent grades from same club dont clash',
         'PHLAnd2ndAdjacency': 'PHL and 2nd grade from same club: back-to-back at one venue or >=3h apart across venues',
         'PHLAndSecondGradeTimes': 'PHL plays before or with 2nd grade',

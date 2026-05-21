@@ -185,12 +185,8 @@ class TestFiftyFiftyHomeAway:
         assert len(mait_wests) == 1, f"Expected Maitland 3rd vs Wests 3rd violation, found: {[v.message for v in violations]}"
 
 
-class TestMaitlandBackToBack:
-    """No consecutive Maitland home weekends (sliding window)."""
-
-    def test_clean_pass(self, tester):
-        violations = tester._check_maitland_back_to_back()
-        assert len(violations) == 0
+# spec-018: TestMaitlandBackToBack removed — the `_check_maitland_back_to_back`
+# tester method (and the venue back-to-back rule) were deleted.
 
 
 class TestEqualMatchUpSpacing:
@@ -239,21 +235,9 @@ class TestEqualMatchUpSpacing:
 # ============== Level 2: HIGH ==============
 
 
-class TestMaitlandAwayClubsLimit:
-    """Max away clubs at Maitland per week."""
-
-    def test_known_violation(self, tester):
-        violations = tester._check_maitland_away_clubs_limit()
-        assert len(violations) >= 1
-        # Known: Week 4 has 3 away clubs (Wests, Crusaders, Souths)
-        week4 = [v for v in violations if 'Week 4' in v.message]
-        assert len(week4) == 1
-        assert 'Wests' in week4[0].message or 'Crusaders' in week4[0].message or 'Souths' in week4[0].message
-
-    def test_violation_mentions_club_names(self, tester):
-        violations = tester._check_maitland_away_clubs_limit()
-        for v in violations:
-            assert 'away clubs' in v.message.lower() or 'max' in v.message.lower()
+# spec-018: TestMaitlandAwayClubsLimit removed — the
+# `_check_maitland_away_clubs_limit` tester method (and the away-clubs-per-week
+# cap rule) were deleted.
 
 
 class TestTeamConflict:

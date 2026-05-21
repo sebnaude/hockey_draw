@@ -170,20 +170,10 @@ class UnifiedConstraintEngine:
         self.by_sunday_clubpair_round_field = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         # --- Venue groupings ---
-        self.by_week_location = defaultdict(list)
-        # Phase 6: generic non-default-home (one set per club whose home venue
-        # is not Broadmeadow). Keys = club name; aliases below preserve the
-        # legacy `maitland_*` names for back-compat with parity tests.
-        self.non_default_all_week = defaultdict(lambda: defaultdict(list))   # club -> week -> [vars]
-        self.non_default_home_week = defaultdict(lambda: defaultdict(list))  # club -> week -> [vars]
-        self.non_default_away_club_week = defaultdict(  # venue -> week -> away_club -> [vars]
-            lambda: defaultdict(lambda: defaultdict(list))
-        )
-        self.maitland_home_week = self.non_default_home_week['Maitland']
-        self.maitland_all_week = self.non_default_all_week['Maitland']
-        self.maitland_away_club_week = self.non_default_away_club_week.setdefault(
-            'Maitland Park', defaultdict(lambda: defaultdict(list))
-        )
+        # spec-018: the `non_default_*` per-club home/away-week maps (and their
+        # `maitland_*` aliases) plus the `by_week_location` map were all deleted
+        # along with the venue-sequencing rules (`NonDefaultHomeGrouping` /
+        # `AwayAtNonDefaultGrouping`). Nothing consumes them anymore.
 
         # --- Broadmeadow groupings ---
         self.bm_slot_club = defaultdict(lambda: defaultdict(list))
@@ -286,23 +276,8 @@ class UnifiedConstraintEngine:
                 if day == 'Sunday':
                     self.by_sunday_clubpair_round_field[club_pair][round_no][field_name].append(var)
 
-            # --- MaxMaitlandHomeWeekends (non-Broadmeadow) ---
-            if location != BROADMEADOW:
-                self.by_week_location[(week, location)].append(var)
-
-            # --- NonDefaultHomeGrouping (Phase 6: per-club, was Maitland-only) ---
-            home_field_map = self.data.get('home_field_map', {}) or {}
-            for nd_club, nd_venue in home_field_map.items():
-                if t1_club == nd_club or t2_club == nd_club:
-                    self.non_default_all_week[nd_club][week].append(var)
-                    if location == nd_venue:
-                        self.non_default_home_week[nd_club][week].append(var)
-
-                # --- AwayAtNonDefaultGrouping ---
-                if location == nd_venue:
-                    for team_club in (t1_club, t2_club):
-                        if team_club and team_club != nd_club:
-                            self.non_default_away_club_week[nd_venue][week][team_club].append(var)
+            # spec-018: venue groupings for the deleted MaxMaitlandHomeWeekends /
+            # NonDefaultHomeGrouping / AwayAtNonDefaultGrouping rules removed.
 
             # --- Broadmeadow slot/field club groupings ---
             if location == BROADMEADOW and day in ['Saturday', 'Sunday']:
@@ -401,8 +376,8 @@ class UnifiedConstraintEngine:
             c += self._fifty_fifty_home_away()
         if 'TeamConflict' not in _skip:
             c += self._team_conflict()
-        if 'MaxMaitlandHomeWeekends' not in _skip:
-            c += self._max_venue_weekends()
+        # spec-018: `MaxMaitlandHomeWeekends` (`_max_venue_weekends`) deleted —
+        # superseded by the spec-004 `AwayClubHomeWeekendsCount` atom.
         # spec-014: PHL/2nd adjacency is now the `PHLAnd2ndAdjacency` atom,
         # dispatched via the non-engine fallback in constraints/stages.py — no
         # engine skip-key block here anymore.
@@ -415,10 +390,8 @@ class UnifiedConstraintEngine:
         # non-engine fallback in `constraints/stages.py`. Nothing to do here.
         if 'ClubVsClubAlignment' not in _skip:
             c += self._club_alignment_hard()
-        if 'MaitlandHomeGrouping' not in _skip:
-            c += self._maitland_grouping_hard()
-        if 'AwayAtMaitlandGrouping' not in _skip:
-            c += self._away_maitland_hard()
+        # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` hard
+        # dispatch removed — venue-sequencing rules deleted.
         if 'ClubDay' not in _skip:
             c += self._club_day_atoms_hard()
         if 'ClubGameSpread' not in _skip:
@@ -500,32 +473,8 @@ class UnifiedConstraintEngine:
                     n += 1
         return n
 
-    def _max_venue_weekends(self):
-        n = 0
-        # Calculate max games per home field
-        grade_games = {g.name: g.num_games for g in self.grades}
-        max_games_per_field = defaultdict(int)
-        for club_name, home_field in self.club_home_field.items():
-            for team_name in self.club_teams_map[club_name]:
-                tg = self.team_grade.get(team_name)
-                if tg:
-                    max_games_per_field[home_field] = max(
-                        max_games_per_field[home_field],
-                        grade_games.get(tg, 0)
-                    )
-
-        location_indicators = defaultdict(list)
-        for (week, location), vars_list in self.by_week_location.items():
-            ind = self.pool.get_or_create_bool(
-                ('weekend_used', week, location), vars_list,
-                f"u_weekend_{week}_{location}")
-            location_indicators[location].append(ind)
-
-        for location, indicators in location_indicators.items():
-            max_weekends = max_games_per_field.get(location, 10) // 2 + 1
-            self.model.Add(sum(indicators) <= max_weekends)
-            n += 1
-        return n
+    # spec-018: `_max_venue_weekends` (the `MaxMaitlandHomeWeekends` rule)
+    # deleted — superseded by the spec-004 `AwayClubHomeWeekendsCount` atom.
 
     # spec-014: `_phl_adjacency_hard` removed. The PHL/2nd adjacency rule is
     # now the self-contained `PHLAnd2ndAdjacency` atom
@@ -750,100 +699,10 @@ class UnifiedConstraintEngine:
                         n += 1
         return n
 
-    def _maitland_grouping_hard(self):
-        """Generic: no back-to-back home weekends per non-default-home club.
-
-        Originally Maitland-only; now iterates `home_field_map` and looks up
-        per-club tuning in `AWAY_VENUE_RULES`. Method name retained for
-        registry/skip-key compatibility (canonical alias `NonDefaultHomeGrouping`).
-        """
-        n = 0
-        slack = self.slack.get('MaitlandHomeGrouping', 0)
-        defaults = self.data.get('constraint_defaults', {})
-        rules = self.data.get('away_venue_rules', {}) or {}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        # Phase 4 adjuster: weeks with FORCED home games are pinned to 1.
-        forced_home_weeks_per_club = self.data.get('count_adjustments', {}).get(
-            'MaitlandHomeGrouping', {}
-        ) or {}
-
-        for nd_club in home_field_map:
-            club_rules = rules.get(nd_club, {})
-            base_max = club_rules.get(
-                'max_consecutive_home',
-                defaults.get('maitland_max_consecutive_home', 1),
-            )
-            if base_max is None:
-                continue
-            limit = base_max + slack
-            forced_home = forced_home_weeks_per_club.get(nd_club, set())
-            all_week = self.non_default_all_week.get(nd_club, {})
-            home_week = self.non_default_home_week.get(nd_club, {})
-
-            home_indicators = {}
-            for week in sorted(all_week.keys()):
-                home_vars = home_week.get(week, [])
-                ind = self.pool.get_or_create_bool(
-                    ('non_default_home_ind', nd_club, week), home_vars,
-                    f'u_ndhome_{nd_club}_{week}')
-                home_indicators[week] = ind
-                if week in forced_home:
-                    self.model.Add(ind == 1)
-                    n += 1
-
-            sorted_weeks = sorted(home_indicators.keys())
-            window_size = limit + 1
-            for i in range(len(sorted_weeks) - window_size + 1):
-                window_weeks = sorted_weeks[i:i + window_size]
-                self.model.Add(
-                    sum(home_indicators[w] for w in window_weeks) <= limit
-                )
-                n += 1
-        return n
-
-    def _away_maitland_hard(self):
-        """Generic: max away clubs per weekend at each non-default home venue.
-
-        Originally Maitland-only; now iterates `home_field_map` and reads
-        per-club `max_away_clubs` from `AWAY_VENUE_RULES`. A None value (e.g.
-        Gosford) skips the constraint for that venue.
-        """
-        n = 0
-        slack = self.slack.get('AwayAtMaitlandGrouping', 0)
-        defaults = self.data.get('constraint_defaults', {})
-        rules = self.data.get('away_venue_rules', {}) or {}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        forced_away_per_week = self.data.get('count_adjustments', {}).get(
-            'AwayAtMaitlandGrouping', {}
-        ) or {}
-
-        for nd_club, nd_venue in home_field_map.items():
-            club_rules = rules.get(nd_club, {})
-            base_limit = club_rules.get(
-                'max_away_clubs',
-                defaults.get('away_maitland_max_clubs', 3),
-            )
-            if base_limit is None:
-                continue
-            hard_limit = base_limit + slack
-            venue_dict = self.non_default_away_club_week.get(nd_venue, {})
-            for week, club_vars in venue_dict.items():
-                club_indicators = []
-                for club, vars_list in club_vars.items():
-                    ind = self.pool.get_or_create_bool(
-                        ('non_default_away_club', nd_venue, club, week), vars_list,
-                        f'u_away_{nd_venue}_{club}_{week}')
-                    club_indicators.append(ind)
-                if club_indicators:
-                    nc = self.model.NewIntVar(0, len(club_indicators), f'u_naway_{nd_venue}_{week}')
-                    self.model.Add(nc == sum(club_indicators))
-                    self.model.Add(nc <= hard_limit)
-                    n += 1
-                    floor = len(forced_away_per_week.get((week, nd_venue), set()))
-                    if floor > 0:
-                        self.model.Add(nc >= floor)
-                        n += 1
-        return n
+    # spec-018: `_maitland_grouping_hard` (NonDefaultHomeGrouping) and
+    # `_away_maitland_hard` (AwayAtNonDefaultGrouping) deleted — the convenor
+    # no longer wants venue-sequencing enforced. Per-club home-weekend counts
+    # remain via the spec-004 `AwayClubHomeWeekendsCount` atom.
 
     # ----------------------------------------------------------------
     # ClubDay — atom dispatch (Phase 3b, replaces _club_day_scheduling /
@@ -929,10 +788,8 @@ class UnifiedConstraintEngine:
         # atom outside the engine).
         if 'ClubVsClubAlignment' not in _skip:
             c += self._club_alignment_soft()
-        if 'MaitlandHomeGrouping' not in _skip:
-            c += self._maitland_grouping_soft()
-        if 'AwayAtMaitlandGrouping' not in _skip:
-            c += self._away_maitland_soft()
+        # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft
+        # dispatch removed — venue-sequencing rules deleted.
         if 'PHLAndSecondGradeTimes' not in _skip:
             c += self._phl_times_atoms_soft()
         if 'PreferredTimesConstraint' not in _skip:
@@ -1075,78 +932,9 @@ class UnifiedConstraintEngine:
                         n += 1
         return n
 
-    def _maitland_grouping_soft(self):
-        """Soft: min(home, away) imbalance penalty per week, per non-default-home club."""
-        n = 0
-        weight = self._get_penalty_weight('MaitlandHomeGrouping', 1000000)
-        self.data['penalties']['MaitlandHomeGrouping'] = {'weight': weight, 'penalties': []}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        rules = self.data.get('away_venue_rules', {}) or {}
-
-        for nd_club in home_field_map:
-            club_rules = rules.get(nd_club, {})
-            if club_rules.get(
-                'max_consecutive_home',
-                self.data.get('constraint_defaults', {}).get('maitland_max_consecutive_home', 1),
-            ) is None:
-                continue
-            all_week = self.non_default_all_week.get(nd_club, {})
-            home_week = self.non_default_home_week.get(nd_club, {})
-            for week in sorted(all_week.keys()):
-                all_vars = all_week[week]
-                home_vars = home_week.get(week, [])
-                if not all_vars:
-                    continue
-                mx = len(all_vars)
-                hc = self.model.NewIntVar(0, mx, f'u_ndhc_{nd_club}_{week}')
-                if home_vars:
-                    self.model.Add(hc == sum(home_vars))
-                else:
-                    self.model.Add(hc == 0)
-                ac = self.model.NewIntVar(0, mx, f'u_ndac_{nd_club}_{week}')
-                self.model.Add(ac == sum(all_vars) - hc)
-                pen = self.model.NewIntVar(0, mx, f'u_ndpen_{nd_club}_{week}')
-                self.model.AddMinEquality(pen, [hc, ac])
-                self.data['penalties']['MaitlandHomeGrouping']['penalties'].append(pen)
-                n += 1
-        return n
-
-    def _away_maitland_soft(self):
-        """Soft: penalize multiple away clubs per weekend at each non-default home venue."""
-        n = 0
-        weight = self._get_penalty_weight('AwayAtMaitlandGrouping', 100000)
-        self.data['penalties']['AwayAtMaitlandGrouping'] = {'weight': weight, 'penalties': []}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        rules = self.data.get('away_venue_rules', {}) or {}
-        defaults = self.data.get('constraint_defaults', {})
-
-        for nd_club, nd_venue in home_field_map.items():
-            club_rules = rules.get(nd_club, {})
-            if club_rules.get(
-                'max_away_clubs', defaults.get('away_maitland_max_clubs', 3),
-            ) is None:
-                continue
-            venue_dict = self.non_default_away_club_week.get(nd_venue, {})
-            for week, club_vars in venue_dict.items():
-                club_indicators = []
-                for club, vars_list in club_vars.items():
-                    ind = self.pool.get_or_create_bool(
-                        ('non_default_away_club', nd_venue, club, week), vars_list,
-                        f'u_away_{nd_venue}_{club}_{week}')
-                    club_indicators.append(ind)
-                if not club_indicators:
-                    continue
-                nc = self.model.NewIntVar(0, len(club_indicators), f'u_saway_nc_{nd_venue}_{week}')
-                self.model.Add(nc == sum(club_indicators))
-                gt1 = self.model.NewBoolVar(f'u_saway_gt1_{nd_venue}_{week}')
-                self.model.Add(nc > 1).OnlyEnforceIf(gt1)
-                self.model.Add(nc <= 1).OnlyEnforceIf(gt1.Not())
-                pen = self.model.NewIntVar(0, len(club_indicators), f'u_saway_pen_{nd_venue}_{week}')
-                self.model.Add(pen == nc - 1).OnlyEnforceIf(gt1)
-                self.model.Add(pen == 0).OnlyEnforceIf(gt1.Not())
-                self.data['penalties']['AwayAtMaitlandGrouping']['penalties'].append(pen)
-                n += 1
-        return n
+    # spec-018: `_maitland_grouping_soft` (NonDefaultHomeGrouping soft
+    # imbalance penalty) and `_away_maitland_soft` (AwayAtNonDefaultGrouping
+    # soft) deleted — venue-sequencing rules removed.
 
     def _phl_times_soft(self):
         """Legacy preferred-date penalties — retained for parity reference. Not called."""

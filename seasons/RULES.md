@@ -114,14 +114,12 @@ home_games * 2 <= total_games + 1
 
 ---
 
-### Rule 8: Maximum Maitland Home Weekends
-**Constraint:** `MaxMaitlandHomeWeekends`
+### Rule 8: Maximum Maitland Home Weekends — NO LONGER ENFORCED (spec-018)
 
-**Description:** Limits the number of weekends where games are played at Maitland Park.
-
-**Enforcement:** Uses indicator variables to track weekends with games, bounded by `num_games // 2 + 1`.
-
-**Rationale:** Balances venue usage and operational costs for remote venues.
+This rule (a cap on weekends with games at Maitland Park) has been **removed**.
+The convenor no longer wants any capping or sequencing of home/away weekends.
+Per-club home-weekend totals are still pinned by the away-club home/away
+expectations rule; only the weekend-cap / spacing dimension was dropped.
 
 ---
 
@@ -197,33 +195,18 @@ Where `space = max_rounds // num_teams`
 
 These constraints use penalty variables that are minimized in the objective function.
 
-### Rule 14: Maitland Home Grouping
-**Constraint:** `MaitlandHomeGrouping`
+### Rule 14: Maitland Home Grouping — NO LONGER ENFORCED (spec-018)
 
-**Description:** 
-- Encourages all Maitland games in a week to be either all home or all away
-- **Hard element:** No back-to-back Maitland home weekends
-
-**Penalty:** `min(home_games, away_games)` per week
-
-**Weight:** 1,000,000
-
-**Rationale:** Reduces travel burden by grouping home/away weeks.
+This rule (no back-to-back Maitland home weekends + grouping a week's games as
+all home or all away) has been **removed**. Back-to-back home weekends are fine
+now — the convenor no longer wants any home/away weekend sequencing.
 
 ---
 
-### Rule 15: Away at Maitland Grouping
-**Constraint:** `AwayAtMaitlandGrouping`
+### Rule 15: Away at Maitland Grouping — NO LONGER ENFORCED (spec-018)
 
-**Description:**
-- Encourages minimal variety in away clubs visiting Maitland each weekend
-- **Hard limit:** Maximum 3 different away clubs per Maitland weekend
-
-**Penalty:** `num_away_clubs - 1` per week
-
-**Weight:** 100,000
-
-**Rationale:** Reduces complexity and improves travel coordination.
+This rule (a cap of 3 different away clubs visiting Maitland per weekend) has
+been **removed**. There is no longer any cap on away-club variety per weekend.
 
 ---
 
@@ -339,9 +322,12 @@ These rules arise from the combination of constraints or data filtering.
 - No simultaneous PHL games at main venue
 
 ### Interaction 2: Home/Away Balance
-`FiftyFiftyHomeandAway`, `MaitlandHomeGrouping`, and `AwayAtMaitlandGrouping` combine to:
-- Ensure fair home/away distribution
-- Group home games for efficiency
+`FiftyFiftyHomeandAway` and the per-club home-weekend totals combine to:
+- Ensure fair home/away distribution per pair and in aggregate
+- Pin the right number of home weekends per away-based club
+
+(The home-grouping and away-clubs-per-weekend rules were removed in spec-018 —
+there is no longer any weekend *sequencing* dimension.)
 - Limit away team variety per weekend
 
 ### Interaction 3: Field Optimization
@@ -384,7 +370,7 @@ These constraints define the structure of the schedule, primarily for travel fea
 | Order | Constraint | Purpose |
 |-------|-----------|---------|
 | 5 | `FiftyFiftyHomeandAway` | Away teams (Maitland/Gosford) get balanced home/away |
-| 6 | `MaxMaitlandHomeWeekends` | No back-to-back Maitland home weekends |
+| ~~6~~ | ~~`MaxMaitlandHomeWeekends`~~ | **REMOVED (spec-018)** — no longer enforced |
 | 7 | `ClubDayConstraint` | Respect special dates (e.g., club days) |
 | 8 | `PHLAndSecondGradeTimes` | PHL timing rules at Broadmeadow |
 | 9 | `PHLAndSecondGradeAdjacency` | PHL/2nd grade play adjacent slots |
@@ -400,7 +386,7 @@ These constraints optimize for venue efficiency and even distribution.
 
 | Order | Constraint | Purpose |
 |-------|-----------|---------|
-| 11 | `AwayAtMaitlandGrouping` | Max 3 away clubs at Maitland per weekend |
+| ~~11~~ | ~~`AwayAtMaitlandGrouping`~~ | **REMOVED (spec-018)** — no longer enforced |
 | 12 | `MinimiseClubsOnAFieldBroadmeadow` | Reduce club switching on Broadmeadow fields |
 | 13 | `EnsureBestTimeslotChoices` | Teams get their best available timeslots |
 | 14 | `MaximiseClubsPerTimeslotBroadmeadow` | Maximize club diversity per timeslot |
@@ -416,7 +402,7 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 
 | Order | Constraint | Purpose |
 |-------|-----------|---------|
-| 16 | `MaitlandHomeGrouping` | Group Maitland home games for travel efficiency |
+| ~~16~~ | ~~`MaitlandHomeGrouping`~~ | **REMOVED (spec-018)** — no longer enforced |
 | 17 | `EqualMatchUpSpacingConstraint` | Space out repeat matchups across season |
 | 18 | `PreferredTimesConstraint` | Satisfy club/team preferred times |
 
@@ -437,7 +423,6 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 ├─────────────────────────────────────────────────────────────┤
 │  STAGE 2: Structural Constraints                            │
 │  ├── FiftyFiftyHomeAway                                     │
-│  ├── MaxMaitlandHomeWeekends                                │
 │  ├── ClubDayConstraint                                      │
 │  ├── PHLAndSecondGradeTimes                                 │
 │  ├── PHLAndSecondGradeAdjacency                            │
@@ -445,7 +430,6 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 │                    ↓ [Save checkpoint, pass hints]          │
 ├─────────────────────────────────────────────────────────────┤
 │  STAGE 3: Optimization Constraints                          │
-│  ├── AwayAtMaitlandGrouping                                 │
 │  ├── MinimiseClubsOnAField                                  │
 │  ├── EnsureBestTimeslotChoices                              │
 │  ├── MaximiseClubsPerTimeslot                               │
@@ -453,7 +437,6 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 │                    ↓ [Save checkpoint, pass hints]          │
 ├─────────────────────────────────────────────────────────────┤
 │  STAGE 4: Soft Preferences                                  │
-│  ├── MaitlandHomeGrouping                                   │
 │  ├── EqualMatchUpSpacing                                    │
 │  └── PreferredTimes                                         │
 │                    ↓ [Final solution]                       │
@@ -467,10 +450,10 @@ These are "nice to have" preferences applied with penalties. The solver will sat
 | Stage | Type | Count | Checkpoint |
 |-------|------|-------|------------|
 | 1 | Required | 4 | `stage_1_required.bin` |
-| 2 | Structural | 6 | `stage_2_structural.bin` |
-| 3 | Optimization | 5 | `stage_3_optimization.bin` |
-| 4 | Soft/Preferences | 3 | `stage_4_soft.bin` |
-| **Total** | | **18** | |
+| 2 | Structural | 5 | `stage_2_structural.bin` |
+| 3 | Optimization | 4 | `stage_3_optimization.bin` |
+| 4 | Soft/Preferences | 2 | `stage_4_soft.bin` |
+| **Total** | | **15** (was 18 before spec-018 removed 3 venue-sequencing constraints) | |
 
 ---
 

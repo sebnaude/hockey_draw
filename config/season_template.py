@@ -218,8 +218,8 @@ SEASON_CONFIG = {
     # Base limits for slack-aware constraints (see CONSTRAINT_DEFAULTS in season_2026.py for docs)
     'constraint_defaults': {
         'spacing_base_slack': 0,
-        'maitland_max_consecutive_home': 1,
-        'away_maitland_max_clubs': 3,
+        # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
+        # removed — the venue-sequencing rules that read them were deleted.
         'max_clubs_per_field': 5,
         'club_game_spread_max_gap': 1,
         # club_game_spread_max_overlap: REMOVED — now dynamic per club: T//2 - 1 where T = team count

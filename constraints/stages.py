@@ -38,18 +38,19 @@ ALL_KEYS = REQUIRED_KEYS | OPTIONAL_KEYS
 #
 # Engine skip-keys come from the literal strings used in
 # `apply_stage_1_hard()` / `apply_stage_2_soft()` in `constraints/unified.py`.
-# Phase-6 generic aliases (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`)
-# share their keys with the legacy Maitland-named entries.
 # ----------------------------------------------------------------------
 
 ENGINE_HARD_KEYS: Set[str] = {
     'NoDoubleBookingTeams', 'NoDoubleBookingFields', 'EqualGamesAndBalanceMatchUps',
-    'FiftyFiftyHomeandAway', 'TeamConflict', 'MaxMaitlandHomeWeekends',
+    'FiftyFiftyHomeandAway', 'TeamConflict',
     # spec-014: PHL/2nd adjacency is no longer an engine key — it's the
     # `PHLAnd2ndAdjacency` atom dispatched via the non-engine fallback.
     'PHLAndSecondGradeTimes',
     'EqualMatchUpSpacing', 'ClubVsClubAlignment',
-    'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping',
+    # spec-018: `MaxMaitlandHomeWeekends` / `MaitlandHomeGrouping` /
+    # `AwayAtMaitlandGrouping` engine keys deleted (venue-sequencing rules
+    # removed). Per-club home-weekend counts are the spec-004
+    # `AwayClubHomeWeekendsCount` atom (dispatched via the non-engine fallback).
     'ClubDay', 'ClubGameSpread', 'EnsureBestTimeslotChoices',
     # spec-007: `ClubGradeAdjacency` removed from the engine. Hard portion is
     # now the `SameGradeSameClubNoConcurrency` atom dispatched via the
@@ -58,17 +59,19 @@ ENGINE_HARD_KEYS: Set[str] = {
 
 ENGINE_SOFT_KEYS: Set[str] = {
     'EqualMatchUpSpacing', 'ClubVsClubAlignment',
-    'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping', 'PHLAndSecondGradeTimes',
+    # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft keys
+    # deleted alongside their hard keys.
+    'PHLAndSecondGradeTimes',
     'PreferredTimesConstraint', 'EnsureBestTimeslotChoices', 'ClubGameSpread',
     # spec-007: `ClubGradeAdjacency` soft penalty removed entirely.
 }
 
 ALL_ENGINE_KEYS: Set[str] = ENGINE_HARD_KEYS | ENGINE_SOFT_KEYS
 
-# Phase-6 alias canonical names share an engine key with their legacy entry.
+# Alias canonical names that share an engine key with another entry.
+# spec-018: `NonDefaultHomeGrouping` / `AwayAtNonDefaultGrouping` aliases
+# removed (the rules they pointed at were deleted).
 _ENGINE_KEY_ALIASES: Dict[str, str] = {
-    'NonDefaultHomeGrouping': 'MaitlandHomeGrouping',
-    'AwayAtNonDefaultGrouping': 'AwayAtMaitlandGrouping',
     'PreferredTimes': 'PreferredTimesConstraint',
 }
 

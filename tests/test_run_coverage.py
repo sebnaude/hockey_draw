@@ -677,26 +677,26 @@ class TestSlackBuilding:
     def test_slack_creates_all_keys(self):
         """--slack N should create dict with all slack-aware constraint names."""
         slack_value = 3
+        # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
+        # removed (rules deleted).
         constraint_slack = {
             'EqualMatchUpSpacingConstraint': slack_value,
-            'AwayAtMaitlandGrouping': slack_value,
-            'MaitlandHomeGrouping': slack_value,
             'ClubVsClubAlignment': slack_value,
             'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
             'MinimiseClubsOnAFieldBroadmeadow': slack_value,
             'ClubGameSpread': slack_value,
         }
-        assert len(constraint_slack) == 7
+        assert len(constraint_slack) == 5
         for name, val in constraint_slack.items():
             assert val == 3
 
     def test_slack_zero_is_valid(self):
         """--slack 0 should create dict with all zeros."""
         slack_value = 0
+        # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
+        # removed (rules deleted).
         constraint_slack = {
             'EqualMatchUpSpacingConstraint': slack_value,
-            'AwayAtMaitlandGrouping': slack_value,
-            'MaitlandHomeGrouping': slack_value,
             'ClubVsClubAlignment': slack_value,
             'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
             'MinimiseClubsOnAFieldBroadmeadow': slack_value,

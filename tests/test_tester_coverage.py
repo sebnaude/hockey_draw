@@ -402,96 +402,10 @@ class TestCheckFiftyFiftyHomeAway:
         assert len(violations) == 0
 
 
-# ============== _check_maitland_back_to_back ==============
-
-class TestCheckMaitlandBackToBack:
-    def test_violation_consecutive_home(self):
-        """Three consecutive weeks at Maitland Park with max_consecutive=1 -> violation."""
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-            make_game('G2', 'Maitland 3rd', 'Wests 3rd', '3rd', 2, 2, '2025-04-08',
-                      field_location=MAITLAND_PARK),
-            make_game('G3', 'Maitland 3rd', 'Norths 3rd', '3rd', 3, 3, '2025-04-15',
-                      field_location=MAITLAND_PARK),
-        ]
-        data = make_data(constraint_defaults={'maitland_max_consecutive_home': 1})
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_back_to_back()
-        assert len(violations) >= 1
-
-    def test_no_violation_alternating(self):
-        """Alternating home/away: H, A, H with max_consecutive=1 -> OK."""
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-            make_game('G2', 'Maitland 3rd', 'Wests 3rd', '3rd', 2, 2, '2025-04-08',
-                      field_location=NIHC),
-            make_game('G3', 'Maitland 3rd', 'Norths 3rd', '3rd', 3, 3, '2025-04-15',
-                      field_location=MAITLAND_PARK),
-        ]
-        data = make_data(constraint_defaults={'maitland_max_consecutive_home': 1})
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_back_to_back()
-        assert len(violations) == 0
-
-    def test_slack_allows_more(self):
-        """With slack=2, max_consecutive=3, so 3 consecutive is OK."""
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-            make_game('G2', 'Maitland 3rd', 'Wests 3rd', '3rd', 2, 2, '2025-04-08',
-                      field_location=MAITLAND_PARK),
-            make_game('G3', 'Maitland 3rd', 'Norths 3rd', '3rd', 3, 3, '2025-04-15',
-                      field_location=MAITLAND_PARK),
-        ]
-        data = make_data(
-            constraint_defaults={'maitland_max_consecutive_home': 1},
-            constraint_slack={'MaitlandHomeGrouping': 2},
-        )
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_back_to_back()
-        assert len(violations) == 0
-
-
-# ============== _check_maitland_away_clubs_limit ==============
-
-class TestCheckMaitlandAwayClubsLimit:
-    def test_violation_too_many_away_clubs(self):
-        """4 away clubs in one week at Maitland, base limit is 3."""
-        clubs = make_clubs()
-        extra_club = Club(name='Souths', home_field=NIHC)
-        all_clubs = clubs + [extra_club]
-        teams = make_teams(all_clubs, ['3rd'])
-        grades = make_grades(teams)
-        data = make_data(clubs=all_clubs, teams=teams, grades=grades,
-                         constraint_defaults={'away_maitland_max_clubs': 3})
-
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-            make_game('G2', 'Maitland 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=2, time='11:30'),
-            make_game('G3', 'Norths 3rd', 'Maitland 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=3, time='13:00',
-                      field_name='Maitland Main Field'),
-            make_game('G4', 'Souths 3rd', 'Maitland 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=4, time='14:30',
-                      field_name='Maitland Main Field'),
-        ]
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_away_clubs_limit()
-        assert len(violations) >= 1
-
-    def test_no_violation_within_limit(self):
-        data = make_data(constraint_defaults={'away_maitland_max_clubs': 3})
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-        ]
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_away_clubs_limit()
-        assert len(violations) == 0
+# spec-018: TestCheckMaitlandBackToBack and TestCheckMaitlandAwayClubsLimit
+# removed — the `_check_maitland_back_to_back` /
+# `_check_maitland_away_clubs_limit` tester methods (and the venue-sequencing
+# rules they checked) were deleted.
 
 
 # ============== _check_club_grade_adjacency ==============
@@ -1362,29 +1276,5 @@ class TestConstraintSlack:
         violations = tester._check_equal_matchup_spacing()
         assert len(violations) >= 1  # gap=1 < min_gap=3
 
-    def test_maitland_away_slack(self):
-        """Slack on AwayAtMaitlandGrouping increases limit."""
-        clubs = make_clubs()
-        extra = Club(name='Souths', home_field=NIHC)
-        all_clubs = clubs + [extra]
-        teams = make_teams(all_clubs, ['3rd'])
-        grades = make_grades(teams)
-        data = make_data(
-            clubs=all_clubs, teams=teams, grades=grades,
-            constraint_defaults={'away_maitland_max_clubs': 2},
-            constraint_slack={'AwayAtMaitlandGrouping': 5},
-        )
-        # 4 away clubs, base_limit=2, slack=5 -> max=7, so 4 is OK
-        games = [
-            make_game('G1', 'Maitland 3rd', 'Tigers 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK),
-            make_game('G2', 'Maitland 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=2),
-            make_game('G3', 'Norths 3rd', 'Maitland 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=3),
-            make_game('G4', 'Souths 3rd', 'Maitland 3rd', '3rd', 1, 1, '2025-04-01',
-                      field_location=MAITLAND_PARK, day_slot=4),
-        ]
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_maitland_away_clubs_limit()
-        assert len(violations) == 0
+    # spec-018: test_maitland_away_slack removed — the AwayAtMaitlandGrouping
+    # rule and its `_check_maitland_away_clubs_limit` tester method were deleted.

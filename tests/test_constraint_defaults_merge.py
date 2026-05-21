@@ -12,8 +12,8 @@ def test_perennial_defaults_have_required_keys():
         'max_friday_broadmeadow',
         'gosford_friday_games',
         'maitland_friday_games',
-        'maitland_max_consecutive_home',
-        'away_maitland_max_clubs',
+        # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
+        # removed (venue-sequencing rules deleted).
         'max_clubs_per_field',
         'club_game_spread_max_gap',
         'club_game_spread_max_overlap',
@@ -48,7 +48,7 @@ def test_merge_keeps_unrelated_defaults():
     overrides = {'max_friday_broadmeadow': 99}
     merged = _merge_constraint_defaults(overrides)
     assert merged['gosford_friday_games'] == CONSTRAINT_DEFAULTS['gosford_friday_games']
-    assert merged['away_maitland_max_clubs'] == CONSTRAINT_DEFAULTS['away_maitland_max_clubs']
+    assert merged['maitland_friday_games'] == CONSTRAINT_DEFAULTS['maitland_friday_games']
 
 
 def test_merge_does_not_mutate_input():

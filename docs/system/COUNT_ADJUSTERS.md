@@ -105,29 +105,17 @@ default + `constraint_slack['BalancedByeSpacing']` from `--slack N`).
 The two atoms are independent dimensions and share `_spacing.py` only
 for the shape of the math.
 
-### 3. `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping` in Phase 6)
+### 3. `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping`) — REMOVED (spec-018)
 
-**Problem:** if FORCED forces a Maitland home weekend into week W, the
-sliding-window consecutive-home-weeks calculation needs to account for it
-already being a 1.
+The home-grouping constraint and its `maitland_home_grouping_adjuster` were
+**deleted in spec-018** — the convenor no longer wants any consecutive-home-
+weekend sequencing. This adjuster no longer exists.
 
-**Proposed formula:**
-```
-forced_home_weeks_per_club = {club: set(weeks)}
-# Atom uses this to clamp specific home indicators to 1 instead of letting
-# the solver choose. Sliding-window math still works on top.
-```
+### 4. `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`) — REMOVED (spec-018)
 
-### 4. `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`)
-
-**Problem:** if FORCED forces an away match at Maitland for club C in
-week W, the per-week away-clubs count for that week is at least 1.
-
-**Proposed formula:**
-```
-forced_away_per_week = {(week, venue): set of away clubs forced there}
-# Atom uses this to baseline the per-week count.
-```
+The away-clubs-per-weekend constraint and its
+`away_at_maitland_grouping_adjuster` were **deleted in spec-018**. This
+adjuster no longer exists.
 
 ### 5. `ClubVsClubCoincidence` (the user's worked example)
 
@@ -158,17 +146,16 @@ motivating example for the whole adjuster mechanism.
 |---|---|---|
 | 1 | `EqualGames` | ✅ no adjuster needed — `sum(team_vars) == num_rounds` is unaffected by FORCED entries (FORCED just pins terms to 1; the sum is unchanged). |
 | 2 | `EqualMatchUpSpacing` | ✅ shipped — `equal_matchup_spacing_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{(t1, t2, grade): set(forced_rounds)}`. `_matchup_spacing_hard` reads it to tighten `min_gap`. |
-| 3 | `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping`) | ✅ shipped — `maitland_home_grouping_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{club: set(forced_home_weeks)}`. `_maitland_grouping_hard` clamps the home indicator to 1 for those weeks. |
-| 4 | `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`) | ✅ shipped — `away_at_maitland_grouping_adjuster` in `constraints/atoms/_adjusters.py`. Returns `{(week, venue): set(away_clubs)}`. `_away_maitland_hard` uses `len(set)` as a per-week floor. |
+| 3 | `MaitlandHomeGrouping` (→ `NonDefaultHomeGrouping`) | ❌ **REMOVED (spec-018)** — constraint deleted; `maitland_home_grouping_adjuster` no longer exists. |
+| 4 | `AwayAtMaitlandGrouping` (→ `AwayAtNonDefaultGrouping`) | ❌ **REMOVED (spec-018)** — constraint deleted; `away_at_maitland_grouping_adjuster` no longer exists. |
 | 5 | `ClubVsClubCoincidence` | ✅ shipped — `club_vs_club_coincidence_adjuster` in `constraints/atoms/club_vs_club_coincidence.py`. Returns `{grade: {club_pair: expected_meetings}}`, reducing for FORCED off-Sunday and BLOCKED on-Sunday entries. The atom reads `expected` instead of `num_games` when computing `min_required = max(0, expected - slack)`. **Verified end-to-end 2026-05-18 (spec-009)** — `tests/atoms/test_cvc_coincidence_phl_friday_adjuster.py`: adjuster math, engine dispatch via `run_count_adjusters`, and atom feasibility all confirmed correct. |
 
 Each adjuster ships as one commit on `final-form` with: (a) the adjuster
 callable assigned to `CONSTRAINT_REGISTRY[name].forced_blocked_adjuster`, (b)
 the atom change to read `data['count_adjustments'][canonical_name]`, (c)
 unit tests covering both the adjuster math (synthesised FORCED/BLOCKED) and
-the atom's behaviour change. The two Phase-6 renames mean adjusters #3 and
-#4 should be implemented against the new `NonDefaultHomeGrouping` /
-`AwayAtNonDefaultGrouping` atoms, not the legacy names.
+the atom's behaviour change. (Adjusters #3 and #4 were removed in spec-018
+along with the home-grouping constraints they served.)
 
 **Where to wire it:** the adjuster registers on the `ConstraintInfo` for the
 *atom* canonical name (e.g. `ClubVsClubCoincidence`, not the parent

@@ -221,11 +221,9 @@ class TestBuildGroupings:
         mini_engine.build_groupings()
         assert len(mini_engine.grade_pair_vars['3rd']) > 0
 
-    def test_maitland_groupings_populated(self, mini_engine):
-        """Maitland-specific groupings are populated for weeks with Maitland games."""
-        mini_engine.build_groupings()
-        # Maitland teams are in the data, so maitland_all_week should have entries
-        assert len(mini_engine.maitland_all_week) > 0
+    # spec-018: test_maitland_groupings_populated removed — the
+    # `maitland_all_week` / `non_default_*` grouping maps were deleted along
+    # with the venue-sequencing rules that consumed them.
 
     def test_broadmeadow_slot_club_populated(self, mini_engine):
         """bm_slot_club has entries for Broadmeadow timeslots."""
@@ -381,8 +379,8 @@ class TestStage2Soft:
             # spec-007: 'ClubGradeAdjacencyConstraint' bucket removed (the
             # legacy adjacent-grade soft was deleted; the surviving hard
             # `SameGradeSameClubNoConcurrency` atom has no penalty bucket).
-            'MaitlandHomeGrouping',
-            'AwayAtMaitlandGrouping',
+            # spec-018: 'MaitlandHomeGrouping' / 'AwayAtMaitlandGrouping'
+            # penalty buckets removed (venue-sequencing soft penalties deleted).
             'ClubGameSpread',
         ]
         for key in expected_keys:
@@ -584,8 +582,8 @@ class TestConstraintCoverage:
         expected_penalty_keys = [
             'EqualMatchUpSpacing',
             # spec-007: 'ClubGradeAdjacencyConstraint' bucket removed.
-            'MaitlandHomeGrouping',
-            'AwayAtMaitlandGrouping',
+            # spec-018: 'MaitlandHomeGrouping' / 'AwayAtMaitlandGrouping' buckets
+            # removed (venue-sequencing soft penalties deleted).
             'ClubGameSpread',
             'ClubVsClubAlignment',
             'ClubVsClubAlignmentField',
@@ -606,8 +604,7 @@ class TestConstraintCoverage:
             'no_double_booking_fields': engine._no_double_booking_fields(),
             'equal_games': engine._equal_games_balanced_matchups(),
             'fifty_fifty': engine._fifty_fifty_home_away(),
-            'maitland_grouping': engine._maitland_grouping_hard(),
-            'away_maitland': engine._away_maitland_hard(),
+            # spec-018: maitland_grouping / away_maitland hard methods deleted.
         }
 
         # These should definitely have constraints with our mini data
@@ -635,14 +632,14 @@ class TestConstraintCoverage:
             '_equal_games_balanced_matchups',
             '_fifty_fifty_home_away',
             '_team_conflict',
-            '_max_venue_weekends',
+            # spec-018: `_max_venue_weekends` (MaxMaitlandHomeWeekends),
+            # `_maitland_grouping_hard` and `_away_maitland_hard` removed —
+            # venue-sequencing rules deleted.
             # spec-014: `_phl_adjacency_hard` removed — PHL/2nd adjacency is now
             # the `PHLAnd2ndAdjacency` atom (dispatched outside the engine).
             '_phl_times_hard',
             '_matchup_spacing_hard',
             '_club_alignment_hard',
-            '_maitland_grouping_hard',
-            '_away_maitland_hard',
             '_club_day_scheduling',
             '_club_game_spread_hard',
             '_best_timeslot_choices_hard',
@@ -652,8 +649,8 @@ class TestConstraintCoverage:
         stage_2_methods = [
             '_matchup_spacing_soft',
             '_club_alignment_soft',
-            '_maitland_grouping_soft',
-            '_away_maitland_soft',
+            # spec-018: `_maitland_grouping_soft` / `_away_maitland_soft`
+            # removed — venue-sequencing soft penalties deleted.
             '_phl_times_soft',
             '_preferred_times',
             '_best_timeslot_choices_soft',
@@ -700,33 +697,9 @@ class TestSlackHandling:
         # More slack should mean fewer or equal hard constraints
         assert count2 <= count1
 
-    def test_slack_affects_maitland_grouping(self, mini_unified_data):
-        """Higher MaitlandHomeGrouping slack allows more consecutive home weeks."""
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['constraint_slack'] = {'MaitlandHomeGrouping': 5}
-        data['penalties'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        count = engine._maitland_grouping_hard()
-        # Should still produce constraints (sliding window)
-        assert count >= 0
-
-    def test_slack_affects_away_maitland(self, mini_unified_data):
-        """AwayAtMaitlandGrouping slack increases hard limit."""
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['constraint_slack'] = {'AwayAtMaitlandGrouping': 5}
-        data['penalties'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        # With high slack, the hard limit is 2+5=7 which is very permissive
-        count = engine._away_maitland_hard()
-        assert count >= 0
+    # spec-018: test_slack_affects_maitland_grouping /
+    # test_slack_affects_away_maitland removed — the MaitlandHomeGrouping /
+    # AwayAtMaitlandGrouping rules and their slack keys were deleted.
 
 
 # ============== TestEquivalenceWithAI ==============
@@ -941,71 +914,9 @@ class TestHardConstraintEnforcement:
             for key, cnt in club_week_day_slot.items():
                 assert cnt <= 1, f"Double-up found: {key} has {cnt} games"
 
-    def test_maitland_grouping_hard_sliding_window(self, mini_unified_data):
-        """MaitlandHomeGrouping sliding window prevents consecutive home weeks beyond limit."""
-        # Default slack=0 means max 1 consecutive home week (limit = 1+0 = 1)
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['penalties'] = {}
-        data['constraint_slack'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        engine.apply_stage_1_hard()
-
-        real_vars = [v for k, v in X.items() if len(k) >= 11]
-        model.Maximize(sum(real_vars))
-
-        status, solver = solve_with_timeout(model, timeout_seconds=5.0)
-        if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            # Check Maitland home weeks
-            maitland_home_weeks = set()
-            for key, var in X.items():
-                if len(key) >= 11 and solver.Value(var) == 1:
-                    if key[10] == MAITLAND:  # field_location
-                        maitland_home_weeks.add(key[6])
-            sorted_weeks = sorted(maitland_home_weeks)
-            # With limit=1, we allow at most 1 consecutive pair
-            for i in range(len(sorted_weeks) - 1):
-                # The constraint is: sum of indicators for consecutive pair <= limit
-                # limit = 1+slack, so 2 consecutive is allowed only with slack >= 1
-                pass  # The constraint is checked via the model, we verify feasibility
-
-    def test_away_maitland_hard_reads_config(self, mini_unified_data):
-        """AwayAtMaitlandGrouping uses config value, not hardcoded 3."""
-        # Set config to 1 (very restrictive)
-        mini_unified_data['constraint_defaults'] = {'away_maitland_max_clubs': 1}
-
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['penalties'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        count = engine._away_maitland_hard()
-
-        # Should add constraints since Maitland away games exist
-        assert count > 0
-
-        # Solve and verify max 1 away club at Maitland per week
-        real_vars = [v for k, v in X.items() if len(k) >= 11]
-        model.Maximize(sum(real_vars))
-
-        status, solver = solve_with_timeout(model, timeout_seconds=5.0)
-        if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            away_clubs_per_week = defaultdict(set)
-            for key, var in X.items():
-                if len(key) >= 11 and solver.Value(var) == 1:
-                    if key[10] == MAITLAND:
-                        week = key[6]
-                        for team in [key[0], key[1]]:
-                            if 'Maitland' not in team:
-                                club = team.rsplit(' ', 1)[0]
-                                away_clubs_per_week[week].add(club)
-            for week, clubs in away_clubs_per_week.items():
-                assert len(clubs) <= 1, f"Week {week}: {len(clubs)} away clubs at Maitland, expected max 1"
+    # spec-018: test_maitland_grouping_hard_sliding_window and
+    # test_away_maitland_hard_reads_config removed — the MaitlandHomeGrouping /
+    # AwayAtMaitlandGrouping rules they exercised were deleted.
 
     def test_best_timeslot_stacking(self, mini_unified_data):
         """Best timeslot choices stacking: if slot 3 used on WF, slot 2 must be used on EF."""
@@ -1285,15 +1196,17 @@ class TestPenaltyWeightsConfig:
         )
         data = dict(mini_unified_data)
         data['penalties'] = {}
-        data['penalty_weights'] = {'MaitlandHomeGrouping': 42}
+        # spec-018: MaitlandHomeGrouping penalty removed — use ClubGameSpread
+        # as the overridden bucket instead.
+        data['penalty_weights'] = {'ClubGameSpread': 42}
         engine = UnifiedConstraintEngine(model, X, data)
         engine.build_groupings()
         engine.apply_stage_1_hard()
         engine.apply_stage_2_soft()
 
-        # MaitlandHomeGrouping overridden
-        if 'MaitlandHomeGrouping' in data['penalties']:
-            assert data['penalties']['MaitlandHomeGrouping']['weight'] == 42
+        # ClubGameSpread overridden
+        if 'ClubGameSpread' in data['penalties']:
+            assert data['penalties']['ClubGameSpread']['weight'] == 42
         # EqualMatchUpSpacing should be default
         if 'EqualMatchUpSpacing' in data['penalties']:
             assert data['penalties']['EqualMatchUpSpacing']['weight'] == 5000

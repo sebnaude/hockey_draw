@@ -118,7 +118,7 @@ class TestNoMetadataRunsAllChecks:
         report = tester.run_violation_check()
 
         # Should have constraint_results for all canonical constraints (22 incl. TeamPairNoConcurrency from spec-007)
-        assert len(report.constraint_results) == 25  # spec-008 added BalancedByeSpacing (spec-003 had added NIHCFillWFBeforeEF + NIHCFillEFBeforeSF earlier)
+        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
         assert report.metadata_source == 'none'
         # Every result should be PASSED or VIOLATED (none SKIPPED)
         statuses = {r.status for r in report.constraint_results}
@@ -172,27 +172,27 @@ class TestSlackFromMetadata:
         meta = {
             'solver_config': {
                 'constraint_slack': {
-                    'MaitlandHomeGrouping': 5,
+                    'ClubGameSpread': 5,
                 }
             }
         }
         draw = make_draw(_minimal_games(), metadata=meta)
         tester = DrawTester(draw, data)
-        assert tester.constraint_slack.get('MaitlandHomeGrouping') == 5
+        assert tester.constraint_slack.get('ClubGameSpread') == 5
 
     def test_caller_overrides_metadata_slack(self):
         """Data dict slack overrides metadata slack."""
-        data = make_data(constraint_slack={'MaitlandHomeGrouping': 10})
+        data = make_data(constraint_slack={'ClubGameSpread': 10})
         meta = {
             'solver_config': {
                 'constraint_slack': {
-                    'MaitlandHomeGrouping': 5,
+                    'ClubGameSpread': 5,
                 }
             }
         }
         draw = make_draw(_minimal_games(), metadata=meta)
         tester = DrawTester(draw, data)
-        assert tester.constraint_slack['MaitlandHomeGrouping'] == 10
+        assert tester.constraint_slack['ClubGameSpread'] == 10
 
 
 class TestConstraintResultStatuses:
@@ -279,7 +279,7 @@ class TestFromCheckpointLoadsMetadata:
                 {'name': 'EnsureEqualGamesAndBalanceMatchUps'},
             ],
             'excluded_constraints': ['ClubGameSpread'],
-            'constraint_slack': {'MaitlandHomeGrouping': 2},
+            'constraint_slack': {'ClubVsClubAlignment': 2},
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -298,7 +298,7 @@ class TestFromCheckpointLoadsMetadata:
         assert 'NoDoubleBookingTeams' in tester._constraints_applied
         assert 'EqualGamesAndBalanceMatchUps' in tester._constraints_applied
         assert 'ClubGameSpread' in tester._excluded_constraints
-        assert tester.constraint_slack.get('MaitlandHomeGrouping') == 2
+        assert tester.constraint_slack.get('ClubVsClubAlignment') == 2
 
     def test_from_checkpoint_missing_pkl_raises(self):
         data = make_data()
@@ -323,7 +323,7 @@ class TestFromCheckpointLoadsMetadata:
             tester = DrawTester.from_checkpoint(tmpdir, data)
             assert tester._constraints_applied is None  # legacy mode
             report = tester.run_violation_check()
-            assert len(report.constraint_results) == 25  # spec-008 added BalancedByeSpacing (spec-003 had added NIHCFillWFBeforeEF + NIHCFillEFBeforeSF earlier)
+            assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
 
 
 class TestFromFileAutodetectsJson:
@@ -384,7 +384,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 25  # spec-008 added BalancedByeSpacing (spec-003 had added NIHCFillWFBeforeEF + NIHCFillEFBeforeSF earlier)
+        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
         assert report.metadata_source == 'none'
 
     def test_legacy_draw_empty_metadata(self):
@@ -393,7 +393,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 25  # spec-008 added BalancedByeSpacing (spec-003 had added NIHCFillWFBeforeEF + NIHCFillEFBeforeSF earlier)
+        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
 
 
 class TestSolverNameNormalization:

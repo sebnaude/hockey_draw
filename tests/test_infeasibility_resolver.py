@@ -181,7 +181,8 @@ class TestConstraintSlackRegistry:
         registry = ConstraintSlackRegistry()
         # Relax real constraints
         registry.increase_slack('ClubDayConstraint')
-        registry.increase_slack('AwayAtMaitlandGrouping')
+        # spec-018: AwayAtMaitlandGrouping removed — use another level-2 rule.
+        registry.increase_slack('TeamConflict')
         # Reset
         registry.reset()
         for name, state in registry.constraints.items():

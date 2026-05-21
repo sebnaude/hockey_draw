@@ -406,8 +406,8 @@ FIELD_UNAVAILABILITIES = {
 
 | Level | Name | Constraints | Can Relax? |
 |-------|------|------------|------------|
-| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalance, EqualMatchUpSpacing, FiftyFiftyHomeandAway, MaitlandHomeGrouping, MaxMaitlandHomeWeekends, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | ❌ Never |
-| 2 | HIGH | ClubDay, AwayAtMaitlandGrouping, TeamConflict | ⚠️ With `--relax` |
+| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalance, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | ❌ Never |
+| 2 | HIGH | ClubDay, TeamConflict | ⚠️ With `--relax` |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | ⚠️ With `--relax` |
 | 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | ✅ Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | ✅ Yes |
@@ -415,15 +415,13 @@ FIELD_UNAVAILABILITIES = {
 ### Constraint Slack (`--slack N`)
 
 The `--slack` flag loosens specific constraints (different from `--relax` which drops entire severity groups):
-- `MaitlandHomeGrouping`: max consecutive home weeks = 1 + slack (sliding window)
-- `AwayAtMaitlandGrouping`: max away clubs at Maitland = 3 + slack
 - `EqualMatchUpSpacingConstraint`: widens spacing window
 - `ClubVsClubAlignment`, `MaximiseClubsPerTimeslotBroadmeadow`, `MinimiseClubsOnAFieldBroadmeadow`, `ClubGameSpread`: loosens limits
 
 ### Key Constraint Details
 
 - **FiftyFiftyHomeandAway**: Per-PAIR balance (not aggregate). Each Maitland/Gosford team vs each opponent is individually balanced ±0.5, but total home/away can still be lopsided.
-- **MaitlandHomeGrouping**: Sliding window constraint — any window of (N+1) consecutive Maitland-game weeks must have at most N home weeks. Previously used broken pairwise BoolVar check (no-op with slack ≥ 1), fixed to sliding window.
+- **Home/away weekend sequencing — REMOVED (spec-018)**: the former `MaitlandHomeGrouping` (consecutive-home cap), `AwayAtMaitlandGrouping` (away-clubs-per-weekend cap) and `MaitlandAlternateHomeAway` (H-A-H-A soft penalty) are gone. Back-to-back home weekends and long away runs are both fine now.
 - **PHLAndSecondGradeAdjacency**: 180-minute time window + location rule — within 180 min must be same location, outside 180 min must be different location.
 
 ### Constraint Types

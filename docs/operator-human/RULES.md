@@ -140,14 +140,13 @@ diluted with extra home games beyond what the season actually needs.
 
 ---
 
-### Rule 8: Maximum Maitland Home Weekends
-**Constraint:** `MaxMaitlandHomeWeekends`
+### Rule 8: Maximum Maitland Home Weekends — NO LONGER ENFORCED (spec-018)
 
-**Description:** Limits the number of weekends where games are played at Maitland Park.
-
-**Enforcement:** Uses indicator variables to track weekends with games, bounded by `num_games // 2 + 1`.
-
-**Rationale:** Balances venue usage and operational costs for remote venues.
+This rule (a cap on the number of weekends with games at Maitland Park) has
+been **removed**. The convenor no longer wants any sequencing or capping of
+home/away weekends. Per-club home-weekend *totals* are still pinned by the
+away-club home/away expectations rule below; only the weekend-cap / spacing
+dimension was dropped.
 
 ---
 
@@ -319,33 +318,19 @@ asked for "≥ N coincident rounds" without precise stacking or co-location.
 
 These constraints use penalty variables that are minimized in the objective function.
 
-### Rule 14: Maitland Home Grouping
+### Rule 14: Maitland Home Grouping — NO LONGER ENFORCED (spec-018)
 
-**Description:**
-- Encourages all Maitland games in a week to be either all home or all away
-- **Hard element:** Maximum consecutive home weekends enforced via sliding window. With `--slack N`, allows up to (1 + N) consecutive home weeks. Default (no slack): no back-to-back.
-
-**Sliding window enforcement:** In any window of (max_consecutive + 1) consecutive Maitland-game weeks, at most max_consecutive can be home weeks. No-play weeks are excluded from the sequence.
-
-**Penalty:** `min(home_games, away_games)` per week
-
-**Weight:** 1,000,000
-
-**Rationale:** Reduces travel burden by grouping home/away weeks.
+This rule (no back-to-back home weekends + grouping all of a week's Maitland
+games as home or away) has been **removed**. Back-to-back home weekends are
+fine now — the convenor no longer wants any home/away weekend sequencing.
 
 ---
 
-### Rule 15: Away at Maitland Grouping
+### Rule 15: Away at Maitland Grouping — NO LONGER ENFORCED (spec-018)
 
-**Description:**
-- Encourages minimal variety in away clubs visiting Maitland each weekend
-- **Hard limit:** Maximum 3 different away clubs per Maitland weekend
-
-**Penalty:** `num_away_clubs - 1` per week
-
-**Weight:** 100,000
-
-**Rationale:** Reduces complexity and improves travel coordination.
+This rule (a cap on how many different away clubs could visit Maitland in one
+weekend) has been **removed**. There is no longer any cap on away-club variety
+per weekend.
 
 ---
 
@@ -444,37 +429,14 @@ This is a **soft constraint** — the solver will respect it when feasible, but 
 
 ---
 
-### Rule 22: Maitland Home/Away Weekend Alternation
-**Constraint:** `MaitlandAlternateHomeAway` (spec-012)
+### Rule 22: Maitland Home/Away Weekend Alternation — NO LONGER ENFORCED (spec-018)
 
-**Description:** Across Maitland's playing weekends, the convenor wants
-roughly alternating (home, away) pairs rather than long runs of either
-type. Two related constraints work together:
-
-- **Hard rule (already in place):** `NonDefaultHomeGrouping` with default
-  slack forbids two consecutive home weekends ("HH"). So you'll never see
-  Maitland playing at Maitland Park two weekends in a row.
-- **Soft rule (spec-012):** `MaitlandAlternateHomeAway` adds a small
-  penalty per consecutive playable-week pair where both weekends are the
-  same type (HH or AA). Since HH is already hard-forbidden, this
-  effectively discourages long runs of away weekends.
-
-Together these push the solver toward an H A H A H A pattern when
-feasible. Bye weeks for Maitland (no game scheduled) contribute neither
-home nor away to a pair — they're treated as a gap that does not penalise
-either neighbour.
-
-**Penalty:** 1 per consecutive same-type pair.
-
-**Weight:** `PENALTY_WEIGHTS['maitland_alternate_home_away']` — 10,000 in
-the 2026 season config. Tuned so the alternation rule shapes the pattern
-without overwhelming the club-vs-club alignment penalty (50,000) or the
-preferred-times penalty (200,000).
-
-**Scope:** Maitland only. Gosford has its own home/away semantics
-(Friday-night PHL forced count + sparse Sunday slots) and is intentionally
-out of scope. Adding alternation for other away clubs is a separate spec
-if needed.
+This rule (a soft H-A-H-A alternation push for Maitland's weekends) has been
+**removed**, along with the hard no-back-to-back-home rule it relied on. The
+convenor no longer wants any home/away weekend sequencing — long runs of home
+or away weekends are both acceptable. The only home/away rules that remain are
+the per-pair / aggregate 50/50 balance and the per-club home-weekend totals
+(Rule 6 above).
 
 ---
 
@@ -545,11 +507,12 @@ to ensure:
 - No simultaneous PHL games at the main venue
 
 ### Interaction 2: Home/Away Balance
-The per-pair home/away balance, the Maitland home-grouping rule, and the
-away-clubs-per-Maitland-weekend rule combine to:
-- Ensure fair home/away distribution
-- Group home games for efficiency
-- Limit away-team variety per weekend
+The per-pair home/away balance and the per-club home-weekend totals combine to:
+- Ensure fair home/away distribution per pair and in aggregate
+- Pin the right number of home weekends per away-based club (Friday/Sunday/overall)
+
+(The former home-grouping and away-clubs-per-weekend rules were removed in
+spec-018 — there is no longer any weekend *sequencing* dimension.)
 
 ### Interaction 3: Field Optimization
 The contiguous-slot rule, the same-field continuity rule, and the

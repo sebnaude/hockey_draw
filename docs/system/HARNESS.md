@@ -62,10 +62,10 @@ use:
 | Key | Producer | Consumed by |
 |---|---|---|
 | `teams`, `grades`, `clubs`, `fields`, `timeslots` | `build_season_data` | every constraint |
-| `home_field_map` | season config | NonDefaultHomeGrouping, FiftyFiftyHomeandAway, generate_X home filter |
-| `away_venue_rules` | `_merge_away_venue_rules` | NonDefaultHomeGrouping, AwayAtNonDefaultGrouping |
+| `home_field_map` | season config | AwayClubHomeWeekendsCount, AwayClubPerOpponentAndAggregateHomeBalance, generate_X home filter |
+| `away_venue_rules` | `_merge_away_venue_rules` | (no active consumers — the home-grouping constraints that read it were removed in spec-018) |
 | `constraint_defaults` | `_merge_constraint_defaults` | every constraint with a tunable threshold |
-| `constraint_slack` | CLI `--slack` | spacing, alignment, grouping, broadmeadow constraints |
+| `constraint_slack` | CLI `--slack` | spacing, alignment, broadmeadow constraints |
 | `forced_games` | season config | generate_X, ForcedGames tester check, Phase 4 adjusters |
 | `blocked_games` | season config | generate_X, BlockedGames tester check, Phase 4 adjusters |
 | `count_adjustments` | `run_count_adjusters` (during build_groupings) | atoms / legacy methods that need FORCED-aware counts |

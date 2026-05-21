@@ -56,19 +56,16 @@ CONSTRAINT_TO_SEVERITY = {
     'PHLAndSecondGradeTimesAI': 1,
     'FiftyFiftyHomeandAway': 1,
     'FiftyFiftyHomeandAwayAI': 1,
-    'MaxMaitlandHomeWeekends': 1,
-    'MaxMaitlandHomeWeekendsAI': 1,
-    'MaitlandHomeGrouping': 1,
-    'MaitlandHomeGroupingAI': 1,
-    
+    # spec-018: `MaxMaitlandHomeWeekends` / `MaitlandHomeGrouping` (+ AI
+    # variants) removed — venue-sequencing rules deleted.
+
     'EqualMatchUpSpacingConstraint': 1,
     'EqualMatchUpSpacingConstraintAI': 1,
 
     # Level 2 - HIGH (structural, club-specific)
     'ClubDayConstraint': 2,
     'ClubDayConstraintAI': 2,
-    'AwayAtMaitlandGrouping': 2,
-    'AwayAtMaitlandGroupingAI': 2,
+    # spec-018: `AwayAtMaitlandGrouping` (+ AI) removed — rule deleted.
     'TeamConflictConstraint': 2,
     'TeamConflictConstraintAI': 2,
 

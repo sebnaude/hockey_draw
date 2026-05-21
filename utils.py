@@ -2693,19 +2693,7 @@ def _check_scheduling_feasibility(data, warnings, fatals):
                 f"{maitland_sunday_total} Sunday slots across {maitland_sunday_weeks} weeks."
             )
 
-        # Check AwayAtMaitlandGrouping: max away clubs per week
-        away_limit = defaults.get('away_maitland_max_clubs', 2)
-        # Each week at Maitland can host games for at most away_limit visiting clubs
-        # plus Maitland itself. Max away games per week = away_limit * slots_per_week / team_pairs
-        # Simpler check: total away games at Maitland should fit in available weeks
-        total_maitland_away = sum((num_rounds.get(mt.grade, 0)) // 2
-                                   for mt in maitland_teams)  # ~half their games are away (at Maitland against others)
-        # Actually, away-at-maitland = other teams visiting Maitland
-        # This equals Maitland's home games (same thing from opponent's perspective)
-        # AwayAtMaitlandGrouping limits how many DIFFERENT clubs visit per week
-        # With limit=2 and ~18 weeks, max distinct club-visits = 2*18 = 36
-        # But same club can visit multiple weeks, so this is rarely binding
-        # Just flag if Maitland weeks are very tight
+        # Flag if Maitland Sunday weeks are very tight relative to home-game demand.
         if maitland_sunday_weeks > 0 and total_maitland_home > maitland_sunday_weeks * 6:
             warnings.append(
                 f"Maitland Park very dense: {total_maitland_home} home games across "

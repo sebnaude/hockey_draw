@@ -66,8 +66,8 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'PHLAnd2ndAdjacency': 1,  # spec-014 (was PHLAndSecondGradeAdjacency)
     'PHLAndSecondGradeTimes': 1,
     'FiftyFiftyHomeAway': 1,
-    'MaxMaitlandHomeWeekends': 1,
-    'MaitlandHomeGrouping': 1,  # Has hard element: no back-to-back Maitland home games
+    # spec-018: `MaxMaitlandHomeWeekends` / `MaitlandHomeGrouping` removed —
+    # venue back-to-back home-weekend rule deleted.
     # spec-016: NIHC fill order is now a SOFT symmetry-breaker (severity 5,
     # was 1), reported as soft pressure (see the metric_value on its
     # violations). Listed at level 5 below.
@@ -76,7 +76,7 @@ CONSTRAINT_SEVERITY_LEVELS = {
 
     # Level 2 - HIGH (structural, club-specific)
     'ClubDayConstraint': 2,
-    'AwayAtMaitlandGrouping': 2,
+    # spec-018: `AwayAtMaitlandGrouping` removed — away-clubs-per-week cap deleted.
     'TeamConflict': 2,
 
     # Level 3 - MEDIUM (spacing, alignment, game spread)
@@ -1159,14 +1159,16 @@ class DrawTester:
             ('EqualGamesAndBalanceMatchUps', self._check_equal_games),
             ('EqualGamesAndBalanceMatchUps', self._check_balanced_matchups),
             ('FiftyFiftyHomeandAway', self._check_fifty_fifty_home_away),
-            ('MaitlandHomeGrouping', self._check_maitland_back_to_back),
+            # spec-018: `_check_maitland_back_to_back` removed — venue
+            # back-to-back home-weekend rule deleted.
             ('PHLAnd2ndAdjacency', self._check_phl_2nd_adjacency),
             ('PHLAndSecondGradeTimes', self._check_phl_second_grade_times),
             ('EqualMatchUpSpacing', self._check_equal_matchup_spacing),
             # spec-008 Part B: byes-as-first-class spacing.
             ('BalancedByeSpacing', self._check_balanced_bye_spacing),
             # Level 2 - HIGH
-            ('AwayAtMaitlandGrouping', self._check_maitland_away_clubs_limit),
+            # spec-018: `_check_maitland_away_clubs_limit` removed —
+            # away-clubs-per-week cap deleted.
             ('ClubDay', self._check_club_day),
             ('TeamConflict', self._check_team_conflict),
             # Level 3 - MEDIUM
@@ -1475,106 +1477,12 @@ class DrawTester:
 
         return violations
     
-    def _check_maitland_back_to_back(self) -> List[Violation]:
-        """Generic non-default-home back-to-back check (Phase 6).
-
-        For each club in `home_field_map`, checks the sliding window of
-        (max_consecutive + 1) consecutive home weeks, where max_consecutive
-        comes from `AWAY_VENUE_RULES[club]['max_consecutive_home']` (or
-        `constraint_defaults['maitland_max_consecutive_home']`). Clubs whose
-        rule is None skip the check. Originally Maitland-only; method name
-        retained for registry-mapping back-compat.
-        """
-        violations = []
-        defaults = self.data.get('constraint_defaults', {})
-        rules = self.data.get('away_venue_rules', {}) or {}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        slack = self.constraint_slack.get('MaitlandHomeGrouping', 0)
-
-        for nd_club, nd_venue in home_field_map.items():
-            club_rules = rules.get(nd_club, {})
-            base_max = club_rules.get(
-                'max_consecutive_home',
-                defaults.get('maitland_max_consecutive_home', 1),
-            )
-            if base_max is None:
-                continue
-            max_consecutive = base_max + slack
-
-            home_weeks = set()
-            club_weeks = set()
-            for game in self.draw.games:
-                club1 = self._team_to_club.get(game.team1)
-                club2 = self._team_to_club.get(game.team2)
-                if nd_club in (club1, club2):
-                    club_weeks.add(game.week)
-                    if game.field_location == nd_venue:
-                        home_weeks.add(game.week)
-
-            sorted_weeks = sorted(club_weeks)
-            is_home = [1 if w in home_weeks else 0 for w in sorted_weeks]
-            window_size = max_consecutive + 1
-            for i in range(len(is_home) - window_size + 1):
-                window_sum = sum(is_home[i:i + window_size])
-                if window_sum > max_consecutive:
-                    breach_week = sorted_weeks[i + window_size - 1]
-                    window_w = sorted_weeks[i:i + window_size]
-                    violations.append(Violation.create(
-                        constraint="MaxMaitlandHomeWeekends",
-                        message=(
-                            f"{nd_club} home {window_sum}/{window_size} in "
-                            f"weeks {window_w} (max consecutive: {max_consecutive})"
-                        ),
-                        week=breach_week,
-                        affected_clubs=[nd_club],
-                        metric_value=window_sum,
-                    ))
-
-        return violations
-
-    def _check_maitland_away_clubs_limit(self) -> List[Violation]:
-        """Generic away-clubs-per-week check at each non-default-home venue (Phase 6).
-
-        Per-venue limit comes from `AWAY_VENUE_RULES[club]['max_away_clubs']`
-        (or `constraint_defaults['away_maitland_max_clubs']`). None disables.
-        """
-        violations = []
-        defaults = self.data.get('constraint_defaults', {})
-        rules = self.data.get('away_venue_rules', {}) or {}
-        home_field_map = self.data.get('home_field_map', {}) or {}
-        slack = self.constraint_slack.get('AwayAtMaitlandGrouping', 0)
-
-        for nd_club, nd_venue in home_field_map.items():
-            club_rules = rules.get(nd_club, {})
-            base_limit = club_rules.get(
-                'max_away_clubs',
-                defaults.get('away_maitland_max_clubs', 3),
-            )
-            if base_limit is None:
-                continue
-            max_away_clubs = base_limit + slack
-            away_clubs_per_week = defaultdict(set)
-            for game in self.draw.games:
-                if game.field_location != nd_venue:
-                    continue
-                for team in (game.team1, game.team2):
-                    team_club = self._team_to_club.get(team, 'Unknown')
-                    if team_club != nd_club:
-                        away_clubs_per_week[game.week].add(team_club)
-            for week, clubs in away_clubs_per_week.items():
-                if len(clubs) > max_away_clubs:
-                    violations.append(Violation.create(
-                        constraint="AwayAtMaitlandGrouping",
-                        message=(
-                            f"Week {week}: {len(clubs)} away clubs at {nd_venue} "
-                            f"(max {max_away_clubs}): {clubs}"
-                        ),
-                        week=week,
-                        affected_clubs=sorted(clubs),
-                        metric_value=len(clubs),
-                    ))
-
-        return violations
+    # spec-018: `_check_maitland_back_to_back` (consecutive home-weekend
+    # window check) and `_check_maitland_away_clubs_limit` (away-clubs-per-week
+    # cap check) deleted — the venue-sequencing rules they verified were
+    # removed. Per-club home-weekend counts are verified by the spec-004
+    # `AwayClubHomeWeekendsCount` atom's own unit test; per-pair/aggregate
+    # home/away balance remains in `_check_fifty_fifty_home_away`.
     
     def _check_club_grade_adjacency(self) -> List[Violation]:
         """Check that same-grade, same-club teams never play simultaneously.
