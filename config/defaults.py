@@ -149,9 +149,13 @@ DEFAULT_STAGES = [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGamesAndBalanceMatchUps',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            # spec-010: PHLRoundOnePlay removed — convenor uses FORCED_GAMES to
-            # express "team X plays round 1" when needed. The atom file is kept
-            # on disk as parity reference; registry entry emptied (solver_class_names=[]).
+            # PHL/2nd ±180-min adjacency (same-location-when-close / different-
+            # location-when-far). Engine hard key. NOTE: under locked-week runs
+            # this can over-constrain Gosford PHL (zero margin) — exclude it via
+            # --exclude PHLAndSecondGradeAdjacency for locked re-solves.
+            'PHLAndSecondGradeAdjacency',
+            # spec-010: PHLRoundOnePlay removed (atom + registry entry deleted)
+            # — convenor uses FORCED_GAMES to express "team X plays round 1".
             'GosfordFridayRoundsForced',
             # spec-007: hard same-grade-same-club rule (was the hard portion
             # of the obsolete `ClubGradeAdjacency` cluster).

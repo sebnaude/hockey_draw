@@ -57,10 +57,10 @@ class TestRegistryCompleteness:
                     f"DrawTester.{attr_name} not covered by registry"
 
     def test_registry_has_expected_entry_count(self):
-        """Registry contains 21 originals + 5 PHL atoms (Phase 3a) + 5 ClubDay
-        atoms (Phase 3b) + 4 ClubVsClub atoms (Phase 3c, obsolete-by-spec-005
-        but kept as parity reference) + 2 Phase-6 generic aliases
-        (NonDefaultHomeGrouping, AwayAtNonDefaultGrouping) +
+        """Registry contains 21 originals + 5 PHL atoms (Phase 3a; spec-010
+        later DELETED PHLRoundOnePlay → 4) + 5 ClubDay atoms (Phase 3b) +
+        2 Phase-6 generic aliases (NonDefaultHomeGrouping,
+        AwayAtNonDefaultGrouping) +
         1 spec-002 soft penalty atom (SoftLexMatchupOrdering) +
         2 spec-007 atoms (SameGradeSameClubNoConcurrency, TeamPairNoConcurrency) +
         2 spec-003 atoms (NIHCFillWFBeforeEF, NIHCFillEFBeforeSF) +
@@ -68,14 +68,14 @@ class TestRegistryCompleteness:
         2 spec-004 atoms (AwayClubHomeWeekendsCount,
         AwayClubPerOpponentAndAggregateHomeBalance) +
         2 spec-005 atoms (ClubVsClubStackedWeekends,
-        ClubVsClubStackedCoLocation — replaces the 4 Phase-3c atoms in the
-        production stage list while leaving them in the registry as
-        parity reference) +
+        ClubVsClubStackedCoLocation — the 4 obsolete Phase-3c ClubVsClub atoms
+        they replaced were DELETED, leaving only the legacy ClubVsClubAlignment
+        slack-key/parity entry) +
         1 spec-012 soft penalty atom (MaitlandAlternateHomeAway) +
         1 spec-008 atom (BalancedByeSpacing — byes-as-first-class
           spacing, HARD severity 2, own slack key)
-        = 49."""
-        assert len(CONSTRAINT_REGISTRY) == 49
+        = 44."""
+        assert len(CONSTRAINT_REGISTRY) == 44
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.

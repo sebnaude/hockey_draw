@@ -15,9 +15,6 @@ from constraints.atoms._adjusters import (
     equal_matchup_spacing_adjuster,
     maitland_home_grouping_adjuster,
 )
-from constraints.atoms.club_vs_club_coincidence import (
-    club_vs_club_coincidence_adjuster,
-)
 from constraints.registry import CONSTRAINT_REGISTRY, run_count_adjusters
 from models import Club, Grade, PlayingField, Team, Timeslot
 
@@ -181,69 +178,6 @@ class TestAwayAtMaitlandGroupingAdjuster:
 
 
 # ----------------------------------------------------------------------
-# #5 ClubVsClubCoincidence adjuster (the user's worked example)
-# ----------------------------------------------------------------------
-
-
-class TestClubVsClubCoincidenceAdjuster:
-    def test_no_forced_returns_none(self):
-        data = _build_data()
-        out = club_vs_club_coincidence_adjuster(data, [], [])
-        assert out is None
-
-    def test_forced_off_sunday_reduces_expected(self):
-        data = _build_data()
-        # PHL: 2 teams, R=6 → per_team_games = 6 // 1 = 6.
-        # FORCED 2 PHL games of (Maitland, Norths) on Friday Gosford → expected drops by 2.
-        forced = [{
-            'grade': 'PHL',
-            'day': 'Friday',
-            'field_location': 'Central Coast Hockey Park',
-            'teams': ['Maitland', 'Norths'],
-            'count': 2,
-        }]
-        out = club_vs_club_coincidence_adjuster(data, forced, [])
-        assert out is not None
-        assert out['PHL'][('Maitland', 'Norths')] == 6 - 2
-
-    def test_blocked_on_sunday_reduces_expected(self):
-        data = _build_data()
-        blocked = [{
-            'grade': '3rd',
-            'day': 'Sunday',
-            'teams': ['Maitland', 'Norths'],
-            'count': 1,
-        }]
-        out = club_vs_club_coincidence_adjuster(data, [], blocked)
-        # 3rd: 2 teams, R=6 → 6. Blocked 1 → expected = 5.
-        assert out['3rd'][('Maitland', 'Norths')] == 5
-
-    def test_sunday_forced_entry_not_counted(self):
-        data = _build_data()
-        # Sunday FORCED doesn't move anything off Sunday.
-        forced = [{
-            'grade': 'PHL',
-            'day': 'Sunday',
-            'teams': ['Maitland', 'Norths'],
-            'count': 2,
-        }]
-        out = club_vs_club_coincidence_adjuster(data, forced, [])
-        assert out is None
-
-    def test_zero_floor(self):
-        data = _build_data()
-        # Forcing more off-Sunday than total → expected clamped to 0.
-        forced = [{
-            'grade': 'PHL',
-            'day': 'Friday',
-            'teams': ['Maitland', 'Norths'],
-            'count': 99,
-        }]
-        out = club_vs_club_coincidence_adjuster(data, forced, [])
-        assert out['PHL'][('Maitland', 'Norths')] == 0
-
-
-# ----------------------------------------------------------------------
 # Engine-level integration: registry dispatches every adjuster.
 # ----------------------------------------------------------------------
 
@@ -254,7 +188,6 @@ class TestRegistryDispatch:
             'EqualMatchUpSpacing',
             'MaitlandHomeGrouping',
             'AwayAtMaitlandGrouping',
-            'ClubVsClubCoincidence',
         ):
             assert CONSTRAINT_REGISTRY[name].forced_blocked_adjuster is not None, (
                 f'Adjuster missing for {name}'
@@ -280,7 +213,5 @@ class TestRegistryDispatch:
         adjustments = run_count_adjusters(data)
         # MaitlandHomeGrouping registered week 5 from entry 1.
         assert adjustments['MaitlandHomeGrouping'] == {'Maitland': {5}}
-        # ClubVsClubCoincidence reduced PHL pair by 2.
-        assert adjustments['ClubVsClubCoincidence']['PHL'][('Maitland', 'Norths')] == 4
         # AwayAtMaitlandGrouping recorded Norths in week 5.
         assert adjustments['AwayAtMaitlandGrouping'][(5, 'Maitland Park')] == {'Norths'}

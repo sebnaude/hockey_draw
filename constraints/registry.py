@@ -162,20 +162,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
     ),
-    # OBSOLETE (spec-010): "every PHL team plays round 1" removed. The convenor
-    # uses FORCED_GAMES entries to express deliberate round-1 placement when
-    # needed. The atom file `constraints/atoms/phl_round_one_play.py` is kept
-    # on disk as parity reference. Registry entry kept (with empty
-    # `solver_class_names`) so legacy solver-class-name lookups still resolve
-    # gracefully and the entry count stays stable.
-    'PHLRoundOnePlay': ConstraintInfo(
-        canonical_name='PHLRoundOnePlay',
-        solver_class_names=[],  # emptied by spec-010 — atom no longer dispatched
-        tester_check_methods=['_check_phl_second_grade_times'],
-        tester_violation_names=['PHLAndSecondGradeTimes'],
-        severity_level=1,
-        atom_group='PHLAndSecondGradeTimes',
-    ),
+    # OBSOLETE (spec-010): "every PHL team plays round 1" removed; the atom
+    # file and registry entry were subsequently DELETED. The convenor uses
+    # FORCED_GAMES entries to express deliberate round-1 placement when needed.
     'PreferredDates': ConstraintInfo(
         canonical_name='PreferredDates',
         solver_class_names=['PreferredDates'],
@@ -349,55 +338,11 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=3,
         slack_key='ClubVsClubAlignment',
     ),
-    # --- Atoms split from ClubVsClubAlignment (Phase 3c) ---
-    # OBSOLETE (spec-005): the four Phase-3c atoms below are superseded by
-    # the spec-005 `ClubVsClubStackedAlignment` cluster
-    # (`ClubVsClubStackedWeekends` + `ClubVsClubStackedCoLocation`). They
-    # remain in the registry + on disk as parity reference only — removed
-    # from `DEFAULT_STAGES` in `config/defaults.py` so the production
-    # pipeline doesn't dispatch them. The legacy engine method
-    # `_club_vs_club_atoms_hard` in `constraints/unified.py` still routes
-    # through them for any caller that explicitly opts into the old engine
-    # path, but the default stage list now goes through spec-005.
-    'ClubVsClubCoincidence': ConstraintInfo(
-        canonical_name='ClubVsClubCoincidence',
-        solver_class_names=['ClubVsClubCoincidence'],
-        tester_check_methods=['_check_club_vs_club_alignment'],
-        tester_violation_names=['ClubVsClubAlignment'],
-        severity_level=3,
-        slack_key='ClubVsClubAlignment',
-        atom_group='ClubVsClubAlignment',
-    ),
-    'ClubVsClubFieldLimit': ConstraintInfo(
-        canonical_name='ClubVsClubFieldLimit',
-        solver_class_names=['ClubVsClubFieldLimit'],
-        tester_check_methods=['_check_club_vs_club_alignment'],
-        tester_violation_names=['ClubVsClubAlignment'],
-        severity_level=3,
-        slack_key='ClubVsClubAlignment',
-        has_soft_component=True,
-        atom_group='ClubVsClubAlignment',
-    ),
-    'ClubVsClubDeficitPenalty': ConstraintInfo(
-        canonical_name='ClubVsClubDeficitPenalty',
-        solver_class_names=['ClubVsClubDeficitPenalty'],
-        tester_check_methods=['_check_club_vs_club_alignment'],
-        tester_violation_names=['ClubVsClubAlignment'],
-        severity_level=3,
-        slack_key='ClubVsClubAlignment',
-        has_soft_component=True,
-        atom_group='ClubVsClubAlignment',
-    ),
-    'PHLAnd2ndBackToBackSameField': ConstraintInfo(
-        canonical_name='PHLAnd2ndBackToBackSameField',
-        solver_class_names=['PHLAnd2ndBackToBackSameField'],
-        tester_check_methods=['_check_club_vs_club_alignment'],
-        tester_violation_names=['ClubVsClubAlignment'],
-        severity_level=3,
-        slack_key='ClubVsClubAlignment',
-        has_soft_component=True,
-        atom_group='ClubVsClubAlignment',
-    ),
+    # The four Phase-3c atoms split from ClubVsClubAlignment (Coincidence,
+    # FieldLimit, DeficitPenalty, PHLAnd2ndBackToBackSameField) were DELETED
+    # (spec-005) — fully superseded by the `ClubVsClubStackedAlignment`
+    # cluster below. The `ClubVsClubAlignment` entry above remains as the
+    # slack-key holder + legacy parity-reference engine path.
     # spec-005: replacement cluster `ClubVsClubStackedAlignment`. Two atoms
     # cooperate via `STACK_PLAY_PREFIX` helper-var keys:
     #   - `ClubVsClubStackedWeekends` (HARD): pins per-(pair, grade) Sunday

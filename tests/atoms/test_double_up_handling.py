@@ -31,16 +31,8 @@ from ortools.sat.python import cp_model
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from constraints.atoms.base import BROADMEADOW
-from constraints.atoms.club_vs_club_coincidence import (
-    ClubVsClubCoincidence,
-    club_vs_club_coincidence_adjuster,
-)
 from constraints.atoms.same_grade_same_club_no_concurrency import (
     SameGradeSameClubNoConcurrency,
-)
-from constraints.atoms._club_vs_club_shared import (
-    collect_grade_pair_round_vars,
-    per_team_games,
 )
 from constraints.helper_vars import HelperVarRegistry
 from models import Club, Grade, PlayingField, Team, Timeslot
@@ -248,89 +240,11 @@ class TestSameGradeSameClubDoublup:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: ClubVsClubCoincidence counts distinct matchups per club-pair
+# Scenario 2 (ClubVsClubCoincidence distinct-matchup counting) was DELETED
+# alongside the obsolete Phase-3c ClubVsClub atoms (spec-005). The
+# distinct-matchup-vs-collapsed-clubs concern now lives entirely in the
+# SameGradeSameClubNoConcurrency scenarios above/below.
 # ---------------------------------------------------------------------------
-
-
-class TestCoincidenceCountsDistinctMatchups:
-    def test_collect_grade_pair_round_vars_sees_two_a_b_matchups(self):
-        """Scenario: collect_grade_pair_round_vars aggregates ALL A-B 3rd-grade vars in round 1 — both matchups × every timeslot."""
-        # Given: the double-up fixture has 3rd-grade games
-        #   (A-1 3rd, B 3rd) and (A-2 3rd, B 3rd) — both with club_pair ('A','B').
-        # Timeslots in week 1 are 2 fields (EF, WF) × 4 day_slots = 8 slots.
-        # Intra-A derby (A-1, A-2) lands in club_pair ('A','A') and is excluded.
-        # The (A-1, C) / (A-2, C) / (B, C) matchups don't contribute to ('A','B').
-        # Oracle: ('A','B') round-1 var count = 2 matchups × 8 timeslots = 16.
-        data = _build_double_up_fixture()
-        model, X = _build_X(data)
-
-        # When: collect_grade_pair_round_vars is invoked for 3rd grade.
-        grade_pair_round = collect_grade_pair_round_vars(X, data, '3rd')
-
-        # Then: the ('A','B') club pair appears in the output map.
-        assert ('A', 'B') in grade_pair_round
-
-        # And: round-1 vars for ('A','B') equal the hand-computed total of 16.
-        round1_vars = grade_pair_round[('A', 'B')].get(1, [])
-        assert len(round1_vars) == 16, (
-            f'Expected 16 vars (2 matchups × 8 timeslots) for (A,B) round 1; '
-            f'got {len(round1_vars)}'
-        )
-
-        # And: the ('A','A') intra-club pair is recorded separately — confirms
-        # the function bucketed by sorted club pair (and didn't merge into A-B).
-        # Hand-computed: 1 matchup (A-1, A-2) × 8 timeslots = 8.
-        intra_a_round1 = grade_pair_round.get(('A', 'A'), {}).get(1, [])
-        assert len(intra_a_round1) == 8
-
-    def test_coincidence_atom_feasible_with_double_up(self):
-        """Given: double-up fixture. ClubVsClubCoincidence applied.
-        When: model solved.
-        Then: FEASIBLE — the atom handles double-ups without crashing or
-              creating impossible constraints.
-
-        Hand-computed: per_team_games for 3rd grade with T=4, R=4:
-          4 // (4-1) = 1 (even teams formula). Also for 4th grade with T=3,
-          R=4: 4 // 3 = 1.
-          lower_grade_pairs_to_compare: both have same per_team_games=1,
-          so the walk yields no pairs (or yields (3rd, 4th, 1) if the
-          ordering produces it). The atom only adds constraints when the
-          pair is found in BOTH grades. Given there are games in both grades,
-          at least some constraints are added, and the model must be feasible.
-        """
-        data = _build_double_up_fixture()
-        model, X = _build_X(data)
-        n = ClubVsClubCoincidence().apply(model, X, data, _registry(model))
-        # n may be 0 if lower_grade_pairs_to_compare yields no pairs for
-        # equal per_team_games grades. That's valid — the important check
-        # is that no exception is thrown and the model remains feasible.
-        status, _ = _solve(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE), (
-            f'ClubVsClubCoincidence with double-up must be feasible (n={n})'
-        )
-
-    def test_adjuster_handles_double_up_club_pair_correctly(self):
-        """Given: double-up fixture with FORCED off-Sunday for (A, B) in 3rd.
-        When: adjuster called.
-        Then: adjustment['3rd'][('A','B')] == per_team_games - forced_count.
-
-        Hand-computed: per_team_games 3rd = 1. Forced count = 1 → expected
-        = max(0, 1-1) = 0.
-        """
-        data = _build_double_up_fixture()
-        # Force 1 3rd-grade game of (A, B) off Sunday
-        forced = [{
-            'grade': '3rd',
-            'day': 'Saturday',
-            'teams': ['A-1 3rd', 'B 3rd'],
-            'count': 1,
-        }]
-        out = club_vs_club_coincidence_adjuster(data, forced, [])
-        assert out is not None
-        assert '3rd' in out
-        assert out['3rd'][('A', 'B')] == max(0, 1 - 1), (
-            f'Expected max(0, 1-1)=0; got {out["3rd"].get(("A","B"))}'
-        )
 
 
 # ---------------------------------------------------------------------------

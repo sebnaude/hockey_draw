@@ -12,20 +12,15 @@ from constraints.atoms.base import Atom
 from constraints.atoms.phl_concurrency import PHLConcurrencyAtBroadmeadow
 from constraints.atoms.phl_2nd_concurrency import PHLAnd2ndConcurrencyAtBroadmeadow
 from constraints.atoms.gosford_friday_rounds import GosfordFridayRoundsForced
-from constraints.atoms.phl_round_one_play import PHLRoundOnePlay
 from constraints.atoms.preferred_dates import PreferredDates
 from constraints.atoms.club_day_participation import ClubDayParticipation
 from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchup
 from constraints.atoms.club_day_opponent_matchup import ClubDayOpponentMatchup
 from constraints.atoms.club_day_same_field import ClubDaySameField
 from constraints.atoms.club_day_contiguous_slots import ClubDayContiguousSlots
-from constraints.atoms.club_vs_club_coincidence import ClubVsClubCoincidence
-from constraints.atoms.club_vs_club_field_limit import ClubVsClubFieldLimit
-from constraints.atoms.club_vs_club_deficit_penalty import ClubVsClubDeficitPenalty
-from constraints.atoms.phl_2nd_back_to_back import PHLAnd2ndBackToBackSameField
-# spec-005: replacement cluster `ClubVsClubStackedAlignment`. The four
-# atoms above are kept on disk for parity reference but removed from the
-# default stage list — see `config/defaults.py::DEFAULT_STAGES`.
+# spec-005: the legacy Phase-3c ClubVsClubAlignment atoms (Coincidence,
+# FieldLimit, DeficitPenalty, PHLAnd2ndBackToBackSameField) were deleted —
+# fully superseded by the `ClubVsClubStackedAlignment` cluster below.
 from constraints.atoms.club_vs_club_stacked_weekends import (
     ClubVsClubStackedWeekends,
 )
@@ -56,8 +51,8 @@ from constraints.atoms.balanced_bye_spacing import BalancedByeSpacing
 from constraints.atoms import _adjusters  # noqa: F401
 
 
-# spec-010: PHLRoundOnePlay removed from the dispatched-atom list. The class
-# remains importable for parity tests; import kept above.
+# spec-010: PHLRoundOnePlay removed from the dispatched-atom list; spec-(final)
+# deleted the atom file entirely (convenor uses FORCED_GAMES for round-1 play).
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
@@ -72,14 +67,6 @@ CLUB_DAY_ATOMS = [
     ClubDayOpponentMatchup,
     ClubDaySameField,
     ClubDayContiguousSlots,
-]
-
-
-CLUB_VS_CLUB_ATOMS = [
-    ClubVsClubCoincidence,
-    ClubVsClubFieldLimit,
-    ClubVsClubDeficitPenalty,
-    PHLAnd2ndBackToBackSameField,
 ]
 
 
@@ -103,7 +90,6 @@ __all__ = [
     'PHLConcurrencyAtBroadmeadow',
     'PHLAnd2ndConcurrencyAtBroadmeadow',
     'GosfordFridayRoundsForced',
-    'PHLRoundOnePlay',
     'PreferredDates',
     'PHL_TIMES_ATOMS',
     'ClubDayParticipation',
@@ -112,11 +98,6 @@ __all__ = [
     'ClubDaySameField',
     'ClubDayContiguousSlots',
     'CLUB_DAY_ATOMS',
-    'ClubVsClubCoincidence',
-    'ClubVsClubFieldLimit',
-    'ClubVsClubDeficitPenalty',
-    'PHLAnd2ndBackToBackSameField',
-    'CLUB_VS_CLUB_ATOMS',
     'ClubVsClubStackedWeekends',
     'ClubVsClubStackedCoLocation',
     'CLUB_VS_CLUB_STACKED_ATOMS',

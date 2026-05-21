@@ -100,10 +100,6 @@ class TestAtomToEngineKey:
         from constraints.stages import atom_to_engine_key
         assert atom_to_engine_key('ClubDayParticipation') == 'ClubDay'
 
-    def test_club_vs_club_atom_maps(self):
-        from constraints.stages import atom_to_engine_key
-        assert atom_to_engine_key('ClubVsClubCoincidence') == 'ClubVsClubAlignment'
-
     def test_phase6_alias_maps_to_legacy_name(self):
         from constraints.stages import atom_to_engine_key
         assert atom_to_engine_key('NonDefaultHomeGrouping') == 'MaitlandHomeGrouping'
