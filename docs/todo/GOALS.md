@@ -138,7 +138,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-016 | NIHC field-fill ordering (WF→EF→SF) becomes a SOFT symmetry-breaker | `done/spec-016-nihc-fill-order-soft.md` | done |
 | spec-017 | Promote `EqualMatchUpSpacing` to HARD beside `BalancedByeSpacing`; keep byes a separate atom | `done/spec-017-promote-matchup-spacing-hard.md` | done |
 | spec-018 | Delete venue back-to-back/alternation rules (`NonDefaultHomeGrouping`, `AwayAtNonDefaultGrouping`, `MaitlandAlternateHomeAway`); keep spec-004 counts/balance | `done/spec-018-remove-home-away-grouping.md` | done |
-| spec-019 | Regression-test `ClubVsClubStackedWeekends` per-pair FORCED-Friday budget (verify-only) | `spec-019-verify-clubvsclub-friday-aware.md` | ready |
+| spec-019 | Regression-test `ClubVsClubStackedWeekends` per-pair FORCED-Friday budget (verify-only) | `done/spec-019-verify-clubvsclub-friday-aware.md` | done |
 | spec-020 | `PreferredGames`: soft, weighted analogue of the whole FORCED_GAMES grammar (penalty-on-deviation); delete `PreferredDates` | `spec-020-soft-forced-games.md` | ready |
 | spec-021 | Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop heavy IntVar encodings; fix the soft_only-trap so hard parts actually run; drop WF/7pm | `spec-021-contiguity-primitive.md` | ready |
 | spec-022 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `spec-022-unify-helper-var-pathway.md` | ready |
