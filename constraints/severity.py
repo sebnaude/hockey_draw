@@ -49,8 +49,9 @@ CONSTRAINT_TO_SEVERITY = {
     'NoDoubleBookingFieldsConstraintAI': 1,
     'EnsureEqualGamesAndBalanceMatchUps': 1,
     'EnsureEqualGamesAndBalanceMatchUpsAI': 1,
-    'PHLAndSecondGradeAdjacency': 1,
-    'PHLAndSecondGradeAdjacencyAI': 1,
+    # spec-014: legacy `PHLAndSecondGradeAdjacency` rewritten as the
+    # `PHLAnd2ndAdjacency` atom (same canonical/class name).
+    'PHLAnd2ndAdjacency': 1,
     'PHLAndSecondGradeTimes': 1,
     'PHLAndSecondGradeTimesAI': 1,
     'FiftyFiftyHomeandAway': 1,

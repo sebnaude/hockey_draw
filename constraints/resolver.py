@@ -456,8 +456,7 @@ CLASS_TO_REGISTRY = {
     'NoDoubleBookingFieldsConstraintAI': 'NoDoubleBookingFields',
     'EnsureEqualGamesAndBalanceMatchUps': 'EqualGames',
     'EnsureEqualGamesAndBalanceMatchUpsAI': 'EqualGames',
-    'PHLAndSecondGradeAdjacency': 'PHLAndSecondGradeAdjacency',
-    'PHLAndSecondGradeAdjacencyAI': 'PHLAndSecondGradeAdjacency',
+    'PHLAnd2ndAdjacency': 'PHLAnd2ndAdjacency',  # spec-014 rewrite
     'PHLAndSecondGradeTimes': 'PHLAndSecondGradeTimes',
     'PHLAndSecondGradeTimesAI': 'PHLAndSecondGradeTimes',
     'FiftyFiftyHomeandAway': 'FiftyFiftyHomeAway',

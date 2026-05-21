@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: done -->
+<!-- owner: session=goal-final-form claimed=2026-05-21 -->
 <!-- depends_on: none (shares config/defaults.py DEFAULT_STAGES, constraints/registry.py, constraints/unified.py with spec-015..018 — rebase + re-run validate_solver_stages before merge) -->
 
 # spec-014 — PHL/2nd adjacency: force same-club adjacency, real-time cross-venue gap, minimal vars
@@ -132,6 +132,57 @@ Two further issues to fix while here:
   apart cross-venue).
 - `docs/operator-ai/CONSTRAINT_APPLICATION.md` / `docs/ai/GAME_TIME_DICTIONARIES.md` — note the
   real-time (minutes) comparison and the two distinct config keys.
+
+## Chosen encoding (Unit A deliverable)
+
+**Encoding picked: zero-added-variable forbid-over-infeasible-pairs.**
+
+For each `(club, week, day)` bucket where the club fields BOTH a PHL game and a
+2nd-grade game, walk the candidate PHL vars × candidate 2nd vars and add a
+`model.Add(phl_var + second_var <= 1)` for exactly the pairs that are *infeasible*
+under the rule. A pair `(p @ field_p/slot_p/loc_p/min_p, q @ field_q/slot_q/loc_q/min_q)`
+is **allowed** iff:
+- **same location** (`loc_p == loc_q`): `field_p == field_q` AND `|slot_p - slot_q| == 1`
+  (same field, back-to-back day_slots); OR
+- **different location**: `|min_p - min_q| >= phl_2nd_cross_venue_min_minutes` (180),
+  using minutes-since-midnight parsed from the `HH:MM` time at key index 5.
+
+Everything else is forbidden. Because each club fields one PHL team and one 2nd
+team, and `NoDoubleBookingTeams` already pins each to ≤1 game per day, the bucket
+is small (one team's slot/field options × the other's). Forbidding only the
+infeasible pairs forces the back-to-back/same-venue or ≥3h-cross-venue
+relationship *whenever both grades play that day*, and adds nothing when a club
+fields only one grade that day (DoD 2c) — the bucket has no `q` to pair with.
+
+**Variable budget: 0 new decision variables** (no IntVar channels, no `plays`
+BoolVars, no slot-pair product vars). This is strictly better than the
+"≤ 2 IntVars + 2 BoolVars per club·day" budget floated in Unit A and is asserted
+directly by a `model.Proto().variables` before/after delta == 0 test (DoD 4). The
+"no slot-pair *product*" requirement in DoD 2a is honoured: we never introduce a
+product variable; we only emit direct `≤ 1` clauses for the bounded set of
+infeasible candidate pairs.
+
+### Deviations from the literal DoD (recorded per /basic)
+
+1. **`solver_class_names = ['PHLAnd2ndAdjacency']`** (own name only), NOT the legacy
+   `['PHLAndSecondGradeAdjacency', 'PHLAndSecondGradeAdjacencyAI']`. Reason: the atom
+   dispatches through the non-engine fallback in `constraints/stages.py`, which calls
+   `_resolve_solver_class` → `_import_solver_class`. Carrying the legacy AI name would,
+   under `use_ai=True`, sort the `…AI` name first and resolve to a now-archived class
+   (un-importable from `constraints.{original,ai,atoms}`) → the atom would be silently
+   skipped. Own-name-only guarantees correct dispatch in both `use_ai` modes. Legacy
+   solver-class-name back-resolution for *old draw metadata* is dropped (not relied on
+   by any test; new draws record the new name).
+2. **Cross-venue threshold is 180 min** (per the Open Decision + DoD 2b/3), not the
+   `120` that appears inconsistently in DoD 4 and a doc bullet — those are typos.
+3. `atom_group=None` and the legacy `_phl_adjacency_hard` engine path is fully removed
+   (method + dispatch block + `phl_club_week_day`/`second_club_week_day` engine maps),
+   not kept as a parity stub, since the atom is self-contained off `X` (cleaner; no
+   dead maps for the AST sweep to flag).
+4. **Locked-week caveat (DoD 9): option 2.** The atom already self-skips locked weeks
+   (standard `key[6] in locked_weeks`). The Gosford-PHL zero-margin risk under
+   `--locked` is handled by updating the CLAUDE.md / docs `--exclude` guidance to the
+   new atom name `PHLAnd2ndAdjacency`.
 
 ## Out of scope
 

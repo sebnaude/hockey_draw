@@ -123,11 +123,17 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         slack_key='MaitlandHomeGrouping',
         has_soft_component=True,
     ),
-    'PHLAndSecondGradeAdjacency': ConstraintInfo(
-        canonical_name='PHLAndSecondGradeAdjacency',
-        solver_class_names=['PHLAndSecondGradeAdjacency', 'PHLAndSecondGradeAdjacencyAI'],
-        tester_check_methods=['_check_phl_second_grade_adjacency'],
-        tester_violation_names=['PHLAndSecondGradeAdjacency'],
+    # spec-014: rewrite of the legacy `PHLAndSecondGradeAdjacency`. The old
+    # engine method `_phl_adjacency_hard` only *forbade* two bad +/-180-min
+    # patterns; the new atom *forces* same-club PHL/2nd back-to-back at one
+    # venue, or a >= 180-min start-time gap across venues. Dispatched via the
+    # non-engine fallback (own name only in `solver_class_names` so dispatch
+    # resolves correctly under both `use_ai` modes — see spec-014 design note).
+    'PHLAnd2ndAdjacency': ConstraintInfo(
+        canonical_name='PHLAnd2ndAdjacency',
+        solver_class_names=['PHLAnd2ndAdjacency'],
+        tester_check_methods=['_check_phl_2nd_adjacency'],
+        tester_violation_names=['PHLAnd2ndAdjacency'],
         severity_level=1,
     ),
     'PHLAndSecondGradeTimes': ConstraintInfo(

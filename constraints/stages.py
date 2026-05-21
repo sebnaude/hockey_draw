@@ -45,7 +45,9 @@ ALL_KEYS = REQUIRED_KEYS | OPTIONAL_KEYS
 ENGINE_HARD_KEYS: Set[str] = {
     'NoDoubleBookingTeams', 'NoDoubleBookingFields', 'EqualGamesAndBalanceMatchUps',
     'FiftyFiftyHomeandAway', 'TeamConflict', 'MaxMaitlandHomeWeekends',
-    'PHLAndSecondGradeAdjacency', 'PHLAndSecondGradeTimes',
+    # spec-014: PHL/2nd adjacency is no longer an engine key — it's the
+    # `PHLAnd2ndAdjacency` atom dispatched via the non-engine fallback.
+    'PHLAndSecondGradeTimes',
     'EqualMatchUpSpacing', 'ClubVsClubAlignment',
     'MaitlandHomeGrouping', 'AwayAtMaitlandGrouping',
     'ClubDay', 'ClubGameSpread', 'EnsureBestTimeslotChoices',

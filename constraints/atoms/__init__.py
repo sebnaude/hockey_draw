@@ -34,6 +34,9 @@ from constraints.atoms.same_grade_same_club_no_concurrency import (
 from constraints.atoms.team_pair_no_concurrency import TeamPairNoConcurrency
 from constraints.atoms.nihc_fill_wf_before_ef import NIHCFillWFBeforeEF
 from constraints.atoms.nihc_fill_ef_before_sf import NIHCFillEFBeforeSF
+# spec-014: PHL/2nd same-club adjacency atom (replaces the legacy
+# `_phl_adjacency_hard` engine method).
+from constraints.atoms.phl_2nd_adjacency import PHLAnd2ndAdjacency
 from constraints.atoms.preferred_weekends_away_ground import (
     PreferredWeekendsAwayGround,
 )
@@ -107,6 +110,7 @@ __all__ = [
     'NIHCFillWFBeforeEF',
     'NIHCFillEFBeforeSF',
     'NIHC_FIELD_FILL_ORDER_ATOMS',
+    'PHLAnd2ndAdjacency',
     'PreferredWeekendsAwayGround',
     'AwayClubHomeWeekendsCount',
     'AwayClubPerOpponentAndAggregateHomeBalance',

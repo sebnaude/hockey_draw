@@ -16,7 +16,6 @@ Usage:
 
 from ortools.sat.python import cp_model
 from collections import defaultdict
-from datetime import datetime, timedelta
 from itertools import combinations
 
 from utils import (
@@ -55,9 +54,11 @@ class UnifiedConstraintEngine:
 
     # PHL_ADJACENCY_MINUTES, MAITLAND_AWAY_HARD_LIMIT, CLUBS_ON_FIELD_HARD_LIMIT
     # and CLUB_GAME_SPREAD_HARD_LIMIT used to live here as class constants.
-    # The first is now read from constraint_defaults['phl_adjacency_window_minutes'];
-    # the others were unused (dead config). BROADMEADOW_MAX_SLOTS stays here as
-    # a tuning param (the threshold above which Broadmeadow slot caps relax).
+    # PHL/2nd adjacency moved out entirely (spec-014): it's now the
+    # `PHLAnd2ndAdjacency` atom reading constraint_defaults
+    # ['phl_2nd_cross_venue_min_minutes']. The others were unused (dead config).
+    # BROADMEADOW_MAX_SLOTS stays here as a tuning param (the threshold above
+    # which Broadmeadow slot caps relax).
     BROADMEADOW_MAX_SLOTS = 6
 
     def __init__(self, model: cp_model.CpModel, X: dict, data: dict, skip_constraints=None):
@@ -193,8 +194,9 @@ class UnifiedConstraintEngine:
         self.by_club_week_day_slot = defaultdict(list)
 
         # --- PHL/2nd grade ---
-        self.phl_club_week_day = defaultdict(lambda: defaultdict(list))
-        self.second_club_week_day = defaultdict(lambda: defaultdict(list))
+        # spec-014: `phl_club_week_day` / `second_club_week_day` engine maps
+        # removed — the legacy `_phl_adjacency_hard` they fed is gone, replaced
+        # by the self-contained `PHLAnd2ndAdjacency` atom (reads X directly).
         self.phl_slot_vars = defaultdict(list)
         self.club_phl_vars = defaultdict(list)
         self.club_2nd_vars = defaultdict(list)
@@ -240,7 +242,7 @@ class UnifiedConstraintEngine:
                 continue
 
             t1, t2, grade = key[0], key[1], key[2]
-            day, day_slot, time_val = key[3], key[4], key[5]
+            day, day_slot = key[3], key[4]
             week, date_str, round_no = key[6], key[7], key[8]
             field_name, location = key[9], key[10]
 
@@ -329,8 +331,6 @@ class UnifiedConstraintEngine:
                     club = self._get_club(team)
                     if club:
                         self.club_phl_vars[(*slot_id, club)].append(var)
-                        if club in self.club_2nd_teams:
-                            self.phl_club_week_day[(club, week, day)][(time_val, location)].append(var)
 
                 if day == 'Friday' and location == BROADMEADOW:
                     self.phl_friday_broadmeadow.append(var)
@@ -349,7 +349,6 @@ class UnifiedConstraintEngine:
                     club = self._get_club(team)
                     if club:
                         self.club_2nd_vars[(*slot_id, club)].append(var)
-                        self.second_club_week_day[(club, week, day)][(time_val, location, team)].append(var)
 
             # --- FiftyFiftyHomeAway ---
             for venue_name, venue_location in AWAY_VENUES.items():
@@ -405,8 +404,9 @@ class UnifiedConstraintEngine:
             c += self._team_conflict()
         if 'MaxMaitlandHomeWeekends' not in _skip:
             c += self._max_venue_weekends()
-        if 'PHLAndSecondGradeAdjacency' not in _skip:
-            c += self._phl_adjacency_hard()
+        # spec-014: PHL/2nd adjacency is now the `PHLAnd2ndAdjacency` atom,
+        # dispatched via the non-engine fallback in constraints/stages.py — no
+        # engine skip-key block here anymore.
         if 'PHLAndSecondGradeTimes' not in _skip:
             c += self._phl_times_atoms_hard()
         if 'EqualMatchUpSpacing' not in _skip:
@@ -528,33 +528,12 @@ class UnifiedConstraintEngine:
             n += 1
         return n
 
-    def _phl_adjacency_hard(self):
-        n = 0
-        for club_week_day, phl_slots in self.phl_club_week_day.items():
-            club, week, day = club_week_day
-            second_slots = self.second_club_week_day.get(club_week_day, {})
-
-            adjacency_minutes = self.data.get('constraint_defaults', {}).get(
-                'phl_adjacency_window_minutes', 180
-            )
-            for (phl_time, phl_loc), phl_vars in phl_slots.items():
-                if not phl_time:
-                    continue
-                phl_time_dt = datetime.strptime(phl_time, '%H:%M')
-                min_time = (phl_time_dt - timedelta(minutes=adjacency_minutes)).time()
-                max_time = (phl_time_dt + timedelta(minutes=adjacency_minutes)).time()
-
-                for (sec_time, sec_loc, sec_team), sec_vars in second_slots.items():
-                    if not sec_time:
-                        continue
-                    sec_time_t = datetime.strptime(sec_time, '%H:%M').time()
-                    if min_time <= sec_time_t <= max_time and sec_loc != phl_loc:
-                        self.model.Add(sum(phl_vars) + sum(sec_vars) <= 1)
-                        n += 1
-                    elif (sec_time_t >= max_time or sec_time_t <= min_time) and sec_loc == phl_loc:
-                        self.model.Add(sum(phl_vars) + sum(sec_vars) <= 1)
-                        n += 1
-        return n
+    # spec-014: `_phl_adjacency_hard` removed. The PHL/2nd adjacency rule is
+    # now the self-contained `PHLAnd2ndAdjacency` atom
+    # (constraints/atoms/phl_2nd_adjacency.py), which forces same-club
+    # back-to-back at one venue or a >= 180-min cross-venue start gap — the
+    # legacy method only *forbade* two patterns inside a +/-180-min window and
+    # never forced adjacency.
 
     # ----------------------------------------------------------------
     # PHL/2nd-grade times — atom dispatch (Phase 3, replaces _phl_times_hard /

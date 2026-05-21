@@ -636,7 +636,8 @@ class TestConstraintCoverage:
             '_fifty_fifty_home_away',
             '_team_conflict',
             '_max_venue_weekends',
-            '_phl_adjacency_hard',
+            # spec-014: `_phl_adjacency_hard` removed — PHL/2nd adjacency is now
+            # the `PHLAnd2ndAdjacency` atom (dispatched outside the engine).
             '_phl_times_hard',
             '_matchup_spacing_hard',
             '_club_alignment_hard',

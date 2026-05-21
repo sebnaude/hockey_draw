@@ -63,7 +63,7 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'NoDoubleBookingFields': 1,
     'EqualGames': 1,
     'BalancedMatchups': 1,
-    'PHLAndSecondGradeAdjacency': 1,
+    'PHLAnd2ndAdjacency': 1,  # spec-014 (was PHLAndSecondGradeAdjacency)
     'PHLAndSecondGradeTimes': 1,
     'FiftyFiftyHomeAway': 1,
     'MaxMaitlandHomeWeekends': 1,
@@ -1156,7 +1156,7 @@ class DrawTester:
             ('EqualGamesAndBalanceMatchUps', self._check_balanced_matchups),
             ('FiftyFiftyHomeandAway', self._check_fifty_fifty_home_away),
             ('MaitlandHomeGrouping', self._check_maitland_back_to_back),
-            ('PHLAndSecondGradeAdjacency', self._check_phl_second_grade_adjacency),
+            ('PHLAnd2ndAdjacency', self._check_phl_2nd_adjacency),
             ('PHLAndSecondGradeTimes', self._check_phl_second_grade_times),
             ('EqualMatchUpSpacing', self._check_equal_matchup_spacing),
             # spec-008 Part B: byes-as-first-class spacing.
@@ -1665,17 +1665,24 @@ class DrawTester:
                     ))
         return violations
 
-    def _check_phl_second_grade_adjacency(self) -> List[Violation]:
-        """Check PHL and 2nd grade from same club satisfy the 180-minute adjacency rule.
+    def _check_phl_2nd_adjacency(self) -> List[Violation]:
+        """Check same-club PHL/2nd adjacency (spec-014).
 
-        The solver constraint enforces:
-        - Within 180 min: PHL and 2nd must be at the SAME location
-        - Outside 180 min: PHL and 2nd must be at DIFFERENT locations
-        This ensures clubs' PHL and 2nd grade games are watchable together.
+        Per (week, day, club) where the club fields BOTH a PHL and a 2nd-grade
+        game, the new rule (matching `PHLAnd2ndAdjacency`) requires:
+        - **Same venue**: same FIELD and ADJACENT day_slots (back-to-back).
+        - **Different venue**: start times >= `phl_2nd_cross_venue_min_minutes`
+          (default 180) apart, measured in real minutes-since-midnight.
+        Any pair breaking its applicable rule is a violation.
         """
         violations = []
-        from datetime import datetime as dt, timedelta
-        MAX_GAP_MINUTES = 180
+        cross_venue_min = self.data.get('constraint_defaults', {}).get(
+            'phl_2nd_cross_venue_min_minutes', 180
+        )
+
+        def _minutes(t):
+            hh, mm = t.split(':')
+            return int(hh) * 60 + int(mm)
 
         # Group games by (week, day, club, grade) - must be same day to compare
         club_games = defaultdict(list)
@@ -1695,28 +1702,37 @@ class DrawTester:
             if 'PHL' not in grade_games or '2nd' not in grade_games:
                 continue
 
-            # Check each PHL game against each 2nd game for this club on this day
             for phl_game in grade_games['PHL']:
-                phl_time = dt.strptime(phl_game.time, '%H:%M')
+                phl_min = _minutes(phl_game.time)
                 phl_loc = phl_game.field_location
 
                 for second_game in grade_games['2nd']:
-                    second_time = dt.strptime(second_game.time, '%H:%M')
+                    second_min = _minutes(second_game.time)
                     second_loc = second_game.field_location
-                    gap_minutes = abs((phl_time - second_time).total_seconds()) / 60
 
-                    if gap_minutes <= MAX_GAP_MINUTES and phl_loc != second_loc:
-                        violations.append(Violation.create(
-                            constraint="PHLAndSecondGradeAdjacency",
-                            message=f"Club '{club}' week {week} ({day}): PHL ({phl_game.time} @ {phl_loc}) and 2nd ({second_game.time} @ {second_loc}) within {int(gap_minutes)}min but different locations",
-                            week=week
-                        ))
-                    elif gap_minutes > MAX_GAP_MINUTES and phl_loc == second_loc:
-                        violations.append(Violation.create(
-                            constraint="PHLAndSecondGradeAdjacency",
-                            message=f"Club '{club}' week {week} ({day}): PHL ({phl_game.time}) and 2nd ({second_game.time}) at same location but {int(gap_minutes)}min apart (>{MAX_GAP_MINUTES}min)",
-                            week=week
-                        ))
+                    if phl_loc == second_loc:
+                        same_field = phl_game.field_name == second_game.field_name
+                        adjacent = abs(phl_game.day_slot - second_game.day_slot) == 1
+                        if not (same_field and adjacent):
+                            violations.append(Violation.create(
+                                constraint="PHLAnd2ndAdjacency",
+                                message=(f"Club '{club}' week {week} ({day}): PHL "
+                                         f"({phl_game.time} {phl_game.field_name}) and 2nd "
+                                         f"({second_game.time} {second_game.field_name}) at same "
+                                         f"venue {phl_loc} but not back-to-back on the same field"),
+                                week=week
+                            ))
+                    else:
+                        gap = abs(phl_min - second_min)
+                        if gap < cross_venue_min:
+                            violations.append(Violation.create(
+                                constraint="PHLAnd2ndAdjacency",
+                                message=(f"Club '{club}' week {week} ({day}): PHL "
+                                         f"({phl_game.time} @ {phl_loc}) and 2nd "
+                                         f"({second_game.time} @ {second_loc}) at different venues "
+                                         f"but only {gap}min apart (< {cross_venue_min}min)"),
+                                week=week
+                            ))
 
         return violations
 

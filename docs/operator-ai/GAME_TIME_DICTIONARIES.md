@@ -168,6 +168,17 @@ PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Sunday'].append(t
 # 10:00 is far from other PHL times (11:30+), may cause issues
 ```
 
+> **spec-014 — PHL/2nd adjacency uses two distinct rules (`PHLAnd2ndAdjacency`):**
+> - **Same venue** ⇒ same field + **adjacent `day_slot`** (back-to-back). This is a
+>   pure slot-adjacency rule, so the PHL and 2nd timeslot lists at a venue must
+>   actually offer adjacent slots for a club fielding both grades.
+> - **Different venue** ⇒ start times compared in **real minutes-since-midnight**,
+>   not `day_slot` indices (different fields run different clocks). The minimum
+>   cross-venue gap is `CONSTRAINT_DEFAULTS['phl_2nd_cross_venue_min_minutes']`
+>   (default 180 = 3 h). This is a separate config key from the same-venue rule —
+>   the two "180"s in the legacy code were a single magic number; they are now
+>   conceptually distinct (slot adjacency vs a 3-hour travel gap).
+
 ### Removing a Timeslot
 
 Simply remove from the list. No variables will be created for that slot.

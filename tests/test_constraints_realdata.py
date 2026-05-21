@@ -469,18 +469,53 @@ class TestPreferredTimes:
 
 
 class TestPHLSecondGradeAdjacency:
-    """PHL and 2nd grade from same club must satisfy 180-min + same-location rule."""
+    """spec-014: same-club PHL/2nd must be back-to-back on one field at a
+    single venue, OR (across venues) start >= 180-min apart."""
 
-    def test_known_violation(self, tester):
-        violations = tester._check_phl_second_grade_adjacency()
-        assert len(violations) >= 1
-        # Known: Wests PHL (13:00) and 2nd (17:30) at same location but 270min apart
-        wests = [v for v in violations if 'Wests' in v.message]
-        assert len(wests) >= 1
-        assert '270min' in wests[0].message or '270' in wests[0].message
+    @staticmethod
+    def _expected_violation_count(tester):
+        """Independent re-derivation of the rule over the fixture games — the
+        oracle the tester method is checked against (no shared code path)."""
+        from collections import defaultdict
+        cross_min = tester.data.get('constraint_defaults', {}).get(
+            'phl_2nd_cross_venue_min_minutes', 180)
+
+        def mins(t):
+            h, m = t.split(':')
+            return int(h) * 60 + int(m)
+
+        club_games = defaultdict(list)
+        for g in tester.draw.games:
+            for team in (g.team1, g.team2):
+                c = tester._team_to_club.get(team)
+                if c:
+                    club_games[(g.week, g.day, c, g.grade)].append(g)
+        per_club = defaultdict(dict)
+        for (week, day, club, grade), gs in club_games.items():
+            if grade in ('PHL', '2nd'):
+                per_club[(week, day, club)][grade] = gs
+
+        count = 0
+        for _key, gg in per_club.items():
+            if 'PHL' not in gg or '2nd' not in gg:
+                continue
+            for p in gg['PHL']:
+                for q in gg['2nd']:
+                    if p.field_location == q.field_location:
+                        ok = (p.field_name == q.field_name
+                              and abs(p.day_slot - q.day_slot) == 1)
+                    else:
+                        ok = abs(mins(p.time) - mins(q.time)) >= cross_min
+                    if not ok:
+                        count += 1
+        return count
+
+    def test_matches_independent_recompute(self, tester):
+        violations = tester._check_phl_2nd_adjacency()
+        assert len(violations) == self._expected_violation_count(tester)
 
     def test_violation_severity(self, tester):
-        violations = tester._check_phl_second_grade_adjacency()
+        violations = tester._check_phl_2nd_adjacency()
         for v in violations:
             assert v.severity_level == 1  # CRITICAL
 

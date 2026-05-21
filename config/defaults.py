@@ -119,8 +119,11 @@ CONSTRAINT_DEFAULTS = {
     'club_game_spread_max_overlap': 0,
     # Club-vs-club alignment
     'club_vs_club_alignment_base_slack': 0,
-    # PHL/2nd adjacency time window
-    'phl_adjacency_window_minutes': 180,
+    # spec-014: PHL/2nd same-club adjacency. The same-venue rule is a
+    # slot-adjacency rule (no minute threshold); the cross-venue rule requires
+    # this minimum start-time gap in REAL minutes (game length + warm-down +
+    # travel + warm-up, measured start-to-start). 180 = 3 h.
+    'phl_2nd_cross_venue_min_minutes': 180,
     # Worst timeslot (penalised by EnsureBestTimeslotChoices)
     'worst_timeslot_time': '19:00',
     # spec-007: TeamPairNoConcurrency convenor list. Each entry is
@@ -149,11 +152,13 @@ DEFAULT_STAGES = [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGamesAndBalanceMatchUps',
             'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
-            # PHL/2nd ±180-min adjacency (same-location-when-close / different-
-            # location-when-far). Engine hard key. NOTE: under locked-week runs
-            # this can over-constrain Gosford PHL (zero margin) — exclude it via
-            # --exclude PHLAndSecondGradeAdjacency for locked re-solves.
-            'PHLAndSecondGradeAdjacency',
+            # spec-014: PHL/2nd same-club adjacency — same-venue games must be
+            # back-to-back on one field; cross-venue games >= 180-min start gap.
+            # Non-engine atom (dispatched via the stages.py fallback). NOTE:
+            # under locked-week runs this can over-constrain Gosford PHL (zero
+            # margin) — exclude it via --exclude PHLAnd2ndAdjacency for locked
+            # re-solves.
+            'PHLAnd2ndAdjacency',
             # spec-010: PHLRoundOnePlay removed (atom + registry entry deleted)
             # — convenor uses FORCED_GAMES to express "team X plays round 1".
             'GosfordFridayRoundsForced',

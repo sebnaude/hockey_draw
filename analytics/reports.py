@@ -429,7 +429,7 @@ class ComplianceCertificate:
         'MaxMaitlandHomeWeekends': 'No back-to-back Maitland home weekends',
         'AwayAtMaitlandGrouping': 'Maximum 3 away clubs at Maitland per week',
         'ClubGradeAdjacency': 'Adjacent grades from same club dont clash',
-        'PHLAndSecondGradeAdjacency': 'PHL and 2nd grade from same club play nearby',
+        'PHLAnd2ndAdjacency': 'PHL and 2nd grade from same club: back-to-back at one venue or >=3h apart across venues',
         'PHLAndSecondGradeTimes': 'PHL plays before or with 2nd grade',
     }
     

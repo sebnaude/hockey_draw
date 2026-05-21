@@ -548,48 +548,80 @@ class TestCheckClubGradeAdjacency:
         assert len(tiger_v) == 0
 
 
-# ============== _check_phl_second_grade_adjacency ==============
+# ============== _check_phl_2nd_adjacency (spec-014) ==============
 
-class TestCheckPHLSecondGradeAdjacency:
-    def test_violation_within_180_different_location(self):
-        """PHL at 10:00 NIHC and 2nd at 12:00 Maitland -> within 180min, different location."""
+class TestCheckPHLAnd2ndAdjacency:
+    """spec-014 rule: same-club PHL/2nd at the SAME venue must be back-to-back
+    (same field, adjacent day_slots); at DIFFERENT venues their start times
+    must be >= phl_2nd_cross_venue_min_minutes (default 180) apart."""
+
+    def test_violation_same_venue_non_adjacent_slots(self):
+        """Given Tigers PHL at NIHC EF slot 1 and Tigers 2nd at NIHC EF slot 3
+        (same venue, same field, |1-3|=2 not adjacent). Then 1 violation."""
         games = [
             make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
-                      time='10:00', field_location=NIHC),
+                      time='10:00', day_slot=1, field_name='EF', field_location=NIHC),
+            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
+                      time='13:00', day_slot=3, field_name='EF', field_location=NIHC),
+        ]
+        tester = DrawTester(make_draw(games), make_data())
+        # Oracle: Tigers fields both grades; same venue, same field, slots 1 & 3
+        # -> not adjacent -> exactly 1 violating PHL×2nd pair. (Wests fields only
+        # PHL+2nd too, identical pair -> +1.) Both clubs participate => 2.
+        violations = tester._check_phl_2nd_adjacency()
+        assert len(violations) == 2
+
+    def test_violation_same_venue_adjacent_but_different_field(self):
+        """Given PHL at NIHC EF slot 1 and 2nd at NIHC WF slot 2 (adjacent slots
+        but DIFFERENT field). Then violation (must be same field)."""
+        games = [
+            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
+                      time='10:00', day_slot=1, field_name='EF', field_location=NIHC),
+            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
+                      time='11:30', day_slot=2, field_name='WF', field_location=NIHC),
+        ]
+        tester = DrawTester(make_draw(games), make_data())
+        # Oracle: same venue, adjacent slots, but EF != WF -> violation for both
+        # participating clubs (Tigers + Wests) => 2.
+        assert len(tester._check_phl_2nd_adjacency()) == 2
+
+    def test_no_violation_same_venue_same_field_adjacent(self):
+        """Given PHL at NIHC EF slot 1 and 2nd at NIHC EF slot 2 (back-to-back,
+        same field). Then no violation."""
+        games = [
+            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
+                      time='10:00', day_slot=1, field_name='EF', field_location=NIHC),
+            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
+                      time='11:30', day_slot=2, field_name='EF', field_location=NIHC),
+        ]
+        tester = DrawTester(make_draw(games), make_data())
+        assert len(tester._check_phl_2nd_adjacency()) == 0
+
+    def test_violation_cross_venue_under_180(self):
+        """Given PHL at NIHC 10:00 and 2nd at Maitland 12:00 (different venues,
+        120 min apart < 180). Then violation."""
+        games = [
+            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
+                      time='10:00', day_slot=1, field_location=NIHC),
             make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
                       time='12:00', day_slot=2, field_location=MAITLAND_PARK),
         ]
-        data = make_data()
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_phl_second_grade_adjacency()
-        assert len(violations) >= 1
+        tester = DrawTester(make_draw(games), make_data())
+        # Oracle: |720 - 600| = 120 < 180 -> violation for both clubs => 2.
+        assert len(tester._check_phl_2nd_adjacency()) == 2
 
-    def test_violation_outside_180_same_location(self):
-        """PHL at 10:00 and 2nd at 14:00 at NIHC -> >180min apart, same location."""
+    def test_no_violation_cross_venue_at_180(self):
+        """Given PHL at NIHC 10:00 and 2nd at Maitland 13:00 (different venues,
+        exactly 180 min apart >= 180). Then no violation."""
         games = [
             make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
-                      time='10:00', field_location=NIHC),
+                      time='10:00', day_slot=1, field_location=NIHC),
             make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
-                      time='14:30', day_slot=4, field_location=NIHC),
+                      time='13:00', day_slot=2, field_location=MAITLAND_PARK),
         ]
-        data = make_data()
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_phl_second_grade_adjacency()
-        # 270 min gap, same location -> violation
-        assert len(violations) >= 1
-
-    def test_no_violation_within_180_same_location(self):
-        """PHL at 10:00 and 2nd at 11:30, both at NIHC -> OK."""
-        games = [
-            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
-                      time='10:00', field_location=NIHC),
-            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
-                      time='11:30', day_slot=2, field_location=NIHC),
-        ]
-        data = make_data()
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_phl_second_grade_adjacency()
-        assert len(violations) == 0
+        tester = DrawTester(make_draw(games), make_data())
+        # Oracle: |780 - 600| = 180 >= 180 -> OK.
+        assert len(tester._check_phl_2nd_adjacency()) == 0
 
     def test_no_check_when_club_has_only_one_grade(self):
         """Club only has PHL, no 2nd grade -> no adjacency to check."""
@@ -600,8 +632,7 @@ class TestCheckPHLSecondGradeAdjacency:
         data = make_data(clubs=clubs, teams=teams, grades=grades)
         games = [make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01')]
         tester = DrawTester(make_draw(games), data)
-        violations = tester._check_phl_second_grade_adjacency()
-        assert len(violations) == 0
+        assert len(tester._check_phl_2nd_adjacency()) == 0
 
 
 # ============== _check_phl_second_grade_times ==============

@@ -19,7 +19,7 @@ def test_perennial_defaults_have_required_keys():
         'club_game_spread_max_gap',
         'club_game_spread_max_overlap',
         'club_vs_club_alignment_base_slack',
-        'phl_adjacency_window_minutes',
+        'phl_2nd_cross_venue_min_minutes',
         'worst_timeslot_time',
     }
     missing = expected_keys - set(CONSTRAINT_DEFAULTS.keys())
@@ -39,10 +39,10 @@ def test_merge_with_none_returns_defaults():
 
 
 def test_merge_overrides_take_precedence():
-    overrides = {'max_friday_broadmeadow': 99, 'phl_adjacency_window_minutes': 240}
+    overrides = {'max_friday_broadmeadow': 99, 'phl_2nd_cross_venue_min_minutes': 240}
     merged = _merge_constraint_defaults(overrides)
     assert merged['max_friday_broadmeadow'] == 99
-    assert merged['phl_adjacency_window_minutes'] == 240
+    assert merged['phl_2nd_cross_venue_min_minutes'] == 240
 
 
 def test_merge_keeps_unrelated_defaults():
@@ -67,7 +67,7 @@ def test_season_2026_inherits_perennials_for_unset_keys():
     # Keys 2026 sets explicitly should match the season config
     assert cd['max_friday_broadmeadow'] == 3
     # Keys 2026 doesn't set should come from defaults
-    assert cd['phl_adjacency_window_minutes'] == CONSTRAINT_DEFAULTS['phl_adjacency_window_minutes']
+    assert cd['phl_2nd_cross_venue_min_minutes'] == CONSTRAINT_DEFAULTS['phl_2nd_cross_venue_min_minutes']
     assert cd['gosford_friday_rounds'] == CONSTRAINT_DEFAULTS['gosford_friday_rounds']
     assert cd['worst_timeslot_time'] == CONSTRAINT_DEFAULTS['worst_timeslot_time']
 

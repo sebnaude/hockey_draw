@@ -74,7 +74,10 @@ class TestRegistryCompleteness:
         1 spec-012 soft penalty atom (MaitlandAlternateHomeAway) +
         1 spec-008 atom (BalancedByeSpacing — byes-as-first-class
           spacing, HARD severity 2, own slack key)
-        = 44."""
+        = 44.
+
+        spec-014 renamed the `PHLAndSecondGradeAdjacency` entry to the
+        `PHLAnd2ndAdjacency` atom (1:1 replacement) — count unchanged."""
         assert len(CONSTRAINT_REGISTRY) == 44
 
     def test_all_entries_have_required_fields(self):
@@ -198,7 +201,7 @@ class TestSlackKeys:
 
     def test_no_slack_returns_none(self):
         assert get_slack_key('NoDoubleBookingTeams') is None
-        assert get_slack_key('PHLAndSecondGradeAdjacency') is None
+        assert get_slack_key('PHLAnd2ndAdjacency') is None
 
     def test_all_slack_keys_exist_in_known_dicts(self):
         """All slack keys in the registry should be recognizable slack dict keys."""

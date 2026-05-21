@@ -224,7 +224,7 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 
 | Level | Name | Constraints | Relaxable? |
 |-------|------|------------|------------|
-| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, NonDefaultHomeGrouping (alias: MaitlandHomeGrouping), PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | Never |
+| 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, NonDefaultHomeGrouping (alias: MaitlandHomeGrouping), PHLAnd2ndAdjacency, PHLAndSecondGradeTimes | Never |
 | 2 | HIGH | ClubDay, AwayAtMaitlandGrouping, TeamConflict | With --relax |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | With --relax |
 | 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | Yes |
@@ -249,7 +249,7 @@ Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `Dra
 
 **MaitlandHomeGrouping**: Uses sliding window of size (max_consecutive + 1) to enforce max N consecutive home weeks. With slack=0, no back-to-back; slack=3, max 4 consecutive.
 
-**PHLAndSecondGradeAdjacency**: Uses 180-minute time window with location logic — within 180 min must be same location, outside 180 min must be different location.
+**PHLAnd2ndAdjacency** (spec-014, atom): per (club, week, day) where the club fields BOTH a PHL and a 2nd game — **same venue** ⇒ same field + adjacent day_slots (back-to-back); **different venue** ⇒ start times ≥ `phl_2nd_cross_venue_min_minutes` (180, real minutes) apart. Replaces the legacy ±180-min forbid window, which never *forced* adjacency.
 
 ### Atomized constraints (final-form)
 
@@ -383,7 +383,7 @@ The tester runs these checks (matching solver constraint behavior):
 - `MaxMaitlandHomeWeekends` — sliding window consecutive home weeks (slack-aware)
 - `AwayAtMaitlandGrouping` — max away clubs per week (slack-aware)
 - `ClubGradeAdjacency` — adjacent grades same club not same timeslot
-- `PHLAndSecondGradeAdjacency` — 180-min window + same-location rule
+- `PHLAnd2ndAdjacency` — same-club PHL/2nd back-to-back at one venue, or ≥180-min start gap across venues (spec-014)
 
 **Important**: The tester uses `game.date` (not `game.week`) for field/slot comparisons because a week can have both Friday and Sunday games on different dates.
 
@@ -603,7 +603,7 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 - **Week vs date** - a single week can have both Friday and Sunday games; always use `date` not `week` when comparing game slots
 - **Per-pair vs aggregate** - FiftyFiftyHomeAway is per-pair; aggregate home/away can be imbalanced even when all pairs are balanced
 - **Slack >= 1 effects** - MaitlandHomeGrouping uses sliding window (correct); check constraint docstrings for slack semantics
-- **Bastardised constraints (2026 locked-week workarounds)**: `EqualMatchUpSpacingConstraint` in `original.py` — only applies to PHL/2nd when locked_weeks active (conditional, safe for normal runs). `ClubVsClubAlignment` — hacked to only apply to PHL/2nd. `PHLAndSecondGradeTimes` — skips locked weeks for Friday counting (totals adjusted by subtracting locked counts) and round 1 enforcement. `PHLAndSecondGradeAdjacency` — must be EXCLUDED via `--exclude` when running with locked weeks (causes infeasibility due to Gosford PHL having zero margin). `locked_keys_set` is stored in `data` by `main_staged.py`/`main_simple`. The AI versions in `ai.py` were NOT changed. Revert hacks if running a full unconstrained solve.
+- **Bastardised constraints (2026 locked-week workarounds)**: `EqualMatchUpSpacingConstraint` in `original.py` — only applies to PHL/2nd when locked_weeks active (conditional, safe for normal runs). `ClubVsClubAlignment` — hacked to only apply to PHL/2nd. `PHLAndSecondGradeTimes` — skips locked weeks for Friday counting (totals adjusted by subtracting locked counts) and round 1 enforcement. `PHLAnd2ndAdjacency` (spec-014; was `PHLAndSecondGradeAdjacency`) — must be EXCLUDED via `--exclude PHLAnd2ndAdjacency` when running with locked weeks (causes infeasibility due to Gosford PHL having zero margin). The atom self-skips locked weeks, but the cross-venue/back-to-back rule can still over-constrain Gosford PHL. `locked_keys_set` is stored in `data` by `main_staged.py`/`main_simple`. The AI versions in `ai.py` were NOT changed. Revert hacks if running a full unconstrained solve.
 
 ## Draw Review Checklist
 
