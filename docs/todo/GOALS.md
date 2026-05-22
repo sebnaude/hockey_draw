@@ -142,7 +142,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-020 | `PreferredGames`: soft, weighted analogue of the whole FORCED_GAMES grammar (penalty-on-deviation); delete `PreferredDates` | `done/spec-020-soft-forced-games.md` | done |
 | spec-021 | Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop heavy IntVar encodings; fix the soft_only-trap so hard parts actually run; drop WF/7pm | `spec-021-contiguity-primitive.md` | ready |
 | spec-022 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `spec-022-unify-helper-var-pathway.md` | ready |
-| spec-023 | Atoms expose hard/soft *phases*; a stage is a uniform `(atoms, phases)` collection — no dedicated hard-vs-soft machinery; `soft_only` trap becomes structurally impossible | `spec-023-atom-hard-soft-phases.md` | ready |
+| spec-023 | Atoms expose hard/soft *phases*; a stage is a uniform `(atoms, phases)` collection — no dedicated hard-vs-soft machinery; `soft_only` trap becomes structurally impossible | `spec-023-atom-hard-soft-phases.md` | delayed (user hold) |
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 

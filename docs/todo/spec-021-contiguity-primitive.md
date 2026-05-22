@@ -9,10 +9,18 @@
 Three constraints implement "don't leave holes between used timeslots" at different scopes,
 in three different (and two of them expensive) ways:
 
-- **`EnsureBestTimeslotChoices`** (engine `_best_timeslot_choices_hard`, per **venue**):
-  no-gap + slot-number bounding (`nts = ceil(games/fields)+1`, with a `BROADMEADOW_MAX_SLOTS`
-  `AddDivisionEquality` special-case) + cross-field stacking. This is an **anchored** rule:
-  games pack into the *earliest* slots (using slot s requires the earlier slots be used).
+- **`EnsureBestTimeslotChoices`** (archived class + engine `_best_timeslot_choices_hard`, per **venue**):
+  The **archived class** (`constraints/archived/original.py`, `archived/ai.py`) uses a pure
+  `AddImplication` chain (each `next_slot` indicator implies each `prev_slot` indicator across all
+  fields — exactly `enforce_monotone_fill`'s semantics). No `AddDivisionEquality` there.
+  The **unified engine method** `_best_timeslot_choices_hard` (`constraints/unified.py`) is the
+  expensive path: it adds slot-number bounding via `AddDivisionEquality(quot, nlg, num_fields)`,
+  a `BROADMEADOW_MAX_SLOTS`-triggered `eq` IntVar, slot-number IntVars per slot, plus the same
+  implication chain for stacking. Both code paths implement the same anchored rule (games pack
+  into the *earliest* slots); the engine version adds the slot-cap logic on top.
+  (review fix — C1: original claim wrongly said the archived class used AddDivisionEquality/nts/ceil;
+  those are only in the unified engine method. Both paths are replaced by VenueEarliestSlotFill —
+  the intent is unchanged, the attribution was wrong.)
 - **`ClubGameSpread`** (engine `_club_game_spread_hard`, per (club, week, day)): a **floating**
   bounded-gap rule (`spread = range − num_used ≤ max_gap`, default 2) PLUS a lower
   no-double-up bound (`num_games − num_used ≤ max_overlap`, default 0). Heavy: min/max
@@ -29,12 +37,21 @@ Problems:
    (Same trap spec-017 fixed for spacing.)
 2. **The expensive encodings are unnecessary.** Anchored fill and no-gap both reduce to an
    implication chain over `slot_used` indicators — the `ClubDayContiguousSlots` pattern — which
-   drops every `AddDivisionEquality`/`ceil`/min/max IntVar (the costly part).
-3. **The WF soft rule and 7pm penalty are obsolete.** `_best_timeslot_choices_soft` only does
-   the "last-slot single field should be WF" penalty (`BestTimeslotWF`), which duplicates
-   `NIHCFillWFBeforeEF` (spec-003/016) → **drop it**. The legacy 7pm penalty was lost in the
-   atomization, but with anchored fill enforced as HARD, **packing into the earliest slots
-   structurally avoids 7 pm** — so 7pm needs no separate rule. **Do not re-add it.**
+   drops every `AddDivisionEquality`/min/max IntVar (the costly part of the engine method).
+3. **The WF soft rule is obsolete.** `_best_timeslot_choices_soft` only does the "last-slot
+   single field should be WF" penalty (`BestTimeslotWF`), which duplicates `NIHCFillWFBeforeEF`
+   (spec-003/016) → **drop it**.
+   **7pm penalty:** The archived `EnsureBestTimeslotChoices` / `EnsureBestTimeslotChoicesAI`
+   classes emit `EnsureBestTimeslotChoices_7pm` soft penalties (see `archived/original.py` line
+   612 and `archived/ai.py` line 759). The unified engine's `_best_timeslot_choices_hard/_soft`
+   do NOT emit a 7pm penalty — only the archived classes do. With anchored fill enforced as HARD,
+   **packing into the earliest slots structurally avoids 7pm** — so no separate 7pm rule is
+   needed. **Do not re-add it.** The `tests/test_best_timeslot_stacking.py` `TestSevenPmPenalty`
+   tests assert `EnsureBestTimeslotChoices_7pm` in `data['penalties']`; these must be updated or
+   deleted as part of Unit B (see implementation units).
+   (review fix — C2: original claim said "7pm penalty was lost in the atomization" — false; it
+   lives in the archived classes and is exercised by TestSevenPmPenalty tests. Correctly noted
+   here so Unit B implementer knows what to clean up.)
 4. **The lower no-double-up bound in `ClubGameSpread`** ("a club isn't in the same slot twice,
    across any of its grades") is **concurrency, not contiguity** — it belongs with the
    concurrency atoms, not bundled into a spread rule.
@@ -49,13 +66,18 @@ another.
 ## The shared primitive
 
 New module `constraints/atoms/_contiguity.py` exposing the indicator pattern + the two
-distinct semantics (no shared atom, just shared building blocks):
+distinct semantics (no shared atom, just shared building blocks).
+
+The helper uses the **pool-style** `HelperVarRegistry` API (`registry.get_or_create_bool`)
+consistent with how `ClubDayContiguousSlots` currently uses it — not the declarative
+`declare/freeze` API. This matches the existing pattern in `_club_day_shared.py`.
 
 ```
 slot_used_indicators(registry, vars_by_slot, kind, *key_prefix) -> dict[int, BoolVar]
     # one channeled `slot_used` BoolVar per slot (OR/max of that slot's vars), via the
     # pool registry keyed (kind, *key_prefix, slot) so callers dedupe. (The existing
     # ClubDayContiguousSlots / EnsureBestTimeslotChoices indicator-building, factored out.)
+    # Uses: registry.get_or_create_bool((kind, *key_prefix, slot), vars_list, label)
 
 enforce_no_gaps(model, slot_inds) -> int        # FLOATING: strict no-hole.
     # for each consecutive triple (prev, mid, next) in sorted slots:
@@ -82,14 +104,26 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
    **combined-field** `slot_used` indicator (OR across that venue's fields per slot) and call
    `enforce_monotone_fill`. This single chain reproduces no-gaps + earliest-packing + the
    venue-level effect of cross-field stacking, with **zero** `AddDivisionEquality`/`nts`/`eq`
-   IntVars and no `BROADMEADOW_MAX_SLOTS` special-case. Registered (severity 5→ but HARD;
-   see DoD 6), wired into a **hard** stage.
+   IntVars (from the unified engine path) and no `BROADMEADOW_MAX_SLOTS` special-case.
+   Registered at **severity 2** (HARD; it replaces a feasibility guarantee, not a preference;
+   severity 5 is "VERY LOW" in the registry — inappropriate for a hard structural rule).
+   (review fix — M1: original text had garbled "severity 5→ but HARD"; clarified to severity 2.
+   Severity 5 = VERY LOW per `CONSTRAINT_TO_SEVERITY`; a hard earliest-fill belongs at 2 or 3.)
+   Wired into a **hard** stage (not `soft_only`).
 3. The soft `BestTimeslotWF` rule is **deleted** (`_best_timeslot_choices_soft`, the
-   `BestTimeslotWF` penalty bucket, weight key). WF preference is owned solely by
-   `NIHCFillWFBeforeEF` (spec-016). No 7pm penalty is added.
-4. `_best_timeslot_choices_hard`/`_soft` engine methods removed; `EnsureBestTimeslotChoices`
-   engine-key dispatch + skip-checks removed; registry entry replaced by `VenueEarliestSlotFill`
-   (or renamed). `BROADMEADOW_MAX_SLOTS` removed.
+   `BestTimeslotWF` penalty bucket, weight key in `config/defaults.py`). WF preference is owned
+   solely by `NIHCFillWFBeforeEF` (spec-016). No 7pm penalty is added.
+4. `_best_timeslot_choices_hard`/`_soft` engine methods removed from `constraints/unified.py`;
+   `EnsureBestTimeslotChoices` engine-key removed from `ENGINE_HARD_KEYS` and `ENGINE_SOFT_KEYS`
+   in `constraints/stages.py`; registry entry replaced by `VenueEarliestSlotFill`. `BROADMEADOW_MAX_SLOTS`
+   class constant removed from `UnifiedConstraintEngine`. The three grouping dicts populated
+   exclusively for the deleted methods (`slot_vars_by_location`, `slot_field_vars`,
+   `games_per_location`) must be removed from `build_groupings()` in `unified.py`, and
+   `self._loc_fields = None` removed from `__init__`.
+   (review fix — H1: stages.py ENGINE_HARD_KEYS / ENGINE_SOFT_KEYS / ALL_ENGINE_KEYS entries for
+   `EnsureBestTimeslotChoices` must also be removed; `stages.py` was missing from the file list.
+   review fix — H2: three grouping dicts in build_groupings() + `_loc_fields`/__init__ cleanup
+   were not mentioned but must happen to avoid dead code.)
 5. `ClubDayContiguousSlots` refactored to call `slot_used_indicators` + `enforce_no_gaps`
    (behaviour-identical; it's the reference impl). Its `tests/atoms/test_club_day_atoms*.py`
    stay green unchanged.
@@ -112,7 +146,9 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
    for the venue + club groupings) — the efficiency win is measured, not assumed.
 10. Full suite green; inventory + severity + stages docs updated; grep-clean for
     `_best_timeslot_choices`, `BROADMEADOW_MAX_SLOTS`, `BestTimeslotWF`, `AddDivisionEquality`
-    (in this area).
+    (in this area), `EnsureBestTimeslotChoices_7pm`.
+    (review fix — M2: added `EnsureBestTimeslotChoices_7pm` to the grep-clean list; that penalty
+    key is produced by the archived classes and tested in TestSevenPmPenalty — it must vanish.)
 11. **Production-wiring proof (not just unit fixtures).** An integration test loads the real
     2026 config, builds the model via the actual `DEFAULT_STAGES` dispatch, and asserts each
     rewritten rule **actually emits hard constraints in production** — i.e. it is reachable
@@ -121,12 +157,17 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
     `DEFAULT_STAGES`, and that a full-config build adds > 0 of their hard constraints. This is
     the explicit guard against the trap that currently leaves `EnsureBestTimeslotChoices` /
     `ClubGameSpread` hard parts dead.
-12. **Systemic guard.** Add a test that fails if ANY constraint with a hard dispatch path is
-    only reachable from `soft_only` stages in `DEFAULT_STAGES` (walk each engine hard-key /
-    hard atom; verify at least one of its stages is not `soft_only`). This catches the
-    soft_only trap for the whole family, not just these three, so future re-staging can't
-    silently disable a hard rule. (If it surfaces others beyond spacing/spec-017, list them in
-    the report and spawn a follow-up plan — do not widen this spec.)
+12. **Systemic guard (key-level).** Add a test that fails if any **hard engine key** in
+    `ENGINE_HARD_KEYS` is reachable in `DEFAULT_STAGES` ONLY from `soft_only` stages. The check
+    must be at the engine-KEY level, not the atom level: collect, per hard key, the union of
+    stages of every atom that maps to it (`atom_to_engine_key`), and assert that union includes
+    at least one non-`soft_only` stage. (Key-level avoids false positives on legitimately-soft
+    atoms that share a hard key with sibling hard atoms — e.g. `PreferredDates` shares
+    `PHLAndSecondGradeTimes` with the concurrency atoms that DO sit in `critical_feasibility`.)
+    Verified scope at plan time: the only genuinely-stranded keys are `ClubGameSpread` and
+    `EnsureBestTimeslotChoices` (both fixed by this spec); `EqualMatchUpSpacing` was the third
+    and is already fixed by spec-017. If the guard surfaces any other stranded key, list it in
+    the report and spawn a follow-up plan — do not widen this spec.
 
 ## Open decisions (recommendations baked in)
 
@@ -144,9 +185,9 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
   `SameGradeSameClubNoConcurrency` (same-grade) by covering the cross-grade club case. Confirm
   the convenor wants this hard (a club's two teams in different grades can't share a slot) —
   it's currently dead (soft_only) so flipping it on is a real behaviour change.
-- **C. Venue fill severity/level.** Recommendation: HARD (the earliest-packing guarantee is
-  what lets us drop the 7pm rule). If the convenor prefers it soft, the 7pm-avoidance argument
-  weakens and we'd revisit a soft late-slot penalty — so default HARD.
+- **C. Venue fill severity/level.** Recommendation: HARD severity 2 (the earliest-packing
+  guarantee is what lets us drop the 7pm rule). If the convenor prefers it soft, the
+  7pm-avoidance argument weakens and we'd revisit a soft late-slot penalty — so default HARD.
 
 ## Implementation units
 
@@ -156,20 +197,56 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
 ### Unit A — Shared `_contiguity` helper + tests
 - Files: `constraints/atoms/_contiguity.py` (new), `tests/atoms/test_contiguity_primitive.py`.
 - No production wiring yet. Test each function on tiny CP-SAT fixtures with hand oracles.
+- Registry `HELPER_VAR_CATALOG` addition: add `'venue_slot_used'` and `'club_spread_slot_used'`
+  as new kind strings (to distinguish from the existing `club_day_slot_used`).
 
 ### Unit B — `VenueEarliestSlotFill` atom (replace EnsureBestTimeslotChoices)
-- Files: `constraints/atoms/venue_earliest_slot_fill.py` (new), `constraints/atoms/__init__.py`,
-  `constraints/registry.py` (replace `EnsureBestTimeslotChoices` entry), `constraints/severity.py`,
-  `constraints/unified.py` (remove `_best_timeslot_choices_hard/_soft`, dispatch, skip-keys,
-  `BROADMEADOW_MAX_SLOTS`), `config/defaults.py` (DEFAULT_STAGES: move to a HARD stage; remove
-  `BestTimeslotWF` weight; the `worst_timeslot_time` default can be removed), `analytics/tester.py`
-  (replace the best-timeslot check with an earliest-fill check).
+- Files:
+  - `constraints/atoms/venue_earliest_slot_fill.py` (new)
+  - `constraints/atoms/__init__.py`
+  - `constraints/registry.py` (replace `EnsureBestTimeslotChoices` entry with `VenueEarliestSlotFill`;
+    add new helper kinds to `HELPER_VAR_CATALOG`)
+  - `constraints/severity.py` (replace `EnsureBestTimeslotChoices`/`AI` entries)
+  - `constraints/unified.py` (remove `_best_timeslot_choices_hard/_soft` methods; remove
+    `BROADMEADOW_MAX_SLOTS` class constant; remove `self._loc_fields = None` from `__init__`;
+    remove `slot_vars_by_location`, `slot_field_vars`, `games_per_location` dicts from
+    `build_groupings()`; remove `EnsureBestTimeslotChoices` from `apply_stage_1_hard()` and
+    `apply_stage_2_soft()` dispatch blocks)
+  - `constraints/stages.py` (remove `EnsureBestTimeslotChoices` from `ENGINE_HARD_KEYS`,
+    `ENGINE_SOFT_KEYS`; add `VenueEarliestSlotFill` as a non-engine atom — it dispatches via
+    the legacy-class fallback path in `apply_solver_stage`)
+  - `config/defaults.py` (DEFAULT_STAGES: move `VenueEarliestSlotFill` to a HARD stage, remove
+    `EnsureBestTimeslotChoices`; remove `BestTimeslotWF` weight key from
+    `PENALTY_WEIGHTS`-style config if present; `worst_timeslot_time` default — remove only after
+    confirming no other production code reads it; see review note below)
+  - `analytics/tester.py` (replace `_check_ensure_best_timeslot_choices` with an earliest-fill
+    check that verifies `VenueEarliestSlotFill` semantics)
+  - `tests/test_best_timeslot_stacking.py` — **UPDATE OR DELETE** this file. The
+    `TestSevenPmPenalty` tests assert `EnsureBestTimeslotChoices_7pm` in `data['penalties']`;
+    these tests are exercising the archived classes and will need updating to reflect that:
+    (a) the 7pm penalty key is gone, and (b) the new atom uses `enforce_monotone_fill` semantics.
+    The stacking/contiguity tests (TestPerFieldContiguity, TestCrossFieldStacking,
+    TestEarlySlotPush) must be rewritten to target `VenueEarliestSlotFill`.
+    (review fix — H3: test_best_timeslot_stacking.py was missing from the file list; it directly
+    tests EnsureBestTimeslotChoices/AI from archived/ and has TestSevenPmPenalty tests that will
+    fail post-cleanup.)
+  - `tests/test_constraint_defaults_merge.py` — update the `expected_keys` set at line 22 if
+    `worst_timeslot_time` is removed from `CONSTRAINT_DEFAULTS` (test currently checks for it).
+    (review fix — M3: this test file was missing; it will break if worst_timeslot_time is deleted
+    without updating the test.)
 - Depends on Unit A. Test per DoD 2, 3, 8 (venue cases), 9.
+- (review note — Low: `worst_timeslot_time` default in `config/defaults.py` is checked by
+  `tests/test_constraint_defaults_merge.py` line 22 + line 70. If it's kept as a dead default
+  for backward-compat, leave the test alone. If truly removed, update the test simultaneously.)
 
 ### Unit C — `ClubGameSpread` refactor + extract `ClubNoConcurrentSlot`
-- Files: `constraints/unified.py` (`_club_game_spread_hard/_soft`), `constraints/atoms/club_no_concurrent_slot.py`
-  (new, per Open decision B), `constraints/registry.py`, `constraints/severity.py`,
-  `config/defaults.py` (stages + `club_game_spread_*` defaults), `analytics/tester.py`.
+- Files:
+  - `constraints/unified.py` (`_club_game_spread_hard/_soft`)
+  - `constraints/atoms/club_no_concurrent_slot.py` (new, per Open decision B)
+  - `constraints/registry.py`
+  - `constraints/severity.py`
+  - `config/defaults.py` (stages + `club_game_spread_*` defaults)
+  - `analytics/tester.py`
 - Depends on Unit A. Test per DoD 6, 8 (club cases), 9; concurrency test for the extracted atom.
 
 ### Unit D — Point `ClubDayContiguousSlots` at the shared helper
@@ -186,10 +263,14 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
   primitive (anchored vs floating).
 - `docs/system/STAGES.md` — venue-fill + club-spread now in hard stages (no longer dead in
   `soft_only`).
-- `docs/PERENNIAL_RULES.md` + `CLAUDE.md` Draw-Review-Checklist — the "last game on WF" and
-  "avoid 7pm" review notes: WF is owned by `NIHCFillWFBeforeEF`; 7pm avoidance is now
-  structural via earliest-fill. Update the checklist wording.
-- `docs/DRAW_RULES.md` — describe earliest-slot packing (venue) vs game clustering (club).
+- `docs/operator-human/PERENNIAL_RULES.md` + `CLAUDE.md` Draw-Review-Checklist — the "last
+  game on WF" and "avoid 7pm" review notes: WF is owned by `NIHCFillWFBeforeEF`; 7pm avoidance
+  is now structural via earliest-fill. Update the checklist wording.
+  (review fix — Low: original path `docs/PERENNIAL_RULES.md` is wrong; in this worktree the
+  file is at `docs/operator-human/PERENNIAL_RULES.md`.)
+- `docs/operator-human/RULES.md` or `docs/DRAW_RULES.md` — describe earliest-slot packing
+  (venue) vs game clustering (club). (Check which of these exists in the worktree; only one
+  will be the live operator-human rules doc.)
 - `docs/todo/GOALS.md` — add spec-021 row; record the "share the pattern, keep atoms separate"
   decision as a worked example of the §2 "extract a helper, don't merge" rule.
 
