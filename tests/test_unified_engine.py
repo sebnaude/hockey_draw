@@ -259,10 +259,10 @@ class TestBuildGroupings:
         # Both 3rd and 4th are lower grades, should have entries
         assert len(mini_engine.by_grade_clubpair_round) > 0
 
-    def test_slot_vars_by_location_populated(self, mini_engine):
-        """slot_vars_by_location has entries for timeslot choices."""
-        mini_engine.build_groupings()
-        assert len(mini_engine.slot_vars_by_location) > 0
+    # spec-021: test_slot_vars_by_location_populated removed — the
+    # slot_vars_by_location grouping was deleted with the _best_timeslot_choices_*
+    # engine methods (earliest-fill is now the VenueEarliestSlotFill atom, which
+    # builds its own grouping from X; see tests/atoms/test_venue_earliest_slot_fill.py).
 
 
 # ============== TestStage1Hard ==============
@@ -642,7 +642,8 @@ class TestConstraintCoverage:
             '_club_alignment_hard',
             '_club_day_scheduling',
             '_club_game_spread_hard',
-            '_best_timeslot_choices_hard',
+            # spec-021: `_best_timeslot_choices_hard` removed — earliest-fill is
+            # now the `VenueEarliestSlotFill` atom (dispatched outside the engine).
         ]
 
         # Stage 2 methods (soft penalties + optimization)
@@ -653,7 +654,7 @@ class TestConstraintCoverage:
             # removed — venue-sequencing soft penalties deleted.
             # spec-020: `_phl_times_soft` removed — PreferredDates deleted.
             '_preferred_times',
-            '_best_timeslot_choices_soft',
+            # spec-021: `_best_timeslot_choices_soft` removed (BestTimeslotWF deleted).
             '_club_game_spread_soft',
         ]
 
@@ -918,85 +919,12 @@ class TestHardConstraintEnforcement:
     # test_away_maitland_hard_reads_config removed — the MaitlandHomeGrouping /
     # AwayAtMaitlandGrouping rules they exercised were deleted.
 
-    def test_best_timeslot_stacking(self, mini_unified_data):
-        """Best timeslot choices stacking: if slot 3 used on WF, slot 2 must be used on EF."""
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['penalties'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        count = engine._best_timeslot_choices_hard()
-
-        # The constraint adds stacking logic (WF preference moved to soft)
-        assert count > 0
-
-        # Solve and check no gaps in slot usage at Broadmeadow
-        real_vars = [v for k, v in X.items() if len(k) >= 11]
-        model.Maximize(sum(real_vars))
-
-        status, solver = solve_with_timeout(model, timeout_seconds=5.0)
-        if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            # For each (week, location), check slots used are contiguous
-            loc_slots = defaultdict(set)
-            for key, var in X.items():
-                if len(key) >= 11 and solver.Value(var) == 1:
-                    loc_key = (key[6], key[10])  # week, location
-                    loc_slots[loc_key].add(key[4])  # day_slot
-            for loc_key, slots in loc_slots.items():
-                if len(slots) >= 3:
-                    sorted_slots = sorted(slots)
-                    for i in range(len(sorted_slots) - 2):
-                        # No gap: if slot i and slot i+2 exist, slot i+1 must exist
-                        if sorted_slots[i+2] - sorted_slots[i] == 2:
-                            assert sorted_slots[i] + 1 in slots, \
-                                f"Gap found at {loc_key}: slots {sorted_slots}"
-
-    def test_best_timeslot_last_slot_wf(self, mini_unified_data):
-        """Last-slot-WF: if only 1 field active on last slot at Broadmeadow, prefer WF (soft)."""
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data = dict(mini_unified_data)
-        data['penalties'] = {}
-        engine = UnifiedConstraintEngine(model, X, data)
-        engine.build_groupings()
-        engine._best_timeslot_choices_hard()
-        engine._best_timeslot_choices_soft()
-
-        # Include penalty in objective so solver optimizes for WF preference
-        real_vars = [v for k, v in X.items() if len(k) >= 11]
-        penalty_terms = []
-        for name, info in data['penalties'].items():
-            w = info['weight']
-            for pv in info['penalties']:
-                penalty_terms.append(w * pv)
-        model.Maximize(sum(real_vars) * 1000 - sum(penalty_terms))
-
-        status, solver = solve_with_timeout(model, timeout_seconds=5.0)
-        if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            # For each week at Broadmeadow, check last slot
-            week_field_slots = defaultdict(lambda: defaultdict(set))
-            for key, var in X.items():
-                if len(key) >= 11 and solver.Value(var) == 1:
-                    if key[10] == BROADMEADOW:
-                        week = key[6]
-                        field = key[9]
-                        day_slot = key[4]
-                        week_field_slots[week][field].add(day_slot)
-
-            for week, field_slots in week_field_slots.items():
-                all_slots = set()
-                for slots in field_slots.values():
-                    all_slots.update(slots)
-                if not all_slots:
-                    continue
-                max_slot = max(all_slots)
-                fields_on_last = [fn for fn, slots in field_slots.items() if max_slot in slots]
-                if len(fields_on_last) == 1:
-                    assert fields_on_last[0] == 'WF', \
-                        f"Week {week}: single field on last slot {max_slot} is {fields_on_last[0]}, expected WF"
+    # spec-021: test_best_timeslot_stacking and test_best_timeslot_last_slot_wf
+    # removed — the `_best_timeslot_choices_hard/_soft` engine methods (cross-field
+    # stacking + BestTimeslotWF) were deleted. Earliest-fill is now the
+    # `VenueEarliestSlotFill` atom (tests/atoms/test_venue_earliest_slot_fill.py +
+    # tests/test_venue_earliest_slot_fill_wired.py); WF order owned by
+    # NIHCFillWFBeforeEF (spec-016).
 
 
 # ============== TestSharedVariablePool ==============

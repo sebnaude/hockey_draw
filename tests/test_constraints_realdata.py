@@ -433,11 +433,11 @@ class TestMinimiseClubsOnAFieldBroadmeadow:
 # ============== Level 5: VERY LOW ==============
 
 
-class TestEnsureBestTimeslotChoices:
-    """Prefer best timeslots for each grade."""
+class TestVenueEarliestSlotFill:
+    """spec-021: venues fill earliest slots — no gaps, anchored to earliest."""
 
     def test_clean_pass(self, tester):
-        violations = tester._check_ensure_best_timeslot_choices()
+        violations = tester._check_venue_earliest_slot_fill()
         assert len(violations) == 0
 
 

@@ -50,6 +50,27 @@ DAY_TIME_MAP = {
     }
 }
 
+# ============== Derived: distinct game-times per location ==============
+# spec-021: `ClubNoConcurrentSlot` caps a club's games per timeslot at a venue,
+# but must allow forced double-ups when a club has more games at a venue than the
+# venue has timeslots (e.g. 8 teams, 7 times → one time must hold 2). This count
+# is DERIVED from DAY_TIME_MAP (not hardcoded) so adding a venue or a time updates
+# the cap automatically. Per location = the max number of distinct game-times
+# across that location's playing days.
+
+
+def compute_no_field_slots(day_time_map):
+    """Map each location to its count of distinct game-times (max over its days).
+
+    Derived from `DAY_TIME_MAP`-shaped input ({location: {day: [times]}}). e.g.
+    NIHC Sunday has 8 times → 8; Maitland Park → 6; Central Coast → 2.
+    """
+    out = {}
+    for location, days_map in (day_time_map or {}).items():
+        out[location] = max((len(times) for times in days_map.values()), default=0)
+    return out
+
+
 # ============== Home Field Mappings ==============
 # Clubs not listed default to Newcastle International Hockey Centre
 
@@ -122,7 +143,10 @@ CONSTRAINT_DEFAULTS = {
     # this minimum start-time gap in REAL minutes (game length + warm-down +
     # travel + warm-up, measured start-to-start). 180 = 3 h.
     'phl_2nd_cross_venue_min_minutes': 180,
-    # Worst timeslot (penalised by EnsureBestTimeslotChoices)
+    # Worst timeslot. spec-021: the production earliest-slot rule
+    # (VenueEarliestSlotFill) avoids 7 pm structurally and does NOT read this.
+    # Kept as a backward-compat default for the legacy soft/resolver path
+    # (constraints/soft.py) and tests; harmless if unused by production stages.
     'worst_timeslot_time': '19:00',
     # spec-007: TeamPairNoConcurrency convenor list. Each entry is
     # (team_a, team_b) or (team_a, team_b, weight_multiplier). Empty by
@@ -177,6 +201,11 @@ DEFAULT_STAGES = [
             # Slack via --slack EqualMatchUpSpacingConstraint N. Byes stay a
             # separate atom with their own slack key (deliberate, not merged).
             'EqualMatchUpSpacing',
+            # spec-021: HARD anchored earliest-slot fill (was the soft_only
+            # `EnsureBestTimeslotChoices`, whose hard part never applied).
+            # Games at a venue pack into the earliest slots — no gaps + earliest
+            # start, which structurally avoids the 7 pm slot.
+            'VenueEarliestSlotFill',
         ],
     },
     {
@@ -239,7 +268,11 @@ DEFAULT_STAGES = [
             # spec-020: `PreferredDates` replaced by the generic `PreferredGames`
             # soft atom (penalty-on-deviation over the full FORCED grammar).
             'PreferredGames',
-            'EnsureBestTimeslotChoices', 'PreferredTimes',
+            # spec-021: 'EnsureBestTimeslotChoices' removed — its earliest-fill
+            # intent is now the HARD `VenueEarliestSlotFill` atom in
+            # critical_feasibility; the BestTimeslotWF soft penalty is deleted
+            # (WF order owned by NIHCFillWFBeforeEF).
+            'PreferredTimes',
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
             # spec-002: predictable alphabetical matchup tie-break.
             'SoftLexMatchupOrdering',

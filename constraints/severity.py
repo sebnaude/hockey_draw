@@ -63,6 +63,8 @@ CONSTRAINT_TO_SEVERITY = {
     'EqualMatchUpSpacingConstraintAI': 1,
 
     # Level 2 - HIGH (structural, club-specific)
+    # spec-021: HARD anchored earliest-slot fill (was soft EnsureBestTimeslotChoices).
+    'VenueEarliestSlotFill': 2,
     'ClubDayConstraint': 2,
     'ClubDayConstraintAI': 2,
     # spec-018: `AwayAtMaitlandGrouping` (+ AI) removed — rule deleted.
@@ -84,8 +86,11 @@ CONSTRAINT_TO_SEVERITY = {
     'MinimiseClubsOnAFieldBroadmeadowAI': 4,
     
     # Level 5 - VERY LOW (timeslot preferences)
-    'EnsureBestTimeslotChoices': 5,
-    'EnsureBestTimeslotChoicesAI': 5,
+    # spec-021: `EnsureBestTimeslotChoices`/`AI` entries removed — earliest-fill
+    # is now the HARD `VenueEarliestSlotFill` atom (severity 2, see Level 2).
+    # The legacy soft/resolver/--relax path still references the archived
+    # classes; `get_severity_level` defaults them to 5 (the level they had), so
+    # nothing in that path regresses.
     'PreferredTimesConstraint': 5,
     'PreferredTimesConstraintAI': 5,
 }

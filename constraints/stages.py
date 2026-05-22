@@ -51,7 +51,9 @@ ENGINE_HARD_KEYS: Set[str] = {
     # `AwayAtMaitlandGrouping` engine keys deleted (venue-sequencing rules
     # removed). Per-club home-weekend counts are the spec-004
     # `AwayClubHomeWeekendsCount` atom (dispatched via the non-engine fallback).
-    'ClubDay', 'ClubGameSpread', 'EnsureBestTimeslotChoices',
+    'ClubDay', 'ClubGameSpread',
+    # spec-021: `EnsureBestTimeslotChoices` engine key removed — replaced by the
+    # non-engine `VenueEarliestSlotFill` atom (dispatched via the fallback).
     # spec-007: `ClubGradeAdjacency` removed from the engine. Hard portion is
     # now the `SameGradeSameClubNoConcurrency` atom dispatched via the
     # non-engine legacy-class fallback; soft adjacent-grade rule was removed.
@@ -62,7 +64,9 @@ ENGINE_SOFT_KEYS: Set[str] = {
     # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft keys
     # deleted alongside their hard keys.
     'PHLAndSecondGradeTimes',
-    'PreferredTimesConstraint', 'EnsureBestTimeslotChoices', 'ClubGameSpread',
+    'PreferredTimesConstraint', 'ClubGameSpread',
+    # spec-021: `EnsureBestTimeslotChoices` soft key removed (BestTimeslotWF
+    # penalty deleted; WF order owned by NIHCFillWFBeforeEF).
     # spec-007: `ClubGradeAdjacency` soft penalty removed entirely.
 }
 

@@ -19,6 +19,7 @@ from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchu
 from constraints.atoms.club_day_opponent_matchup import ClubDayOpponentMatchup
 from constraints.atoms.club_day_same_field import ClubDaySameField
 from constraints.atoms.club_day_contiguous_slots import ClubDayContiguousSlots
+from constraints.atoms.venue_earliest_slot_fill import VenueEarliestSlotFill
 # spec-005: the legacy Phase-3c ClubVsClubAlignment atoms (Coincidence,
 # FieldLimit, DeficitPenalty, PHLAnd2ndBackToBackSameField) were deleted —
 # fully superseded by the `ClubVsClubStackedAlignment` cluster below.
@@ -100,6 +101,7 @@ __all__ = [
     'ClubDayOpponentMatchup',
     'ClubDaySameField',
     'ClubDayContiguousSlots',
+    'VenueEarliestSlotFill',
     'CLUB_DAY_ATOMS',
     'ClubVsClubStackedWeekends',
     'ClubVsClubStackedCoLocation',

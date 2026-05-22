@@ -55,9 +55,9 @@ class UnifiedConstraintEngine:
     # PHL/2nd adjacency moved out entirely (spec-014): it's now the
     # `PHLAnd2ndAdjacency` atom reading constraint_defaults
     # ['phl_2nd_cross_venue_min_minutes']. The others were unused (dead config).
-    # BROADMEADOW_MAX_SLOTS stays here as a tuning param (the threshold above
-    # which Broadmeadow slot caps relax).
-    BROADMEADOW_MAX_SLOTS = 6
+    # spec-021: BROADMEADOW_MAX_SLOTS removed — the EnsureBestTimeslotChoices
+    # slot-cap IntVars it gated are gone (replaced by the VenueEarliestSlotFill
+    # atom's monotone-fill chain, which needs no slot cap).
 
     def __init__(self, model: cp_model.CpModel, X: dict, data: dict, skip_constraints=None):
         self.model = model
@@ -103,9 +103,6 @@ class UnifiedConstraintEngine:
 
         # CGS iteration keys (populated by _club_game_spread_hard for soft phase)
         self._cgs_keys = []
-
-        # Best-timeslot per-field indicators (populated by hard, used by soft)
-        self._loc_fields = None
 
     # ================================================================
     # LOOKUPS
@@ -198,10 +195,10 @@ class UnifiedConstraintEngine:
         # --- Home/away ---
         self.home_away_venue = defaultdict(lambda: {'home': [], 'away': []})
 
-        # --- Timeslot optimization ---
-        self.slot_vars_by_location = defaultdict(list)
-        self.slot_field_vars = defaultdict(list)
-        self.games_per_location = defaultdict(lambda: defaultdict(list))
+        # spec-021: slot_vars_by_location / slot_field_vars / games_per_location
+        # removed — they fed only the deleted _best_timeslot_choices_* methods.
+        # Earliest-slot fill is now the VenueEarliestSlotFill atom, which builds
+        # its own per-(week, date, location) slot grouping from X.
 
         # --- Club day ---
         self.club_day_game_vars = defaultdict(dict)
@@ -327,11 +324,7 @@ class UnifiedConstraintEngine:
                         else:
                             self.home_away_venue[pair_key]['away'].append(var)
 
-            # --- EnsureBestTimeslotChoices ---
-            slot_key = (week, day, location, day_slot)
-            self.slot_vars_by_location[slot_key].append(var)
-            self.slot_field_vars[(week, day, location, field_name, day_slot)].append(var)
-            self.games_per_location[(week, day)][location].append(var)
+            # spec-021: EnsureBestTimeslotChoices groupings removed (see above).
 
             # --- ClubDay ---
             if date_str in club_day_dates:
@@ -389,8 +382,7 @@ class UnifiedConstraintEngine:
             c += self._club_day_atoms_hard()
         if 'ClubGameSpread' not in _skip:
             c += self._club_game_spread_hard()
-        if 'EnsureBestTimeslotChoices' not in _skip:
-            c += self._best_timeslot_choices_hard()
+        # spec-021: EnsureBestTimeslotChoices hard removed — VenueEarliestSlotFill atom.
         self.constraints_added += c
         return c
 
@@ -785,8 +777,7 @@ class UnifiedConstraintEngine:
         # penalties. `PreferredGames` dispatches via the non-engine fallback.
         if 'PreferredTimesConstraint' not in _skip:
             c += self._preferred_times()
-        if 'EnsureBestTimeslotChoices' not in _skip:
-            c += self._best_timeslot_choices_soft()
+        # spec-021: EnsureBestTimeslotChoices soft removed (BestTimeslotWF deleted).
         if 'ClubGameSpread' not in _skip:
             c += self._club_game_spread_soft()
         self.constraints_added += c
@@ -978,153 +969,6 @@ class UnifiedConstraintEngine:
                     self.model.Add(pv == self.X[game_key])
                     self.data['penalties']['PreferredTimesConstraint']['penalties'].append(pv)
                     n += 1
-        return n
-
-    def _best_timeslot_choices_hard(self):
-        """Hard: no-gap constraint, slot-number bounding, stacking."""
-        n = 0
-        location_day_slots = defaultdict(dict)
-        slot_number_vars = defaultdict(dict)
-
-        for slot_key, vars_list in self.slot_vars_by_location.items():
-            week, day, location, day_slot = slot_key
-            if len(vars_list) > 1:
-                ind = self.pool.get_or_create_bool(
-                    ('slot_used', slot_key), vars_list,
-                    f'u_slot_used_{week}_{day}_{location}_{day_slot}')
-                location_day_slots[(week, day, location)][day_slot] = ind
-                nv = self.model.NewIntVar(0, 100, f'u_slot_num_{week}_{location}_{day_slot}')
-                self.model.Add(nv == int(day_slot))
-                slot_number_vars[(week, day, location)][day_slot] = nv
-
-        # No gaps
-        for (week, day, location), day_slots in location_day_slots.items():
-            sorted_slots = sorted(day_slots.keys())
-            for i in range(1, len(sorted_slots) - 1):
-                prev_s = sorted_slots[i - 1]
-                curr_s = sorted_slots[i]
-                next_s = sorted_slots[i + 1]
-                if prev_s in day_slots and curr_s in day_slots and next_s in day_slots:
-                    self.model.Add(
-                        day_slots[prev_s] + day_slots[next_s] <= 1
-                    ).OnlyEnforceIf(day_slots[curr_s].Not())
-                    n += 1
-
-        # Slot number bounding
-        for (week, day), locations in self.games_per_location.items():
-            for location, location_vars in locations.items():
-                fields_at_loc = [f for f in self.fields if f.location == location]
-                num_fields = len(fields_at_loc)
-                if num_fields == 0:
-                    continue
-                nlg = self.model.NewIntVar(0, len(self.games), f'u_nlg_{week}_{location}')
-                self.model.Add(nlg == sum(location_vars))
-                quot = self.model.NewIntVar(0, len(self.timeslots), f'u_quot_{week}_{location}')
-                self.model.AddDivisionEquality(quot, nlg, num_fields)
-                nts = self.model.NewIntVar(0, len(self.timeslots), f'u_nts_{week}_{location}')
-                self.model.Add(nts == quot + 1)
-
-                nvars = slot_number_vars.get((week, day, location), {})
-                for ds, nv in nvars.items():
-                    ind = location_day_slots[(week, day, location)][ds]
-                    if location == BROADMEADOW:
-                        eq = self.model.NewIntVar(0, 200, f'u_eq_{week}_{location}_{ds}')
-                        self.model.Add(eq >= self.BROADMEADOW_MAX_SLOTS)
-                        self.model.Add(eq >= nts)
-                        ci = self.model.NewBoolVar(f'u_ci_{week}_{location}_{ds}')
-                        self.model.Add(nts <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(ci)
-                        self.model.Add(nts > self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(ci.Not())
-                        self.model.Add(eq <= self.BROADMEADOW_MAX_SLOTS).OnlyEnforceIf(ci)
-                        self.model.Add(eq <= nts).OnlyEnforceIf(ci.Not())
-                        self.model.Add(nv <= eq).OnlyEnforceIf(ind)
-                    else:
-                        self.model.Add(nv <= nts).OnlyEnforceIf(ind)
-                    n += 1
-
-        # Stacking: if any field uses slot N+1, all fields must use slot N
-        # Build per-field indicators at each location (stored for soft phase)
-        self._loc_fields = defaultdict(lambda: defaultdict(dict))
-        for sfk, vars_list in self.slot_field_vars.items():
-            week, day, location, field_name, day_slot = sfk
-            if vars_list:
-                ind = self.pool.get_or_create_bool(
-                    ('slot_field_used', week, day, location, field_name, day_slot),
-                    vars_list,
-                    f'u_sf_used_{week}_{day}_{location}_{field_name}_{day_slot}')
-                self._loc_fields[(week, day, location)][field_name][day_slot] = ind
-
-        for (week, day, location), fields_dict in self._loc_fields.items():
-            all_field_names = sorted(fields_dict.keys())
-            all_slots = set()
-            for field_slots in fields_dict.values():
-                all_slots.update(field_slots.keys())
-            if not all_slots:
-                continue
-            sorted_all_slots = sorted(all_slots)
-
-            # Stacking: if any field uses slot s, all other fields must use slot s-1
-            for i, s in enumerate(sorted_all_slots):
-                if i == 0:
-                    continue
-                prev_s = sorted_all_slots[i - 1]
-                for fn in all_field_names:
-                    if s in fields_dict.get(fn, {}) and prev_s in fields_dict.get(fn, {}):
-                        for other_fn in all_field_names:
-                            if other_fn == fn:
-                                continue
-                            if s in fields_dict.get(other_fn, {}) and prev_s in fields_dict.get(other_fn, {}):
-                                self.model.AddImplication(
-                                    fields_dict[other_fn][s],
-                                    fields_dict[fn][prev_s])
-                                n += 1
-
-        return n
-
-    def _best_timeslot_choices_soft(self):
-        """Soft: prefer West Field for last-slot-only games at Broadmeadow."""
-        n = 0
-        if self._loc_fields is None:
-            return 0
-        weight = self._get_penalty_weight('BestTimeslotWF', 50000)
-        penalties = []
-
-        for (week, day, location), fields_dict in self._loc_fields.items():
-            if location != BROADMEADOW:
-                continue
-            all_slots = set()
-            for field_slots in fields_dict.values():
-                all_slots.update(field_slots.keys())
-            if not all_slots:
-                continue
-            max_slot = max(all_slots)
-
-            # Count fields active on the last slot
-            last_slot_fields = []
-            for fn, slots in fields_dict.items():
-                if max_slot in slots:
-                    last_slot_fields.append((fn, slots[max_slot]))
-
-            if len(last_slot_fields) >= 2:
-                field_inds = {fn: ind for fn, ind in last_slot_fields}
-                total_active = self.model.NewIntVar(0, len(last_slot_fields),
-                    f'u_ls_total_{week}_{day}_{max_slot}')
-                self.model.Add(total_active == sum(ind for _, ind in last_slot_fields))
-
-                single_field = self.model.NewBoolVar(f'u_ls_single_{week}_{day}_{max_slot}')
-                self.model.Add(total_active == 1).OnlyEnforceIf(single_field)
-                self.model.Add(total_active != 1).OnlyEnforceIf(single_field.Not())
-
-                if 'WF' in field_inds:
-                    wf_ind = field_inds['WF']
-                    # Penalty: single field on last slot but NOT West Field
-                    violation = self.model.NewBoolVar(f'u_wf_viol_{week}_{day}_{max_slot}')
-                    self.model.AddBoolAnd([single_field, wf_ind.Not()]).OnlyEnforceIf(violation)
-                    self.model.AddBoolOr([single_field.Not(), wf_ind]).OnlyEnforceIf(violation.Not())
-                    penalties.append(violation)
-                    n += 1
-
-        if penalties:
-            self.data['penalties']['BestTimeslotWF'] = {'weight': weight, 'penalties': penalties}
         return n
 
     def _club_day_field_contiguity(self):

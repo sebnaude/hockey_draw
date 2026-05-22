@@ -484,9 +484,9 @@ class TestCLIArgumentParsing:
     def test_generate_exclude_constraints(self):
         args = self._parse_args([
             'generate', '--year', '2026', '--simple',
-            '--exclude', 'EnsureBestTimeslotChoices', 'ClubGameSpread',
+            '--exclude', 'VenueEarliestSlotFill', 'ClubGameSpread',
         ])
-        assert args.exclude == ['EnsureBestTimeslotChoices', 'ClubGameSpread']
+        assert args.exclude == ['VenueEarliestSlotFill', 'ClubGameSpread']
 
     def test_generate_locked_and_lock_weeks(self):
         args = self._parse_args([

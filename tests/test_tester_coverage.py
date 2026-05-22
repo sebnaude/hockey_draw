@@ -1016,11 +1016,11 @@ class TestCheckMinimiseClubsOnAFieldBroadmeadow:
         assert len(violations) == 0
 
 
-# ============== _check_ensure_best_timeslot_choices ==============
+# ============== _check_venue_earliest_slot_fill (spec-021) ==============
 
-class TestCheckEnsureBestTimeslotChoices:
+class TestCheckVenueEarliestSlotFill:
     def test_violation_gap_in_slots(self):
-        """Games at slots 1, 3, 5 at same location/day -> gaps."""
+        """Games at slots 1, 3, 5 at same location/day -> gaps (2 of them)."""
         data = make_data()
         games = [
             make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
@@ -1031,12 +1031,14 @@ class TestCheckEnsureBestTimeslotChoices:
                       day_slot=5),
         ]
         tester = DrawTester(make_draw(games), data)
-        violations = tester._check_ensure_best_timeslot_choices()
+        violations = tester._check_venue_earliest_slot_fill()
         gap_v = [v for v in violations if 'gap' in v.message]
-        assert len(gap_v) >= 1
+        # Hand oracle: 1->3 and 3->5 are both gaps. Earliest used slot is 1 ==
+        # earliest offered (1), so no earliest-start violation.
+        assert len(gap_v) == 2
 
-    def test_no_violation_contiguous(self):
-        """Games at slots 1, 2, 3 -> no gap."""
+    def test_no_violation_contiguous_from_earliest(self):
+        """Games at slots 1, 2, 3 -> no gap, anchored to earliest -> 0 violations."""
         data = make_data()
         games = [
             make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
@@ -1047,11 +1049,11 @@ class TestCheckEnsureBestTimeslotChoices:
                       day_slot=3),
         ]
         tester = DrawTester(make_draw(games), data)
-        violations = tester._check_ensure_best_timeslot_choices()
+        violations = tester._check_venue_earliest_slot_fill()
         assert len(violations) == 0
 
-    def test_fewer_than_3_slots_skipped(self):
-        """Fewer than 3 slots -> no check."""
+    def test_two_game_gap_now_flagged(self):
+        """spec-021: even a 2-game spread {1,5} is a gap (old <3-slot skip removed)."""
         data = make_data()
         games = [
             make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
@@ -1060,8 +1062,29 @@ class TestCheckEnsureBestTimeslotChoices:
                       day_slot=5),
         ]
         tester = DrawTester(make_draw(games), data)
-        violations = tester._check_ensure_best_timeslot_choices()
-        assert len(violations) == 0
+        violations = tester._check_venue_earliest_slot_fill()
+        gap_v = [v for v in violations if 'gap' in v.message]
+        assert len(gap_v) == 1
+
+    def test_earliest_start_violation(self):
+        """A week starting at slot 2 while another week uses slot 1 -> not anchored."""
+        data = make_data()
+        games = [
+            # Week 1 uses slot 1 -> establishes earliest-offered = 1 for this venue/day.
+            make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
+                      day_slot=1),
+            make_game('G2', 'Norths 3rd', 'Maitland 3rd', '3rd', 1, 1, '2025-04-01',
+                      day_slot=2),
+            # Week 2 starts at slot 2 (skips the offered earliest slot 1) -> violation.
+            make_game('G3', 'Tigers 4th', 'Wests 4th', '4th', 2, 2, '2025-04-08',
+                      day_slot=2),
+            make_game('G4', 'Norths 4th', 'Maitland 4th', '4th', 2, 2, '2025-04-08',
+                      day_slot=3),
+        ]
+        tester = DrawTester(make_draw(games), data)
+        violations = tester._check_venue_earliest_slot_fill()
+        anchor_v = [v for v in violations if 'anchored' in v.message]
+        assert len(anchor_v) == 1
 
 
 # ============== _check_preferred_times ==============

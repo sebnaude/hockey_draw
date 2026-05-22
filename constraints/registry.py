@@ -378,12 +378,18 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=4,
         slack_key='MinimiseClubsOnAFieldBroadmeadow',
     ),
-    'EnsureBestTimeslotChoices': ConstraintInfo(
-        canonical_name='EnsureBestTimeslotChoices',
-        solver_class_names=['EnsureBestTimeslotChoices', 'EnsureBestTimeslotChoicesAI'],
-        tester_check_methods=['_check_ensure_best_timeslot_choices'],
-        tester_violation_names=['EnsureBestTimeslotChoices'],
-        severity_level=5,
+    # spec-021: replaces the old soft_only `EnsureBestTimeslotChoices` engine
+    # rule with a HARD anchored monotone-fill atom (severity 2). Games at a
+    # venue pack into the earliest timeslots — no gaps + earliest start, which
+    # structurally avoids the 7 pm slot (no 7 pm penalty re-added). Non-engine
+    # atom (dispatched via the stages.py legacy-class fallback).
+    'VenueEarliestSlotFill': ConstraintInfo(
+        canonical_name='VenueEarliestSlotFill',
+        solver_class_names=['VenueEarliestSlotFill'],
+        tester_check_methods=['_check_venue_earliest_slot_fill'],
+        tester_violation_names=['VenueEarliestSlotFill'],
+        severity_level=2,
+        required_helpers=['venue_slot_used'],
     ),
     'PreferredTimes': ConstraintInfo(
         canonical_name='PreferredTimes',

@@ -88,8 +88,9 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'MaximiseClubsPerTimeslotBroadmeadow': 4,
     'MinimiseClubsOnAFieldBroadmeadow': 4,
     
+    # spec-021: HARD anchored earliest-slot fill (was soft EnsureBestTimeslotChoices).
+    'VenueEarliestSlotFill': 2,
     # Level 5 - VERY LOW (timeslot preferences)
-    'EnsureBestTimeslotChoices': 5,
     'PreferredTimesConstraint': 5,
     # spec-016: NIHC field-fill order — soft symmetry-breaker.
     'NIHCFillWFBeforeEF': 5,
@@ -1184,7 +1185,7 @@ class DrawTester:
             ('MaximiseClubsPerTimeslotBroadmeadow', self._check_maximise_clubs_per_timeslot_broadmeadow),
             ('MinimiseClubsOnAFieldBroadmeadow', self._check_minimise_clubs_on_a_field_broadmeadow),
             # Level 5 - VERY LOW
-            ('EnsureBestTimeslotChoices', self._check_ensure_best_timeslot_choices),
+            ('VenueEarliestSlotFill', self._check_venue_earliest_slot_fill),
             ('PreferredTimes', self._check_preferred_times),
             # Config-driven checks (forced/blocked games)
             ('ForcedGames', self._check_forced_games),
@@ -2317,39 +2318,60 @@ class DrawTester:
 
         return violations
 
-    def _check_ensure_best_timeslot_choices(self) -> List[Violation]:
-        """Check EnsureBestTimeslotChoices: no unused timeslots between two used ones
-        at the same location on the same day, and games should use the minimum
-        contiguous block of timeslots.
+    def _check_venue_earliest_slot_fill(self) -> List[Violation]:
+        """Check VenueEarliestSlotFill (spec-021): games at a venue on a day pack
+        into the EARLIEST timeslots — no interior gap AND anchored to the
+        earliest slot the venue offers.
 
-        This is a soft constraint - reports gaps as warnings.
+        Post-hoc, the earliest slot a (location, day) offers is taken as the
+        minimum day_slot observed at that (location, day) across the whole draw
+        (the slot set is the same every playing week). Two checks per
+        (week, day, location):
+          - earliest-start: if the venue has games but the earliest offered slot
+            is unused, the block didn't anchor to slot 1 → violation.
+          - no-gap: an unused slot between two used ones → violation.
+
+        HARD rule — violations are real, not warnings.
         """
         violations = []
 
-        # Group games by (week, day, field_location) -> set of day_slots used
+        # Group games by (week, day, field_location) -> set of day_slots used.
         location_slots = defaultdict(set)
         location_games = defaultdict(list)
+        # Earliest day_slot the venue offers (min observed across all weeks).
+        earliest_offered = {}
         for game in self.draw.games:
             key = (game.week, game.day, game.field_location)
             location_slots[key].add(game.day_slot)
             location_games[key].append(game.game_id)
+            loc_day = (game.day, game.field_location)
+            prev = earliest_offered.get(loc_day)
+            if prev is None or game.day_slot < prev:
+                earliest_offered[loc_day] = game.day_slot
 
         for (week, day, location), slots in location_slots.items():
             sorted_slots = sorted(slots)
-            if len(sorted_slots) < 3:
-                continue
 
-            # Check for gaps: unused slot between two used ones
-            for i in range(1, len(sorted_slots) - 1):
+            # Earliest-start: anchored to the earliest slot the venue offers.
+            first_offered = earliest_offered.get((day, location))
+            if first_offered is not None and sorted_slots[0] > first_offered:
+                violations.append(Violation.create(
+                    constraint="VenueEarliestSlotFill",
+                    message=f"Week {week} ({day}) at {location}: earliest used slot "
+                            f"{sorted_slots[0]} is later than offered slot {first_offered} "
+                            f"— not anchored to earliest",
+                    affected_games=location_games[(week, day, location)][:5],
+                    week=week
+                ))
+
+            # No-gap: unused slot between two used ones.
+            for i in range(1, len(sorted_slots)):
                 prev_slot = sorted_slots[i - 1]
                 curr_slot = sorted_slots[i]
-                # Check if there's an unused slot between prev and curr
-                # (the constraint prevents slot i-1 and i+1 from both being used
-                #  if slot i is unused - i.e., no gaps)
                 if curr_slot - prev_slot > 1:
                     violations.append(Violation.create(
-                        constraint="EnsureBestTimeslotChoices",
-                        message=f"[soft] Week {week} ({day}) at {location}: gap between "
+                        constraint="VenueEarliestSlotFill",
+                        message=f"Week {week} ({day}) at {location}: gap between "
                                 f"slots {prev_slot} and {curr_slot}",
                         affected_games=location_games[(week, day, location)][:5],
                         week=week
