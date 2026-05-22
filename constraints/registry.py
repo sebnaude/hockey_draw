@@ -574,6 +574,12 @@ HELPER_VAR_CATALOG: Set[str] = {
     'cvc_stack_field_used',   # (pair, week, field_name) — pair using this field this Sunday
     'cvc_stack_slot_used',    # (pair, week, day_slot) — pair using this slot this Sunday
     'cvc_stack_active',       # (pair, week) — stacking active this Sunday (≥ 2 grades coincide)
+    # spec-021 shared contiguity primitive (constraints/atoms/_contiguity.py).
+    # Anchored venue fill vs floating club spread use distinct kinds so their
+    # slot_used indicators never collide.
+    'venue_slot_used',        # (week, date, location, day_slot) — VenueEarliestSlotFill
+    'club_spread_slot_used',  # (club, week, day, day_slot) — ClubGameSpread contiguity
+    'club_concurrent_slot',   # (club, week, day_slot) — ClubNoConcurrentSlot count helper
 }
 
 
