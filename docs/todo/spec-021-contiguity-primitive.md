@@ -1,5 +1,7 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: in_progress -->
+<!-- owner: session=goal-final-form claimed=2026-05-23 -->
+<!-- tier: complex -->
+<!-- Open decisions A/B/C resolved by convenor 2026-05-23 — see "Resolved decisions" section. -->
 <!-- depends_on: spec-016 (NIHC fill → soft) and spec-017 (spacing→hard, the soft_only-trap fix pattern). Shares config/defaults.py DEFAULT_STAGES + constraints/unified.py + constraints/registry.py with spec-018; rebase + re-run validate_solver_stages before merge. -->
 
 # spec-021 — Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop the heavy IntVar encodings
@@ -127,11 +129,25 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
 5. `ClubDayContiguousSlots` refactored to call `slot_used_indicators` + `enforce_no_gaps`
    (behaviour-identical; it's the reference impl). Its `tests/atoms/test_club_day_atoms*.py`
    stay green unchanged.
-6. `ClubGameSpread` refactored: the UPPER contiguity uses the shared pattern (per Open
-   decision: strict `enforce_no_gaps` OR a retained light bounded-gap); the heavy
-   min/max/range/gap IntVars are removed where the shared primitive replaces them. The LOWER
-   no-double-up bound is **extracted** to a concurrency atom (per Open decision) — not in the
-   spread rule. Soft spread penalty either kept (lightened) or dropped per Open decision.
+6. `ClubGameSpread` refactored (per resolved decision A): the UPPER contiguity HARD rule allows
+   `gap_cap = max(0, min(1, n - 3))` holes where `n` = the club's games in the (club, week, day)
+   group — i.e. ≤3 games → 0 holes via the cheap `enforce_no_gaps` chain, ≥4 games → ≤1 hole via
+   a minimal hole indicator. The heavy `_club_game_spread_hard` min/max/range/gap/spread IntVars
+   are removed; the cap is encoded with `slot_used` indicators + (only when `n ≥ 4`) a single
+   bounded hole count. A **soft** penalty drives residual holes toward 0 (kept, lightened to a
+   pure hole-count penalty). The LOWER no-double-up bound is **extracted** to `ClubNoConcurrentSlot`
+   (DoD 6b) — not in the spread rule.
+6b. New atom **`ClubNoConcurrentSlot`** (`constraints/atoms/club_no_concurrent_slot.py`, hard, per
+   resolved decision B): per (club, week, day_slot) the count of the club's games across all
+   grades/teams ≤ `cap`, where `cap = max(1, ceil(n_loc / no_field_slots_<location>))` and `n_loc`
+   = the club's games at that location that day. `no_field_slots_<location>` is a new config value
+   **derived from `DAY_TIME_MAP`** (distinct game-times per location/day; NIHC Sunday = 8,
+   Maitland Park = 6, Central Coast = 2). The derivation is a config-layer function (in
+   `config/defaults.py` or `config/__init__.py`), not hardcoded per-venue; adding a venue or a
+   time in `DAY_TIME_MAP` updates it automatically. Registered hard (severity 2) and wired into a
+   hard stage. Behaviour test (GWT, hand oracle): a club with 2 games at a 2-time venue (Central
+   Coast) → cap 1, both-in-one-slot INFEASIBLE; a club with 3 games at the same 2-time venue →
+   cap `ceil(3/2)=2`, two-in-one-slot FEASIBLE but three-in-one INFEASIBLE.
 7. Staging fixed: `VenueEarliestSlotFill` runs in a **hard** stage (so earliest-packing is
    actually enforced — the whole point). The `ClubGameSpread` hard portion likewise runs in a
    hard stage if kept hard (no longer dead in `soft_only`). `validate_solver_stages == []`.
@@ -139,8 +155,11 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
    - venue with 2 games / 2 fields offered slots {1,2,3}: a solution placing a game in slot 3
      while slot 1 empty is **INFEASIBLE**; placing in slot 1 is FEASIBLE (earliest-pack).
    - venue with games in slots {1,3} but not 2 → **INFEASIBLE** (no gap).
-   - club with games in slots {1,2} feasible; {1,4} infeasible under the club rule (per chosen
-     gap semantics, with the hand-computed threshold).
+   - Hand oracle uses holes = (max_used − min_used + 1) − num_used and gap_cap = max(0, min(1, n−3)).
+   - club with **3** games offered slots {1..6}: {1,2,3} → 0 holes, FEASIBLE; {1,2,4} → 1 hole >
+     gap_cap 0, INFEASIBLE.
+   - club with **4** games offered slots {1..6}: {1,2,4,5} → 1 hole = gap_cap 1, FEASIBLE;
+     {1,2,5,6} → 2 holes > 1, INFEASIBLE.
 9. Variable-count check: on the 2026 fixture, the rewritten atoms add **strictly fewer**
    CP-SAT IntVars than the old engine methods (assert before/after `model.Proto().variables`
    for the venue + club groupings) — the efficiency win is measured, not assumed.
@@ -169,25 +188,37 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
     and is already fixed by spec-017. If the guard surfaces any other stranded key, list it in
     the report and spawn a follow-up plan — do not widen this spec.
 
-## Open decisions (recommendations baked in)
+## Resolved decisions (convenor, 2026-05-23)
 
-- **A. Club gap: strict no-gap vs bounded (≤2)?** `ClubGameSpread` currently allows up to
-  `max_gap=2` holes; strict `enforce_no_gaps` allows 0. A bounded-gap ≥1 genuinely needs a
-  hole *count* (some arithmetic), so it can't use the pure cheap chain.
-  **Recommendation:** make the club HARD rule **strict no-gap** (`enforce_no_gaps`, shared,
-  cheap) and keep a **soft** penalty for any residual spread as the tuning lever — i.e. hard
-  "no holes," soft "prefer tight." This drops the IntVars and matches `ClubDayContiguousSlots`.
-  If the convenor truly needs "up to 2 holes allowed as hard," we keep a minimal hole-count
-  (still dropping min/max via the indicators) — more code, so only if required.
-- **B. Lower no-double-up: where does it go?** Recommendation: extract to a small concurrency
-  atom **`ClubNoConcurrentSlot`** (per (club, week, day_slot): at most one of the club's games,
-  across all its grades/teams) and put it in a **hard** stage. It complements
-  `SameGradeSameClubNoConcurrency` (same-grade) by covering the cross-grade club case. Confirm
-  the convenor wants this hard (a club's two teams in different grades can't share a slot) —
-  it's currently dead (soft_only) so flipping it on is a real behaviour change.
-- **C. Venue fill severity/level.** Recommendation: HARD severity 2 (the earliest-packing
-  guarantee is what lets us drop the 7pm rule). If the convenor prefers it soft, the
-  7pm-avoidance argument weakens and we'd revisit a soft late-slot penalty — so default HARD.
+All three Open decisions are now resolved by the convenor. The resolutions below are binding
+on the DoD; where they tighten or extend a DoD item, the DoD item is updated to match.
+
+- **A. Club gap → bounded by a games-derived cap (NOT a fixed 0 or 2).** The per-(club, week,
+  day) contiguity HARD rule allows `gap_cap = max(0, min(1, n - 3))` holes, where `n` is the
+  number of that club's games in the group (its games that day at that venue/contiguity scope).
+  Concretely: a club with ≤3 games → **0 holes** (strict no-gap); a club with ≥4 games →
+  **at most 1 hole**. A **soft** penalty pushes any residual hole toward 0 (so even when 1 hole
+  is permitted, the solver prefers none). Rationale (convenor): with only 3 games a tight block
+  is always achievable; past 4 games one unavoidable hole can occur, so forcing 0 would risk
+  infeasibility. This is a bounded-gap-≤1-conditional rule, so it needs a minimal hole indicator
+  (NOT the pure `enforce_no_gaps` chain) when `n ≥ 4`; for `n ≤ 3` it reduces to the cheap
+  `enforce_no_gaps` chain. The heavy `ClubGameSpread` min/max/range IntVars are still removed —
+  we encode the cap with `slot_used` indicators + a single bounded hole-count, not the old
+  range/spread arithmetic.
+- **B. Lower no-double-up → extract to hard `ClubNoConcurrentSlot`, capacity-aware.** Extract
+  the cross-grade no-double-up to a new atom `ClubNoConcurrentSlot` (per (club, week, day_slot):
+  the club's games across all grades/teams in one timeslot ≤ a capacity-aware cap) in a **hard**
+  stage. **Caveat (convenor):** a flat "≤1 per slot" is wrong when a club has more games at a
+  venue than the venue has timeslots — then double-ups are *forced*. So the cap is
+  `max(1, ceil(club_games_at_location_that_day / no_field_slots_<location>))`, where
+  `no_field_slots_<location>` is a **new config value derived from `DAY_TIME_MAP`** (the count of
+  distinct game *times* at that location/day — e.g. NIHC Sunday = 8, Maitland Park = 6, Central
+  Coast = 2). The derivation lives in config (computed from the existing field-slot-time entries),
+  not hardcoded, so adding a venue or time auto-updates it. This complements
+  `SameGradeSameClubNoConcurrency` (same-grade) by covering the cross-grade club case.
+- **C. Venue fill → HARD, severity 2.** Confirmed. `VenueEarliestSlotFill` is hard at severity 2;
+  the earliest-packing guarantee is what lets us drop the 7pm rule entirely (no late-slot soft
+  penalty re-added).
 
 ## Implementation units
 
@@ -241,13 +272,22 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
 
 ### Unit C — `ClubGameSpread` refactor + extract `ClubNoConcurrentSlot`
 - Files:
-  - `constraints/unified.py` (`_club_game_spread_hard/_soft`)
-  - `constraints/atoms/club_no_concurrent_slot.py` (new, per Open decision B)
-  - `constraints/registry.py`
-  - `constraints/severity.py`
-  - `config/defaults.py` (stages + `club_game_spread_*` defaults)
-  - `analytics/tester.py`
-- Depends on Unit A. Test per DoD 6, 8 (club cases), 9; concurrency test for the extracted atom.
+  - `constraints/unified.py` (`_club_game_spread_hard/_soft`) — replace heavy range/spread IntVars
+    with `slot_used` indicators + games-derived `gap_cap = max(0, min(1, n-3))` (cheap chain when
+    n≤3; single bounded hole-count when n≥4); lighten soft to a pure hole-count penalty.
+  - `constraints/atoms/club_no_concurrent_slot.py` (new, per resolved decision B) — capacity-aware
+    per-(club, week, day_slot) cap `max(1, ceil(n_loc / no_field_slots_<location>))`.
+  - `config/defaults.py` — add a `no_field_slots_for_location(location, day='Sunday')` helper (or
+    `NO_FIELD_SLOTS` dict computed from `DAY_TIME_MAP`) returning the distinct-time count per
+    location; wire `ClubNoConcurrentSlot` into a hard stage; keep `club_game_spread_*` defaults
+    (gap now derived, soft weight retained).
+  - `config/__init__.py` — surface `no_field_slots` into the loaded `data` dict so the atom reads
+    it via `data`, derived (not hardcoded). Confirm the cleanest single source at implement time.
+  - `constraints/registry.py`, `constraints/severity.py` (register `ClubNoConcurrentSlot` hard sev 2).
+  - `analytics/tester.py` (spread check updated to hole-count semantics; add `ClubNoConcurrentSlot`
+    capacity check).
+- Depends on Unit A. Test per DoD 6, 6b, 8 (club cases), 9; concurrency test for the extracted atom
+  with the Central-Coast 2-time hand oracle.
 
 ### Unit D — Point `ClubDayContiguousSlots` at the shared helper
 - Files: `constraints/atoms/club_day_contiguous_slots.py`.
@@ -273,6 +313,9 @@ decision (the only place `ClubGameSpread` differs from strict no-gap).
   will be the live operator-human rules doc.)
 - `docs/todo/GOALS.md` — add spec-021 row; record the "share the pattern, keep atoms separate"
   decision as a worked example of the §2 "extract a helper, don't merge" rule.
+- `docs/CONFIGURATION_REFERENCE.md` / `docs/ai/CONFIGURATION_REFERENCE.md` (whichever exists in
+  this worktree) — document the new `no_field_slots_<location>` derived config (what it is, that
+  it is computed from `DAY_TIME_MAP`, and that `ClubNoConcurrentSlot` reads it).
 
 ## Out of scope
 
