@@ -82,7 +82,9 @@ class TestRegistryCompleteness:
         is now a generic FORCED_GAMES count entry): 44 - 1 = 43.
         spec-018 DELETED the venue-sequencing entries `NonDefaultHomeGrouping`,
         `MaitlandHomeGrouping`, `AwayAtNonDefaultGrouping`,
-        `AwayAtMaitlandGrouping` and `MaitlandAlternateHomeAway`: 43 - 5 = 38."""
+        `AwayAtMaitlandGrouping` and `MaitlandAlternateHomeAway`: 43 - 5 = 38.
+        spec-020 DELETED `PreferredDates` and ADDED `PreferredGames` (the generic
+        soft FORCED analogue) — net 0: 38 - 1 + 1 = 38."""
         assert len(CONSTRAINT_REGISTRY) == 38
 
     def test_all_entries_have_required_fields(self):

@@ -749,7 +749,57 @@ class DrawVersionManager:
             blocked_outcomes.append(outcome)
         metadata['blocked_game_outcomes'] = blocked_outcomes
 
+        # spec-020: preferred (soft) game outcomes — matched count vs target,
+        # constraint type, incurred deviation penalty, and satisfied flag.
+        preferred_outcomes = []
+        for pg in data.get('preferred_games', []):
+            outcome = dict(pg)
+            matched, penalty = self._preferred_game_deviation(
+                pg, scheduled, data.get('teams', []))
+            outcome['matched_count'] = matched
+            outcome['target'] = pg.get('count', 1)
+            outcome['constraint'] = pg.get('constraint', 'equal')
+            outcome['penalty'] = penalty
+            outcome['satisfied'] = (penalty == 0)
+            preferred_outcomes.append(outcome)
+        metadata['preferred_game_outcomes'] = preferred_outcomes
+
         return metadata
+
+    @staticmethod
+    def _preferred_game_deviation(entry, scheduled, teams):
+        """Return (matched_count, penalty) for one PREFERRED_GAMES entry.
+
+        Counts scheduled games matching the entry's FORCED-style scope+team
+        grammar (via the shared parser) and computes the deviation penalty per
+        the same table the `PreferredGames` atom uses. Penalty 0 == satisfied.
+        """
+        from utils import _build_scope_count_rules, _get_matching_forced_scopes
+        scope_groups, ctypes, counts, _w = _build_scope_count_rules(
+            [entry], teams, label='PREFERRED_GAMES', unique_per_entry=True)
+        if not scope_groups:
+            return 0, 0
+        matched = 0
+        for k in scheduled:
+            if len(k) < 11:
+                continue
+            if _get_matching_forced_scopes(k, scope_groups):
+                matched += 1
+        ctype = entry.get('constraint', 'equal')
+        N = entry.get('count', 1)
+        if ctype == 'equal':
+            penalty = abs(matched - N)
+        elif ctype == 'lesse':
+            penalty = max(0, matched - N)
+        elif ctype == 'less':
+            penalty = max(0, matched - (N - 1))
+        elif ctype == 'greatere':
+            penalty = max(0, N - matched)
+        elif ctype == 'greater':
+            penalty = max(0, (N + 1) - matched)
+        else:
+            penalty = abs(matched - N)
+        return matched, penalty
 
     @staticmethod
     def _serialize_for_json(obj):

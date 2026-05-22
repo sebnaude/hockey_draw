@@ -578,7 +578,7 @@ The CP-SAT log format: `best:-inf` means no solution found *at that log timestam
 
 ## Common Pitfalls
 
-- **PHL_PREFERENCES** only supports `preferred_dates` key
+- **PREFERRED_GAMES** (spec-020) is the soft, weighted analogue of FORCED_GAMES — same scope/team/club grammar + optional `weight`, penalty-on-deviation instead of a hard rule. Marquee PHL dates are now a soft preferred entry (e.g. `{'grade':'PHL','date':X,'constraint':'equal','count':1,'weight':10000}`), NOT the old `PHL_PREFERENCES`/`PreferredDates` (both deleted). See `docs/system/FORCED_GAMES_AS_COUNT_RULES.md`.
 - **Cannot create NEW timeslots** - only existing `DAY_TIME_MAP` slots get variables
 - **Hints are not locks** - `model.AddHint()` is a suggestion, `model.Add(X[key] == 1)` is a lock
 - **day_slot indexing** - `generate_timeslots()` uses 1-indexed day_slot; verify with `scripts/verify_locked_keys.py`

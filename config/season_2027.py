@@ -108,14 +108,14 @@ PREFERENCE_NO_PLAY = {
     # },
 }
 
-# ============== PHL Preferences ==============
+# ============== Preferred Games (spec-020) ==============
 # MUST BE EXPLICITLY SET - Do not inherit from previous year
-
-PHL_PREFERENCES = {
-    'preferred_dates': [],
-    'phl_2nd_back_to_back': False,  # Set to True if confirmed for 2027
-    'gosford_2nd_grade_bye': False,  # Set to True if confirmed for 2027
-}
+# Soft, weighted FORCED_GAMES analogue. Replaces the deleted PHL_PREFERENCES /
+# PreferredDates. Empty = no preferences. See
+# docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
+# (phl_2nd_back_to_back / gosford_2nd_grade_bye were documentation-only flags,
+# never read by the constraint system.)
+PREFERRED_GAMES = []
 
 # ============== Special Games ==============
 # MUST BE EXPLICITLY SET - Do not inherit from previous year
@@ -166,8 +166,8 @@ SEASON_CONFIG = {
     
     # Preferences - reference the dicts above
     'preference_no_play': PREFERENCE_NO_PLAY,
-    'phl_preferences': PHL_PREFERENCES,
-    
+    'preferred_games': PREFERRED_GAMES,  # spec-020 soft FORCED analogue
+
     # Special games - reference the dict above
     'special_games': SPECIAL_GAMES,
     
@@ -219,7 +219,7 @@ Before using this config, ensure ALL items are completed:
 □ FIELD_UNAVAILABILITIES - Block all unavailable weekends/days
 □ CLUB_DAYS - Set all club day dates
 □ PREFERENCE_NO_PLAY - Add all soft no-play constraints
-□ PHL_PREFERENCES - Set PHL configuration
+□ PREFERRED_GAMES - Add soft weighted game preferences (spec-020)
 □ CONSTRAINT_DEFAULTS - Set gosford_friday_games and max_friday_broadmeadow
 □ FORCED_GAMES - Add forced Friday night matchups
 □ BLOCKED_GAMES - Block non-confirmed Friday dates at Gosford

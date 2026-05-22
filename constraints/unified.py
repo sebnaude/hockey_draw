@@ -27,7 +27,6 @@ from constraints.registry import run_count_adjusters
 from constraints.atoms import (
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
-    PreferredDates,
     ClubDayParticipation,
     ClubDayIntraClubMatchup,
     ClubDayOpponentMatchup,
@@ -193,7 +192,8 @@ class UnifiedConstraintEngine:
         self.phl_friday_gosford = []
         self.phl_friday_gosford_round = defaultdict(list)
         self.phl_round1_vars = defaultdict(list)
-        self.preferred_date_vars = defaultdict(list)
+        # spec-020: `preferred_date_vars` removed — PreferredDates deleted; the
+        # generic `PreferredGames` atom scans X directly (no engine groupings).
 
         # --- Home/away ---
         self.home_away_venue = defaultdict(lambda: {'home': [], 'away': []})
@@ -210,12 +210,7 @@ class UnifiedConstraintEngine:
         self.grade_team_vars = defaultdict(lambda: defaultdict(list))
         self.grade_pair_vars = defaultdict(lambda: defaultdict(list))
 
-        # Get PHL preferred dates
-        phl_prefs = self.data.get('phl_preferences', {})
-        pref_dates = set(
-            d.date().strftime('%Y-%m-%d')
-            for d in phl_prefs.get('preferred_dates', [])
-        )
+        # spec-020: PHL preferred-date grouping removed (PreferredDates deleted).
 
         # Get club day dates (normalize_club_day handles the dict form
         # `{'date': dt, 'opponent': 'X'}` used when an opponent is set).
@@ -314,8 +309,6 @@ class UnifiedConstraintEngine:
                 if round_no == 1:
                     self.phl_round1_vars[t1].append(var)
                     self.phl_round1_vars[t2].append(var)
-                if date_str in pref_dates:
-                    self.preferred_date_vars[date_str].append(var)
 
             elif grade == '2nd':
                 slot_id = (week, day, day_slot, location)
@@ -497,17 +490,14 @@ class UnifiedConstraintEngine:
         PHLConcurrencyAtBroadmeadow,
         PHLAnd2ndConcurrencyAtBroadmeadow,
     )
-    _PHL_SOFT_ATOMS = (PreferredDates,)
+    # spec-020: `_PHL_SOFT_ATOMS` / `_phl_times_atoms_soft` removed — the only
+    # member was PreferredDates, now deleted. The generic `PreferredGames`
+    # soft atom has no atom_group and dispatches via the non-engine fallback
+    # in `apply_solver_stage` (constraints/stages.py), not through the engine.
 
     def _phl_times_atoms_hard(self):
         n = 0
         for atom_cls in self._PHL_HARD_ATOMS:
-            n += atom_cls().apply(self.model, self.X, self.data, self.registry)
-        return n
-
-    def _phl_times_atoms_soft(self):
-        n = 0
-        for atom_cls in self._PHL_SOFT_ATOMS:
             n += atom_cls().apply(self.model, self.X, self.data, self.registry)
         return n
 
@@ -790,8 +780,9 @@ class UnifiedConstraintEngine:
             c += self._club_alignment_soft()
         # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft
         # dispatch removed — venue-sequencing rules deleted.
-        if 'PHLAndSecondGradeTimes' not in _skip:
-            c += self._phl_times_atoms_soft()
+        # spec-020: PHL/2nd soft dispatch removed — its only member
+        # (PreferredDates) is deleted; PHL/2nd times soft has no remaining
+        # penalties. `PreferredGames` dispatches via the non-engine fallback.
         if 'PreferredTimesConstraint' not in _skip:
             c += self._preferred_times()
         if 'EnsureBestTimeslotChoices' not in _skip:
@@ -936,20 +927,10 @@ class UnifiedConstraintEngine:
     # imbalance penalty) and `_away_maitland_soft` (AwayAtNonDefaultGrouping
     # soft) deleted — venue-sequencing rules removed.
 
-    def _phl_times_soft(self):
-        """Legacy preferred-date penalties — retained for parity reference. Not called."""
-        n = 0
-        weight = self._get_penalty_weight('phl_preferences', 10000)
-        self.data['penalties']['phl_preferences'] = {'weight': weight, 'penalties': []}
-        for date_str, vars_list in self.preferred_date_vars.items():
-            if vars_list:
-                week_no = get_nearest_week_by_date(date_str, self.timeslots)
-                if week_no not in self.locked_weeks:
-                    pen = self.model.NewIntVar(0, len(vars_list), f"u_pref_date_{date_str}")
-                    self.model.AddAbsEquality(pen, sum(vars_list) - 1)
-                    self.data['penalties']['phl_preferences']['penalties'].append(pen)
-                    n += 1
-        return n
+    # spec-020: `_phl_times_soft` (legacy preferred-date parity reference)
+    # removed — it read the now-deleted `self.preferred_date_vars` grouping and
+    # the removed `phl_preferences` config key. The generic `PreferredGames`
+    # atom replaces it.
 
     def _preferred_times(self):
         """Soft: no-play date penalties (2025 + 2026 format)."""

@@ -96,11 +96,11 @@ PREFERENCE_NO_PLAY = {
     ]
 }
 
-# ============== PHL Preferences ==============
-
-PHL_PREFERENCES = {
-    'preferred_dates': []  # Can add specific date preferences here
-}
+# ============== Preferred Games (spec-020) ==============
+# Soft, weighted FORCED_GAMES analogue. Replaces the deleted PHL_PREFERENCES /
+# PreferredDates. Empty = no preferences. See
+# docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
+PREFERRED_GAMES = []
 
 # ============== Season Configuration ==============
 
@@ -130,8 +130,8 @@ SEASON_CONFIG = {
     
     # Preferences
     'preference_no_play': PREFERENCE_NO_PLAY,
-    'phl_preferences': PHL_PREFERENCES,
-    
+    'preferred_games': PREFERRED_GAMES,  # spec-020 soft FORCED analogue
+
     # Home field mappings
     'home_field_map': {
         'Maitland': 'Maitland Park',

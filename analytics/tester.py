@@ -94,6 +94,9 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # spec-016: NIHC field-fill order — soft symmetry-breaker.
     'NIHCFillWFBeforeEF': 5,
     'NIHCFillEFBeforeSF': 5,
+    # spec-020: PreferredGames — soft, weighted FORCED analogue. Deviations are
+    # soft pressure (metric_value = deviation penalty), never hard violations.
+    'PreferredGames': 5,
 
     # Config-driven checks
     'ForcedGames': 1,   # CRITICAL - forced games must happen
@@ -1186,6 +1189,8 @@ class DrawTester:
             # Config-driven checks (forced/blocked games)
             ('ForcedGames', self._check_forced_games),
             ('BlockedGames', self._check_blocked_games),
+            # spec-020: soft preferred-games deviation (reported as soft pressure)
+            ('PreferredGames', self._check_preferred_games),
         ]
 
         checked_canonicals = set()
@@ -2595,6 +2600,58 @@ class DrawTester:
                                 f"on {game.date} at {game.field_location}",
                         affected_games=[game.game_id],
                     ))
+
+        return violations
+
+    def _check_preferred_games(self) -> List[Violation]:
+        """Report PREFERRED_GAMES deviations as SOFT pressure (spec-020).
+
+        Mirrors `_check_forced_games`' scope/team matching but, because these
+        are soft preferences, a deviation is NOT a hard violation. Each entry
+        whose matched-game count deviates from its target emits a severity-5
+        Violation carrying `metric_value` = the deviation penalty, so the
+        breakdown rolls it up under `soft_pressure['PreferredGames']` rather
+        than as a structural failure.
+        """
+        violations = []
+        preferred_games = self.data.get('preferred_games', [])
+        if not preferred_games:
+            return violations
+
+        for entry in preferred_games:
+            desc = entry.get('description', str({k: v for k, v in entry.items()
+                                                  if k not in ('description', 'reason')}))
+            ctype = entry.get('constraint', 'equal')
+            N = entry.get('count', 1)
+
+            matching_games = []
+            for game in self.draw.games:
+                if self._game_matches_scope(game, entry) and \
+                   self._game_matches_teams(game, entry, self.teams):
+                    matching_games.append(game.game_id)
+
+            count = len(matching_games)
+            if ctype == 'equal':
+                penalty = abs(count - N)
+            elif ctype == 'lesse':
+                penalty = max(0, count - N)
+            elif ctype == 'less':
+                penalty = max(0, count - (N - 1))
+            elif ctype == 'greatere':
+                penalty = max(0, N - count)
+            elif ctype == 'greater':
+                penalty = max(0, (N + 1) - count)
+            else:
+                penalty = abs(count - N)
+
+            if penalty > 0:
+                violations.append(Violation.create(
+                    constraint="PreferredGames",
+                    message=(f"Preferred game '{desc}' [{ctype} {N}]: "
+                             f"found {count} game(s), deviation penalty {penalty}"),
+                    affected_games=matching_games,
+                    metric_value=float(penalty),
+                ))
 
         return violations
 

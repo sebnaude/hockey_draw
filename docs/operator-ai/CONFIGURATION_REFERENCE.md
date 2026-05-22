@@ -38,7 +38,7 @@ SEASON_CONFIG = {
     'second_grade_times': SECOND_GRADE_TIMES,
     'field_unavailabilities': FIELD_UNAVAILABILITIES,
     'club_days': CLUB_DAYS,
-    'phl_preferences': PHL_PREFERENCES,
+    'preferred_games': PREFERRED_GAMES,
     'preference_no_play': PREFERENCE_NO_PLAY,
     'special_games': SPECIAL_GAMES,
     'forced_games': FORCED_GAMES,
@@ -414,15 +414,45 @@ CLUB_DAYS = {
 
 ---
 
-## PHL_PREFERENCES
+## PREFERRED_GAMES (spec-020)
+
+Soft, weighted analogue of `FORCED_GAMES`: same scope/team/club grammar **plus**
+an optional `weight`, but a penalty-on-deviation instead of a hard constraint. A
+preference that can't be met costs objective, never feasibility. Replaces the
+deleted `PHL_PREFERENCES` / `PreferredDates`.
 
 ```python
-PHL_PREFERENCES = {
-    'preferred_dates': [],  # Specific date preferences for PHL games
-}
+PREFERRED_GAMES = [
+    # Softly prefer exactly one PHL game on a marquee date (the old
+    # PreferredDates behaviour, migrated):
+    {'grade': 'PHL', 'date': '2026-04-19', 'constraint': 'equal', 'count': 1,
+     'weight': 10000, 'description': 'marquee PHL date'},
+    # Softly prefer at most 2 games at a venue on a date:
+    {'field_location': 'Maitland Park', 'date': '2026-05-03',
+     'constraint': 'lesse', 'count': 2},
+]
 ```
 
-**Note:** Only `preferred_dates` key is supported. Other PHL rules are enforced via constraints, not this dict.
+**Penalty per `constraint` type** (target `N = count`):
+
+| `constraint` | penalty |
+|---|---|
+| `equal` | `\|sum − N\|` |
+| `lesse` | `max(0, sum − N)` |
+| `greatere` | `max(0, N − sum)` |
+| `greater` | `max(0, (N+1) − sum)` |
+| `less` | `max(0, sum − (N−1))` |
+
+**Default weight:** `PENALTY_WEIGHTS['preferred_games']` (default `10000`). A
+single shared bucket holds all entries; an optional per-entry `weight` is a
+multiplier on top of the default (`max(1, weight // default)`), used only when
+one preference must out-rank the rest.
+
+**Non-fatal:** an empty / zero-candidate scope produces 0 penalty + a logged
+warning (never `sys.exit`). For a hard guarantee, use `FORCED_GAMES` instead.
+
+See `docs/system/FORCED_GAMES_AS_COUNT_RULES.md` for the full grammar and
+implementation notes.
 
 ---
 

@@ -148,15 +148,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
     # OBSOLETE (spec-010): "every PHL team plays round 1" removed; the atom
     # file and registry entry were subsequently DELETED. The convenor uses
     # FORCED_GAMES entries to express deliberate round-1 placement when needed.
-    'PreferredDates': ConstraintInfo(
-        canonical_name='PreferredDates',
-        solver_class_names=['PreferredDates'],
-        tester_check_methods=['_check_phl_second_grade_times'],
-        tester_violation_names=['PHLAndSecondGradeTimes'],
-        severity_level=1,
-        has_soft_component=True,
-        atom_group='PHLAndSecondGradeTimes',
-    ),
+    # spec-020: `PreferredDates` (narrow PHL-only soft `|sum − 1|` on a date)
+    # DELETED — its behaviour is now a `PREFERRED_GAMES` config entry handled by
+    # the generic `PreferredGames` soft atom below.
     'EqualMatchUpSpacing': ConstraintInfo(
         canonical_name='EqualMatchUpSpacing',
         solver_class_names=['EqualMatchUpSpacingConstraint', 'EqualMatchUpSpacingConstraintAI'],
@@ -414,6 +408,18 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         solver_class_names=['PreferredWeekendsAwayGround'],
         tester_check_methods=[],
         tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+    ),
+    # spec-020: generic soft analogue of the whole FORCED_GAMES grammar.
+    # Penalty-on-deviation from a per-scope target (equal/lesse/less/greater/
+    # greatere + count). Pure soft: never blocks feasibility. Reads
+    # `data['preferred_games']`. Replaces the deleted PHL-only `PreferredDates`.
+    'PreferredGames': ConstraintInfo(
+        canonical_name='PreferredGames',
+        solver_class_names=['PreferredGames'],
+        tester_check_methods=['_check_preferred_games'],
+        tester_violation_names=['PreferredGames'],
         severity_level=5,
         has_soft_component=True,
     ),

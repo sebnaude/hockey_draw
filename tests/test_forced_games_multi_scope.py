@@ -29,6 +29,7 @@ from constraints.atoms.base import BROADMEADOW, GOSFORD, MAITLAND
 from models import Club, Grade, PlayingField, Team, Timeslot
 from utils import (
     _build_forced_game_rules,
+    _build_scope_count_rules,
     _get_matching_forced_scopes,
     _is_blocked_by_no_play,
     _build_blocked_game_rules,
@@ -205,6 +206,60 @@ def test_norths_vs_maitland_var_matches_both_scopes():
     )
     matches = _get_matching_forced_scopes(tigers_maitland_key, rules)
     assert len(matches) == 1
+
+
+# ----------------------------------------------------------------------
+# spec-020 Unit A — shared parser returns per-entry weights when
+# unique_per_entry=True; back-compat wrapper unchanged.
+# ----------------------------------------------------------------------
+
+def test_scope_count_rules_returns_per_entry_weights():
+    """`_build_scope_count_rules(unique_per_entry=True)` returns a 4-tuple whose
+    4th element maps each entry's scope_key to its `weight`.
+
+    Hand oracle: two team-less PHL/date entries with different weights and NO
+    team filter. With unique_per_entry=True each gets its own scope_key (no
+    merge), so constraint_weights has exactly 2 keyed entries: 100 and 200.
+    """
+    data = _build_fixture()
+    entries = [
+        {'grade': 'PHL', 'date': '2026-03-22', 'constraint': 'equal',
+         'count': 1, 'weight': 100},
+        {'grade': 'PHL', 'date': '2026-03-29', 'constraint': 'lesse',
+         'count': 2, 'weight': 200},
+    ]
+    scope_groups, ctypes, counts, weights = _build_scope_count_rules(
+        entries, data['teams'], label='PREFERRED_GAMES', unique_per_entry=True)
+
+    # Two distinct scopes (no merge), each with its weight + ctype + count.
+    assert len(scope_groups) == 2
+    assert sorted(weights.values()) == [100, 200]
+    assert sorted(ctypes.values()) == ['equal', 'lesse']
+    assert sorted(counts.values()) == [1, 2]
+
+
+def test_scope_count_rules_no_weight_means_absent():
+    """Entries without `weight` produce no constraint_weights entry (atom then
+    falls back to the default bucket weight)."""
+    data = _build_fixture()
+    entries = [{'grade': 'PHL', 'date': '2026-03-22', 'constraint': 'equal', 'count': 1}]
+    scope_groups, _ctypes, _counts, weights = _build_scope_count_rules(
+        entries, data['teams'], label='PREFERRED_GAMES', unique_per_entry=True)
+    assert len(scope_groups) == 1
+    assert weights == {}
+
+
+def test_back_compat_wrapper_returns_three_tuple():
+    """`_build_forced_game_rules` still returns the original 3-tuple so all 12
+    FORCED callers stay unchanged."""
+    data = _build_fixture()
+    forced = [{'grade': 'PHL', 'date': '2026-03-22', 'constraint': 'equal', 'count': 1}]
+    result = _build_forced_game_rules(forced, data['teams'])
+    assert len(result) == 3
+    scope_groups, ctypes, counts = result
+    assert isinstance(scope_groups, dict)
+    assert list(ctypes.values()) == ['equal']
+    assert list(counts.values()) == [1]
 
 
 # ----------------------------------------------------------------------

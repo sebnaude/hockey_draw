@@ -457,16 +457,24 @@ BLOCKED_GAMES = [
 ]
 
 # ============== PHL Preferences ==============
-# Note: PHL_PREFERENCES only supports 'preferred_dates' key for the constraint system.
-# Other settings are documented in comments below.
+# spec-020: PHL_PREFERENCES (and its narrow `preferred_dates` soft constraint,
+# the deleted PreferredDates atom) removed. To softly prefer "exactly one PHL
+# game on date X", add a PREFERRED_GAMES entry below:
+#   {'grade': 'PHL', 'date': '2026-04-19', 'constraint': 'equal', 'count': 1,
+#    'weight': 10000, 'description': 'marquee PHL date'}
 #
 # Additional PHL Rules (enforced via constraints, not this dict):
 #   - PHL/2nd back-to-back: CONFIRMED for 2026
 #   - Teams playing Gosford have 2nd grade bye: CONFIRMED
 
-PHL_PREFERENCES = {
-    'preferred_dates': [],  # Add specific date preferences here if needed
-}
+# ============== Preferred Games (spec-020) ==============
+# Soft, weighted analogue of FORCED_GAMES (same scope/team/club grammar +
+# optional `weight`). Penalty-on-deviation from `count` per `constraint` type
+# (equal/lesse/less/greater/greatere) instead of a hard rule. Single shared
+# bucket weighted by PENALTY_WEIGHTS['preferred_games']; per-entry `weight` is a
+# multiplier. Empty list = no preferences (no penalty). See
+# docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
+PREFERRED_GAMES = []
 
 # ============== PHL SCHEDULE SUMMARY ==============
 #
@@ -1101,7 +1109,9 @@ PENALTY_WEIGHTS = {
     'PreferredTimesConstraint':           200_000,
     'ClubVsClubAlignmentField':                 0,  # Superseded by ClubFieldConcentration
     'ClubGradeAdjacencyConstraint':        50_000,
-    'phl_preferences':                     10_000,
+    # spec-020: 'phl_preferences' weight removed — PreferredDates deleted; the
+    # marquee-PHL-date behaviour is now a PREFERRED_GAMES entry using the
+    # 'preferred_games' weight below.
     'MaximiseClubsPerTimeslotBroadmeadow':  5_000,
     'MinimiseClubsOnAFieldBroadmeadow':     5_000,
     # Penalty per dummy slot used. Higher = solver avoids dummy slots more strongly.
@@ -1118,6 +1128,11 @@ PENALTY_WEIGHTS = {
     # Each 'avoid' entry incurs this penalty per game scheduled at the venue on that date.
     # Each 'prefer' entry incurs this penalty per game MISSING from the venue on that date.
     'preferred_weekends_away_ground':           1_000,
+    # spec-020: soft, weighted FORCED_GAMES analogue. Single shared bucket for
+    # all PREFERRED_GAMES entries; per-entry `weight` acts as a multiplier on
+    # top of this default. Matches the old `phl_preferences` weight (the
+    # marquee-PHL-date behaviour PreferredDates used to provide).
+    'preferred_games':                         10_000,
     # spec-018: 'maitland_alternate_home_away' (spec-012) removed — the
     # alternation soft penalty was deleted.
 }
@@ -1165,10 +1180,12 @@ SEASON_CONFIG = {
     
     # Preferences
     'preference_no_play': PREFERENCE_NO_PLAY,
-    'phl_preferences': PHL_PREFERENCES,
 
     # Preferred / avoided away-ground weekends (spec-006)
     'preferred_weekends': PREFERRED_WEEKENDS,
+
+    # Preferred games — soft weighted FORCED analogue (spec-020)
+    'preferred_games': PREFERRED_GAMES,
     
     # Special games
     'special_games': SPECIAL_GAMES,

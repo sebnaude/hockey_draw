@@ -236,7 +236,9 @@ DEFAULT_STAGES = [
             # penalty is unnecessary because the stacking atom enforces the
             # exact Sunday-meeting count via a HARD `sum == budget`
             # constraint (no deficit possible at solve time).
-            'PreferredDates',
+            # spec-020: `PreferredDates` replaced by the generic `PreferredGames`
+            # soft atom (penalty-on-deviation over the full FORCED grammar).
+            'PreferredGames',
             'EnsureBestTimeslotChoices', 'PreferredTimes',
             'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
             # spec-002: predictable alphabetical matchup tie-break.
@@ -254,6 +256,14 @@ DEFAULT_STAGES = [
         ],
     },
 ]
+
+
+# spec-020: empty default for the soft, weighted FORCED_GAMES analogue. Season
+# configs may override with a list of preference entries (same grammar as
+# FORCED_GAMES + optional `weight`). Read as `data['preferred_games']` via
+# `build_season_data`. Penalty weight lives in each season's PENALTY_WEIGHTS
+# dict (`preferred_games`), NOT here — defaults.py has no PENALTY_WEIGHTS.
+PREFERRED_GAMES = []
 
 
 # Each PERENNIAL entry carries `'perennial': True`. This flag is read by

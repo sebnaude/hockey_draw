@@ -578,9 +578,16 @@ def _resolve_team_name(name, grade, team_names_set, team_lookup, all_teams):
     return results if results else [name]
 
 
-def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
+def _build_scope_count_rules(entries: list, teams: list, *,
+                             label: str = 'FORCED_GAMES',
+                             unique_per_entry: bool = False) -> tuple:
     """
-    Build lookup structure from FORCED_GAMES config for fast variable filtering.
+    Build lookup structure from a FORCED_GAMES-style config list.
+
+    Shared by the hard FORCED_GAMES pipeline (variable elimination in
+    generate_X) and the soft `PreferredGames` atom (penalty-on-deviation).
+    Both halves use the SAME scope/team/club grammar; only the enforcement
+    differs. This is the single source of truth for parsing that grammar.
 
     Groups entries by their scope (non-team fields). For each scope, collects
     all allowed team matchers. A variable matching the scope must match at least
@@ -596,17 +603,33 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
     Team names in config can be club names (e.g., 'Maitland') — they are auto-resolved
     to full team names (e.g., 'Maitland PHL') using the grade field and teams list.
 
+    Args:
+        entries: list of FORCED_GAMES-style dicts.
+        teams: season team list (for name/club resolution).
+        label: diagnostic label for log lines ('FORCED_GAMES' or
+            'PREFERRED_GAMES'). Only affects printed text.
+        unique_per_entry: when True, EVERY entry gets a unique `_entry_idx`
+            in its scope so no two entries merge — the soft path needs a
+            distinct penalty + weight per entry. The hard FORCED path leaves
+            this False so team-less entries on the same scope merge into one
+            count constraint (existing behaviour).
+
     Returns:
-        Tuple of (scope_groups dict, constraint_types dict, constraint_counts dict).
+        4-tuple (scope_groups, constraint_types, constraint_counts,
+                 constraint_weights):
         scope_groups: scope_key (frozenset) -> list of team matchers.
         constraint_types: scope_key (frozenset) -> constraint type string.
         constraint_counts: scope_key (frozenset) -> count override (default 1).
+        constraint_weights: scope_key (frozenset) -> optional per-entry
+            'weight' (only populated when the entry carried a 'weight' field;
+            consumed by the soft path as a multiplier).
         Each team matcher is ('pair', team1, team2) or ('any', team_name).
     """
-    if not forced_games:
-        return {}, {}, {}
+    if not entries:
+        return {}, {}, {}, {}
 
     team_names_set, team_lookup = _build_team_lookups(teams)
+    forced_games = entries  # internal alias (logic below was written for FORCED)
 
     # scope_key -> list of team matchers
     scope_groups = defaultdict(list)
@@ -614,6 +637,8 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
     constraint_types = {}
     # scope_key -> count override for constraint threshold (default 1)
     constraint_counts = {}
+    # scope_key -> per-entry weight (soft path only; absent => default weight)
+    constraint_weights = {}
 
     for entry_idx, entry in enumerate(forced_games):
         grade = entry.get('grade')
@@ -644,7 +669,11 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
         raw_teams = entry.get('teams', [])
         has_team1_team2 = 'team1' in entry or 'team2' in entry
         has_club = 'club' in entry
-        if raw_teams or has_team1_team2 or has_club:
+        # review m1: inject `_entry_idx` exactly once. The team-matcher branch
+        # needs a unique scope so pair/club entries don't merge; the soft path
+        # (unique_per_entry=True) needs EVERY entry distinct. Combine into one
+        # condition so we never double-inject the same tag.
+        if unique_per_entry or raw_teams or has_team1_team2 or has_club:
             scope.append(('_entry_idx', entry_idx))
 
         scope_key = frozenset(scope)
@@ -657,6 +686,8 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
         constraint_types[scope_key] = new_ctype
         if 'count' in entry:
             constraint_counts[scope_key] = entry['count']
+        if 'weight' in entry:
+            constraint_weights[scope_key] = entry['weight']
 
         # Build team matcher from 'teams' key or team1/team2
         # If no teams specified, use ('all',) matcher to match any team pair in scope
@@ -711,9 +742,25 @@ def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
         )
         ctype = constraint_types[scope_key]
         ctype_desc = f" [{ctype}]" if ctype != 'equal' else ''
-        print(f"  Forced game rule: {desc} -> {len(matchers)} team matcher(s): [{matcher_details}]{ctype_desc}")
+        rule_label = 'Preferred game rule' if label == 'PREFERRED_GAMES' else 'Forced game rule'
+        print(f"  {rule_label}: {desc} -> {len(matchers)} team matcher(s): [{matcher_details}]{ctype_desc}")
 
-    return dict(scope_groups), constraint_types, constraint_counts
+    return dict(scope_groups), constraint_types, constraint_counts, constraint_weights
+
+
+def _build_forced_game_rules(forced_games: list, teams: list) -> tuple:
+    """Back-compat wrapper around `_build_scope_count_rules` for FORCED callers.
+
+    Returns the original 3-tuple `(scope_groups, constraint_types,
+    constraint_counts)` so all existing FORCED_GAMES callers (generate_X, the
+    PHL forced-friday helper, and the FORCED test suite) keep working
+    unchanged — they neither expect nor use the soft path's per-entry weights.
+    """
+    scope_groups, constraint_types, constraint_counts, _weights = (
+        _build_scope_count_rules(forced_games, teams, label='FORCED_GAMES',
+                                 unique_per_entry=False)
+    )
+    return scope_groups, constraint_types, constraint_counts
 
 
 def _get_matching_forced_scopes(key: tuple, forced_rules: dict) -> list:
@@ -1213,12 +1260,19 @@ def _validate_entry_fields(entries, label, valid_dates, valid_locations, valid_f
             else:
                 warnings.append(msg)
 
-        # Validate constraint type (forced games only)
-        if is_forced:
+        # Validate constraint type. FORCED → fatal on bad type; PREFERRED_GAMES
+        # → warn (review C3: the gate previously only ran for FORCED, so a typo
+        # like 'equall' on a preferred entry passed validation then silently
+        # produced no penalty). Soft contract: warn, never fatal.
+        if is_forced or label == 'PREFERRED_GAMES':
             ctype = entry.get('constraint', 'equal')
             if ctype not in _VALID_CONSTRAINT_TYPES:
-                fatals.append(f"{label} '{desc}': invalid constraint type '{ctype}'. "
-                             f"Must be one of: {sorted(_VALID_CONSTRAINT_TYPES)}")
+                msg = (f"{label} '{desc}': invalid constraint type '{ctype}'. "
+                       f"Must be one of: {sorted(_VALID_CONSTRAINT_TYPES)}")
+                if is_forced:
+                    fatals.append(msg)
+                else:
+                    warnings.append(msg)
 
         # Validate team names resolve
         grade_for_resolve = entry.get('grades', []) or entry.get('grade')
@@ -3250,6 +3304,8 @@ def validate_game_config(data: dict) -> None:
     timeslots = data['timeslots']
     forced_games = data.get('forced_games', [])
     blocked_games = data.get('blocked_games', [])
+    # spec-020: soft preferred-games entries (validated like FORCED but warn-only).
+    preferred_games = data.get('preferred_games', [])
 
     # Filter out forced/blocked entries whose dates fall entirely in locked weeks.
     # Locked weeks are already solved — forced/blocked rules don't apply to them.
@@ -3286,7 +3342,8 @@ def validate_game_config(data: dict) -> None:
     grade_rounds_override = data.get('grade_rounds_override', {})
     home_field_map = data.get('home_field_map', {})
     phl_game_times = data.get('phl_game_times', {})
-    has_config_to_validate = (forced_games or blocked_games or club_days
+    has_config_to_validate = (forced_games or blocked_games or preferred_games
+                              or club_days
                               or constraint_defaults or grade_rounds_override
                               or home_field_map or phl_game_times)
 
@@ -3314,6 +3371,15 @@ def validate_game_config(data: dict) -> None:
                           valid_field_names, valid_grades, valid_days,
                           team_names_set, team_lookup, teams, warnings, fatals)
     _validate_entry_fields(blocked_games, 'BLOCKED_GAMES', valid_dates, valid_locations,
+                          valid_field_names, valid_grades, valid_days,
+                          team_names_set, team_lookup, teams, warnings, fatals)
+    # spec-020: validate PREFERRED_GAMES entries with the SAME field/date/venue/
+    # ctype validator but is_forced=False (warnings, never fatals — soft
+    # contract). The `weight` field passes silently (no unexpected-field check).
+    # Crucially this runs the validator ONLY on preferred_games here; the FORCED
+    # feasibility phases below never see these entries, so a zero-candidate
+    # preferred scope can never trigger the FORCED feasibility FATAL.
+    _validate_entry_fields(preferred_games, 'PREFERRED_GAMES', valid_dates, valid_locations,
                           valid_field_names, valid_grades, valid_days,
                           team_names_set, team_lookup, teams, warnings, fatals)
 
@@ -3822,7 +3888,7 @@ def build_season_data(config: dict) -> dict:
             - field_unavailabilities: dict
             - club_days: dict
             - preference_no_play: dict
-            - phl_preferences: dict
+            - preferred_games: list (spec-020 soft FORCED analogue)
             - home_field_map: dict
             - grade_order: list
             
@@ -4000,8 +4066,9 @@ def build_season_data(config: dict) -> dict:
     # Get preferences from config
     club_days = config.get('club_days', {})
     preference_no_play = config.get('preference_no_play', {})
-    phl_preferences = config.get('phl_preferences', {'preferred_dates': []})
-    
+    # spec-020: `phl_preferences` removed — PreferredDates deleted; marquee PHL
+    # dates are expressed as PREFERRED_GAMES entries handled by PreferredGames.
+
     return {
         'year': year,
         'teams': TEAMS,
@@ -4015,7 +4082,6 @@ def build_season_data(config: dict) -> dict:
         'day_time_map': day_time_map,
         'phl_game_times': phl_game_times,
         'second_grade_times': config.get('second_grade_times', {}),
-        'phl_preferences': phl_preferences,
         'max_day_slot_per_field': max_day_slot_per_field,
         'field_unavailabilities': field_unavailabilities,
         'club_days': club_days,
@@ -4026,6 +4092,8 @@ def build_season_data(config: dict) -> dict:
         'special_games': config.get('special_games', {}),
         # spec-006: preferred / avoided away-ground weekends (e.g. NRL clashes).
         'preferred_weekends': config.get('preferred_weekends', []),
+        # spec-020: soft, weighted FORCED_GAMES analogue (penalty-on-deviation).
+        'preferred_games': config.get('preferred_games', []),
         'forced_games': config.get('forced_games', []),
         'blocked_games': config.get('blocked_games', []),
         'penalty_weights': config.get('penalty_weights', {}),

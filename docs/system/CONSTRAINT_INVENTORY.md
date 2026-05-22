@@ -69,7 +69,7 @@ fine). The only home/away rules that remain are the spec-004 atoms
 
 | Cluster | Legacy classes | Atoms after split | Net change |
 |---|---|---|---|
-| PHLAndSecondGradeTimes | 1 | 3 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `PreferredDates`. (`PHLRoundOnePlay` deleted spec-010; `GosfordFridayRoundsForced` deleted spec-015 — both expressed as FORCED_GAMES entries, see `docs/system/FORCED_GAMES_AS_COUNT_RULES.md`) | +2 |
+| PHLAndSecondGradeTimes | 1 | 2 — `PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`. (`PHLRoundOnePlay` deleted spec-010; `GosfordFridayRoundsForced` deleted spec-015 — both expressed as FORCED_GAMES entries, see `docs/system/FORCED_GAMES_AS_COUNT_RULES.md`; `PreferredDates` deleted spec-020 — replaced by the generic `PreferredGames` soft atom, no longer in this cluster) | +1 |
 | ClubDayConstraint | 1 | 5 | +4 |
 | ClubVsClubAlignment | 1 | 4 (Phase 3c — OBSOLETE per spec-005, parity reference only) | +3 |
 | ClubVsClubStackedAlignment (spec-005) | 0 (new cluster — replaces the 4 Phase-3c atoms in `DEFAULT_STAGES`) | 2 — `ClubVsClubStackedWeekends`, `ClubVsClubStackedCoLocation` | +2 |
@@ -81,9 +81,10 @@ fine). The only home/away rules that remain are the spec-004 atoms
 | SoftLexMatchupOrdering (spec-002) | 0 (new atom, no legacy class) | 1 — `SoftLexMatchupOrdering` | +1 |
 | NIHCFieldFillOrder (spec-003) | 0 (new atoms, no legacy class; replaces a review-only perennial rule) | 2 — `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF` | +2 |
 | PreferredWeekendsAwayGround (spec-006) | 0 (new atom, no legacy class) | 1 — `PreferredWeekendsAwayGround` | +1 |
-| **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** (was 32 before spec-018 removed the 3 venue-sequencing atoms) | **+11** |
+| PreferredGames (spec-020) | 0 (new atom; replaces the deleted `PreferredDates` 1:1) | 1 — `PreferredGames` (generic soft FORCED analogue) | 0 |
+| **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** (was 32 before spec-018 removed the 3 venue-sequencing atoms; spec-020 swaps `PreferredDates`→`PreferredGames`, net 0) | **+11** |
 
-Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **38** (was 43 before spec-018 deleted the 5 home/away-grouping registry entries: `NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`).
+Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **38** (was 43 before spec-018 deleted the 5 home/away-grouping registry entries: `NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`; spec-020 deleted `PreferredDates` and added `PreferredGames` — net 0).
 
 ## 4. Per-atom engineering detail
 
@@ -98,7 +99,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `PHLAnd2ndConcurrencyAtBroadmeadow` | `constraints/atoms/phl_2nd_concurrency.py` | n/a | yes | yes | — | — | PHL + same-club-2nd no-concurrency at Broadmeadow |
 | `GosfordFridayRoundsForced` | _deleted (spec-015)_ | n/a | n/a | n/a | — | — | **DELETED (spec-015).** Per-round `sum == 1` Gosford-Friday rule is now a generic `FORCED_GAMES` count entry (scope + count + constraint type) in the season config — see `FORCED_GAMES_AS_COUNT_RULES.md`. Atom file, registry entry, and `CONSTRAINT_DEFAULTS['gosford_friday_rounds']` removed. |
 | `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | **OBSOLETE (spec-010).** Removed from `critical_feasibility` stage and `_PHL_HARD_ATOMS`; `solver_class_names` emptied in registry. File kept on disk as parity reference. Convenor uses `FORCED_GAMES` entries to express deliberate round-1 placement when needed. |
-| `PreferredDates` | `constraints/atoms/preferred_dates.py` | excluded | yes | yes | — | — | Soft; weight `PENALTY_WEIGHTS['phl_preferences']=10000` |
+| `PreferredDates` | _deleted (spec-020)_ | n/a | n/a | n/a | — | — | **DELETED (spec-020).** The narrow PHL-only `\|sum − 1\|`-on-a-date soft constraint is now expressed as a `PREFERRED_GAMES` config entry handled by the generic `PreferredGames` soft atom (below). `PHL_PREFERENCES` / `phl_preferences` and `PENALTY_WEIGHTS['phl_preferences']` removed. |
 | **Atomised (Phase 3) — ClubDay cluster** | | | | | | | |
 | `ClubDayParticipation` | `constraints/atoms/club_day_participation.py` | excluded | yes | yes | — | — | Skips locked-week club days via `parse_club_day_entries` |
 | `ClubDayIntraClubMatchup` | `constraints/atoms/club_day_intra_club_matchup.py` | excluded | yes | yes | — | — | Derby logic when opponent undefined / empty for grade |
@@ -140,6 +141,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | **Soft-only penalty atoms (no tester violation check)** | | | | | | | |
 | `SoftLexMatchupOrdering` | `constraints/atoms/soft_lex_matchup_ordering.py` | included | yes | yes | — | — | Pure soft tie-break (weight=1 default); no tester violation check; ranks pairs 0-indexed alphabetically per grade |
 | `PreferredWeekendsAwayGround` | `constraints/atoms/preferred_weekends_away_ground.py` | n/a | yes | yes | — | — | Pure soft; reads `data['preferred_weekends']`; no tester violation check. Penalty key `preferred_weekends_away_ground` (default 1000). avoid mode: penalises each game at venue on date. prefer mode: penalises shortage vs target_count. |
+| `PreferredGames` | `constraints/atoms/preferred_games.py` | reuses FORCED scope/team parser (`_build_scope_count_rules`, `unique_per_entry=True`) | yes (per-variable, `key[6] in locked_weeks`) | yes | — | — | **Soft (spec-020), severity 5, no atom_group.** Generic analogue of the whole FORCED_GAMES grammar. Reads `data['preferred_games']`; per scope adds a penalty-on-deviation from `count` per `constraint` type (equal→`\|sum−N\|`; lesse→`max(0,sum−N)`; greatere→`max(0,N−sum)`; greater→`max(0,(N+1)−sum)`; less→`max(0,sum−(N−1))`). Single shared bucket `preferred_games` (default weight 10000); optional per-entry `weight` is a multiplier. Empty/zero-candidate scope → 0 penalty + logged warning, NEVER `sys.exit`. Tester check `_check_preferred_games` reports deviations as soft pressure (metric_value), not hard violations. |
 | **Tester-only (no solver enforcement)** | | | | | | | |
 | `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
 | `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |

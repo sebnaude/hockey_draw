@@ -384,15 +384,21 @@ matching scheduled game and will avoid those slots when feasible.
 
 ---
 
-### Rule 19: PHL Preferred Dates
+### Rule 19: Preferred Games (soft, weighted)
 
-**Description:** PHL games should occur on preferred dates when possible.
+**Description:** Any FORCED_GAMES-style target can be expressed as a *soft*
+preference via `PREFERRED_GAMES` — e.g. "prefer exactly one PHL game on this
+marquee date", "prefer at most two games at this venue on this date". The solver
+is penalised for deviating from the target rather than forced to meet it.
+(spec-020 — replaces the old PHL-only "preferred dates" rule.)
 
-**Penalty:** `|games_on_date - 1|` per preferred date
+**Penalty:** deviation from the target `count` per the entry's `constraint` type
+(e.g. `equal` → `|games − count|`, `lesse` → `max(0, games − count)`).
 
-**Weight:** 10,000
+**Weight:** 10,000 (default; per-entry `weight` acts as a multiplier).
 
-**Rationale:** Accommodates broadcast schedules and special events.
+**Rationale:** Accommodates broadcast schedules, special events, and any
+soft scheduling preference without risking infeasibility.
 
 ---
 

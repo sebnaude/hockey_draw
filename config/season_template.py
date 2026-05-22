@@ -157,18 +157,15 @@ PREFERENCE_NO_PLAY = {
     # },
 }
 
-# ============== PHL Preferences ==============
-# PHL-specific scheduling preferences
-
-PHL_PREFERENCES = {
-    'preferred_dates': [],  # List of preferred dates for PHL games
-    
-    # Whether PHL and 2nd grade should play back-to-back
-    'phl_2nd_back_to_back': True,
-    
-    # Whether teams playing Gosford get a 2nd grade bye
-    'gosford_2nd_grade_bye': True,
-}
+# ============== Preferred Games (spec-020) ==============
+# Soft, weighted FORCED_GAMES analogue (same scope/team/club grammar + optional
+# `weight`). Penalty-on-deviation from `count` per `constraint` type. Replaces
+# the deleted PHL_PREFERENCES / PreferredDates. Empty = no preferences.
+# Example marquee-PHL-date entry:
+#   {'grade': 'PHL', 'date': '2027-04-18', 'constraint': 'equal', 'count': 1,
+#    'weight': 10000, 'description': 'marquee PHL date'}
+# See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
+PREFERRED_GAMES = []
 
 # ============== Season Configuration ==============
 # Main configuration dictionary that pulls everything together
@@ -207,8 +204,8 @@ SEASON_CONFIG = {
     # No-play rules
     'blocked_games': BLOCKED_GAMES,
     'preference_no_play': PREFERENCE_NO_PLAY,
-    'phl_preferences': PHL_PREFERENCES,
-    
+    'preferred_games': PREFERRED_GAMES,  # spec-020 soft FORCED analogue
+
     # Home field mappings (from config/defaults.py, override if needed)
     'home_field_map': HOME_FIELD_MAP,
 

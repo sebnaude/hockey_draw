@@ -118,7 +118,7 @@ class TestNoMetadataRunsAllChecks:
         report = tester.run_violation_check()
 
         # Should have constraint_results for all canonical constraints (22 incl. TeamPairNoConcurrency from spec-007)
-        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
+        assert len(report.constraint_results) == 24  # spec-018 removed 2 Maitland grouping checks; spec-020 added _check_preferred_games (23 -> 24)
         assert report.metadata_source == 'none'
         # Every result should be PASSED or VIOLATED (none SKIPPED)
         statuses = {r.status for r in report.constraint_results}
@@ -323,7 +323,7 @@ class TestFromCheckpointLoadsMetadata:
             tester = DrawTester.from_checkpoint(tmpdir, data)
             assert tester._constraints_applied is None  # legacy mode
             report = tester.run_violation_check()
-            assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
+            assert len(report.constraint_results) == 24  # spec-018 removed 2 Maitland grouping checks; spec-020 added _check_preferred_games (23 -> 24)
 
 
 class TestFromFileAutodetectsJson:
@@ -384,7 +384,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
+        assert len(report.constraint_results) == 24  # spec-018 removed 2 Maitland grouping checks; spec-020 added _check_preferred_games (23 -> 24)
         assert report.metadata_source == 'none'
 
     def test_legacy_draw_empty_metadata(self):
@@ -393,7 +393,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 23  # spec-018 removed the two Maitland grouping checks (_check_maitland_back_to_back + _check_maitland_away_clubs_limit)
+        assert len(report.constraint_results) == 24  # spec-018 removed 2 Maitland grouping checks; spec-020 added _check_preferred_games (23 -> 24)
 
 
 class TestSolverNameNormalization:
@@ -516,3 +516,73 @@ class TestFullReportIncludesConstraintResults:
         report = tester.run_violation_check()
         text = report.full_report()
         assert 'Skipped:' in text
+
+
+class TestPreferredGamesSoftPressure:
+    """spec-020 Unit D: tester reports PREFERRED_GAMES deviations as SOFT
+    pressure (severity 5, metric_value set), never hard violations; and
+    draw metadata records `preferred_game_outcomes`."""
+
+    def test_deviation_reported_as_soft_pressure(self):
+        # Given: a preferred entry "exactly 1 PHL game on 2026-04-12" but the
+        # draw schedules ZERO PHL games on that date.
+        # Hand oracle: equal/count=1, matched=0 -> penalty |0 - 1| = 1.
+        data = make_data(preferred_games=[
+            {'grade': 'PHL', 'date': '2026-04-12', 'constraint': 'equal',
+             'count': 1, 'description': 'pref PHL 04-12'}
+        ])
+        draw = make_draw(_minimal_games())  # no game on 2026-04-12
+        tester = DrawTester(draw, data)
+        report = tester.run_violation_check()
+
+        # Then: a PreferredGames Violation exists, severity 5 (VERY LOW),
+        # carrying metric_value == 1 (the deviation penalty).
+        pg = [v for v in report.violations if v.constraint == 'PreferredGames']
+        assert len(pg) == 1
+        assert pg[0].severity_level == 5
+        assert pg[0].metric_value == 1.0
+
+        # And: it rolls up under soft_pressure, NOT as a structural failure
+        # (highest severity stays better than critical/high).
+        breakdown = report.breakdown
+        assert 'PreferredGames' in breakdown.soft_pressure
+        assert breakdown.soft_pressure['PreferredGames']['total_penalty'] == 1.0
+
+    def test_satisfied_preference_no_violation(self):
+        # Given: prefer exactly 1 PHL game on 2026-03-22; the draw HAS exactly
+        # one (G001). Hand oracle: matched=1, penalty |1 - 1| = 0 -> no violation.
+        data = make_data(preferred_games=[
+            {'grade': 'PHL', 'date': '2026-03-22', 'constraint': 'equal', 'count': 1}
+        ])
+        draw = make_draw(_minimal_games())
+        tester = DrawTester(draw, data)
+        report = tester.run_violation_check()
+        pg = [v for v in report.violations if v.constraint == 'PreferredGames']
+        assert pg == []
+
+    def test_metadata_records_preferred_game_outcomes(self):
+        # Given: a synthetic single-game solution and a preferred entry.
+        from analytics.versioning import DrawVersionManager
+        data = make_data(preferred_games=[
+            {'grade': 'PHL', 'date': '2026-03-22', 'constraint': 'equal',
+             'count': 1, 'description': 'marquee'}
+        ])
+        # Solution: exactly one PHL game on the date (matched=1 -> penalty 0).
+        solution = {
+            ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '10:00', 1,
+             '2026-03-22', 1, 'EF', NIHC): 1,
+        }
+        draw = make_draw([make_game('G001', 'Tigers PHL', 'Wests PHL', 'PHL',
+                                    1, 1, '2026-03-22')])
+        dvm = DrawVersionManager.__new__(DrawVersionManager)  # no disk setup
+        meta = dvm._build_draw_metadata(draw, solution, data, 'simple', 'now')
+
+        # Then: metadata carries preferred_game_outcomes with the right shape.
+        outcomes = meta['preferred_game_outcomes']
+        assert len(outcomes) == 1
+        o = outcomes[0]
+        assert o['matched_count'] == 1
+        assert o['target'] == 1
+        assert o['constraint'] == 'equal'
+        assert o['penalty'] == 0
+        assert o['satisfied'] is True

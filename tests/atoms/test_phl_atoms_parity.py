@@ -120,7 +120,9 @@ class TestPHLAtomsParityWithLegacy:
         engine_b.apply_stage_1_hard()
         engine_b.apply_stage_2_soft()
         engine_b._phl_times_hard()
-        engine_b._phl_times_soft()
+        # spec-020: `_phl_times_soft` removed (PreferredDates deleted); it only
+        # added soft penalties, never hard constraints, so feasibility parity
+        # is unaffected by dropping the call.
         status_b, _ = solve_with_timeout(engine_b.model, seconds=5.0)
 
         assert status_a == status_b

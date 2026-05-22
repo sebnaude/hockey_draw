@@ -14,7 +14,6 @@ from constraints.atoms.phl_2nd_concurrency import PHLAnd2ndConcurrencyAtBroadmea
 # spec-015: GosfordFridayRoundsForced deleted — its per-round sum==1 rule is
 # expressed generically via FORCED_GAMES count entries (scope + count +
 # constraint type). See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
-from constraints.atoms.preferred_dates import PreferredDates
 from constraints.atoms.club_day_participation import ClubDayParticipation
 from constraints.atoms.club_day_intra_club_matchup import ClubDayIntraClubMatchup
 from constraints.atoms.club_day_opponent_matchup import ClubDayOpponentMatchup
@@ -42,6 +41,9 @@ from constraints.atoms.phl_2nd_adjacency import PHLAnd2ndAdjacency
 from constraints.atoms.preferred_weekends_away_ground import (
     PreferredWeekendsAwayGround,
 )
+# spec-020: generic soft analogue of the whole FORCED_GAMES grammar
+# (penalty-on-deviation). Replaces the narrow PHL-only PreferredDates.
+from constraints.atoms.preferred_games import PreferredGames
 from constraints.atoms.away_club_home_weekends_count import (
     AwayClubHomeWeekendsCount,
 )
@@ -61,7 +63,6 @@ from constraints.atoms import _adjusters  # noqa: F401
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,
     PHLAnd2ndConcurrencyAtBroadmeadow,
-    PreferredDates,
 ]
 
 
@@ -93,7 +94,6 @@ __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
     'PHLAnd2ndConcurrencyAtBroadmeadow',
-    'PreferredDates',
     'PHL_TIMES_ATOMS',
     'ClubDayParticipation',
     'ClubDayIntraClubMatchup',
@@ -112,6 +112,7 @@ __all__ = [
     'NIHC_FIELD_FILL_ORDER_ATOMS',
     'PHLAnd2ndAdjacency',
     'PreferredWeekendsAwayGround',
+    'PreferredGames',
     'AwayClubHomeWeekendsCount',
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'BalancedByeSpacing',

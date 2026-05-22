@@ -261,3 +261,74 @@ The hand-off doc `docs/ATOMIZATION_HANDOFF.md` remains the canonical pickup poin
 
 Ready for Phase 3b (ClubDayConstraint atomization)?
 ```
+
+---
+
+## Soft variant: `PREFERRED_GAMES` + the `PreferredGames` atom (spec-020)
+
+`FORCED_GAMES` is HARD — a count entry adds `model.Add(sum(vars) <op> count)` and
+makes the model infeasible if it can't be met. **`PREFERRED_GAMES` is the soft,
+weighted analogue: the SAME scope/team/club grammar, but a penalty-on-deviation
+instead of a hard constraint.** A preference that can't be met costs objective,
+never feasibility.
+
+This generalises the deleted PHL-only `PreferredDates` (which only ever did
+`|sum − 1|` on a date) and the venue/date `PreferredWeekendsAwayGround` into ONE
+mechanism covering the full FORCED grammar.
+
+### Config
+
+`PREFERRED_GAMES` lives in the season config (default `[]` in
+`config/defaults.py`). Entry grammar = FORCED_GAMES grammar **plus** an optional
+`weight`:
+
+```python
+PREFERRED_GAMES = [
+    # Softly prefer exactly one PHL game on a marquee date (the old
+    # PreferredDates behaviour, migrated):
+    {'grade': 'PHL', 'date': '2026-04-19', 'constraint': 'equal', 'count': 1,
+     'weight': 10000, 'description': 'marquee PHL date'},
+]
+```
+
+`build_season_data` exposes it as `data['preferred_games']`. Penalty weight is
+`PENALTY_WEIGHTS['preferred_games']` (default 10000).
+
+### Penalty-on-deviation table
+
+For each scope, with target `N = count`:
+
+| `constraint` | meaning | penalty term |
+|---|---|---|
+| `equal` | `== N` | `\|sum − N\|` (two-sided, `AddAbsEquality`) |
+| `lesse` | `<= N` | `max(0, sum − N)` |
+| `greatere` | `>= N` | `max(0, N − sum)` |
+| `greater` | `> N` (CP-SAT: `>= N+1`) | `max(0, (N+1) − sum)` |
+| `less` | `< N` (CP-SAT: `<= N−1`) | `max(0, sum − (N−1))` |
+
+### Differences from hard FORCED
+
+- **Never fatal.** Empty / zero-candidate scope → 0 penalty + a logged warning
+  (FORCED `sys.exit(1)`s on an empty scope). The penalty IntVar upper bound is
+  computed per type so `count` > candidate count never crashes CP-SAT.
+- **Touches no variables.** Like FORCED enforcement it eliminates nothing; it
+  runs as a post-hoc soft atom over the finished `X` dict.
+- **Not a hard-count adjuster source.** Preferred entries are soft and must NOT
+  alter any hard constraint's expected counts (FORCED entries DO feed Phase-4
+  count adjusters).
+- **Weighting.** A single shared `data['penalties']['preferred_games']` bucket
+  carries the default weight; an optional per-entry `weight` is a multiplier
+  (`max(1, entry_weight // default_weight)`) applied only to that entry's raw
+  penalty. With no per-entry `weight`, every preference has equal pull.
+
+### Implementation
+
+- Parser: `utils._build_scope_count_rules(entries, teams, label='PREFERRED_GAMES',
+  unique_per_entry=True)` (shared with FORCED; `_build_forced_game_rules` is a
+  thin back-compat wrapper returning the original 3-tuple).
+- Atom: `constraints/atoms/preferred_games.py::PreferredGames` (severity 5, soft,
+  `has_soft_component=True`, no `atom_group`), in `DEFAULT_STAGES`
+  `soft_optimisation`.
+- Tester: `_check_preferred_games` reports deviations as soft pressure.
+- Metadata: `save_solver_output` writes `preferred_game_outcomes` (matched count,
+  target, constraint type, penalty, satisfied) alongside `forced_game_outcomes`.

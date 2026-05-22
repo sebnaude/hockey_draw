@@ -113,8 +113,8 @@ This exclusion is hardcoded in `generate_X()` and saves ~20,000+ variables.
 
 ## Key Config Rules
 
-### PHL_PREFERENCES
-**Only** supports `preferred_dates` key. Other keys cause constraint errors.
+### PREFERRED_GAMES (spec-020)
+Soft, weighted analogue of `FORCED_GAMES` (same scope/team/club grammar + optional `weight`), penalty-on-deviation instead of a hard rule. Replaces the deleted `PHL_PREFERENCES` / `PreferredDates`. Marquee PHL dates are now a soft preferred entry, e.g. `{'grade':'PHL','date':X,'constraint':'equal','count':1,'weight':10000}`. See `docs/system/FORCED_GAMES_AS_COUNT_RULES.md`.
 
 ### Constraint Groups
 - **Required constraints**: Must be satisfied (feasibility)

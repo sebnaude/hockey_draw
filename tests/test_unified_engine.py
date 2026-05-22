@@ -651,7 +651,7 @@ class TestConstraintCoverage:
             '_club_alignment_soft',
             # spec-018: `_maitland_grouping_soft` / `_away_maitland_soft`
             # removed — venue-sequencing soft penalties deleted.
-            '_phl_times_soft',
+            # spec-020: `_phl_times_soft` removed — PreferredDates deleted.
             '_preferred_times',
             '_best_timeslot_choices_soft',
             '_club_game_spread_soft',
