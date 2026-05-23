@@ -409,14 +409,14 @@ FIELD_UNAVAILABILITIES = {
 | 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalance, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | ❌ Never |
 | 2 | HIGH | ClubDay, TeamConflict | ⚠️ With `--relax` |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | ⚠️ With `--relax` |
-| 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | ✅ Yes |
+| 4 | LOW | _(empty since spec-024)_ | ✅ Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | ✅ Yes |
 
 ### Constraint Slack (`--slack N`)
 
 The `--slack` flag loosens specific constraints (different from `--relax` which drops entire severity groups):
 - `EqualMatchUpSpacingConstraint`: widens spacing window
-- `ClubVsClubAlignment`, `MaximiseClubsPerTimeslotBroadmeadow`, `MinimiseClubsOnAFieldBroadmeadow`, `ClubGameSpread`: loosens limits
+- `ClubVsClubAlignment`, `ClubGameSpread`: loosens limits
 
 ### Key Constraint Details
 

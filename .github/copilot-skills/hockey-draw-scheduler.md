@@ -33,7 +33,7 @@ cd c:\Users\c3205\Documents\Code\python\draw
 .\.venv\Scripts\python.exe run.py generate --year 2025 --simple
 
 # Generate with AI constraints, simple mode, exclude problematic constraints
-.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow
+.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices
 
 # Generate with low memory usage (4 workers)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --low-memory
@@ -96,8 +96,6 @@ All 18 constraint pairs have been audited and the AI versions brought to full pa
 
 #### Three constraints are excluded from initial AI runs:
 - `EnsureBestTimeslotChoices` / `EnsureBestTimeslotChoicesAI`
-- `MinimiseClubsOnAFieldBroadmeadow` / `MinimiseClubsOnAFieldBroadmeadowAI`
-- `MaximiseClubsPerTimeslotBroadmeadow` / `MaximiseClubsPerTimeslotBroadmeadowAI`
 
 ### Data Locations
 

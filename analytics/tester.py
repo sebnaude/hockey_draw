@@ -2076,43 +2076,48 @@ class DrawTester:
         return violations
 
     def _check_club_game_spread(self) -> List[Violation]:
-        """Check ClubGameSpread (spec-021): a club's games on a day are near-contiguous.
+        """Check ClubGameSpread (spec-024): per-FIELD near-contiguity + off-primary.
 
-        holes = (max_used_slot - min_used_slot + 1) - num_distinct_used_slots
-        gap_cap = max(0, min(1, n_games - 3)) + slack
-          (<=3 games -> 0 holes allowed; >=4 games -> 1 hole allowed.)
-        Hard: holes > gap_cap is a violation. Soft: any hole within cap is a warning.
-        Double-ups are NOT checked here — that's `_check_club_no_concurrent_slot`.
+        Per (club, week, day, field):
+          holes = (max_used_slot - min_used_slot + 1) - num_distinct_used_slots
+          gap_cap = max(0, min(1, n_field - 3)) + slack
+            (<=3 games on a field -> 0 holes; >=4 -> 1 hole allowed.)
+          Hard: holes > gap_cap is a violation. Soft: any hole within cap warns.
+        Plus a soft off-primary-field observation per (club, week, day) that spans
+        more than one field (games not on the club's most-used field that day).
+        Applies at ALL venues. Double-ups are NOT checked here — see
+        `_check_club_no_concurrent_slot`.
         """
         violations = []
         config_slack = self.constraint_slack.get('ClubGameSpread', 0)
 
-        # Group games by (club, week, day) -> {day_slot: set of game_ids}.
-        # Only Broadmeadow — away venues have 1 field so contiguity is moot.
-        club_week_day_slots = defaultdict(lambda: defaultdict(set))
+        # (club, week, day, field) -> {day_slot: set of game_ids}
+        cwdf_slots = defaultdict(lambda: defaultdict(set))
+        # (club, week, day) -> {field: set of game_ids}
+        cwd_fields = defaultdict(lambda: defaultdict(set))
         for game in self.draw.games:
-            if game.field_location != 'Newcastle International Hockey Centre':
-                continue
             for team in [game.team1, game.team2]:
                 club = self._team_to_club.get(team)
-                if club:
-                    club_week_day_slots[(club, game.week, game.day)][game.day_slot].add(game.game_id)
+                if not club:
+                    continue
+                cwdf_slots[(club, game.week, game.day, game.field_name)][game.day_slot].add(game.game_id)
+                cwd_fields[(club, game.week, game.day)][game.field_name].add(game.game_id)
 
-        for (club, week, day), slot_games in club_week_day_slots.items():
+        # (1) per-field contiguity
+        for (club, week, day, field), slot_games in cwdf_slots.items():
             all_game_ids = {gid for gids in slot_games.values() for gid in gids}
-            n_games = len(all_game_ids)
-            if n_games < 2:
+            n_field = len(all_game_ids)
+            if n_field < 2:
                 continue
-
             slots = sorted(slot_games.keys())
             holes = (slots[-1] - slots[0] + 1) - len(slots)
-            gap_cap = max(0, min(1, n_games - 3)) + config_slack
+            gap_cap = max(0, min(1, n_field - 3)) + config_slack
 
             if holes > gap_cap:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
-                    message=f"Club '{club}' week {week} ({day}): {holes} hole(s) in slots {slots} "
-                            f"exceeds cap {gap_cap} ({n_games} games)",
+                    message=f"Club '{club}' week {week} ({day}) field {field}: {holes} hole(s) "
+                            f"in slots {slots} exceeds cap {gap_cap} ({n_field} games)",
                     affected_games=list(all_game_ids)[:5],
                     week=week,
                     affected_clubs=[club],
@@ -2121,10 +2126,27 @@ class DrawTester:
             elif holes > 0:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
-                    message=f"[soft] Club '{club}' week {week} ({day}): {holes} hole(s) in slots {slots} "
-                            f"({n_games} games, within cap {gap_cap})",
+                    message=f"[soft] Club '{club}' week {week} ({day}) field {field}: {holes} hole(s) "
+                            f"in slots {slots} ({n_field} games, within cap {gap_cap})",
                     affected_games=list(all_game_ids)[:5],
                     week=week
+                ))
+
+        # (2) off-primary-field soft observation per (club, week, day)
+        for (club, week, day), fields in cwd_fields.items():
+            if len(fields) < 2:
+                continue
+            counts = {f: len(g) for f, g in fields.items()}
+            off_primary = sum(counts.values()) - max(counts.values())
+            if off_primary > 0:
+                all_game_ids = {gid for g in fields.values() for gid in g}
+                violations.append(Violation.create(
+                    constraint="ClubGameSpread",
+                    message=f"[soft] Club '{club}' week {week} ({day}): {off_primary} game(s) off the "
+                            f"primary field (split across {len(fields)} fields: {counts})",
+                    affected_games=list(all_game_ids)[:5],
+                    week=week,
+                    affected_clubs=[club],
                 ))
 
         return violations

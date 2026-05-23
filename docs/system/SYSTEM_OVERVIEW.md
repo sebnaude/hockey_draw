@@ -144,8 +144,6 @@ Each variable is a boolean: 1 = game scheduled at this slot, 0 = not scheduled.
 ├────────────────────────────────────────────────────────────────┤
 │ Stage 2: stage2_soft (Soft preferences) - 4 constraints        │
 │   • EnsureBestTimeslotChoices                                  │
-│   • MaximiseClubsPerTimeslotBroadmeadow                        │
-│   • MinimiseClubsOnAFieldBroadmeadow                           │
 │   • PreferredTimesConstraint                                   │
 │                         ↓ final solution                       │
 └────────────────────────────────────────────────────────────────┘

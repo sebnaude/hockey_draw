@@ -335,31 +335,28 @@ per weekend.
 
 ---
 
-### Rule 16: Maximize Clubs Per Timeslot
-**Constraint:** `MaximiseClubsPerTimeslotBroadmeadow`
+### Rules 16–17: Club field concentration (spec-024)
+**Constraint:** `ClubGameSpread` (per-field)
 
-**Description:** Encourages diversity of clubs within each timeslot at Broadmeadow.
+The old venue-side rules `MaximiseClubsPerTimeslotBroadmeadow` (diversity of clubs
+per timeslot) and `MinimiseClubsOnAFieldBroadmeadow` (cap clubs sharing a field)
+have been **removed**. The convenor's intent is now expressed club-side by the
+field-aware `ClubGameSpread`:
 
-**Penalty:** `total_teams_playing - num_clubs` per timeslot
+- **Per field, a club's games are contiguous.** With ≤3 games on a field they must
+  form a gap-free block; with ≥4, at most one hole is allowed (a soft penalty drives
+  it to zero). Applies at all venues.
+- **Splitting a club's day across fields is penalised.** A soft "off-primary-field"
+  penalty counts every game a club plays away from its most-used field that day
+  (`total − max_field_count`), so the solver keeps a club's games together on one
+  field where it can.
 
-**Weight:** 5,000
+**Weight:** the shared `ClubGameSpread` penalty weight (per-field holes + off-primary
+games).
 
-**Rationale:** Ensures fair exposure and prevents monopolization of slots.
-
----
-
-### Rule 17: Minimize Clubs Per Field Per Day
-**Constraint:** `MinimiseClubsOnAFieldBroadmeadow`
-
-**Description:**
-- Encourages continuity—clubs should play multiple games on the same field
-- **Hard limit:** Maximum 5 clubs on any field on any day
-
-**Penalty:** `|num_clubs - 2|` per (week, date, field)
-
-**Weight:** 5,000
-
-**Rationale:** Reduces setup/transition time and improves club experience.
+**Rationale:** keeps a club's games clustered on one field — less travel/transition
+for families following multiple grades — expressed from the club's point of view
+rather than the venue's.
 
 ---
 

@@ -72,7 +72,7 @@ atoms into:
   with the inverse skip mask. `applied_engine_keys` is threaded across
   stages so a cluster's hard atoms never get re-added.
 - **non-engine atoms** — atoms whose canonical names don't map to an
-  engine method (e.g. `MaximiseClubsPerTimeslotBroadmeadow`). The
+  engine method (e.g. `PreferredTimes`). The
   dispatcher resolves the legacy solver class via `solver_class_names` in
   the registry and instantiates it directly.
 

@@ -1016,47 +1016,47 @@ class UnifiedConstraintEngine:
         return n
 
     def _club_game_spread_hard(self):
-        """Hard: a club's games on a day form a near-contiguous block.
+        """Hard: a club's games on a day form a near-contiguous block PER FIELD.
 
+        spec-024: re-scoped from (club, week, day) to (club, week, day, field).
         spec-021 (resolved decision A): the allowed hole count is games-derived,
-        ``gap_cap = max(0, min(1, n_games - 3))`` (+ ``--slack ClubGameSpread``).
-        A club with <=3 games that day must have NO interior holes; with >=4
-        games at most ONE (a soft penalty drives it to zero). Encoded with
-        ``slot_used`` indicators (shared ``_contiguity`` primitive) + per-position
-        "used-before/after" channels + a per-slot hole indicator — dropping all
-        the old range/min/max/spread/overlap IntVars. The lower no-double-up
-        bound moved to the ``ClubNoConcurrentSlot`` atom.
+        ``gap_cap = max(0, min(1, n_field - 3))`` (+ ``--slack ClubGameSpread``),
+        where ``n_field`` is the club's games ON THAT FIELD that day. A club with
+        <=3 games on a field must have NO interior holes on that field; with >=4
+        at most ONE (a soft penalty drives it to zero). Encoded with ``slot_used``
+        indicators (shared ``_contiguity`` primitive) + per-position
+        "used-before/after" channels + a per-slot hole indicator. The off-primary
+        (multi-field) soft penalty lives in ``_club_game_spread_soft``. The lower
+        no-double-up bound moved to the ``ClubNoConcurrentSlot`` atom.
         """
         from constraints.atoms._contiguity import slot_used_indicators
         n = 0
         config_slack = self.slack.get('ClubGameSpread', 0)
 
-        # Regroup by (club, week, day)
-        club_week_day_groups = defaultdict(dict)
-        for (club, week, day, day_slot), vars_list in self.by_club_week_day_slot.items():
-            club_week_day_groups[(club, week, day)][day_slot] = vars_list
-
+        # spec-024: per (club, week, day, field). by_club_week_day_field_slot is
+        # already keyed that way -> {day_slot: [vars]} per field group.
         self._cgs_keys = []
         self._cgs_hole_vars = {}
 
-        for (club, week, day), slots_dict in club_week_day_groups.items():
+        for (club, week, day, field), slots_dict in self.by_club_week_day_field_slot.items():
             sorted_slots = sorted(slots_dict.keys())
             if len(sorted_slots) < 2:
                 continue
 
             slot_inds = slot_used_indicators(
-                self.registry, slots_dict, 'club_spread_slot_used', club, week, day)
+                self.registry, slots_dict, 'club_spread_slot_used',
+                club, week, day, field)
 
             # Channel "a used slot exists before / after each position".
             m = len(sorted_slots)
             pref = [slot_inds[sorted_slots[0]]] + [None] * (m - 1)
             for i in range(1, m):
-                p = self.model.NewBoolVar(f'u_cgs_pref_{club}_w{week}_{day}_{i}')
+                p = self.model.NewBoolVar(f'u_cgs_pref_{club}_w{week}_{day}_{field}_{i}')
                 self.model.AddMaxEquality(p, [pref[i - 1], slot_inds[sorted_slots[i]]])
                 pref[i] = p
             suf = [None] * (m - 1) + [slot_inds[sorted_slots[m - 1]]]
             for i in range(m - 2, -1, -1):
-                s = self.model.NewBoolVar(f'u_cgs_suf_{club}_w{week}_{day}_{i}')
+                s = self.model.NewBoolVar(f'u_cgs_suf_{club}_w{week}_{day}_{field}_{i}')
                 self.model.AddMaxEquality(s, [suf[i + 1], slot_inds[sorted_slots[i]]])
                 suf[i] = s
 
@@ -1066,16 +1066,17 @@ class UnifiedConstraintEngine:
                 used_before, used_after = pref[i - 1], suf[i + 1]
                 cur = slot_inds[sorted_slots[i]]
                 h = self.model.NewBoolVar(
-                    f'u_cgs_hole_{club}_w{week}_{day}_s{sorted_slots[i]}')
+                    f'u_cgs_hole_{club}_w{week}_{day}_{field}_s{sorted_slots[i]}')
                 self.model.AddBoolAnd(
                     [used_before, used_after, cur.Not()]).OnlyEnforceIf(h)
                 self.model.AddBoolOr(
                     [used_before.Not(), used_after.Not(), cur]).OnlyEnforceIf(h.Not())
                 hole_vars.append(h)
 
-            # gap_cap = max(0, min(1, n_games - 3)) = (n_games >= 4 ? 1 : 0), + slack.
+            # gap_cap = max(0, min(1, n_field - 3)) = (n_field >= 4 ? 1 : 0), + slack,
+            # where n_field = the club's games ON THIS FIELD that day.
             all_vars_flat = [v for s in sorted_slots for v in slots_dict[s]]
-            ge4 = self.model.NewBoolVar(f'u_cgs_ge4_{club}_w{week}_{day}')
+            ge4 = self.model.NewBoolVar(f'u_cgs_ge4_{club}_w{week}_{day}_{field}')
             self.model.Add(sum(all_vars_flat) >= 4).OnlyEnforceIf(ge4)
             self.model.Add(sum(all_vars_flat) <= 3).OnlyEnforceIf(ge4.Not())
 
@@ -1084,24 +1085,59 @@ class UnifiedConstraintEngine:
                 self.model.Add(sum(hole_vars) <= 1 + config_slack).OnlyEnforceIf(ge4)
                 n += 1
 
-            self._cgs_hole_vars[(club, week, day)] = hole_vars
-            self._cgs_keys.append((club, week, day))
+            self._cgs_hole_vars[(club, week, day, field)] = hole_vars
+            self._cgs_keys.append((club, week, day, field))
         return n
 
     def _club_game_spread_soft(self):
-        """Soft: penalise every residual interior hole in a club's day block.
+        """Soft: per-field residual holes + the off-primary-field game count.
 
-        Drives the solver toward zero holes even when the hard cap permits one
-        (spec-021). Each hole indicator contributes one unit of penalty.
+        Two ClubGameSpread soft pressures share one penalty bucket (spec-024):
+        1. Every residual interior hole on a field (drives the per-field hard cap
+           toward zero holes even when it permits one — spec-021).
+        2. ``off_primary`` per (club, week, day): the number of the club's games
+           NOT on its most-used field that day = ``total_games - max_field_count``.
+           Zero iff all the club's games that day sit on a single field. This
+           discourages splitting a club's day across multiple fields.
         """
         n = 0
         weight = self._get_penalty_weight('ClubGameSpread', 5000)
         self.data['penalties']['ClubGameSpread'] = {'weight': weight, 'penalties': []}
+
+        # (1) per-field hole indicators (keys are 4-tuples after spec-024).
         hole_map = getattr(self, '_cgs_hole_vars', {})
         for key in self._cgs_keys:
             for h in hole_map.get(key, []):
                 self.data['penalties']['ClubGameSpread']['penalties'].append(h)
                 n += 1
+
+        # (2) off-primary-field penalty per (club, week, day).
+        # Aggregate all of a club's day vars by field from the per-field grouping.
+        club_day_fields = defaultdict(dict)  # (club,week,day) -> {field: [vars]}
+        for (club, week, day, field), slots_dict in self.by_club_week_day_field_slot.items():
+            flat = [v for vs in slots_dict.values() for v in vs]
+            if flat:
+                club_day_fields[(club, week, day)][field] = flat
+
+        for (club, week, day), fields in club_day_fields.items():
+            if len(fields) < 2:
+                continue  # single field -> off_primary is structurally 0.
+            all_vars = [v for fl in fields.values() for v in fl]
+            total = len(all_vars)  # upper bound on games that day
+            field_counts = []
+            for field, fl in fields.items():
+                c = self.model.NewIntVar(0, len(fl),
+                                         f'u_cgs_fcount_{club}_w{week}_{day}_{field}')
+                self.model.Add(c == sum(fl))
+                field_counts.append(c)
+            max_count = self.model.NewIntVar(0, total,
+                                             f'u_cgs_fmax_{club}_w{week}_{day}')
+            self.model.AddMaxEquality(max_count, field_counts)
+            off_primary = self.model.NewIntVar(0, total,
+                                               f'u_cgs_offprimary_{club}_w{week}_{day}')
+            self.model.Add(off_primary == sum(all_vars) - max_count)
+            self.data['penalties']['ClubGameSpread']['penalties'].append(off_primary)
+            n += 1
         return n
 
     # ================================================================

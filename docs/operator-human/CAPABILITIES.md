@@ -60,7 +60,6 @@ A precise list of every capability implemented in the Hockey Draw Scheduling Sys
 | `MaitlandBackToBack` | Minimize consecutive Maitland home weekends |
 | `MaitlandHomeAwayBalance` | Balance home/away per week at Maitland |
 | `MaitlandAwayClubsLimit` | Max 3 away clubs at Maitland per week |
-| `MaximiseClubsPerTimeslotBroadmeadow` | Diversity of clubs in each timeslot |
 | `ClubDays` | Preference for club-specific days |
 | `HomeGrouping` | Group home games together |
 | `PHLSecondGradeSameVenue` | PHL and 2nd at same venue when possible |

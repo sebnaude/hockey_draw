@@ -313,7 +313,7 @@ python run.py generate --year 2025 --stages stage1_required
 python run.py generate --year 2025 --ai
 
 # Generate with AI constraints in simple mode, excluding problematic constraints
-python run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices MinimiseClubsOnAFieldBroadmeadow MaximiseClubsPerTimeslotBroadmeadow --workers 14
+python run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices --workers 14
 
 # Resume from a checkpoint
 python run.py generate --year 2025 --resume run_1 stage1_required

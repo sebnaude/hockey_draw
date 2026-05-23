@@ -210,31 +210,15 @@ been **removed**. There is no longer any cap on away-club variety per weekend.
 
 ---
 
-### Rule 16: Maximize Clubs Per Timeslot
-**Constraint:** `MaximiseClubsPerTimeslotBroadmeadow`
+### Rules 16–17: Club field concentration (spec-024)
+**Constraint:** `ClubGameSpread` (per-field)
 
-**Description:** Encourages diversity of clubs within each timeslot at Broadmeadow.
-
-**Penalty:** `total_teams_playing - num_clubs` per timeslot
-
-**Weight:** 5,000
-
-**Rationale:** Ensures fair exposure and prevents monopolization of slots.
-
----
-
-### Rule 17: Minimize Clubs Per Field Per Day
-**Constraint:** `MinimiseClubsOnAFieldBroadmeadow`
-
-**Description:**
-- Encourages continuity—clubs should play multiple games on the same field
-- **Hard limit:** Maximum 5 clubs on any field on any day
-
-**Penalty:** `|num_clubs - 2|` per (week, date, field)
-
-**Weight:** 5,000
-
-**Rationale:** Reduces setup/transition time and improves club experience.
+`MaximiseClubsPerTimeslotBroadmeadow` and `MinimiseClubsOnAFieldBroadmeadow` have
+been **removed**. Their intent is now club-side via the field-aware `ClubGameSpread`:
+per field, a club's games must be contiguous (≤3 games → gap-free; ≥4 → at most one
+hole, soft-driven to zero), and a soft off-primary-field penalty discourages
+splitting a club's day across fields (`total − max_field_count`). Applies at all
+venues. Weight: the shared `ClubGameSpread` penalty.
 
 ---
 
@@ -331,10 +315,12 @@ there is no longer any weekend *sequencing* dimension.)
 - Limit away team variety per weekend
 
 ### Interaction 3: Field Optimization
-`EnsureBestTimeslotChoices`, `MinimiseClubsOnAFieldBroadmeadow`, and `MaximiseClubsPerTimeslotBroadmeadow` balance:
-- Contiguous timeslot usage
-- Club continuity on fields
-- Diversity within timeslots
+`VenueEarliestSlotFill` (earliest-slot packing) and the field-aware `ClubGameSpread`
+(per-field contiguity + off-primary-field penalty, spec-024) balance:
+- Contiguous timeslot usage (per venue and per club-field)
+- Club continuity on a single field
+(`MinimiseClubsOnAFieldBroadmeadow` / `MaximiseClubsPerTimeslotBroadmeadow` were
+removed in spec-024.)
 
 ### Interaction 4: Club Day Integration
 `ClubDayConstraint` interacts with most other constraints, requiring:
@@ -387,9 +373,9 @@ These constraints optimize for venue efficiency and even distribution.
 | Order | Constraint | Purpose |
 |-------|-----------|---------|
 | ~~11~~ | ~~`AwayAtMaitlandGrouping`~~ | **REMOVED (spec-018)** — no longer enforced |
-| 12 | `MinimiseClubsOnAFieldBroadmeadow` | Reduce club switching on Broadmeadow fields |
-| 13 | `EnsureBestTimeslotChoices` | Teams get their best available timeslots |
-| 14 | `MaximiseClubsPerTimeslotBroadmeadow` | Maximize club diversity per timeslot |
+| ~~12~~ | ~~`MinimiseClubsOnAFieldBroadmeadow`~~ | **REMOVED (spec-024)** — replaced by per-field `ClubGameSpread` |
+| 13 | `VenueEarliestSlotFill` | Games pack into the earliest venue timeslots (spec-021) |
+| ~~14~~ | ~~`MaximiseClubsPerTimeslotBroadmeadow`~~ | **REMOVED (spec-024)** — replaced by per-field `ClubGameSpread` |
 | 15 | `ClubVsClubAlignment` | Align rivalry/paired club matchups |
 
 **Checkpoint:** `checkpoints/stage_3_optimization.bin`

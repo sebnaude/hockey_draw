@@ -581,7 +581,7 @@ HELPER_VAR_CATALOG: Set[str] = {
     # Anchored venue fill vs floating club spread use distinct kinds so their
     # slot_used indicators never collide.
     'venue_slot_used',        # (week, date, location, day_slot) — VenueEarliestSlotFill
-    'club_spread_slot_used',  # (club, week, day, day_slot) — ClubGameSpread contiguity
+    'club_spread_slot_used',  # spec-024: (club, week, day, field, day_slot) — per-field ClubGameSpread contiguity
 }
 
 

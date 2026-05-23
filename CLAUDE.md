@@ -227,7 +227,7 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 | 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAnd2ndAdjacency, PHLAndSecondGradeTimes | Never |
 | 2 | HIGH | ClubDay, TeamConflict | With --relax |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | With --relax |
-| 4 | LOW | MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow | Yes |
+| 4 | LOW | _(empty since spec-024 deleted Maximise/MinimiseClubsBroadmeadow)_ | Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | Yes |
 
 ### Constraint Slack (`--slack N`)
@@ -235,8 +235,6 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 The `--slack` CLI flag loosens specific constraints. Applied to:
 - `EqualMatchUpSpacingConstraint`: reduces min_gap toward floor. Formula: `min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - slack)`. Config: `spacing_base_slack` in `CONSTRAINT_DEFAULTS` (default 0)
 - `ClubVsClubAlignment`: loosens alignment requirement
-- `MaximiseClubsPerTimeslotBroadmeadow`: reduces minimum
-- `MinimiseClubsOnAFieldBroadmeadow`: increases maximum
 - `ClubGameSpread`: increases spread limit (upper) AND allows more double-ups (lower). Formula: `gap >= -(max_overlap + slack)` and `gap <= max_gap + slack`
 
 Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `DrawTester`.
@@ -342,8 +340,6 @@ data = load_season_data(2026)
 data['constraint_slack'] = {
     'EqualMatchUpSpacingConstraint': 3,
     'ClubVsClubAlignment': 3,
-    'MaximiseClubsPerTimeslotBroadmeadow': 3,
-    'MinimiseClubsOnAFieldBroadmeadow': 3,
     'ClubGameSpread': 3,
 }
 

@@ -52,7 +52,7 @@ Current catalog (extend as Phase 3 atoms need new kinds):
 | Kind | Key shape | Built by | Used by (planned atoms) |
 |---|---|---|---|
 | `is_slot_used` | `(week, day, location, day_slot)` | sums vars at that slot, ≥1 ⇒ 1 | `EnsureBestTimeslotChoices`, `ClubGameSpread` |
-| `is_field_used` | `(week, day, location, field, day_slot)` | sums vars at that field+slot, ≥1 ⇒ 1 | `EnsureBestTimeslotChoices`, `MinimiseClubsOnAFieldBroadmeadow` |
+| `is_field_used` | `(week, day, location, field, day_slot)` | sums vars at that field+slot, ≥1 ⇒ 1 | `EnsureBestTimeslotChoices` |
 | `weekend_used` | `(week, location)` | sums all venue vars in week | `EnsureBestTimeslotChoices` |
 | `team_plays_in_week` | `(team, week)` | sum of team's vars in that week | `NoDoubleBookingTeams`, adjacency atoms |
 | `pair_plays_in_week` | `(team1, team2, week, grade)` | OR over all timeslot vars | `EqualMatchUpSpacing`, `ClubVsClubAlignment` |
@@ -64,7 +64,7 @@ Current catalog (extend as Phase 3 atoms need new kinds):
 | `club_day_field_used` | `(club, field_name)` | indicator: any club_day game on field_name | `ClubDaySameField` |
 | `club_day_slot_used` | `(club, day_slot)` | indicator: any club_day game at day_slot | `ClubDayContiguousSlots` |
 | `venue_slot_used` | `(week, date, location, day_slot)` | OR across a venue's fields at that slot | `VenueEarliestSlotFill` (spec-021) |
-| `club_spread_slot_used` | `(club, week, day, day_slot)` | OR over a club's games at that slot | `ClubGameSpread` contiguity (spec-021) |
+| `club_spread_slot_used` | `(club, week, day, field, day_slot)` | OR over a club's games at that field+slot | `ClubGameSpread` per-field contiguity (spec-024) |
 | `phl_2nd_btb_pair` | `(clubs, round_no, field, slot1, slot2)` | back-to-back same-field indicator | `PHLAnd2ndBackToBackSameField` |
 
 ## Shared contiguity primitive (spec-021)
