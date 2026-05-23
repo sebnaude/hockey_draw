@@ -1,7 +1,10 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- owner: session=opus-c9436a1-20260523T091537Z claimed=2026-05-23T09:15:37Z -->
+<!-- completed: 2026-05-24 — all 4 units (A registry/resolver, B soft_only-delete/apply_constraint_set, C CLI --groups + simple/staged wiring, D metadata/severity read-through/docs) merged to final-form @083bf5a. Each unit passed /adversarial Mode B; Unit C & D review findings fixed (metadata accuracy, honest oracles, doc counts). Merged origin/final-form (spec-025/026/028) — additive conflicts in run.py/main_staged.py (kept both --groups and --regen-from) and CONSTRAINT_INVENTORY.md count (reconciled to 38). DoD-8 staged parity: hard=12908 both ways (zero delta). validate_solver_stages(DEFAULT_STAGES)==[]. -->
+<!-- reviewed-impl: /adversarial Mode B per unit, 2026-05-23/24 -->
+<!-- unblocks: spec-027 (its last dependency — spec-023 groups machinery — is now landed) -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — corrected stale spec-021 dependency claim) — fixes applied inline -->
 <!-- depends_on: spec-021 (done — `_best_timeslot_choices_hard/_soft` removed, `EnsureBestTimeslotChoices` engine-key removed, `ClubGameSpread` moved to `club_day` hard stage, `VenueEarliestSlotFill` + `ClubNoConcurrentSlot` atoms registered) and spec-024 (done — `ClubGameSpread` re-scoped to per-field). Both are fully landed; `validate_solver_stages(DEFAULT_STAGES)==[]`. Deleting `soft_only` is behaviour-neutral: `ClubGameSpread` is already in `club_day` (non-`soft_only`), so its hard part already runs; the `soft_optimisation` stage no longer carries any hard-bearing constraint. Shared files `constraints/registry.py`, `constraints/stages.py`, `config/defaults.py`, `run.py`, `main_staged.py` — rebase + re-run validate before merge. -->
 <!-- tier: complex -->
