@@ -1,4 +1,5 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- completed: 2026-05-23 — Units A+B merged to final-form (c077c28); 44 tests (notes 26 + export 18) green, baseline 94 + spec-025 11 green; post-merge publish path verified all 5 categories render in col N. -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
