@@ -1,4 +1,4 @@
-<!-- status: in_progress -->
+<!-- status: done -->
 <!-- owner: session=goal-final-form claimed=2026-05-23 -->
 <!-- tier: complex -->
 <!-- Open decisions A/B/C resolved by convenor 2026-05-23 — see "Resolved decisions" section. -->
