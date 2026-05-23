@@ -72,13 +72,24 @@ When you need to add or change a constraint:
 2. **Write the atom** in `constraints/atoms/<descriptive_name>.py`. Subclass `Constraint` (from `constraints.atoms.base`). One `apply(model, X, data)` method. Skip dummy keys (`len(key) < 11`) and locked weeks (`key[6] <= data.get('current_week', 0)`).
 3. **Register shared helpers** via the `registry` arg passed to `atom.apply()` — use `get_or_create_bool`, `get_or_create_presence`, or `register`, not by creating BoolVars/IntVars directly. See `docs/system/HELPER_VARS.md`.
 4. **Register** in `constraints/registry.py` with: canonical name, severity, slack key (if applicable), helper-var catalog entries it consumes.
-5. **Wire into a stage** in `config/defaults.py::DEFAULT_STAGES` (or whatever stage is appropriate). Use the canonical name.
+5. **Tag into groups** (spec-023): set the new entry's `ConstraintInfo.groups` frozenset in `constraints/registry.py` (e.g. `{'core', 'critical_feasibility'}`). Selection is by group, not by an exclusive stage/partition — a solve applies the deduped union of the selected `--groups`. (The legacy stage names are still valid group names.) Use the canonical name.
 6. **Test in isolation** in `tests/atoms/test_<name>.py` against a tiny CP-SAT fixture. Add a parity test if there's a legacy implementation to match.
 7. **Update docs**: `CONSTRAINT_INVENTORY.md` (the SSoT table), `STAGES.md` if you added a stage, and this file if the goal shifts.
 
 **Atomizing a remaining monolith** (anything in `constraints/archived/` that the registry still aliases to a single legacy class) follows the same pattern as Phases 3a/3b/3c: read the original code, list the independent behaviours, write one atom each, add a parity test against the original, wire into stages, then mark the legacy entry as "atomized" in `CONSTRAINT_INVENTORY.md`.
 
 **Never re-monolithize.** If two atoms have shared logic, extract a helper (see `constraints/atoms/_club_day_shared.py` for the pattern), don't merge the atoms. The merge always feels right in the moment and is always regretted three months later.
+
+### Worked example: groups replace the stage partition (spec-023)
+
+The old model partitioned atoms into exactly one stage each (`critical_feasibility`, `home_away_balance`, …) and the solver walked that partition. spec-023 replaced the partition with **named, overlapping constraint groups** carried on `ConstraintInfo.groups`. The mechanics:
+
+- **A constraint is applied whole.** Its hard part sets the cap and its soft part improves within the cap; the two always run together. There is no `soft_only` lever any more — if you genuinely need to apply one idea of a constraint without another, **split it into two atoms** and tag them into different groups. Never give an atom a hard/soft phase switch.
+- **Groups overlap; selection is a deduped union.** A constraint may be tagged `{'core', 'critical_feasibility'}`; `--groups core critical_feasibility` applies it exactly once. No `--groups` flag selects the `default` group (every production constraint), identical to the legacy full build.
+- **Concretely:** `ClubVsClubStackedWeekends` carries `{'club_alignment', 'core'}`. Running `--groups core` applies it (plus everything else in `core`); `--groups club_alignment` also applies it; running both applies it once. To select *only* its co-location half you would not toggle a phase — you rely on the already-split sibling atom `ClubVsClubStackedCoLocation` being its own registry entry with its own tags.
+- `--slack` is orthogonal: it loosens *within* a constraint and is unaffected by group selection.
+
+See `docs/system/STAGES.md` for the full group/dispatch reference and `docs/system/CONSTRAINT_INVENTORY.md` for the per-constraint groups (the SSoT is `ConstraintInfo.groups`).
 
 ---
 
@@ -142,7 +153,7 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-020 | `PreferredGames`: soft, weighted analogue of the whole FORCED_GAMES grammar (penalty-on-deviation); delete `PreferredDates` | `done/spec-020-soft-forced-games.md` | done |
 | spec-021 | Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop heavy IntVar encodings; fix the soft_only-trap so hard parts actually run; drop WF/7pm | `done/spec-021-contiguity-primitive.md` | done |
 | spec-022 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `done/spec-022-unify-helper-var-pathway.md` | done |
-| spec-023 | Constraint groups: composable, deduped, flag-selected (`--groups`); a constraint is applied whole (hard+soft together); delete the `soft_only` hard/soft machinery (supersedes the rejected atom-hard-soft-phases design) | `spec-023-constraint-groups.md` | ready |
+| spec-023 | Constraint groups: composable, deduped, flag-selected (`--groups`); a constraint is applied whole (hard+soft together); delete the `soft_only` hard/soft machinery (supersedes the rejected atom-hard-soft-phases design) | `spec-023-constraint-groups.md` | building |
 | spec-024 | Delete `MaximiseClubsPerTimeslotBroadmeadow` + `MinimiseClubsOnAFieldBroadmeadow`; re-scope `ClubGameSpread` to per-field contiguity (≤3 games/field contiguous, ≥4 ≤1 hole) + a multi-field (off-primary) soft penalty, all venues | `done/spec-024-field-spread-replaces-club-balance.md` | done |
 | spec-025 | `LOCKED_PAIRINGS`: dedicated sister config to FORCED_GAMES that pins a pairing to its date/weekend but frees time/slot/field; substrate for regen | `spec-025-locked-pairings-config.md` | ready |
 | spec-026 | Unified regeneration mode (`--regen-from`/`--regen-grades`/`--regen-weeks`): freeze everything outside a grade/week scope (hard-lock played weeks + auto-extract date pins), re-solve the scope | `spec-026-regeneration-mode.md` | ready |
