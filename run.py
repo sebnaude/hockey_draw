@@ -125,6 +125,27 @@ Examples:
                             help='Skip a SOLVER_STAGES entry. May be passed multiple times.')
     gen_parser.add_argument('--list-stages', action='store_true',
                             help='Print the configured SOLVER_STAGES and exit.')
+    gen_parser.add_argument('--regen-from', type=str, metavar='SOURCE',
+                            help='Source draw JSON to freeze from (e.g. draws/2026/current.json). '
+                                 'Presence of this flag enables regeneration mode: games outside '
+                                 'the regen scope (--regen-grades / --regen-weeks) are pinned to '
+                                 'their existing dates via LOCKED_PAIRINGS, while games inside the '
+                                 'scope are solved fresh. Played weeks supplied via --lock-weeks '
+                                 'are hard-locked (exact game key) and are never pinned — '
+                                 '--lock-weeks and --regen-weeks must not overlap.')
+    gen_parser.add_argument('--regen-grades', nargs='+', metavar='GRADE',
+                            help='Grades to REGENERATE (re-solve freely). Games in grades NOT '
+                                 'listed here are frozen (pinned to their date). Omit to leave '
+                                 'all grades free along the grade axis. Union semantics: a game '
+                                 'is FREE if its grade is in --regen-grades OR its week is in '
+                                 '--regen-weeks (either axis frees it).')
+    gen_parser.add_argument('--regen-weeks', type=str, metavar='SPEC',
+                            help='Weeks to REGENERATE (re-solve freely), as a range or list '
+                                 '(e.g. "10-22", "10,12,14", "10-12,15"). Future weeks NOT '
+                                 'listed here are frozen (pinned to their date). Omit to leave '
+                                 'all weeks free along the week axis. Union semantics: a game '
+                                 'is FREE if its grade is in --regen-grades OR its week is in '
+                                 '--regen-weeks. Must not overlap with --lock-weeks (FATAL).')
 
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -295,6 +316,130 @@ def _load_locked_keys(path: str, locked_weeks: set) -> list:
     print(f"ERROR: Unknown locked file format: {path}")
     print(f"  Expected: .json (draw), .pkl (pickle), or directory (checkpoint)")
     sys.exit(1)
+
+
+def _parse_week_spec(spec: str) -> set:
+    """Parse a week specification string into a set of ints.
+
+    Supports:
+    - Comma-separated values:  "10,12,14"  → {10, 12, 14}
+    - Closed ranges:           "10-22"     → {10, 11, ..., 22}
+    - Combinations:            "10-12,15"  → {10, 11, 12, 15}
+
+    Whitespace around tokens is stripped.  An empty string returns the
+    empty set.
+
+    Raises:
+        ValueError: If a token cannot be parsed as an int or a valid A-B
+            range, or if A > B in a range.
+    """
+    if not spec or not spec.strip():
+        return set()
+
+    result: set = set()
+    for token in spec.split(','):
+        token = token.strip()
+        if not token:
+            continue
+        if '-' in token:
+            # Could be a range like "10-22"
+            parts = token.split('-', 1)
+            try:
+                a, b = int(parts[0].strip()), int(parts[1].strip())
+            except ValueError:
+                raise ValueError(
+                    f"Invalid week range token {token!r}: expected A-B with integers"
+                )
+            if a > b:
+                raise ValueError(
+                    f"Invalid week range {token!r}: start {a} > end {b}"
+                )
+            result.update(range(a, b + 1))
+        else:
+            try:
+                result.add(int(token))
+            except ValueError:
+                raise ValueError(
+                    f"Invalid week token {token!r}: expected an integer"
+                )
+    return result
+
+
+def resolve_regen_scope(games, regen_grades, regen_weeks, lock_weeks=None):
+    """Partition games into (free_ids, frozen_ids) using the union free-scope rule.
+
+    The rule (the one non-obvious thing — document it here):
+        A game is FREE iff its grade ∈ regen_grades OR its week ∈ regen_weeks.
+        Everything else is frozen (to be pinned via LOCKED_PAIRINGS).
+
+    Rationale: regenerating a grade means ALL weeks of that grade move;
+    regenerating weeks 10-22 means ALL grades in those weeks move; doing
+    both frees the union.  This matches the convenor's use cases:
+      - Roster change → --regen-grades 5th 6th (all weeks of those grades)
+      - Re-time future weeks → --regen-weeks 10-22 (all grades in those weeks)
+      - Both together frees the union.
+
+    Args:
+        games: Iterable of StoredGame (or any object with .game_id, .grade,
+            .week attributes).
+        regen_grades: Set/iterable of grade strings to REGENERATE (free).
+            Empty → no game freed along the grade axis.
+        regen_weeks: Set/iterable of week ints to REGENERATE (free).
+            None or empty → no game freed along the week axis.
+        lock_weeks: Set/iterable of hard-locked played weeks (from
+            --lock-weeks).  These are excluded from both free and frozen sets
+            because they are handled by the hard-lock path, not by pinning.
+            Defaults to None (empty).
+
+    Returns:
+        (free_ids, frozen_ids): Two sets of game_id strings.
+        - free_ids:   games inside the regen scope (solver re-decides them).
+        - frozen_ids: games outside the regen scope (to be pinned).
+        Note: games in hard-locked played weeks appear in NEITHER set.
+    """
+    regen_grades_set = set(regen_grades) if regen_grades else set()
+    regen_weeks_set = set(regen_weeks) if regen_weeks else set()
+    lock_weeks_set = set(lock_weeks) if lock_weeks else set()
+
+    free_ids: set = set()
+    frozen_ids: set = set()
+
+    for game in games:
+        # Hard-locked played weeks are handled by the locked-keys path, not pinning.
+        if game.week in lock_weeks_set:
+            continue
+        # Union rule: free if grade ∈ regen_grades OR week ∈ regen_weeks.
+        if game.grade in regen_grades_set or game.week in regen_weeks_set:
+            free_ids.add(game.game_id)
+        else:
+            frozen_ids.add(game.game_id)
+
+    return free_ids, frozen_ids
+
+
+def _validate_regen_lock_weeks_overlap(regen_weeks: set, lock_weeks: set) -> None:
+    """Validate that --regen-weeks and --lock-weeks do not overlap.
+
+    A week cannot be both hard-locked (already played, pinned exactly) and
+    re-solved (free) at the same time.  If they overlap, exit non-zero with a
+    clear error message naming the overlapping weeks.
+
+    Args:
+        regen_weeks: Parsed set of ints from --regen-weeks.
+        lock_weeks: Parsed set of ints from --lock-weeks.
+
+    Raises:
+        SystemExit(1): if the two sets intersect.
+    """
+    overlap = regen_weeks & lock_weeks
+    if overlap:
+        weeks_str = ', '.join(str(w) for w in sorted(overlap))
+        print(
+            f"ERROR: --regen-weeks and --lock-weeks overlap on week(s): {weeks_str}. "
+            f"A week cannot be both hard-locked (played) and re-solved (free). "
+            f"Remove the overlapping week(s) from one of the flags."
+        )
+        sys.exit(1)
 
 
 def _resolve_solver_stages(args, season_config):
