@@ -220,6 +220,30 @@ This system does NOT schedule finals. The `end_date` is always the last regular 
 
 ## Constraint System
 
+### Constraint Groups (spec-023 — selection model)
+
+A solve no longer walks a strict stage *partition*. Constraints carry
+`ConstraintInfo.groups: frozenset[str]` in `constraints/registry.py` (the single
+source of truth for selection), and a run applies the **deduped union of the
+selected groups** in one canonical (registry-insertion) order. Key points:
+
+- A constraint is applied as a **whole** — its hard part and soft part always run
+  together. There is no longer any per-stage `soft_only` toggle (`soft_only` is
+  **gone**). If you genuinely need one idea of a constraint without another, split
+  it into two atoms; never give an atom a hard/soft phase switch.
+- `--groups NAME...` is the selector (deduped union, minus `--exclude`). No
+  `--groups` flag selects the `default` group (every production constraint),
+  identical to the legacy full build. Group names include `core`, `soft`,
+  `severity_1`..`severity_5`, `default`/`all`/`production`, and the legacy stage
+  names (`critical_feasibility`, `home_away_balance`, `club_alignment`,
+  `club_day`, `soft_optimisation`) which keep `--stage-only`/`--skip-stage`
+  working — they overlap freely now.
+- `--slack` is orthogonal: it loosens *within* a constraint and is unaffected by
+  group selection.
+- Severity levels below are still real (`severity_N` groups resolve over
+  `ConstraintInfo.severity_level`) and drive severity-staged solving; see
+  `docs/system/STAGES.md` for the full group/dispatch reference.
+
 ### Severity Levels (used by --relax flag and severity-staged solving)
 
 | Level | Name | Constraints | Relaxable? |
@@ -398,6 +422,12 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 
 # Use a custom stages config (JSON list of {name, atoms, ...}) — replaces defaults.
 .\.venv\Scripts\python.exe run.py generate --year 2026 --stages-config my_stages.json
+
+# Select constraints by group (spec-023): deduped union of the named groups,
+# minus --exclude. No --groups == the `default` group (every production
+# constraint). Works on both --simple and --staged. --list-groups to enumerate.
+.\.venv\Scripts\python.exe run.py generate --year 2026 --groups core soft
+.\.venv\Scripts\python.exe run.py generate --year 2026 --groups core --exclude ClubGameSpread
 
 # Generate with slack (loosens constraints)
 .\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3
