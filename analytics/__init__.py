@@ -22,6 +22,7 @@ from .storage import (
     export_draw_to_revformat,
     SlotAnalyzer,
     get_slot_analyzer,
+    extract_locked_pairings,
 )
 from .tester import DrawTester, ViolationReport, Violation, test_draw, what_if_move_game
 from .reports import (
@@ -46,7 +47,8 @@ __all__ = [
     'export_draw_to_revformat',
     'SlotAnalyzer',
     'get_slot_analyzer',
-    
+    'extract_locked_pairings',
+
     # Versioning
     'DrawVersionManager',
     'DrawVersion',

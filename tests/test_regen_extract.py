@@ -189,6 +189,21 @@ class TestPrimaryOracle:
         assert ("Norths 4th", "Souths 4th") in team_pairs
         assert ("Easts 4th", "Wests 4th") in team_pairs
 
+    def test_non_alphabetical_team_order_is_preserved_not_resorted(self):
+        # GIVEN a game whose stored team1/team2 are deliberately NOT in
+        # alphabetical order (a re-sorting bug would flip them).
+        draw = _make_draw(
+            _make_game("G00009", "Zebra 4th", "Alpha 4th", "4th", 2, "2026-04-05"),
+        )
+        # WHEN extracted
+        pins = extract_locked_pairings(
+            draw, freeze_grades={"4th"}, freeze_weeks={2}, exclude_weeks=frozenset()
+        )
+        # THEN the stored order is preserved verbatim (oracle: ['Zebra 4th',
+        # 'Alpha 4th'] — re-sorting would yield ['Alpha 4th', 'Zebra 4th']).
+        assert len(pins) == 1
+        assert pins[0]["teams"] == ["Zebra 4th", "Alpha 4th"]
+
     def test_6th_grade_game_is_not_included(self, draw_3games):
         # GIVEN / WHEN
         pins = extract_locked_pairings(
