@@ -96,8 +96,26 @@ CONSTRAINT_TO_SEVERITY = {
 
 
 def get_severity_level(constraint_cls) -> int:
-    """Get severity level for a constraint class."""
+    """Get severity level for a constraint class.
+
+    spec-023 (Unit D): severity membership is read FROM THE REGISTRY
+    (``ConstraintInfo.severity_level``) as the single source of truth — this is
+    the same field the ``severity_N`` derived groups (``DERIVED_GROUPS``) resolve
+    over, so ``get_severity_level`` and ``resolve_group('severity_N')`` agree by
+    construction. The legacy ``CONSTRAINT_TO_SEVERITY`` map is kept only as a
+    fallback for archived / non-registry classes (e.g. the `--relax`/resolver
+    path still references removed classes), preserving identical behaviour.
+    """
     name = constraint_cls.__name__
+    # Read-through to the registry first (canonicalise the class name).
+    from constraints.registry import (
+        CONSTRAINT_REGISTRY,
+        normalize_constraint_name,
+    )
+    canonical = normalize_constraint_name(name)
+    if canonical and canonical in CONSTRAINT_REGISTRY:
+        return CONSTRAINT_REGISTRY[canonical].severity_level
+    # Fallback for archived / non-registry classes.
     return CONSTRAINT_TO_SEVERITY.get(name, 5)  # Default to lowest severity
 
 

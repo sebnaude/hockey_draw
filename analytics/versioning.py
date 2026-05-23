@@ -706,6 +706,15 @@ class DrawVersionManager:
             # Constraints applied
             'constraints_applied': data.get('constraints_applied', []),
 
+            # spec-023: resolved constraint-group selection. ``groups_selected``
+            # is the list of group NAMES the operator chose (e.g. ['default'] or
+            # ['core', 'soft']); ``applied_constraint_set`` is the deduped union
+            # of canonical constraint names that selection resolved to. Both are
+            # stashed in ``data`` by the simple/staged dispatch in main_staged.py
+            # (``_groups_selected`` / ``_constraint_names``).
+            'groups_selected': list(data.get('_groups_selected', ['default'])),
+            'applied_constraint_set': list(data.get('_constraint_names', [])),
+
             # Input restrictions
             'forced_games': data.get('forced_games', []),
             'blocked_games': data.get('blocked_games', []),

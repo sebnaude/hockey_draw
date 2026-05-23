@@ -108,11 +108,27 @@ CONSTRAINT_SEVERITY_LEVELS = {
 # Mapping from severity level to label
 SEVERITY_LEVEL_LABELS = {
     1: 'CRITICAL',
-    2: 'HIGH', 
+    2: 'HIGH',
     3: 'MEDIUM',
     4: 'LOW',
     5: 'VERY LOW',
 }
+
+
+def _severity_level_for(constraint_name: str) -> int:
+    """spec-023 (Unit D): resolve a constraint/check name to its severity level,
+    reading FROM THE REGISTRY (``ConstraintInfo.severity_level``) as the single
+    source of truth — the same field ``resolve_group('severity_N')`` resolves
+    over. Falls back to the local ``CONSTRAINT_SEVERITY_LEVELS`` map only for
+    tester-only check labels that have no canonical registry entry
+    (``EqualGames``, ``BalancedMatchups``, ``FiftyFiftyHomeAway``). Behaviour is
+    identical to the old map for every registry-backed name (verified: zero
+    deltas across all tester labels)."""
+    from constraints.registry import CONSTRAINT_REGISTRY, normalize_constraint_name
+    canonical = normalize_constraint_name(constraint_name)
+    if canonical and canonical in CONSTRAINT_REGISTRY:
+        return CONSTRAINT_REGISTRY[canonical].severity_level
+    return CONSTRAINT_SEVERITY_LEVELS.get(constraint_name, 5)
 
 
 @dataclass
@@ -140,7 +156,7 @@ class Violation:
                affected_clubs: List[str] = None,
                metric_value: Optional[float] = None) -> 'Violation':
         """Factory method that auto-determines severity from constraint name."""
-        level = CONSTRAINT_SEVERITY_LEVELS.get(constraint, 5)
+        level = _severity_level_for(constraint)
         severity = SEVERITY_LEVEL_LABELS.get(level, 'VERY LOW')
         return cls(
             constraint=constraint,
@@ -2767,7 +2783,7 @@ def get_severity_level(constraint_name: str) -> int:
     Returns:
         Severity level (1-5, lower = more severe)
     """
-    return CONSTRAINT_SEVERITY_LEVELS.get(constraint_name, 5)
+    return _severity_level_for(constraint_name)
 
 
 def get_severity_label(level: int) -> str:
