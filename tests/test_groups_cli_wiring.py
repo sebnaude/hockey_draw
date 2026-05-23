@@ -215,19 +215,176 @@ def test_simple_path_skip_constraints_for_core():
     assert applied  # non-empty
 
 
-def test_simple_and_staged_select_identical_engine_keys():
-    """Given the SAME resolved --groups set,
-    When the simple path derives its applied engine keys (ALL - skip) and the
-    staged path derives its applied engine keys (collect_engine_keys over the
-    same resolved set),
-    Then they are IDENTICAL — proving --groups selects the same constraints in
-    both modes."""
-    for groups in (['core'], ['core', 'soft'], ['default'], ['severity_1']):
+# Hand-listed engine-key oracles per group. These are written out by hand (NOT
+# computed from collect_engine_keys / the simple-skip derivation), so a test that
+# checks them cannot tautologically cancel — it pins the ACTUAL engine keys each
+# group resolves to. Derived once by inspection of the registry's group tags and
+# each whole-constraint's engine_keys, then frozen here as the contract.
+ENGINE_KEY_ORACLE = {
+    # core = hard feasibility set. Note the legacy engine keys
+    # FiftyFiftyHomeandAway / ClubVsClubAlignment / TeamConflict are ABSENT (no
+    # production-group atom maps to them — see spec §1) and the soft
+    # PreferredTimesConstraint is absent (core is hard-only).
+    'core': {
+        'ClubDay',
+        'ClubGameSpread',
+        'EqualGamesAndBalanceMatchUps',
+        'EqualMatchUpSpacing',
+        'NoDoubleBookingFields',
+        'NoDoubleBookingTeams',
+        'PHLAndSecondGradeTimes',
+    },
+    # core + soft adds the soft engine key PreferredTimesConstraint.
+    ('core', 'soft'): {
+        'ClubDay',
+        'ClubGameSpread',
+        'EqualGamesAndBalanceMatchUps',
+        'EqualMatchUpSpacing',
+        'NoDoubleBookingFields',
+        'NoDoubleBookingTeams',
+        'PHLAndSecondGradeTimes',
+        'PreferredTimesConstraint',
+    },
+    # default = full production set = core + soft engine keys (the obsolete trio
+    # is still excluded BY DESIGN).
+    'default': {
+        'ClubDay',
+        'ClubGameSpread',
+        'EqualGamesAndBalanceMatchUps',
+        'EqualMatchUpSpacing',
+        'NoDoubleBookingFields',
+        'NoDoubleBookingTeams',
+        'PHLAndSecondGradeTimes',
+        'PreferredTimesConstraint',
+    },
+    # severity_1 = the CRITICAL severity stage. Unlike the production groups it
+    # legitimately DOES carry the obsolete engine key FiftyFiftyHomeandAway
+    # (severity stages are a separate, historical grouping per the staged
+    # baseline above), so it appears here but NOT in core/default.
+    'severity_1': {
+        'EqualGamesAndBalanceMatchUps',
+        'EqualMatchUpSpacing',
+        'FiftyFiftyHomeandAway',
+        'NoDoubleBookingFields',
+        'NoDoubleBookingTeams',
+        'PHLAndSecondGradeTimes',
+    },
+}
+
+
+def _production_simple_applied(constraint_names):
+    """Return the engine keys the PRODUCTION simple path will actually apply.
+
+    `main_staged._main_simple_unified` derives ``skip_constraints`` from a
+    resolved selection, hands it to a real ``UnifiedConstraintEngine``, and the
+    engine applies ``ALL_ENGINE_KEYS - skip_constraints``. We run that exact
+    sequence on real 2026 data (build only, no solve) and read the engine's
+    stored ``skip_constraints`` back, so the returned set is what production
+    applies — not a formula re-spelled in the test.
+
+    The anti-tautology guarantee lives in the CALLER: this result is compared to
+    an INDEPENDENT hand oracle (ENGINE_KEY_ORACLE), so even though the simple and
+    staged sides share ``collect_engine_keys``, the oracle is the load-bearing
+    check and the assertion cannot reduce to ``X == X``."""
+    from ortools.sat.python import cp_model
+    from utils import generate_X
+    from constraints.unified import UnifiedConstraintEngine
+    from main_staged import load_data
+    # Mirror _main_simple_unified's derivation exactly.
+    selected_engine_keys, _ = collect_engine_keys(list(constraint_names))
+    skip = ALL_ENGINE_KEYS - selected_engine_keys
+    model = cp_model.CpModel()
+    data = load_data(2026)
+    X, conflicts = generate_X(model, data)
+    data['team_conflicts'] = conflicts
+    eng = UnifiedConstraintEngine(model, X, data, skip_constraints=set(skip))
+    # Engine now holds the production skip; report what it will apply.
+    return ALL_ENGINE_KEYS - set(eng.skip_constraints)
+
+
+def test_simple_applied_engine_keys_match_hand_oracle():
+    """Given a resolved --groups set,
+    When the production simple path derives its applied engine keys (read back
+    from a real UnifiedConstraintEngine on real data),
+    Then they equal a HAND-WRITTEN oracle for that group — and the staged path
+    (collect_engine_keys over the same names) equals the SAME oracle.
+
+    This replaces the old self-cancelling identity test
+    (``ALL - (ALL - X) == X``). Both the simple and staged sides are pinned
+    against an independent hand oracle, so the assertion proves the actual wiring
+    rather than reducing to a tautology."""
+    for groups, oracle in (
+        (['core'], ENGINE_KEY_ORACLE['core']),
+        (['core', 'soft'], ENGINE_KEY_ORACLE[('core', 'soft')]),
+        (['default'], ENGINE_KEY_ORACLE['default']),
+        (['severity_1'], ENGINE_KEY_ORACLE['severity_1']),
+    ):
         _, names = run._resolve_group_selection(groups, [])
-        simple_applied = ALL_ENGINE_KEYS - _simple_skip_for(names)
-        # Staged applies via apply_constraint_set -> collect_engine_keys(names).
+        # Simple side: production engine's applied engine keys (skip read-back).
+        simple_applied = _production_simple_applied(names)
+        # Staged side: registry resolver's engine keys for the same names.
         staged_applied, _ = collect_engine_keys(names)
+        # Independent hand oracle pins both — proving the wiring, not an identity.
+        assert simple_applied == oracle, (groups, sorted(simple_applied), sorted(oracle))
+        assert staged_applied == oracle, (groups, sorted(staged_applied), sorted(oracle))
         assert simple_applied == staged_applied, groups
+
+
+def test_default_simple_selection_excludes_obsolete_trio_by_design():
+    """Given NO --groups (default selection),
+    When the production simple path derives skip_constraints
+    (ALL_ENGINE_KEYS - collect_engine_keys(default-group names)),
+    Then it skips EXACTLY {FiftyFiftyHomeandAway, ClubVsClubAlignment,
+    TeamConflict}.
+
+    This pins the intended default-`--simple` behaviour at the SELECTION level.
+    The three skipped engine keys are obsolete legacy entries that map to NO
+    production-group atom: per spec-023 §1 they "get no production group" because
+    they are superseded by atoms AwayClubHomeWeekendsCount /
+    AwayClubPerOpponentAndAggregateHomeBalance (replacing FiftyFiftyHomeandAway)
+    and ClubVsClubStackedWeekends / ClubVsClubStackedCoLocation (replacing
+    ClubVsClubAlignment), with TeamConflict carried separately. Per the convenor's
+    RESOLVED Option B, default `--simple` selects the `default` group (production
+    constraints). The resulting ~-2,453-hard-constraint delta versus the old
+    no-skip simple path is therefore INTENTIONAL, not a regression.
+
+    (The real-data cross-mode parity baseline — actual hard-constraint counts —
+    is Unit D's DoD-8 deliverable; this test stays at the selection level, which
+    is what Unit C controls.)"""
+    group_names, default_names = run._resolve_group_selection(None, [])
+    assert group_names == ['default']  # no --groups => default group
+    selected_engine_keys, _ = collect_engine_keys(default_names)
+    skip = ALL_ENGINE_KEYS - selected_engine_keys
+    # Hand-computed oracle: exactly the obsolete trio, nothing else.
+    assert skip == {'FiftyFiftyHomeandAway', 'ClubVsClubAlignment', 'TeamConflict'}
+
+
+def test_staged_none_equals_default_group_filter():
+    """Given the staged path,
+    When run with constraint_names=None (no --groups, legacy path) vs
+    constraint_names=resolve('default') (the filter applied),
+    Then the applied per-stage atoms are IDENTICAL — proving the run.py
+    asymmetry (simple always passes default; staged passes None when no --groups)
+    is cosmetic, because filtering DEFAULT_STAGES' atoms to the default group is a
+    no-op. This pins the comment in run.run_generate next to
+    `staged_constraint_filter`."""
+    from constraints.stages import load_solver_stages
+
+    base = load_solver_stages({})
+    # staged-None: no filtering (the legacy path run.py uses when no --groups).
+    none_applied = [(s['name'], list(s.get('atoms', []))) for s in base]
+
+    # staged default-group: the exact filter main_staged applies when
+    # constraint_names is the resolved default set.
+    _, default_names = run._resolve_group_selection(None, [])
+    keep = set(default_names)
+    default_applied = []
+    for s in base:
+        kept = [a for a in s.get('atoms', []) if a in keep]
+        if kept:
+            default_applied.append((s['name'], kept))
+
+    assert none_applied == default_applied
 
 
 def test_simple_engine_respects_skip_on_real_data():

@@ -534,10 +534,16 @@ def run_generate(args):
     # --groups produces an identical selection in --simple and --staged.
     groups_arg = getattr(args, 'groups', None)
     group_names, constraint_names = _resolve_group_selection(groups_arg, exclude)
-    # The staged path only *filters* its ordered stages when the operator
-    # explicitly selected groups; with no --groups it runs the legacy full
-    # stage list byte-for-byte (severity stages legitimately carry a few
-    # obsolete engine keys not in any production group — keep them on default).
+    # Asymmetry note (intentional, not a behaviour difference): the simple path
+    # always receives the resolved `constraint_names` (default group when no
+    # --groups), whereas the staged path receives None when no --groups so it
+    # runs the legacy stage list untouched. These select IDENTICALLY: filtering
+    # DEFAULT_STAGES' atoms down to the `default` group's names is a no-op
+    # (DEFAULT_STAGES ⊆ default group), so staged-None == staged-default-group
+    # atom-for-atom. Passing None just keeps the legacy staged path byte-for-byte
+    # rather than routing it through the filter for a guaranteed no-op. The
+    # equivalence is pinned by test_groups_cli_wiring.py
+    # ::test_staged_none_equals_default_group_filter.
     staged_constraint_filter = constraint_names if groups_arg else None
 
     relax_config = None
