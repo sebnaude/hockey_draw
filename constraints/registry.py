@@ -5,7 +5,7 @@ Maps between solver class names, tester check methods, unified engine skip names
 severity levels, and slack keys.
 """
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set
 import re
 
 
@@ -20,6 +20,12 @@ class ConstraintInfo:
     slack_key: Optional[str] = None
     has_soft_component: bool = False
     tester_only: bool = False  # True if no solver equivalent (diagnostic check)
+    # spec-023: named groups this constraint belongs to. A "group" is a named,
+    # possibly-overlapping set of WHOLE constraints; a solve applies the deduped
+    # union of selected groups in canonical (registry insertion) order. Overlap
+    # is allowed and expected (e.g. {core, critical_feasibility}). Empty for
+    # tester-only / obsolete legacy entries that are not selected by any group.
+    groups: FrozenSet[str] = frozenset()
     # Phase 2 additions for atomization
     atom_group: Optional[str] = None
     """Name of the legacy combined constraint this atom was split from
@@ -42,6 +48,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_no_double_booking_teams'],
         tester_violation_names=['NoDoubleBookingTeams'],
         severity_level=1,
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'NoDoubleBookingFields': ConstraintInfo(
         canonical_name='NoDoubleBookingFields',
@@ -49,6 +56,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_no_double_booking_fields'],
         tester_violation_names=['NoDoubleBookingFields'],
         severity_level=1,
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'EqualGamesAndBalanceMatchUps': ConstraintInfo(
         canonical_name='EqualGamesAndBalanceMatchUps',
@@ -56,6 +64,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_equal_games', '_check_balanced_matchups'],
         tester_violation_names=['EqualGames', 'BalancedMatchups'],
         severity_level=1,
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     # OBSOLETE (spec-004): superseded by `AwayClubHomeWeekendsCount` +
     # `AwayClubPerOpponentAndAggregateHomeBalance`. The legacy combined class
@@ -87,6 +96,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_fifty_fifty_home_away'],
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
+        groups=frozenset({'core', 'home_away_balance'}),
     ),
     # spec-004: per-opponent + aggregate home/away balance atom. Replaces the
     # per-pair and aggregate blocks of the obsolete `FiftyFiftyHomeandAway`.
@@ -96,6 +106,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_fifty_fifty_home_away'],
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
+        groups=frozenset({'core', 'home_away_balance'}),
     ),
     # spec-018: `NonDefaultHomeGrouping` (alias `MaitlandHomeGrouping`;
     # solver classes `MaitlandHomeGrouping*` / `MaxMaitlandHomeWeekends*`)
@@ -115,6 +126,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_phl_2nd_adjacency'],
         tester_violation_names=['PHLAnd2ndAdjacency'],
         severity_level=1,
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'PHLAndSecondGradeTimes': ConstraintInfo(
         canonical_name='PHLAndSecondGradeTimes',
@@ -131,6 +143,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PHLAndSecondGradeTimes'],
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'PHLAnd2ndConcurrencyAtBroadmeadow': ConstraintInfo(
         canonical_name='PHLAnd2ndConcurrencyAtBroadmeadow',
@@ -139,6 +152,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PHLAndSecondGradeTimes'],
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     # spec-015: GosfordFridayRoundsForced entry removed. The per-round
     # `sum == 1` rule is expressed generically via FORCED_GAMES count entries
@@ -158,6 +172,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['EqualMatchUpSpacing'],
         severity_level=1,
         slack_key='EqualMatchUpSpacingConstraint',
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     # spec-008 Part B: byes are first-class. A team's bye rounds are spread
     # across the season using the same `_spacing.ideal_bye_gap` math as
@@ -170,6 +185,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['BalancedByeSpacing'],
         severity_level=2,
         slack_key='BalancedByeSpacing',
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'ClubDay': ConstraintInfo(
         canonical_name='ClubDay',
@@ -186,6 +202,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubDayConstraint'],
         severity_level=2,
         atom_group='ClubDay',
+        groups=frozenset({'core', 'club_day'}),
     ),
     'ClubDayIntraClubMatchup': ConstraintInfo(
         canonical_name='ClubDayIntraClubMatchup',
@@ -194,6 +211,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubDayConstraint'],
         severity_level=2,
         atom_group='ClubDay',
+        groups=frozenset({'core', 'club_day'}),
     ),
     'ClubDayOpponentMatchup': ConstraintInfo(
         canonical_name='ClubDayOpponentMatchup',
@@ -202,6 +220,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubDayConstraint'],
         severity_level=2,
         atom_group='ClubDay',
+        groups=frozenset({'core', 'club_day'}),
     ),
     'ClubDaySameField': ConstraintInfo(
         canonical_name='ClubDaySameField',
@@ -211,6 +230,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=2,
         atom_group='ClubDay',
         required_helpers=['club_day_field_used'],
+        groups=frozenset({'core', 'club_day'}),
     ),
     'ClubDayContiguousSlots': ConstraintInfo(
         canonical_name='ClubDayContiguousSlots',
@@ -220,6 +240,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=2,
         atom_group='ClubDay',
         required_helpers=['club_day_slot_used'],
+        groups=frozenset({'core', 'club_day'}),
     ),
     # spec-018: `AwayAtNonDefaultGrouping` (alias `AwayAtMaitlandGrouping`;
     # solver classes `AwayAtMaitlandGrouping*`) DELETED — the convenor no
@@ -258,6 +279,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubGradeAdjacency'],
         severity_level=1,
         atom_group='ClubGradeAdjacency',
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     # spec-007: soft atom for convenor-supplied team pairs that should avoid
     # concurrent (week, day_slot) appearances (siblings in non-adjacent grades,
@@ -269,6 +291,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['TeamPairNoConcurrency'],
         severity_level=3,
         has_soft_component=True,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     # spec-003: NIHC field-fill order. Two atoms per (date, day_slot) at
     # Broadmeadow forcing WF -> EF -> SF fill priority. Replaces the legacy
@@ -287,6 +310,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     'NIHCFillEFBeforeSF': ConstraintInfo(
         canonical_name='NIHCFillEFBeforeSF',
@@ -297,6 +321,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     'ClubVsClubAlignment': ConstraintInfo(
         canonical_name='ClubVsClubAlignment',
@@ -332,6 +357,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         slack_key='ClubVsClubAlignment',
         atom_group='ClubVsClubStackedAlignment',
         required_helpers=['cvc_stack_play'],
+        groups=frozenset({'core', 'club_alignment'}),
     ),
     'ClubVsClubStackedCoLocation': ConstraintInfo(
         canonical_name='ClubVsClubStackedCoLocation',
@@ -345,6 +371,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
             'cvc_stack_play', 'cvc_stack_field_used', 'cvc_stack_slot_used',
             'cvc_stack_active',
         ],
+        groups=frozenset({'core', 'club_alignment'}),
     ),
     'ClubGameSpread': ConstraintInfo(
         canonical_name='ClubGameSpread',
@@ -353,6 +380,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubGameSpread'],
         severity_level=3,
         slack_key='ClubGameSpread',
+        # spec-023: §1 lists this as {core} minimum; reconciled against
+        # DEFAULT_STAGES — ClubGameSpread lives in the (non-soft_only) club_day
+        # stage, so it carries the club_day legacy-stage group tag too.
+        groups=frozenset({'core', 'club_day'}),
     ),
     # spec-021: extracted from ClubGameSpread's lower no-double-up bound (which
     # is concurrency, not contiguity). HARD, capacity-aware via no_field_slots.
@@ -362,6 +393,11 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_club_no_concurrent_slot'],
         tester_violation_names=['ClubNoConcurrentSlot'],
         severity_level=2,
+        # spec-023: §1 lists this as {core} minimum; reconciled against
+        # DEFAULT_STAGES — ClubNoConcurrentSlot is wired into critical_feasibility
+        # (NOT club_day, which the spec's illustrative example guessed), so it
+        # carries the critical_feasibility legacy-stage group tag.
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'ClubFieldConcentration': ConstraintInfo(
         canonical_name='ClubFieldConcentration',
@@ -387,6 +423,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['VenueEarliestSlotFill'],
         severity_level=2,
         required_helpers=['venue_slot_used'],
+        # spec-023: §1 lists this as {core} minimum; reconciled against
+        # DEFAULT_STAGES — VenueEarliestSlotFill is wired into critical_feasibility,
+        # so it carries the critical_feasibility legacy-stage group tag.
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     'PreferredTimes': ConstraintInfo(
         canonical_name='PreferredTimes',
@@ -394,6 +434,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_preferred_times'],
         tester_violation_names=['PreferredTimesConstraint'],
         severity_level=5,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     'SoftLexMatchupOrdering': ConstraintInfo(
         canonical_name='SoftLexMatchupOrdering',
@@ -402,6 +443,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=[],
         severity_level=5,
         has_soft_component=True,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     # spec-006: soft penalty for preferred / avoided weekends at away grounds
     # (e.g. NRL-Knights home games at Maitland Park). Pure soft: never blocks
@@ -413,6 +455,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=[],
         severity_level=5,
         has_soft_component=True,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     # spec-020: generic soft analogue of the whole FORCED_GAMES grammar.
     # Penalty-on-deviation from a per-scope target (equal/lesse/less/greater/
@@ -425,6 +468,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PreferredGames'],
         severity_level=5,
         has_soft_component=True,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     # spec-018: `MaitlandAlternateHomeAway` (spec-012 soft) DELETED — its whole
     # purpose was to push an H-A-H-A weekend pattern, the sequencing the
@@ -637,3 +681,172 @@ def validate_required_helpers() -> List[str]:
             if kind not in HELPER_VAR_CATALOG:
                 bad.append(f"{name} -> {kind}")
     return bad
+
+
+# ======================================================================
+# spec-023: Constraint groups — composable, deduped, flag-selected.
+#
+# A "group" is a named, possibly-overlapping set of WHOLE constraints. A solve
+# applies the deduped UNION of the selected groups in one canonical order
+# (= CONSTRAINT_REGISTRY dict insertion order; see resolve_groups). Selecting
+# the same constraint via two groups applies it exactly once.
+#
+# Group membership has TWO sources, and only the first is hand-maintained:
+#   1. Explicit tags — `ConstraintInfo.groups` (e.g. {'core', 'critical_feasibility'}).
+#      This is the single hand-maintained membership store.
+#   2. Derived predicates — `DERIVED_GROUPS` below. Membership is COMPUTED over
+#      ConstraintInfo, never stored, so there is no second source of truth.
+# ======================================================================
+
+# Derived group predicates. A name maps to a predicate over ConstraintInfo;
+# resolve_group computes membership on demand. `severity_1`..`severity_5` select
+# by severity level. `default`/`all`/`production` select every constraint with a
+# non-empty explicit groups set (i.e. every production constraint).
+DERIVED_GROUPS: Dict[str, Callable[[ConstraintInfo], bool]] = {
+    **{
+        f'severity_{n}': (lambda info, n=n: info.severity_level == n)
+        for n in range(1, 6)
+    },
+    'default': (lambda info: bool(info.groups)),
+    'all': (lambda info: bool(info.groups)),
+    'production': (lambda info: bool(info.groups)),
+}
+
+
+def _explicit_group_names() -> Set[str]:
+    """Every explicit group tag that appears on at least one ConstraintInfo."""
+    names: Set[str] = set()
+    for info in CONSTRAINT_REGISTRY.values():
+        names |= set(info.groups)
+    return names
+
+
+def list_group_names() -> List[str]:
+    """Return all known group names: explicit tags ∪ derived names.
+
+    Explicit tags are listed first (sorted), then derived names (in their
+    DERIVED_GROUPS declaration order), so the output is stable and readable.
+    """
+    explicit = sorted(_explicit_group_names())
+    derived = [n for n in DERIVED_GROUPS if n not in explicit]
+    return explicit + derived
+
+
+def resolve_group(name: str) -> Set[str]:
+    """Resolve a single group name to its set of canonical constraint names.
+
+    A name may be an explicit tag (membership read from `ConstraintInfo.groups`)
+    or a derived group (membership computed via its `DERIVED_GROUPS` predicate).
+    An explicit tag and a derived predicate of the same name would both apply;
+    in practice the namespaces are disjoint. Unknown names resolve to the empty
+    set (callers that want strictness should check `list_group_names()` first).
+    """
+    members: Set[str] = set()
+    # Explicit-tag membership.
+    for canonical, info in CONSTRAINT_REGISTRY.items():
+        if name in info.groups:
+            members.add(canonical)
+    # Derived-predicate membership.
+    predicate = DERIVED_GROUPS.get(name)
+    if predicate is not None:
+        for canonical, info in CONSTRAINT_REGISTRY.items():
+            if predicate(info):
+                members.add(canonical)
+    return members
+
+
+# Canonical order = CONSTRAINT_REGISTRY dict insertion order (Open decision A:
+# no per-entry `order` int; registry order suffices and already places helper-var
+# producers before consumers). Index lookup for ordering and the dep validator.
+_REGISTRY_INDEX: Dict[str, int] = {
+    name: i for i, name in enumerate(CONSTRAINT_REGISTRY)
+}
+
+
+def canonical_index(canonical_name: str) -> int:
+    """Registry insertion index of a canonical name (its position in apply order)."""
+    return _REGISTRY_INDEX[canonical_name]
+
+
+def resolve_groups(names: Iterable[str]) -> List[str]:
+    """Deduped UNION of the membership of every named group, in canonical order.
+
+    This is the heart of the dedup-union guarantee: a constraint reachable via
+    two requested groups appears EXACTLY ONCE. The returned list is sorted by
+    canonical (registry insertion) order, which is the single global apply order
+    and already satisfies producer-before-consumer for shared helper vars
+    (validated by `validate_group_order`).
+    """
+    union: Set[str] = set()
+    for name in names:
+        union |= resolve_group(name)
+    return sorted(union, key=lambda n: _REGISTRY_INDEX[n])
+
+
+# Known helper-var producer → consumer relationships. The producer registers the
+# helper-var kind(s) the consumer reads, so the producer's apply() must run first.
+# With registry-insertion order as the apply order, the producer's registry index
+# must be strictly lower than the consumer's. `validate_group_order` asserts this.
+#
+# Each entry: (producer_canonical, consumer_canonical, [shared_helper_kinds]).
+HELPER_VAR_PRODUCER_CONSUMER: List[tuple] = [
+    # spec-005: Weekends registers `cvc_stack_play`; CoLocation reads it (plus
+    # its own kinds). Weekends must run first. (registry: 25 < 26.)
+    ('ClubVsClubStackedWeekends', 'ClubVsClubStackedCoLocation', ['cvc_stack_play']),
+]
+
+
+def validate_group_order() -> List[str]:
+    """Assert every helper-var producer precedes its consumer in canonical order.
+
+    Returns a list of human-readable violations ([] when OK), matching the style
+    of `validate_solver_stages` / `validate_required_helpers`. A future reorder
+    of CONSTRAINT_REGISTRY that places a consumer before its producer trips this.
+
+    Two layers of checking:
+      1. The hand-curated `HELPER_VAR_PRODUCER_CONSUMER` pairs.
+      2. Any pair surfaced by `required_helpers` metadata: for each shared helper
+         kind declared by a consumer, the producer of that kind (the lowest-index
+         constraint declaring it) must precede the consumer.
+    """
+    violations: List[str] = []
+
+    def _idx(name: str) -> Optional[int]:
+        return _REGISTRY_INDEX.get(name)
+
+    # Layer 1: explicit producer/consumer pairs.
+    for producer, consumer, kinds in HELPER_VAR_PRODUCER_CONSUMER:
+        pi, ci = _idx(producer), _idx(consumer)
+        if pi is None:
+            violations.append(f"unknown producer {producer!r}")
+            continue
+        if ci is None:
+            violations.append(f"unknown consumer {consumer!r}")
+            continue
+        if not pi < ci:
+            violations.append(
+                f"{producer} (idx {pi}) must precede {consumer} (idx {ci}) "
+                f"for helper kinds {kinds}"
+            )
+
+    # Layer 2: derive producer for each helper kind = the first (lowest-index)
+    # constraint declaring it; every later declarer is a consumer that must
+    # follow it. This catches dep pairs surfaced purely by required_helpers
+    # metadata even if not hand-listed above.
+    first_declarer: Dict[str, str] = {}
+    for canonical, info in CONSTRAINT_REGISTRY.items():
+        for kind in info.required_helpers:
+            if kind not in first_declarer:
+                first_declarer[kind] = canonical
+    for canonical, info in CONSTRAINT_REGISTRY.items():
+        for kind in info.required_helpers:
+            producer = first_declarer[kind]
+            if producer == canonical:
+                continue
+            pi, ci = _REGISTRY_INDEX[producer], _REGISTRY_INDEX[canonical]
+            if not pi < ci:
+                violations.append(
+                    f"{producer} (idx {pi}) declares helper {kind!r} read by "
+                    f"{canonical} (idx {ci}) but does not precede it"
+                )
+    return violations
