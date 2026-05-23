@@ -9,8 +9,14 @@ solver classes via the registry's `solver_class_names`.
 Usage:
     from constraints.stages import (
         load_solver_stages, validate_solver_stages, list_stages,
-        apply_solver_stage,
+        apply_constraint_set, apply_solver_stage,
     )
+
+    # `apply_constraint_set(canonical_names, ...)` is the primary entry point:
+    # it applies a resolved, deduped, canonically-ordered list of WHOLE
+    # constraints (engine keys run hard+soft; atoms run their full apply).
+    # `apply_solver_stage(stage, ...)` is a thin wrapper over it for the
+    # staged solver (passes the stage's `atoms` list through).
 
     stages = load_solver_stages(config)  # config is a season config dict
     errors = validate_solver_stages(stages)
