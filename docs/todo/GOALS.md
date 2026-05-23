@@ -143,6 +143,63 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-021 | Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop heavy IntVar encodings; fix the soft_only-trap so hard parts actually run; drop WF/7pm | `spec-021-contiguity-primitive.md` | ready |
 | spec-022 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `spec-022-unify-helper-var-pathway.md` | ready |
 | spec-023 | Atoms expose hard/soft *phases*; a stage is a uniform `(atoms, phases)` collection — no dedicated hard-vs-soft machinery; `soft_only` trap becomes structurally impossible | `spec-023-atom-hard-soft-phases.md` | delayed (user hold) |
+| spec-024 | `LOCKED_PAIRINGS`: dedicated sister config to FORCED_GAMES that pins a pairing to its date/weekend but frees time/slot/field; substrate for regen | `spec-024-locked-pairings-config.md` | ready |
+| spec-025 | Unified regeneration mode (`--regen-from`/`--regen-grades`/`--regen-weeks`): freeze everything outside a grade/week scope (hard-lock played weeks + auto-extract date pins for the rest), re-solve the scope | `spec-025-regeneration-mode.md` | ready |
+| spec-026 | Regeneration soft-constraint group: soft analogues of every hard rule except a small core-hard physical set; selected as the `regen` group; documented separately in `REGEN_CONSTRAINTS.md` | `spec-026-regen-soft-constraint-group.md` | not_ready (blocked on spec-023 groups landing) |
+
+### spec-024 — `LOCKED_PAIRINGS`: pin pairing to its weekend, free the time
+
+**Target:** A new config list separate from FORCED_GAMES that pins a specific pairing to a
+specific date (its weekend / playing day) while leaving time, slot, and field for the solver.
+Same hard `sum==1` semantics the convenor currently expresses via ~180 `{teams, grade, date}`
+FORCED entries, but kept out of FORCED_GAMES so that list stays readable (count rules + marquee
+games only) and regen tooling (spec-025) has a clean place to write pins.
+
+**Why:** FORCED_GAMES is bloated with mechanical locked-pairing entries that drown the
+convenor's intentional rules. A dedicated `LOCKED_PAIRINGS` separates "freeze this decided
+pairing onto its weekend" from "this is a deliberate count rule / marquee game."
+
+**How to apply:** Reuse `_build_scope_count_rules(label='LOCKED_PAIRINGS', unique_per_entry=True)`
+as a second scope-count pass in `generate_X`; `model.Add(sum==1)` per pin; forbid time/slot/
+field keys; filter locked-week pins; FATAL on empty scope (a pin that can't be placed is a real
+error). Migrate the existing FORCED locked-pairings into it.
+
+### spec-025 — Unified regeneration mode
+
+**Target:** One mechanism to modify a published draw: name a regeneration scope along two axes —
+grades (`--regen-grades 5th 6th`) and/or weeks (`--regen-weeks 10-22`) — and the solver re-rolls
+that scope while everything else is frozen. Played weeks are hard-locked (existing `--lock-weeks`);
+all other frozen games are auto-extracted into `LOCKED_PAIRINGS` (date pinned, time free). A game
+is FREE iff its grade is in `--regen-grades` OR its week is in `--regen-weeks` (union).
+
+**Why:** Changes to a published draw are first-class (GOALS §1), but today the only options are
+game-by-game hand edits or a full re-solve. Roster moves (5th→6th) and mid-season re-times are
+the same "freeze the rest, re-solve a slice" operation.
+
+**How to apply:** `extract_locked_pairings(draw, freeze_grades, freeze_weeks, exclude_weeks)`
+turns frozen `StoredGame`s into pins (reusing `DrawStorage.to_key`/`get_remaining_games`); new
+CLI flags + a union scope resolver; orchestration feeds pins + hard-locks + the `regen` group;
+output is a MINOR version bump with a `regen` metadata block.
+
+### spec-026 — Regeneration soft-constraint group
+
+**Target:** A `regen` constraint group selected automatically in regen mode: a small **core-hard**
+set (no double-booking of teams/fields, equal games/balance, same-grade-same-club concurrency,
+PHL/2nd Broadmeadow concurrency, and the pins) stays hard; **soft analogues** of every other rule
+(PHL/2nd adjacency, club-day co-location/contiguity, club-vs-club stacking, bye spacing, matchup
+spacing, away-club weekend counts) apply as tracked penalties so a scoped regen stays feasible
+and the convenor sees which "nice" rules bent. Documented separately in
+`docs/system/REGEN_CONSTRAINTS.md`.
+
+**Why:** Pinning dates and freeing only the time boxes games in; a full hard application returns
+INFEASIBLE on changes the convenor knows are fine. Soften everything but genuine physical
+impossibilities.
+
+**How to apply:** Built on spec-023's groups machinery (constraint = whole; split into two atoms
+to select sub-parts). Soft analogues are distinct atoms tagged `regen_soft`; the `regen` group =
+`core_hard` ∪ `regen_soft` ∪ `soft`, excluding the hard atoms of softened rules. Reuse existing
+soft components where present. **Blocked until spec-023's constraint-groups redesign lands on
+final-form** (final-form currently carries the superseded `spec-023-atom-hard-soft-phases`).
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 
