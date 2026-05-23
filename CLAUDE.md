@@ -92,6 +92,7 @@ Two lists control variable filtering:
 |--------|---------|
 | `FORCED_GAMES` | Force games matching partial keys (sum == 1 by default, supports `constraint` field for `lesse`/`greatere`/etc. and `count` to change the threshold, e.g. `'constraint': 'lesse', 'count': 2` for sum <= 2). Team filters: `teams=[t1,t2]`, `team1=`, `team2=`, or `club=` (resolves to all teams of that club at the given grade). |
 | `BLOCKED_GAMES` | Eliminate variables matching scope + team matchers (or ALL vars in scope if no teams specified) |
+| `LOCKED_PAIRINGS` | Pin a pairing to its **date** (sum == 1, time/slot/field FREE for solver). Sister config to FORCED_GAMES for mechanical date-pins. Allowed keys: `teams`/`team1`/`team2`, `grade`, `date`, `description`. Forbidden keys (→ validation FATAL): `time`, `day_slot`, `field_name`, `field_location`, `day`, `week`, `round_no`, `count`, `constraint`. spec-026 regen mode writes auto-extracted pins here. |
 
 **A FORCED variable can match multiple scopes.** A var that matches both `{day=Friday, club=Maitland}` count==2 and `{day=Friday, teams=[Norths,Maitland]}` count==1 counts toward BOTH constraints. Use this composability to express "exactly N games of kind X, of which exactly M are kind Y" rules.
 
