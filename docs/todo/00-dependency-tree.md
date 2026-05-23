@@ -17,7 +17,7 @@ writing: spec-001…022 and **spec-024** (field-spread, replaced the club-balanc
 spec-021 (done) ──▶ spec-023 (building, constraint-groups) ─┐
                                                             ├─▶ spec-027 (ready, regen-soft)
 spec-022 (done, independent)                                │
-spec-025 (building, independent) ─▶ spec-026 (ready) ───────┘
+spec-025 (done, independent) ──▶ spec-026 (ready) ──────────┘
 spec-028 (building, independent)
 ```
 
@@ -30,22 +30,22 @@ Edges:
   surviving `_club_game_spread_*` engine methods are intentional, so deleting `soft_only` is
   behaviour-neutral). **`building`** (claimed 2026-05-23 by a concurrent session).
 - **spec-025** — `LOCKED_PAIRINGS` config. Independent (`depends_on: none`); builds only on
-  already-shipped locked-weeks + FORCED machinery. **`building`** (claimed 2026-05-23).
+  already-shipped locked-weeks + FORCED machinery. **`done`** (landed 2026-05-23).
 - **spec-026** — unified regeneration mode. Depends on spec-025 (writes pins into
-  `LOCKED_PAIRINGS`). `ready`; startable once spec-025 lands (spec-025 currently `building`).
+  `LOCKED_PAIRINGS`). **`ready` and startable** — spec-025 has landed; spec-026's only dependency
+  is now satisfied.
 - **spec-027** — regeneration soft-constraint group. Depends on spec-023 (groups machinery) +
   spec-026 (regen mode selects the `regen` group); pins via spec-025 indirectly. Status `ready`
-  (hardened) but **NOT startable yet**: spec-023 + spec-025 are `building` and spec-026 is `ready`
-  — none is `done`/landed. The constraint-groups machinery (`resolve_groups`, `DERIVED_GROUPS`,
+  (hardened) but **NOT startable yet**: spec-023 is `building` and spec-026 is `ready` — both
+  must land first. The constraint-groups machinery (`resolve_groups`, `DERIVED_GROUPS`,
   `--groups`, `ConstraintInfo.groups`) and the `soft_only` deletion are NOT on `final-form` yet —
-  spec-027 must wait for spec-023 (and spec-026, and spec-025) to land.
+  spec-027 must wait for spec-023 (and spec-026) to land.
 - **spec-028** — per-weekend notes export column. Independent (`depends_on: none`). **`building`**
   (claimed 2026-05-23).
 
 ## Ready to start in parallel right now
 
-- *(none unclaimed)* — every spec with no unmet dependency (spec-023, spec-025, spec-028) is
-  already `building` under a concurrent session as of 2026-05-23.
+- **spec-026** — `LOCKED_PAIRINGS` (spec-025) has landed; spec-026's only dependency is satisfied.
+  All other dependencies (spec-025) are `done`. Start when ready.
 
-(spec-026 unblocks the moment spec-025 lands; spec-027 unblocks once spec-023 + spec-025 +
-spec-026 all land.)
+(spec-027 unblocks once spec-023 + spec-026 both land.)

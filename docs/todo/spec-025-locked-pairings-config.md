@@ -1,4 +1,4 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none (locked-weeks already shipped on final-form: run.py:71-79, main_staged.py:1037-1059, utils.py:3586+. Reuses the FORCED scope-count machinery in utils.py without changing it. Shares utils.py + config/defaults.py + config/season_*.py with spec-021/022/023 — rebase + re-run validate before merge.) -->
