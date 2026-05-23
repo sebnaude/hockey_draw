@@ -125,6 +125,15 @@ Examples:
                             help='Skip a SOLVER_STAGES entry. May be passed multiple times.')
     gen_parser.add_argument('--list-stages', action='store_true',
                             help='Print the configured SOLVER_STAGES and exit.')
+    gen_parser.add_argument('--groups', nargs='+', metavar='NAME', default=None,
+                            help='spec-023: apply the deduped UNION of these named constraint '
+                                 'groups (e.g. --groups core soft, --groups severity_1). '
+                                 'Resolves via the registry, minus any --exclude. No --groups '
+                                 'means the "default" group (every production constraint). '
+                                 'Use --list-groups to see available group names.')
+    gen_parser.add_argument('--list-groups', action='store_true',
+                            help='Print all known constraint group names (explicit tags + '
+                                 'derived severity_N/default) and exit.')
 
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -341,6 +350,33 @@ def _resolve_solver_stages(args, season_config):
     return stages
 
 
+def _resolve_group_selection(groups_arg, exclude):
+    """spec-023: resolve a --groups selection to (group_names, constraint_names).
+
+    `groups_arg` is the raw `--groups` list (or None/empty when not passed);
+    `exclude` is the `--exclude` list. Returns:
+      - `group_names`: the requested group names, defaulting to ['default'] when
+        none were passed (so metadata always records a selection).
+      - `constraint_names`: the deduped UNION of those groups' canonical names,
+        in canonical (registry insertion) order, MINUS any `--exclude`d name.
+
+    Exits with an error if a requested group name is unknown. This single
+    resolution is shared by both dispatch paths so --groups selects identically
+    in --simple and --staged.
+    """
+    from constraints.registry import resolve_groups, list_group_names
+    group_names = list(groups_arg) if groups_arg else ['default']
+    known = set(list_group_names())
+    unknown_groups = [g for g in group_names if g not in known]
+    if unknown_groups:
+        print(f"ERROR: unknown --groups name(s): {unknown_groups}")
+        print(f"  Known groups: {', '.join(list_group_names())}")
+        sys.exit(1)
+    exclude_set = set(exclude or [])
+    constraint_names = [c for c in resolve_groups(group_names) if c not in exclude_set]
+    return group_names, constraint_names
+
+
 def run_generate(args):
     """Generate a new draw."""
     print("="*60)
@@ -350,14 +386,27 @@ def run_generate(args):
     from main_staged import main_staged, load_data
     from solver_diagnostics import SolverConfig, get_recommended_config
 
-    # --list-stages: print and exit before any solver setup.
+    # --list-groups: print all known group names and exit (no solver setup).
+    if getattr(args, 'list_groups', False):
+        from constraints.registry import list_group_names
+        print("Available constraint group names (spec-023):")
+        for name in list_group_names():
+            print(f"  {name}")
+        return
+
+    # --list-stages: print and exit before any solver setup. Also lists group
+    # names (spec-023) so operators discover --groups selectors here.
     if getattr(args, 'list_stages', False):
         from constraints.stages import list_stages
+        from constraints.registry import list_group_names
         # Only load season_config if the user didn't pass --stages-config.
         season_config = {} if getattr(args, 'stages_config', None) else load_data(args.year)
         stages = _resolve_solver_stages(args, season_config)
         print("Configured solver stages:")
         print(list_stages(stages))
+        print("\nAvailable constraint group names (spec-023, for --groups):")
+        for name in list_group_names():
+            print(f"  {name}")
         return
     
     # Parse resume arguments
@@ -476,6 +525,21 @@ def run_generate(args):
         print("WARNING: --unified and --staged are incompatible. Using --unified.")
 
     exclude = args.exclude or []
+
+    # spec-023: resolve --groups into a deduped, canonically-ordered list of
+    # WHOLE constraint canonical names, minus --exclude. No --groups => the
+    # 'default' group (every production constraint), which equals today's full
+    # DEFAULT_STAGES selection. This single resolution is shared by BOTH the
+    # staged path (main_staged) and the simple/unified path (main_simple), so
+    # --groups produces an identical selection in --simple and --staged.
+    groups_arg = getattr(args, 'groups', None)
+    group_names, constraint_names = _resolve_group_selection(groups_arg, exclude)
+    # The staged path only *filters* its ordered stages when the operator
+    # explicitly selected groups; with no --groups it runs the legacy full
+    # stage list byte-for-byte (severity stages legitimately carry a few
+    # obsolete engine keys not in any production group — keep them on default).
+    staged_constraint_filter = constraint_names if groups_arg else None
+
     relax_config = None
     if getattr(args, 'relax', False):
         relax_config = {
@@ -521,6 +585,8 @@ def run_generate(args):
             run_id=final_run_id,
             description=user_description,
             provenance=provenance,
+            constraint_names=constraint_names,
+            groups_selected=group_names,
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -542,6 +608,8 @@ def run_generate(args):
             description=user_description,
             provenance=provenance,
             solver_stages=resolved_stages,
+            constraint_names=staged_constraint_filter,
+            groups_selected=group_names,
         )
     
     if solution:

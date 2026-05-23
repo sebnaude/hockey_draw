@@ -207,35 +207,45 @@ def validate_solver_stages(stages: List[Dict[str, Any]]) -> List[str]:
 def severity_solver_stages() -> List[Dict[str, Any]]:
     """Return a SOLVER_STAGES list grouped by severity level (1=critical → 5=very low).
 
-    Built from `CONSTRAINT_REGISTRY` so it stays in sync as atoms come and
-    go. Tester-only entries are skipped, and atomized clusters surface their
-    atoms (not the legacy combined name) so the dispatcher routes through
-    the engine path. The result is suitable to pass to
-    `StagedScheduleSolver.run_solver_stages_solve(stages_override=...)`
-    when the user opts into severity-based staging via `--staged`.
+    spec-023 (Unit C): reimplemented in terms of `resolve_group('severity_N')`
+    so severity staging is just another group selection — but it remains a
+    naturally non-overlapping ordered selection (each constraint has exactly one
+    severity level, so the per-level groups are disjoint). The result is
+    byte-for-byte identical to the prior registry-walk implementation: each
+    `severity_N` group is filtered to drop tester-only entries and atomized
+    legacy combined names (whose atoms appear separately so the dispatcher
+    routes through the engine/atom path).
+
+    Suitable to pass to `StagedScheduleSolver.run_solver_stages_solve(
+    stages_override=...)` when the user opts into severity-based staging via
+    `--staged`.
     """
-    from collections import defaultdict
+    from constraints.registry import resolve_group
+
     # Names of atom_groups whose atoms cover them (skip the combined name so
     # the dispatcher uses atoms instead of legacy classes).
     atomized_groups = {
         info.atom_group for info in CONSTRAINT_REGISTRY.values()
         if info.atom_group
     }
-    by_severity: Dict[int, List[str]] = defaultdict(list)
-    for name, info in CONSTRAINT_REGISTRY.items():
-        if info.tester_only:
-            continue
+
+    def _keep(name: str) -> bool:
+        info = CONSTRAINT_REGISTRY.get(name)
+        if info is None or info.tester_only:
+            return False
         if name in atomized_groups:
-            # Skip the legacy combined name; its atoms appear separately.
-            continue
-        by_severity[info.severity_level].append(name)
+            return False
+        return True
 
     stages: List[Dict[str, Any]] = []
-    for level in sorted(by_severity):
+    for level in range(1, 6):
+        members = sorted(n for n in resolve_group(f'severity_{level}') if _keep(n))
+        if not members:
+            continue
         stages.append({
             'name': f'severity_{level}',
             'description': f'Severity level {level} constraints',
-            'atoms': sorted(by_severity[level]),
+            'atoms': members,
         })
     return stages
 

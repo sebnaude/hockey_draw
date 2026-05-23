@@ -832,7 +832,8 @@ class StagedScheduleSolver:
 
     def run_staged_solve(self, run_id: str = None, resume_from: str = None,
                          stages_to_run: list = None, severity_staged: bool = False,
-                         exclude_constraints: list = None) -> dict:
+                         exclude_constraints: list = None,
+                         keep_constraints: list = None) -> dict:
         """Run the staged solving process.
 
         Phase 7c: this method is now a thin shim over
@@ -844,7 +845,11 @@ class StagedScheduleSolver:
         ``solver_stages`` overrides).
 
         ``exclude_constraints`` becomes a name-based filter on the
-        resolved stages' atom lists.
+        resolved stages' atom lists. ``keep_constraints`` (spec-023) is the
+        complementary inclusion filter: when set, each stage's atoms are
+        restricted to that set so a --groups selection applies identically here
+        as in the simple path. When None, no inclusion filtering is done (legacy
+        full selection).
         """
         if severity_staged:
             stages = severity_solver_stages()
@@ -853,6 +858,17 @@ class StagedScheduleSolver:
         if stages_to_run:
             wanted = set(stages_to_run)
             stages = [s for s in stages if s['name'] in wanted]
+
+        # spec-023: restrict every stage's atoms to the resolved --groups set.
+        # Stages that end up empty are removed.
+        if keep_constraints is not None:
+            keep_set = set(keep_constraints)
+            filtered = []
+            for s in stages:
+                kept = [a for a in s.get('atoms', []) if a in keep_set]
+                if kept:
+                    filtered.append({**s, 'atoms': kept})
+            stages = filtered
 
         # Drop excluded atoms from every stage. Stages that end up empty
         # are removed.
@@ -901,7 +917,8 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 severity_staged: bool = False, hint_solution: dict = None,
                 exclude_constraints: list = None,
                 description: str = '', provenance: dict = None,
-                solver_stages: list = None):
+                solver_stages: list = None,
+                constraint_names: list = None, groups_selected: list = None):
     """Main entry point for staged solving (Phase 7c-clean).
 
     Args:
@@ -921,6 +938,13 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         description: User-provided description for metadata.
         provenance: Dict with locked_source, hint_source paths etc.
         solver_stages: Optional override for the stage list (from `--stages-config` etc.).
+        constraint_names: spec-023 — resolved deduped union of selected --groups
+            (canonical names), minus --exclude. When set, each stage's atoms are
+            restricted to this set (and emptied stages dropped) so --groups
+            selects an identical constraint set in --staged as in --simple. When
+            None, the legacy full stage selection runs unchanged.
+        groups_selected: spec-023 — the list of group names the operator
+            requested (for metadata; defaults to ['default']).
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -973,6 +997,10 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     data['_solver_workers'] = solver_config.num_workers if solver_config else None
     data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
     data['_excluded_constraints'] = list(exclude_constraints or [])
+    # spec-023: record the resolved group selection + applied constraint set.
+    data['_groups_selected'] = list(groups_selected or ['default'])
+    if constraint_names is not None:
+        data['_constraint_names'] = list(constraint_names)
     if description:
         data['_user_description'] = description
     if provenance:
@@ -1078,6 +1106,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 run_id=run_id, resume_from=resume_from,
                 stages_to_run=stages_to_run, severity_staged=True,
                 exclude_constraints=exclude_constraints,
+                keep_constraints=constraint_names,
             )
         else:
             stages_override = data.get('solver_stages')
@@ -1087,6 +1116,17 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
             if stages_to_run:
                 names = set(stages_to_run)
                 stages_override = [s for s in stages_override if s['name'] in names]
+            # spec-023: restrict each stage's atoms to the resolved --groups set
+            # (drop emptied stages) so --groups selects identically here and in
+            # --simple. None => legacy full selection unchanged.
+            if constraint_names is not None:
+                keep_set = set(constraint_names)
+                filtered = []
+                for s in stages_override:
+                    kept = [a for a in s.get('atoms', []) if a in keep_set]
+                    if kept:
+                        filtered.append({**s, 'atoms': kept})
+                stages_override = filtered
             solution = solver.run_solver_stages_solve(
                 run_id=run_id, stages_override=stages_override,
             )
@@ -1129,11 +1169,31 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
 
 
 def _main_simple_unified(model, X, data, solver_config, resource_monitor,
-                         checkpoint_manager, run_dir, logger):
-    """Run unified 3-phase constraint engine in simple mode."""
-    from constraints.unified import UnifiedConstraintEngine
+                         checkpoint_manager, run_dir, logger,
+                         constraint_names: list = None):
+    """Run unified 3-phase constraint engine in simple mode.
 
-    engine = UnifiedConstraintEngine(model, X, data)
+    spec-023 (Unit C): when ``constraint_names`` (the resolved deduped union of
+    selected --groups, minus --exclude) is provided, we translate it into the
+    engine's existing ``skip_constraints`` exclusion mechanism — the engine
+    keys NOT covered by the selection are skipped, so ``apply_phase_a/b/c()``
+    apply only the selected WHOLE constraints' engine portions. This is the same
+    selection the staged path applies, so --groups is identical in --simple and
+    --staged. When None, no engine key is skipped (legacy full selection).
+    """
+    from constraints.unified import UnifiedConstraintEngine
+    from constraints.stages import collect_engine_keys, ALL_ENGINE_KEYS
+
+    skip_constraints = set()
+    if constraint_names is not None:
+        selected_engine_keys, _ = collect_engine_keys(list(constraint_names))
+        # Skip every engine key the selection does NOT cover (reuse the engine's
+        # existing skip_constraints exclusion mechanism — no new lever invented).
+        skip_constraints = ALL_ENGINE_KEYS - selected_engine_keys
+        print(f"\n[spec-023] --groups selection: applying {len(selected_engine_keys)} "
+              f"engine key(s); skipping {sorted(skip_constraints)}")
+
+    engine = UnifiedConstraintEngine(model, X, data, skip_constraints=skip_constraints)
     engine.build_groupings()
 
     print("\nApplying unified constraints (Phase A + B + C)...")
@@ -1241,13 +1301,22 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
                 relax_config: dict = None, fix_round_1: bool = False,
                 constraint_slack: dict = None, hint_solution: dict = None,
                 use_unified: bool = True, run_id: str = None,
-                description: str = '', provenance: dict = None):
+                description: str = '', provenance: dict = None,
+                constraint_names: list = None, groups_selected: list = None):
     """Simple (non-staged) main entry point — single solve via the unified engine.
 
     Phase 7c: the legacy iterate-classes path is gone. ``--simple`` always
     routes through ``_main_simple_unified`` which uses
     ``UnifiedConstraintEngine`` (and the registry for non-engine atoms).
     ``use_unified`` is retained as a no-op flag for CLI back-compat.
+
+    spec-023 (Unit C): ``constraint_names`` is the resolved deduped union of
+    selected --groups (canonical names), minus --exclude. It is propagated to
+    ``_main_simple_unified`` and applied as a ``UnifiedConstraintEngine.skip_constraints``
+    filter so the ``apply_phase_a/b/c()`` calls apply only the selected WHOLE
+    constraints' engine keys — making --groups select identically in --simple
+    as in --staged. When None, the legacy full engine selection runs unchanged.
+    ``groups_selected`` is recorded in metadata.
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -1299,6 +1368,10 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
     data['_solver_workers'] = solver_config.num_workers if solver_config else None
     data['_relax_enabled'] = bool(relax_config and relax_config.get('enabled'))
     data['_excluded_constraints'] = list(exclude_constraints or [])
+    # spec-023: record the resolved group selection + applied constraint set.
+    data['_groups_selected'] = list(groups_selected or ['default'])
+    if constraint_names is not None:
+        data['_constraint_names'] = list(constraint_names)
     if description:
         data['_user_description'] = description
     if provenance:
@@ -1391,7 +1464,8 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
     # files. `--unified` is now redundant but kept as a no-op for
     # backwards-compatible CLI invocations.
     return _main_simple_unified(model, X, data, solver_config, resource_monitor,
-                                 checkpoint_manager, run_dir, logger)
+                                 checkpoint_manager, run_dir, logger,
+                                 constraint_names=constraint_names)
 
 
 if __name__ == "__main__":
