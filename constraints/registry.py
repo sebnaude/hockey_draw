@@ -445,6 +445,18 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=1,
         tester_only=True,
     ),
+    # spec-025: LOCKED_PAIRINGS — mechanical date-pins (pairing + date, time/slot/
+    # field free). Enforced by generate_X via a per-pin `sum == 1` over candidate
+    # vars on the pin's date (not a Constraint class). The tester re-verifies each
+    # pin's pairing is present on its date in the finished draw.
+    'LockedPairings': ConstraintInfo(
+        canonical_name='LockedPairings',
+        solver_class_names=[],  # Enforced by generate_X sum==1, not a Constraint class
+        tester_check_methods=['_check_locked_pairings'],
+        tester_violation_names=['LockedPairings'],
+        severity_level=1,
+        tester_only=True,
+    ),
 }
 
 
