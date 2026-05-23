@@ -143,9 +143,16 @@ def test_derived_severity_1_matches_severity_metadata():
 def test_default_group_is_every_production_constraint():
     """Given the derived 'default'/'all'/'production' groups,
     When resolved,
-    Then each equals every constraint with a non-empty explicit groups set."""
+    Then each equals every FRESH-SEASON-BUILD constraint = exactly core ∪ soft.
+
+    spec-027 changed default/all/production from `bool(info.groups)` to
+    `core ∪ soft`. The two are identical for every constraint that existed
+    before spec-027 (each carried `core` or `soft`), but the change keeps the
+    new `core_hard`-only freeze pins + TeamConflict, and the `regen_soft` atoms,
+    OUT of a fresh build (they were/are never part of DEFAULT_STAGES)."""
     production = {
-        name for name, info in CONSTRAINT_REGISTRY.items() if info.groups
+        name for name, info in CONSTRAINT_REGISTRY.items()
+        if {'core', 'soft'} & info.groups
     }
     assert resolve_group('default') == production
     assert resolve_group('all') == production

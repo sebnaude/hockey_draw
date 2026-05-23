@@ -48,7 +48,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_no_double_booking_teams'],
         tester_violation_names=['NoDoubleBookingTeams'],
         severity_level=1,
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     'NoDoubleBookingFields': ConstraintInfo(
         canonical_name='NoDoubleBookingFields',
@@ -56,7 +56,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_no_double_booking_fields'],
         tester_violation_names=['NoDoubleBookingFields'],
         severity_level=1,
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     'EqualGamesAndBalanceMatchUps': ConstraintInfo(
         canonical_name='EqualGamesAndBalanceMatchUps',
@@ -64,7 +64,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_equal_games', '_check_balanced_matchups'],
         tester_violation_names=['EqualGames', 'BalancedMatchups'],
         severity_level=1,
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     # OBSOLETE (spec-004): superseded by `AwayClubHomeWeekendsCount` +
     # `AwayClubPerOpponentAndAggregateHomeBalance`. The legacy combined class
@@ -106,7 +106,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_fifty_fifty_home_away'],
         tester_violation_names=['FiftyFiftyHomeAway'],
         severity_level=1,
-        groups=frozenset({'core', 'home_away_balance'}),
+        groups=frozenset({'core', 'home_away_balance', 'core_hard'}),
     ),
     # spec-018: `NonDefaultHomeGrouping` (alias `MaitlandHomeGrouping`;
     # solver classes `MaitlandHomeGrouping*` / `MaxMaitlandHomeWeekends*`)
@@ -143,7 +143,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PHLAndSecondGradeTimes'],
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     'PHLAnd2ndConcurrencyAtBroadmeadow': ConstraintInfo(
         canonical_name='PHLAnd2ndConcurrencyAtBroadmeadow',
@@ -152,7 +152,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['PHLAndSecondGradeTimes'],
         severity_level=1,
         atom_group='PHLAndSecondGradeTimes',
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     # spec-015: GosfordFridayRoundsForced entry removed. The per-round
     # `sum == 1` rule is expressed generically via FORCED_GAMES count entries
@@ -252,6 +252,13 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_team_conflict'],
         tester_violation_names=['TeamConflict'],
         severity_level=2,
+        # spec-027: a named team pair shares players — two games in one week is a
+        # genuine impossibility, so it stays HARD in regen. Tagged core_hard ONLY
+        # (no `core`): TeamConflict is data-driven and was never in DEFAULT_STAGES,
+        # so it is deliberately absent from the fresh-build `default` group; adding
+        # only `core_hard` pulls it into the `regen` group without changing any
+        # fresh-season behaviour.
+        groups=frozenset({'core_hard'}),
     ),
     # OBSOLETE (spec-007): the legacy `ClubGradeAdjacencyConstraint` did two
     # things — (1) a hard same-grade-same-club no-concurrency rule and (2) a
@@ -279,7 +286,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ClubGradeAdjacency'],
         severity_level=1,
         atom_group='ClubGradeAdjacency',
-        groups=frozenset({'core', 'critical_feasibility'}),
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     # spec-007: soft atom for convenor-supplied team pairs that should avoid
     # concurrent (week, day_slot) appearances (siblings in non-adjacent grades,
@@ -397,7 +404,8 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         # DEFAULT_STAGES — ClubNoConcurrentSlot is wired into critical_feasibility
         # (NOT club_day, which the spec's illustrative example guessed), so it
         # carries the critical_feasibility legacy-stage group tag.
-        groups=frozenset({'core', 'critical_feasibility'}),
+        # spec-027: physical slot-concurrency — stays HARD in regen (core_hard).
+        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
     'ClubFieldConcentration': ConstraintInfo(
         canonical_name='ClubFieldConcentration',
@@ -480,6 +488,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['ForcedGames'],
         severity_level=1,
         tester_only=True,
+        # spec-027: a freeze pin. Stays HARD in regen (core_hard). Enforced at
+        # generate_X time (no solver class), so apply_constraint_set skips it;
+        # the tag is for `regen`-group membership + documentation completeness.
+        groups=frozenset({'core_hard'}),
     ),
     'BlockedGames': ConstraintInfo(
         canonical_name='BlockedGames',
@@ -488,6 +500,8 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['BlockedGames'],
         severity_level=1,
         tester_only=True,
+        # spec-027: a freeze pin (variable elimination). Stays HARD in regen.
+        groups=frozenset({'core_hard'}),
     ),
     # spec-025: LOCKED_PAIRINGS — mechanical date-pins (pairing + date, time/slot/
     # field free). Enforced by generate_X via a per-pin `sum == 1` over candidate
@@ -500,6 +514,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['LockedPairings'],
         severity_level=1,
         tester_only=True,
+        # spec-027: THE freeze itself in regen — soft pins would defeat the
+        # purpose. Stays HARD (core_hard). Enforced at generate_X time.
+        groups=frozenset({'core_hard'}),
     ),
 }
 
@@ -712,16 +729,37 @@ def validate_required_helpers() -> List[str]:
 
 # Derived group predicates. A name maps to a predicate over ConstraintInfo;
 # resolve_group computes membership on demand. `severity_1`..`severity_5` select
-# by severity level. `default`/`all`/`production` select every constraint with a
-# non-empty explicit groups set (i.e. every production constraint).
+# by severity level.
+#
+# `default`/`all`/`production` select the normal FRESH-SEASON-BUILD set: every
+# constraint carrying `core` or `soft`. (spec-027 changed this from the old
+# `bool(info.groups)` — behaviour-identical for every constraint that existed
+# before spec-027, since each carried `core` or `soft` — so that two new kinds
+# of group tag are EXCLUDED from fresh builds: (a) the `core_hard`-only freeze
+# pins + TeamConflict, which were never in DEFAULT_STAGES, and (b) the spec-027
+# `regen_soft` atoms, which must NEVER apply in a fresh build — only in regen.)
+#
+# `regen` (spec-027) is the regeneration constraint set: the kept-hard physical
+# atoms (`core_hard`), the soft-analogue atoms (`regen_soft`), and the always-soft
+# atoms (`soft`). It deliberately does NOT select the normal hard atoms of the
+# softened constraints — they carry only `{core, ...}`, never `core_hard`/
+# `regen_soft`/`soft`, so this predicate excludes them automatically (this is how
+# regen "softens" e.g. PHLAnd2ndAdjacency, the ClubDay atoms, ClubVsClubStacked*,
+# BalancedByeSpacing, VenueEarliestSlotFill, and the engine EqualMatchUpSpacing /
+# ClubGameSpread keys — by selecting their RegenSoft analogue instead of them).
+def _is_fresh_build(info: 'ConstraintInfo') -> bool:
+    return bool(info.groups & {'core', 'soft'})
+
+
 DERIVED_GROUPS: Dict[str, Callable[[ConstraintInfo], bool]] = {
     **{
         f'severity_{n}': (lambda info, n=n: info.severity_level == n)
         for n in range(1, 6)
     },
-    'default': (lambda info: bool(info.groups)),
-    'all': (lambda info: bool(info.groups)),
-    'production': (lambda info: bool(info.groups)),
+    'default': _is_fresh_build,
+    'all': _is_fresh_build,
+    'production': _is_fresh_build,
+    'regen': (lambda info: bool(info.groups & {'core_hard', 'regen_soft', 'soft'})),
 }
 
 

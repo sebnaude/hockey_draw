@@ -1146,6 +1146,28 @@ PENALTY_WEIGHTS = {
     'preferred_games':                         10_000,
     # spec-018: 'maitland_alternate_home_away' (spec-012) removed — the
     # alternation soft penalty was deleted.
+    #
+    # ---- spec-027: regeneration soft-analogue penalty weights ----
+    # Used ONLY by the `regen` constraint group (scoped regeneration, spec-026).
+    # A fresh season build never applies the RegenSoft atoms, so these weights are
+    # inert outside regen. Relative magnitudes: feasibility-adjacent rules
+    # (adjacency, home/away balance, stacked weekends, matchup/bye spacing) weigh
+    # far above the cosmetic ones (club-day cosmetics, club-game spread, earliest
+    # slot fill). Each RegenSoft atom falls back to a matching hardcoded default
+    # when its key is absent (seasons other than 2026 define no PENALTY_WEIGHTS).
+    'regen_phl_2nd_adjacency':                100_000,
+    'regen_away_club_home_weekends_count':     90_000,
+    'regen_clubvsclub_stacked_weekends':       80_000,
+    'regen_clubvsclub_stacked_colocation':     70_000,
+    'regen_equal_matchup_spacing':             60_000,
+    'regen_balanced_bye_spacing':              50_000,
+    'regen_club_day_participation':            40_000,
+    'regen_club_day_intra_club_matchup':       35_000,
+    'regen_club_day_opponent_matchup':         35_000,
+    'regen_club_day_same_field':               30_000,
+    'regen_club_day_contiguous_slots':         25_000,
+    'regen_club_game_spread':                  20_000,
+    'regen_venue_earliest_slot_fill':          10_000,
 }
 
 # ============== Season Configuration ==============
