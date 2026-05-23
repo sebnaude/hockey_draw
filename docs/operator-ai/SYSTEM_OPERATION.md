@@ -137,8 +137,21 @@ union.
 **Interaction with `--lock-weeks`:** a `--lock-weeks` (already-played) week is
 **hard-locked** (exact keys pinned, nothing moves) and is never pinned-by-date; a
 future week not in `--regen-weeks` is **pinned**; a `--regen-weeks` week is
-**free**. `--regen-weeks` and `--lock-weeks` must not overlap (FATAL). A regen is
-a solver run, so it bumps the **MAJOR** version (vN.M → v{N+1}.0).
+**free**. `--regen-weeks` and `--lock-weeks` must not overlap (FATAL). A
+`--regen-weeks` value that does not exist in the source draw is also FATAL (catches
+typos / off-by-one). A regen is a solver run, so it bumps the **MAJOR** version
+(vN.M → v{N+1}.0).
+
+**Metadata:** the output draw records a `regen` block in `metadata` with
+`source_draw`, `regen_grades`, `regen_weeks`, `frozen_pin_count`,
+`hard_locked_weeks`, and `games_changed` (count of games re-timed vs the source).
+A non-regen run adds no `regen` block.
+
+**spec-027 warning:** until the regen soft-constraint group (spec-027) and the
+groups machinery (spec-023) land, regen runs under the **full hard constraint set**
+and prints `WARNING: spec-027 regen group not available …`. Small scopes (e.g.
+`--regen-grades 6th`, which doesn't touch PHL/2nd adjacency) stay feasible; large
+re-times may be infeasible until spec-027 softens the relevant rules.
 
 ---
 

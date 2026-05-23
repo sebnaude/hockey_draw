@@ -102,6 +102,10 @@ You can — without thinking too hard:
 3. Loosen one dimension of a rule by passing `--slack N` and knowing exactly which atoms read that slack.
 4. Diagnose an infeasibility down to a single cluster via `run.py diagnose --stage X`.
 5. Apply a convenor hand-edit, see the violation diff, promote it as a MINOR version, all in one script.
+   Or, for a bigger change, **regenerate a scoped slice of the draw** (spec-026):
+   `run.py generate --regen-from <draw> --regen-grades 5th 6th` (or `--regen-weeks 10-22`)
+   freezes everything else on its date/weekend and re-solves only the named scope,
+   versioned MAJOR with a `regen` metadata block recording what changed.
 6. Hand a new convenor (or AI agent) `CLAUDE.md` + this file + `docs/ATOMIZATION_PLAN.md` and have them productive in an hour.
 
 If any of these starts to feel hard, that's the signal that something has drifted from the model. Fix the drift before adding more features.

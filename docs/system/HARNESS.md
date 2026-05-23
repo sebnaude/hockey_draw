@@ -54,6 +54,44 @@ convert_X_to_roster(...)          # solution → DrawStorage
 DrawStorage.export_schedule_xlsx(...) / DrawTester.run_violation_check(...)
 ```
 
+## Regeneration entry point (spec-026)
+
+A regen run (`--regen-from SOURCE [--regen-grades …] [--regen-weeks …]`) is a
+**pre-`generate_X` pipeline entry point** that feeds the normal pipeline above —
+it is not a separate solver path.
+
+```
+--regen-from SOURCE
+        │
+        ▼
+DrawStorage.load(SOURCE)                  # run.py::_compute_regen_state
+        │   ├─ validate regen∩lock-weeks empty (FATAL)
+        │   └─ validate regen-weeks ⊆ source weeks (FATAL)
+        ▼
+resolve_regen_scope(games, grades, weeks, lock_weeks)   # (free_ids, frozen_ids)
+        │   union rule: free iff grade∈regen-grades OR week∈regen-weeks;
+        │   hard-locked weeks excluded from both sets
+        ▼
+_build_regen_pins(source_draw, frozen_ids)              # one date-pin per frozen game
+        │
+        ▼  (kwarg regen_locked_pairings → main_staged / main_simple)
+_merge_regen_pins(data, regen_locked_pairings)          # AFTER load_data()
+        │   concatenate with config LOCKED_PAIRINGS, dedup by (teams,grade,date)
+        ▼
+data['locked_pairings']  ─────────────▶  generate_X (spec-025 pin pass)
+--lock-weeks  ────────────────────────▶  locked-keys path (model.Add(X==1)+zero)
+        │
+        ▼
+(normal pipeline: UnifiedConstraintEngine → Solve → save_solver_output is_major=True)
+        │
+        └─ draw metadata gains a `regen` block (source_draw, regen_grades,
+           regen_weeks, frozen_pin_count, hard_locked_weeks, games_changed)
+```
+
+The regen constraint group (`resolve_groups(['regen'])`, spec-023/spec-027) is
+selected via `_select_regen_group()` when available; until then the run falls
+back to the full hard constraint set with a printed WARNING.
+
 ## Data dict — keys consumed by the engine
 
 Output of `build_season_data()`. Constraints can read any key but typically
@@ -70,6 +108,7 @@ use:
 | `blocked_games` | season config | generate_X, BlockedGames tester check, Phase 4 adjusters |
 | `count_adjustments` | `run_count_adjusters` (during build_groupings) | atoms / legacy methods that need FORCED-aware counts |
 | `locked_weeks` | `--locked` + `--lock-weeks` CLI | engine groupings skip these |
+| `locked_pairings` | config LOCKED_PAIRINGS + regen `_merge_regen_pins` (spec-025/spec-026) | generate_X pin pass (date pinned, time/slot/field free) |
 | `penalties` | engine populates per soft constraint | objective function |
 | `solver_stages` | season config (Phase 7b foundation) | `constraints/stages.py` (not yet wired into main_staged.py) |
 

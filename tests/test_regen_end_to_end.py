@@ -180,6 +180,23 @@ class TestFrozenSetAndPins:
         assert all(p["grade"] != "6th" for p in pins)
         assert all(p["date"] != W1 for p in pins)
 
+    def test_bye_in_frozen_set_produces_no_pin(self):
+        # GIVEN a draw with a bye (team2='') and a normal game, both in the
+        # frozen set (4th grade, frozen because we regen 6th only).
+        draw = _draw(
+            _g("B1", "Norths 4th", "", "4th", 1, W1),          # bye
+            _g("B2", "Easts 4th", "Wests 4th", "4th", 1, W1),  # normal
+            _g("B3", "Souths 6th", "Tigers 6th", "6th", 1, W1),  # free (6th)
+        )
+        _, frozen_ids = resolve_regen_scope(
+            draw.games, regen_grades={"6th"}, regen_weeks=set(), lock_weeks=set()
+        )
+        assert frozen_ids == {"B1", "B2"}
+        pins = _build_regen_pins(draw, frozen_ids)
+        # THEN only the normal game is pinned (bye skipped by the guard).
+        assert len(pins) == 1
+        assert pins[0]["teams"] == ["Easts 4th", "Wests 4th"]
+
     def test_hard_locked_week_yields_no_pin(self, source_draw):
         # GIVEN week 1 is hard-locked (played). It is in neither free nor frozen.
         free_ids, frozen_ids = resolve_regen_scope(
