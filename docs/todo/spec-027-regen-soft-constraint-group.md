@@ -129,6 +129,23 @@ not as a change to how a fresh season is built.
    simply does NOT select the hard counterpart. Per spec-023's "split into two atoms" rule, any
    constraint whose hard and soft halves are still fused in one atom is split into a hard atom +
    a soft atom as part of this spec (named in Unit B).
+
+   > **IMPLEMENTATION DEVIATION (2026-05-24, verified against final-form code — applies the
+   > "split into two atoms" clause above).** `EqualMatchUpSpacing` and `ClubGameSpread` are NOT
+   > atoms — they are **engine keys** (in BOTH `ENGINE_HARD_KEYS` and `ENGINE_SOFT_KEYS`,
+   > `constraints/stages.py:52-80`). `apply_constraint_set` (`stages.py:313-319`) runs
+   > `engine.apply_stage_1_hard()` AND `engine.apply_stage_2_soft()` *together* for any engine
+   > key; spec-023 deleted `soft_only`, so there is **no mechanism to select the engine's soft
+   > half without its hard half**. "Reuse the existing soft component" is therefore not
+   > achievable. Resolution (per the clause above): create two NEW standalone soft-analogue
+   > atoms `EqualMatchUpSpacingRegenSoft` and `ClubGameSpreadRegenSoft` (non-engine atoms that
+   > replicate the penalty math of `unified.py::_matchup_spacing_soft` / `_club_game_spread_soft`
+   > into `data['penalties']['regen_equal_matchup_spacing']` / `['regen_club_game_spread']`), and
+   > have the `regen` group NOT select the engine `EqualMatchUpSpacing` / `ClubGameSpread` keys
+   > (they carry only `{core,...}` tags, never `core_hard`/`regen_soft`, so the derived `regen`
+   > predicate excludes them automatically). NIHC-fill genuinely needs no new atom (it is already
+   > a pure-soft atom in the `soft` group). Net: **13 new RegenSoft atoms** (the 11 listed below
+   > + these 2), updating DoD-10's count and the Risks "atom proliferation" note accordingly.
    (review fix — `VenueEarliestSlotFill` is HARD severity 2 in final-form (spec-021 made it a
    hard atom, not soft); it requires a new soft-analogue atom `VenueEarliestSlotFillRegenSoft`,
    not reuse of an existing soft component. The parenthetical claim "already soft post-spec-021"
