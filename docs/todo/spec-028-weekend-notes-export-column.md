@@ -1,9 +1,9 @@
-<!-- status: under_review -->
+<!-- status: building -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
-<!-- owner: session=none claimed=none -->
-<!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
+<!-- owner: session=opus-aa5b71e-20260523T091653Z claimed=2026-05-23T09:16:53Z -->
+<!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — dependency audit) — fixes applied inline -->
 
 # spec-028 — Per-weekend notes column in the published season xlsx
 
@@ -160,7 +160,7 @@ No maintained script currently calls `export_schedule_xlsx` in the final-form wo
 
 ## Dependencies
 
-- **Other plans:** `depends_on: none`. spec-028 touches `analytics/notes.py` (new), `analytics/storage.py`, `config/season_2026.py` (additive `note` keys), `data/2026/notes.json` (new), tests, `CLAUDE.md`, `docs/system/SYSTEM_OVERVIEW.md`. None of these are touched by the active specs 021/022/023 (which live in `constraints/*`, `run.py`, `main_staged.py`), so spec-028 is **independently parallelisable** with all of them. It does **rely on** spec-006 (done) having landed `PREFERRED_WEEKENDS` + `data['preferred_weekends']` — confirmed present at `config/season_2026.py:1050` and `utils.py:4098`. (review note — Low: the other `spec-024-field-spread-replaces-club-balance.md` also touches `config/season_2026.py`; if both run concurrently there will be a merge conflict on that file. Coordinate with whoever lands field-spread first so the `'note'` additions rebase cleanly.)
+- **Other plans:** `depends_on: none`. spec-028 touches `analytics/notes.py` (new), `analytics/storage.py`, `config/season_2026.py` (additive `note` keys), `data/2026/notes.json` (new), tests, `CLAUDE.md`, `docs/system/SYSTEM_OVERVIEW.md`. None of these are touched by the active specs 021/022/023 (which live in `constraints/*`, `run.py`, `main_staged.py`), so spec-028 is **independently parallelisable** with all of them. It does **rely on** spec-006 (done) having landed `PREFERRED_WEEKENDS` + `data['preferred_weekends']` — confirmed present at `config/season_2026.py:1049` and `utils.py:4098`. (review fix — Medium: the previous review noted a concurrent-conflict risk with `spec-024` — but spec-024 (field-spread) is already **done** per the dependency tree and is no longer a concurrent concern. The active concurrent risk is **spec-025** (LOCKED_PAIRINGS config), which is `ready` now and rewrites `config/season_2026.py:693-938` (the FORCED_GAMES locked-week entries). spec-028 adds additive `'note'` keys to FORCED_GAMES entries in the same file. If both land concurrently there will be a merge conflict on `config/season_2026.py`. The implementer of whichever lands second must rebase the `'note'` additions onto the post-spec-025 FORCED_GAMES layout. Functionally independent — `depends_on: none` is still correct.)
 
 - **Within this plan:** Unit B depends_on Unit A (consumes its return shape). Unit A is independently completable and testable first.
 
