@@ -9,7 +9,7 @@ Together with the WF-before-EF atom, the two soft penalties make WF→EF→SF th
 canonical (cheapest) fill order; SF-before-WF/EF emerges for free since SF is
 lowest priority. No hard implication is added.
 
-Helper variables are declared via the ``nihc_field_used`` kind so the
+Helper variables are registered under the ``nihc_field_used`` kind so the
 EF indicator is shared with the sibling atom (no duplicate channeling).
 """
 from constraints.atoms.base import Atom

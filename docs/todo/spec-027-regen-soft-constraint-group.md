@@ -1,4 +1,4 @@
-<!-- status: ready -->
+<!-- status: under_review -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->

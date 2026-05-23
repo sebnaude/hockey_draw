@@ -28,7 +28,7 @@ Edge cases:
 - Dummy keys (len < 11) and locked weeks are skipped via the standard
   uniformity rules in the unified engine, mirrored here.
 
-Helper variables are declared via the ``nihc_field_used`` kind so the
+Helper variables are registered under the ``nihc_field_used`` kind so the
 sibling atom ``NIHCFillEFBeforeSF`` shares the same EF indicator.
 """
 from collections import defaultdict

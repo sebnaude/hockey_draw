@@ -1,4 +1,4 @@
-<!-- status: ready -->
+<!-- status: under_review -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-025 (LOCKED_PAIRINGS config + generate_X enforcement — regen writes pins into it). Builds on the already-shipped locked-weeks architecture (run.py:71-79, main_staged.py:1037-1059). The regen soft-constraint group (spec-027) is selected by this mode but is NOT a blocker: without spec-027 the regen still runs, just with the normal hard constraints (which is the "may be infeasible" case spec-027 fixes). Shares run.py + main_staged.py + analytics/storage.py with spec-021/022/023 — rebase before merge. -->
