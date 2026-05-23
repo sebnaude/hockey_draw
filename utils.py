@@ -3623,6 +3623,15 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
     # Build forced games lookup from config
     forced_game_rules, forced_constraint_types, forced_constraint_counts = _build_forced_game_rules(data.get('forced_games', []), teams)
 
+    # spec-025: LOCKED_PAIRINGS — a second, parallel scope-count pass. Each pin is
+    # its own scope (unique_per_entry=True; redundant since pins always carry
+    # teams, but explicit). Pins are always hard `sum == 1`, so the ctypes/counts/
+    # weights returned here are unused. _build_scope_count_rules returns a 4-tuple.
+    lp_scope_groups, _lp_ctypes, _lp_counts, _lp_weights = _build_scope_count_rules(
+        data.get('locked_pairings', []), teams,
+        label='LOCKED_PAIRINGS', unique_per_entry=True,
+    )
+
     # Build blocked games (no-play) lookup from config.
     # `perennial_blocked_scopes` tracks scope_keys whose source entry was marked
     # `'perennial': True` (e.g. the rounds-1-2 Broadmeadow-only rule from
@@ -3637,7 +3646,10 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
 
     # Collect forced variables per scope for adding sum==1 constraints
     forced_scope_vars = defaultdict(list)  # scope_key -> [(key, var), ...]
-    
+    # spec-025: separate registry so FORCED count math is byte-identical to the
+    # FORCED-only baseline; a var may register in BOTH (additive).
+    locked_pairing_scope_vars = defaultdict(list)  # scope_key -> [var, ...]
+
     # Build set of PHL-only venues (Gosford) and days (Friday)
     # These should be excluded from non-PHL grades
     phl_only_venues = {'Central Coast Hockey Park'}  # Gosford is PHL-only
@@ -3749,6 +3761,10 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
                     X[key] = var
                     for scope_key in forced_matches_block:
                         forced_scope_vars[scope_key].append(var)
+                    # spec-025: a perennial-exempt var may also satisfy a pin.
+                    if lp_scope_groups and not in_locked_week:
+                        for lp_scope_key in _get_matching_forced_scopes(key, lp_scope_groups):
+                            locked_pairing_scope_vars[lp_scope_key].append(var)
                     forced_vars_forced += 1
                     perennial_exempt_count += 1
                     continue
@@ -3768,10 +3784,19 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
                     X[key] = var
                     for scope_key in matching_scopes:
                         forced_scope_vars[scope_key].append(var)
+                    # spec-025: register the same var against any matching pin.
+                    if lp_scope_groups and not in_locked_week:
+                        for lp_scope_key in _get_matching_forced_scopes(key, lp_scope_groups):
+                            locked_pairing_scope_vars[lp_scope_key].append(var)
                     forced_vars_forced += 1
                     continue
 
-            X[key] = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
+            var = model.NewBoolVar(f'X_{t1_name}_{t2_name}_{t.day}_{t.time}_{t.week}_{t.field.name}')
+            X[key] = var
+            # spec-025: register plain (non-FORCED) vars against matching pins.
+            if lp_scope_groups and not in_locked_week:
+                for lp_scope_key in _get_matching_forced_scopes(key, lp_scope_groups):
+                    locked_pairing_scope_vars[lp_scope_key].append(var)
 
     # Pre-check: verify all forced game rules matched at least one variable.
     # If any forced game has zero matching vars, diagnose why and exit.
@@ -3845,7 +3870,67 @@ def generate_X(model, data: dict) -> Tuple[Dict, Dict]:
         else:
             print(f"  WARNING: Unknown constraint type '{ctype}' for forced game, defaulting to equal")
             model.Add(sum(vars_list) == count)
-    
+
+    # spec-025: LOCKED_PAIRINGS empty-scope pre-check. A pin whose pairing has
+    # zero placeable vars on its date is a real config/feasibility error (exactly
+    # like FORCED). FATAL with a LOCKED_PAIRINGS-labelled diagnostic — never drop.
+    missing_locked = [
+        sk for sk in lp_scope_groups
+        if sk not in locked_pairing_scope_vars or len(locked_pairing_scope_vars[sk]) == 0
+    ]
+    if missing_locked:
+        locked_pairings = data.get('locked_pairings', [])
+        lp_scope_to_entry = {}
+        for entry_idx, entry in enumerate(locked_pairings):
+            scope = []
+            for field in _SCOPE_FIELDS:
+                if field in entry:
+                    val = entry[field]
+                    idx = _KEY_INDEX[field]
+                    if isinstance(val, list):
+                        scope.append((idx, tuple(val)))
+                    else:
+                        scope.append((idx, val))
+            grades = entry.get('grades', [])
+            if grades and 'grade' not in entry:
+                scope.append((_KEY_INDEX['grade'], tuple(grades)))
+            raw_teams = entry.get('teams', [])
+            has_team1_team2 = 'team1' in entry or 'team2' in entry
+            has_club = 'club' in entry
+            if raw_teams or has_team1_team2 or has_club:
+                scope.append(('_entry_idx', entry_idx))
+            lp_scope_to_entry[frozenset(scope)] = entry
+
+        print(f"\n{'='*70}")
+        print(f"FATAL: {len(missing_locked)} LOCKED_PAIRINGS pin(s) have NO playable variables!")
+        print(f"The solver cannot satisfy these pins. Fix config before running.")
+        print(f"{'='*70}")
+        for sk in missing_locked:
+            scope_desc = ', '.join(f"{idx_to_name.get(idx, idx)}={val}" for idx, val in sk if isinstance(idx, int))
+            entry = lp_scope_to_entry.get(sk, {})
+            desc = entry.get('description', scope_desc)
+            print(f"\n  LOCKED_PAIRINGS: {desc}")
+            print(f"    Scope: {scope_desc}")
+            teams_info = entry.get('teams', [])
+            if teams_info:
+                print(f"    Teams: {teams_info}")
+            print(f"    (teams={teams_info}, grade={entry.get('grade')}, date={entry.get('date')})")
+            reasons = _diagnose_missing_forced_game(entry, lp_scope_groups, sk, data)
+            print(f"    Diagnosis:")
+            for reason in reasons:
+                print(f"      - {reason}")
+        print(f"\n{'='*70}")
+        print("Fix the LOCKED_PAIRINGS config, BLOCKED_GAMES, PHL_GAME_TIMES, "
+              "FIELD_UNAVAILABILITIES, or season dates to resolve.")
+        print(f"{'='*70}\n")
+        sys.exit(1)
+
+    # spec-025: apply each pin as a hard sum == 1 (time/slot/field left free).
+    for scope_key, vars_list in locked_pairing_scope_vars.items():
+        model.Add(sum(vars_list) == 1)
+    if locked_pairing_scope_vars:
+        print(f"  - Locked pairings: {len(locked_pairing_scope_vars)} pin scope(s) -> sum == 1 each")
+
     print(f"Created {len(X)} decision variables")
     print(f"  - PHL: {phl_vars_created} created, {phl_vars_skipped} skipped (invalid venue/field/day/time)")
     if second_valid_slots:
