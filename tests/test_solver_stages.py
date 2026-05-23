@@ -43,13 +43,16 @@ class TestValidateSolverStages:
         errors = validate_solver_stages(stages)
         assert any('NotARealAtom' in e for e in errors)
 
-    def test_duplicate_atom_across_stages_fails(self):
+    def test_duplicate_atom_across_stages_now_accepted(self):
+        """spec-023 DoD 6: the no-atom-in-two-stages (no-overlap) rule is
+        REMOVED — a solve applies the deduped UNION of selected groups, so the
+        same atom may legally appear in more than one stage/group."""
         stages = [
             {'name': 'a', 'atoms': ['NoDoubleBookingTeams']},
             {'name': 'b', 'atoms': ['NoDoubleBookingTeams']},
         ]
         errors = validate_solver_stages(stages)
-        assert any('appears in stages' in e for e in errors)
+        assert errors == []
 
     def test_duplicate_stage_name_fails(self):
         stages = [

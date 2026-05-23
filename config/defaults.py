@@ -161,7 +161,9 @@ CONSTRAINT_DEFAULTS = {
 #   description: human-readable summary
 #   atoms: list of canonical constraint names from constraints/registry.py
 # Optional fields:
-#   time_limit_seconds, use_prior_solution_as_hint, soft_only, requires_complete_solution
+#   time_limit_seconds, use_prior_solution_as_hint, requires_complete_solution
+# (spec-023: the `soft_only` field was removed — a constraint is applied whole,
+#  hard+soft together; there is no soft-only pass.)
 #
 # Season configs may override `SOLVER_STAGES` to reorder, add, or remove stages.
 
@@ -264,11 +266,14 @@ DEFAULT_STAGES = [
     {
         'name': 'soft_optimisation',
         'description': 'Soft penalties and optimisation',
-        'soft_only': True,
+        # spec-023: `soft_only` removed. This stage carries only pure-soft
+        # atoms (no live hard engine method), so always running hard+soft is
+        # behaviour-neutral. The hard-bearing constraints that once lived here
+        # were already moved out (EqualMatchUpSpacing → critical_feasibility,
+        # ClubGameSpread → club_day) by spec-017/021.
         'atoms': [
             # spec-017: 'EqualMatchUpSpacing' moved to critical_feasibility so
-            # its HARD part actually applies (this stage is soft_only, which
-            # skips apply_stage_1_hard).
+            # its HARD part actually applies (it was dead here under soft_only).
             # spec-021: 'ClubGameSpread' moved to club_day (hard) for the same
             # reason — its near-contiguity hard part was dead here. Its soft
             # hole-count penalty now runs in club_day too.

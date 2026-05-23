@@ -24,9 +24,12 @@ from constraints.registry import CONSTRAINT_REGISTRY
 
 
 REQUIRED_KEYS = {'name', 'atoms'}
+# spec-023: `soft_only` removed — a constraint is applied WHOLE (hard+soft
+# together), never peeled into a soft-only pass. There is no longer any
+# stage-level switch that suppresses the hard half of a constraint.
 OPTIONAL_KEYS = {
     'description', 'time_limit_seconds', 'use_prior_solution_as_hint',
-    'soft_only', 'requires_complete_solution',
+    'requires_complete_solution',
 }
 ALL_KEYS = REQUIRED_KEYS | OPTIONAL_KEYS
 
@@ -130,19 +133,28 @@ def load_solver_stages(season_config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def validate_solver_stages(stages: List[Dict[str, Any]]) -> List[str]:
-    """Validate a stage list against the registry. Returns a list of error
+    """Validate a stage/group list against the registry. Returns a list of error
     strings (empty list = valid).
 
-    Rules:
-    - Every stage has `name` + `atoms` (non-empty).
-    - Stage names are unique.
-    - Every atom in any stage is a registered canonical name.
-    - No atom appears in more than one stage.
+    spec-023 (DoD 6): the no-atom-in-two-stages (no-overlap) rule is REMOVED —
+    a constraint may legally appear in more than one group/stage, because a
+    solve applies the deduped UNION of selected groups. Validation instead
+    checks:
+    - Every stage has `name` + `atoms` (non-empty); stage names are unique.
+    - Every member of any stage is a registered canonical name OR a resolvable
+      group name (so a stage may reference a group by name).
+    - The canonical-order helper-var producer/consumer check passes
+      (`validate_group_order` from Unit A).
     - Optional keys are well-typed.
     """
+    from constraints.registry import (
+        list_group_names as _list_group_names,
+        validate_group_order as _validate_group_order,
+    )
+
     errors: List[str] = []
     seen_names: Set[str] = set()
-    seen_atoms: Dict[str, str] = {}  # atom_name -> stage_name where first found
+    group_names = set(_list_group_names())
 
     for i, stage in enumerate(stages):
         if not isinstance(stage, dict):
@@ -167,18 +179,21 @@ def validate_solver_stages(stages: List[Dict[str, Any]]) -> List[str]:
             errors.append(f'stage {name!r}: atoms must be a non-empty list')
             continue
 
+        # Each member must be a registered canonical name or a resolvable
+        # group name. Overlap across stages is now legal — no dedup check.
         for atom in atoms:
-            if atom not in CONSTRAINT_REGISTRY:
-                errors.append(
-                    f'stage {name!r}: atom {atom!r} not in CONSTRAINT_REGISTRY'
-                )
-            elif atom in seen_atoms and seen_atoms[atom] != name:
-                errors.append(
-                    f'atom {atom!r} appears in stages '
-                    f'{seen_atoms[atom]!r} and {name!r}'
-                )
-            else:
-                seen_atoms[atom] = name
+            if atom in CONSTRAINT_REGISTRY:
+                continue
+            if atom in group_names:
+                continue
+            errors.append(
+                f'stage {name!r}: atom {atom!r} is neither a registered '
+                f'canonical name nor a resolvable group name'
+            )
+
+    # Canonical-order helper-dep check (DoD 3 / Unit A). A registry reorder that
+    # places a helper-var consumer before its producer trips this.
+    errors.extend(_validate_group_order())
 
     return errors
 
@@ -224,9 +239,8 @@ def list_stages(stages: List[Dict[str, Any]]) -> str:
     lines = []
     for stage in stages:
         atoms = stage.get('atoms', [])
-        soft = ' [soft-only]' if stage.get('soft_only') else ''
         desc = stage.get('description', '')
-        lines.append(f"- {stage['name']}{soft}: {desc}")
+        lines.append(f"- {stage['name']}: {desc}")
         for atom in atoms:
             lines.append(f"    {atom}")
     return '\n'.join(lines)
@@ -245,8 +259,8 @@ def list_stages(stages: List[Dict[str, Any]]) -> str:
 # ----------------------------------------------------------------------
 
 
-def apply_solver_stage(
-    stage: Dict[str, Any],
+def apply_constraint_set(
+    canonical_names: List[str],
     *,
     model,
     X: Dict,
@@ -255,39 +269,48 @@ def apply_solver_stage(
     applied_engine_keys: Set[str],
     applied_atoms: Set[str],
 ) -> Tuple[int, List[str]]:
-    """Apply one stage's atoms to the model.
+    """Apply a resolved/ordered/deduped list of WHOLE constraints to the model.
 
-    Returns `(constraints_added, atoms_applied_this_stage)`. Mutates
+    spec-023: this is the single dispatch entry point. Each constraint is
+    applied whole — there is no soft-only pass:
+      - engine keys run `apply_stage_1_hard()` AND `apply_stage_2_soft()`;
+      - non-engine atoms run their full `apply(model, X, data, registry)`.
+
+    `canonical_names` should already be deduped and in canonical (registry
+    insertion) order — see `constraints.registry.resolve_groups`. This function
+    additionally skips any name already in `applied_atoms` (and any engine key
+    already in `applied_engine_keys`), so calling it across several stages never
+    double-applies a constraint.
+
+    Returns `(constraints_added, names_applied_this_call)`. Mutates
     `applied_engine_keys` and `applied_atoms` in place.
     """
-    atoms = stage.get('atoms', [])
-    new_atoms = [a for a in atoms if a not in applied_atoms]
-    if not new_atoms:
+    new_names = [a for a in canonical_names if a not in applied_atoms]
+    if not new_names:
         return 0, []
 
-    engine_keys, non_engine = collect_engine_keys(new_atoms)
+    engine_keys, non_engine = collect_engine_keys(new_names)
     new_engine_keys = engine_keys - applied_engine_keys
 
     constraints_added = 0
-    soft_only = bool(stage.get('soft_only'))
 
     if new_engine_keys:
-        # Set engine skip = everything except this stage's new engine keys.
+        # Set engine skip = everything except this call's new engine keys.
+        # spec-023: ALWAYS run hard AND soft — engine keys are applied whole.
         engine.skip_constraints = ALL_ENGINE_KEYS - new_engine_keys
-        if not soft_only:
-            constraints_added += engine.apply_stage_1_hard()
+        constraints_added += engine.apply_stage_1_hard()
         constraints_added += engine.apply_stage_2_soft()
         applied_engine_keys.update(new_engine_keys)
 
     # Legacy-class fallback for atoms not handled by the engine.
     #
     # For Atom subclasses we MUST share a single helper-var registry across
-    # every atom in the same stage call: the spec-005
+    # every atom in the same call: the spec-005
     # `ClubVsClubStackedCoLocation` reads helper vars registered by
     # `ClubVsClubStackedWeekends`, so an ephemeral-per-atom registry would
     # silently break the cross-atom lookup. Prefer the engine's registry
-    # (used for stages that mix engine + atom dispatch); fall back to a
-    # single ephemeral registry built once per stage call.
+    # (used when we mix engine + atom dispatch); fall back to a single
+    # ephemeral registry built once per call.
     from constraints.atoms.base import Atom as _AtomBase
     stage_registry = (
         getattr(engine, 'helper_registry', None)
@@ -310,8 +333,35 @@ def apply_solver_stage(
             constraint.apply(model, X, data)
         constraints_added += len(model.Proto().constraints) - prior
 
-    applied_atoms.update(new_atoms)
-    return constraints_added, new_atoms
+    applied_atoms.update(new_names)
+    return constraints_added, new_names
+
+
+def apply_solver_stage(
+    stage: Dict[str, Any],
+    *,
+    model,
+    X: Dict,
+    data: Dict,
+    engine,
+    applied_engine_keys: Set[str],
+    applied_atoms: Set[str],
+) -> Tuple[int, List[str]]:
+    """Apply one stage's atoms to the model (thin wrapper over
+    `apply_constraint_set`).
+
+    spec-023: a stage is just a named list of WHOLE constraints. This resolves
+    the stage's `atoms` and hands them to `apply_constraint_set`, which always
+    runs hard+soft for engine keys (the `soft_only` switch is gone). Returns
+    `(constraints_added, atoms_applied_this_stage)`; mutates the two
+    `applied_*` sets in place.
+    """
+    return apply_constraint_set(
+        list(stage.get('atoms', [])),
+        model=model, X=X, data=data, engine=engine,
+        applied_engine_keys=applied_engine_keys,
+        applied_atoms=applied_atoms,
+    )
 
 
 def _ephemeral_registry(model):

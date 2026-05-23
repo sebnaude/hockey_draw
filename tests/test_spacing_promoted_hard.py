@@ -139,25 +139,30 @@ class TestDispatchAppliesBothParts:
         status, _ = _solve(model)
         assert status == cp_model.INFEASIBLE
 
-    def test_soft_only_dispatch_skips_hard(self):
-        """Contrast (the pre-spec-017 bug): a soft_only stage skips the hard
-        part. Forcing a gap=1 repeat is still FEASIBLE because only the soft
-        penalty applies."""
+    def test_soft_only_key_is_now_ignored_hard_still_applies(self):
+        """spec-023: `soft_only` is DELETED. A stage dict that still carries a
+        stray `{'soft_only': True}` key no longer suppresses the hard part —
+        `apply_solver_stage` ignores the key and applies the constraint WHOLE.
+        Migrated from the pre-spec-023 `test_soft_only_dispatch_skips_hard`:
+        the old assertion (gap=1 FEASIBLE because hard was skipped) is INVERTED
+        to the new always-hard behaviour (gap == S0 INFEASIBLE)."""
         model, X, data = _fixture()
         engine = _engine(model, X, data)
+        # A leftover soft_only key must have NO effect now.
         stage = {'name': 'soft_optimisation', 'atoms': ['EqualMatchUpSpacing'],
                  'soft_only': True}
         apply_solver_stage(
             stage, model=model, X=X, data=data, engine=engine,
             applied_engine_keys=set(), applied_atoms=set(),
         )
-        # Soft bucket still populated.
+        # Soft bucket populated.
         assert data['penalties']['EqualMatchUpSpacing']['penalties']
-        # No hard clause: force T0 vs T1 in consecutive rounds (gap=1) -> FEASIBLE.
+        # Hard part STILL bites despite soft_only: force T0 vs T1 at gap == S0
+        # (=5, rounds 1 and 6) -> INFEASIBLE.
         model.Add(sum(_pair_vars(X, 'T0', 'T1', 1)) >= 1)
-        model.Add(sum(_pair_vars(X, 'T0', 'T1', 2)) >= 1)
+        model.Add(sum(_pair_vars(X, 'T0', 'T1', 1 + S0)) >= 1)
         status, _ = _solve(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        assert status == cp_model.INFEASIBLE
 
 
 # ----------------------------------------------------------------------
