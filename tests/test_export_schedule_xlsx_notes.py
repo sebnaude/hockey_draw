@@ -77,8 +77,8 @@ def _make_draw(*games: StoredGame) -> DrawStorage:
     )
 
 
-def _export(draw: DrawStorage, tmp_path, suffix: str = "", **kwargs) -> openpyxl.Workbook:
-    """Export draw to a temp xlsx and return the opened workbook."""
+def _export(draw: DrawStorage, tmp_path, suffix: str = "", **kwargs) -> "Tuple[openpyxl.Workbook, str]":
+    """Export draw to a temp xlsx and return (opened workbook, path)."""
     path = str(tmp_path / f"schedule{suffix}.xlsx")
     draw.export_schedule_xlsx(path, **kwargs)
     return openpyxl.load_workbook(path), path
@@ -178,6 +178,20 @@ class TestScenario1_ThreeGamesThreeNotes:
         assert ws.cell(row=4, column=1).value == 1   # week
         assert ws.cell(row=4, column=7).value == "Norths PHL"   # team1
         assert ws.cell(row=4, column=8).value == "Wests PHL"    # team2
+
+    def test_notes_header_and_cells_are_styled(self, wb):
+        # DoD #4 styling: Notes header (N2) is bold with a solid header fill +
+        # border; each note cell (N4) carries a solid week_bg fill + border.
+        # Guards against a regression that silently drops the styling.
+        ws = wb.active
+        header = ws.cell(row=2, column=14)
+        assert header.font.bold is True
+        assert header.fill.fill_type == "solid"
+        assert header.border.left.style is not None  # thin_border applied
+        note_cell = ws.cell(row=4, column=14)
+        assert note_cell.fill.fill_type == "solid"   # week_bg
+        assert note_cell.border.left.style is not None
+        assert note_cell.font.italic is False
 
     def test_week2_also_has_notes_header(self, wb):
         # Week 2 starts at row 9 (rows 7-8 are blank/separator after week 1).
