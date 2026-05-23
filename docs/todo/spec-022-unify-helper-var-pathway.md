@@ -1,5 +1,5 @@
-<!-- status: ready -->
-<!-- owner: session=none claimed=none -->
+<!-- status: building -->
+<!-- owner: session=final-form-spec022 claimed=2026-05-23 -->
 <!-- reviewed: adversarial Sonnet review 2026-05-22 + 2026-05-23 second pass — all fixes applied inline (see "(review fix — …)" annotations) -->
 <!-- depends_on: none (touches constraints/helper_vars.py, constraints/atoms/base.py, constraints/stages.py, tests/test_helper_var_registry.py — minimal overlap with spec-014..019; rebase before merge) -->
 

@@ -86,13 +86,11 @@ def _slot_field_index(
 
 def _declare_field_used_helper(registry, date: str, day_slot: int,
                                field_name: str, vars_list):
-    """Idempotent declaration + immediate build via the pool API.
+    """Idempotent lookup-or-build via the pool API.
 
-    The atoms run inside the `apply()` step where the registry is
-    typically already frozen (the engine freezes after `declare_helpers`).
-    We therefore use the pool-style `get_or_create_bool` cache which is
-    valid post-freeze. Cache key is namespaced by `nihc_field_used` so it
-    cannot collide with other kinds.
+    The atom builds (or reuses) the `field_used` indicator inside `apply()`
+    via the pool-style `get_or_create_bool` cache. Cache key is namespaced by
+    `nihc_field_used` so it cannot collide with other kinds.
     """
     return registry.get_or_create_bool(
         ('nihc_field_used', date, day_slot, field_name),

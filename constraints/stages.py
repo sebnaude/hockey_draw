@@ -315,16 +315,15 @@ def apply_solver_stage(
 
 
 def _ephemeral_registry(model):
-    """Build a frozen `HelperVarRegistry` for atoms that don't declare helpers.
+    """Build a fresh `HelperVarRegistry` for atoms dispatched outside the engine.
 
-    Atoms that don't declare any helpers can use a fresh registry per call —
-    no shared state is needed. This avoids requiring the engine to expose a
-    registry attribute when the atom dispatches purely outside it.
+    Atoms create shared helpers lazily via the pool-style API inside `apply()`,
+    so a fresh registry per call is sufficient — no shared state is needed. This
+    avoids requiring the engine to expose a registry attribute when the atom
+    dispatches purely outside it.
     """
     from constraints.helper_vars import HelperVarRegistry
-    reg = HelperVarRegistry(model)
-    reg.freeze({}, {})
-    return reg
+    return HelperVarRegistry(model)
 
 
 def _resolve_solver_class(canonical_name: str, *, use_ai: bool = False):

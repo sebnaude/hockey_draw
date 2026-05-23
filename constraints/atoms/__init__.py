@@ -1,8 +1,9 @@
 """Atomic constraints — one idea per class.
 
-Each atom subclasses `Atom` (constraints/atoms/base.py) and:
-- `declare_helpers(registry, data)` declares helper-vars it needs (default: none).
-- `apply(model, X, data, registry)` adds CP-SAT constraints, returns count added.
+Each atom subclasses `Atom` (constraints/atoms/base.py) and implements:
+- `apply(model, X, data, registry)` — adds CP-SAT constraints, returns count
+  added. Shared helper variables are created/looked-up via the pool-style
+  `registry` API (`get_or_create_bool`, `get_or_create_presence`, `register`).
 
 Atoms are instantiated and dispatched by `UnifiedConstraintEngine`. Their
 `canonical_name` matches a `ConstraintInfo` entry in `constraints/registry.py`

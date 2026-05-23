@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Optional
+from typing import ClassVar, Dict
 
 
 # Venue-name constants. Atoms compare against these instead of hardcoding strings.
@@ -17,18 +17,13 @@ class Atom(ABC):
     Subclasses set `canonical_name` (matches a `ConstraintInfo` entry) and
     `atom_group` (the legacy combined-constraint name they were split from).
 
-    Lifecycle (driven by `UnifiedConstraintEngine`):
-      1. `declare_helpers(registry, data)` — declare helper-vars needed.
-      2. `registry.freeze(X, data)` — engine builds every helper once.
-      3. `apply(model, X, data, registry)` — add CP-SAT constraints to model.
+    Contract: `apply(model, X, data, registry)` adds CP-SAT constraints to the
+    model, creating or looking up any shared helper variables via the pool-style
+    registry API (`get_or_create_bool`, `get_or_create_presence`, `register`).
     """
 
     canonical_name: ClassVar[str] = ''
     atom_group: ClassVar[str] = ''
-
-    def declare_helpers(self, registry, data: Dict) -> None:
-        """Override to declare helpers via `registry.declare(...)`. Default: no helpers."""
-        return
 
     @abstractmethod
     def apply(self, model, X: Dict, data: Dict, registry) -> int:

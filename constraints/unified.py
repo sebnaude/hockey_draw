@@ -96,7 +96,7 @@ class UnifiedConstraintEngine:
         # Grouping dicts (populated by build_groupings)
         self._groupings_built = False
 
-        # Helper-var registry (declarative API for atoms; pool-style methods for legacy engine).
+        # Helper-var registry (pool-style API: shared by atoms and the engine).
         # `self.pool` retained as alias so existing internal methods keep working.
         self.registry = HelperVarRegistry(self.model)
         self.pool = self.registry
