@@ -354,7 +354,17 @@ For specific constraints where hardcoded limits may be too restrictive, use the 
 For constraints not covered by config:
 
 1. Check if existing constraint can be configured differently
-2. If not, add to `constraints/original.py` (or `constraints/ai.py` for AI version)
-3. Add to constraint list in `main_staged.py`
-4. Add tests in `tests/test_constraints.py`
-5. Document in `docs/ai/CONSTRAINT_APPLICATION.md` (this file)
+2. If not, implement it as an atom in `constraints/atoms/` and register a
+   `ConstraintInfo` for it in `constraints/registry.py`
+3. **Tag it into groups** (spec-023): set the new entry's
+   `ConstraintInfo.groups` frozenset (e.g. `{'core', 'critical_feasibility'}`
+   or `{'soft', 'soft_optimisation'}`). Selection is **by group, not by a
+   single stage/partition** — a constraint may belong to several overlapping
+   groups, and a solve applies the deduped union of the selected `--groups`.
+   Do **not** slot it into one exclusive stage; there is no partition any more.
+   (Derived `severity_N` / `default` groups are computed from
+   `severity_level` / a non-empty `groups` set — no extra wiring needed.)
+4. Add tests under `tests/` (registry/group membership + a Given/When/Then
+   behaviour test for the atom)
+5. Document in `docs/operator-ai/CONSTRAINT_APPLICATION.md` (this file) and add
+   the groups column entry in `docs/system/CONSTRAINT_INVENTORY.md`
