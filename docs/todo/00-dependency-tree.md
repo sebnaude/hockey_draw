@@ -14,34 +14,38 @@ writing: spec-001…022 and **spec-024** (field-spread, replaced the club-balanc
 ## DAG
 
 ```
-spec-021 (done) ──▶ spec-023 (ready, constraint-groups) ─┐
-                                                          ├─▶ spec-027 (ready, regen-soft)
-spec-022 (done, independent)                              │
-spec-025 (ready, independent) ─▶ spec-026 (ready) ────────┘
-spec-028 (ready, independent)
+spec-021 (done) ──▶ spec-023 (building, constraint-groups) ─┐
+                                                            ├─▶ spec-027 (ready, regen-soft)
+spec-022 (done, independent)                                │
+spec-025 (building, independent) ─▶ spec-026 (ready) ───────┘
+spec-028 (building, independent)
 ```
 
 Edges:
 
 - **spec-022** — unify helper-var pathway. Independent (`depends_on: none`). **Done** (2026-05-23).
 - **spec-023** — constraint-groups machinery (the redesign that *replaced* the superseded
-  `spec-023-atom-hard-soft-phases`; now landed on `final-form`). Depends on spec-021 (`done`).
-  Ready now.
+  `spec-023-atom-hard-soft-phases`). Depends on spec-021 + spec-024 (**both `done`** — spec-021
+  moved `ClubGameSpread` to the `club_day` hard stage and spec-024 re-scoped it per-field; the
+  surviving `_club_game_spread_*` engine methods are intentional, so deleting `soft_only` is
+  behaviour-neutral). **`building`** (claimed 2026-05-23 by a concurrent session).
 - **spec-025** — `LOCKED_PAIRINGS` config. Independent (`depends_on: none`); builds only on
-  already-shipped locked-weeks + FORCED machinery. Ready now.
+  already-shipped locked-weeks + FORCED machinery. **`building`** (claimed 2026-05-23).
 - **spec-026** — unified regeneration mode. Depends on spec-025 (writes pins into
-  `LOCKED_PAIRINGS`). Ready to start once spec-025 lands.
+  `LOCKED_PAIRINGS`). `ready`; startable once spec-025 lands (spec-025 currently `building`).
 - **spec-027** — regeneration soft-constraint group. Depends on spec-023 (groups machinery) +
-  spec-026 (regen mode selects the `regen` group); pins via spec-025 indirectly. Ready to start
-  once spec-023 + spec-026 land. (The earlier hard block — constraint-groups not on final-form —
-  is now cleared.)
-- **spec-028** — per-weekend notes export column. Independent (`depends_on: none`). Ready now.
+  spec-026 (regen mode selects the `regen` group); pins via spec-025 indirectly. Status `ready`
+  (hardened) but **NOT startable yet**: spec-023 + spec-025 are `building` and spec-026 is `ready`
+  — none is `done`/landed. The constraint-groups machinery (`resolve_groups`, `DERIVED_GROUPS`,
+  `--groups`, `ConstraintInfo.groups`) and the `soft_only` deletion are NOT on `final-form` yet —
+  spec-027 must wait for spec-023 (and spec-026, and spec-025) to land.
+- **spec-028** — per-weekend notes export column. Independent (`depends_on: none`). **`building`**
+  (claimed 2026-05-23).
 
 ## Ready to start in parallel right now
 
-- **spec-023** — constraint-groups machinery (deps `done`).
-- **spec-025** — `LOCKED_PAIRINGS` config (no unmet deps).
-- **spec-028** — per-weekend notes export column (no unmet deps).
+- *(none unclaimed)* — every spec with no unmet dependency (spec-023, spec-025, spec-028) is
+  already `building` under a concurrent session as of 2026-05-23.
 
-(spec-026 unblocks the moment spec-025 lands; spec-027 unblocks once both spec-023 and spec-026
-land.)
+(spec-026 unblocks the moment spec-025 lands; spec-027 unblocks once spec-023 + spec-025 +
+spec-026 all land.)
