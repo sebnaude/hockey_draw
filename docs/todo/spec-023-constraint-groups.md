@@ -1,9 +1,9 @@
-<!-- status: under_review -->
+<!-- status: building -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
-<!-- owner: session=none claimed=none -->
-<!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline (see "(review fix — …)" annotations). Open question RESOLVED 2026-05-23 (convenor chose Unit C Option B — wire --groups into --simple/_main_simple_unified). NOT YET STARTABLE: depends_on spec-021 is in_progress (engine methods _club_game_spread_* still present in unified.py) and shares registry.py/stages.py/defaults.py/run.py/main_staged.py — must wait for spec-021 to land, then rebase, before claiming. -->
-<!-- depends_on: spec-021 (removes the `_best_timeslot_choices_*` / `_club_game_spread_*` engine methods and lands their hard parts as atoms, so deleting `soft_only` causes no behaviour change). Shares constraints/registry.py, constraints/stages.py, config/defaults.py, run.py, main_staged.py with spec-018/021/022 — rebase + re-run validate before merge. -->
+<!-- owner: session=opus-c9436a1-20260523T091537Z claimed=2026-05-23T09:15:37Z -->
+<!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — corrected stale spec-021 dependency claim) — fixes applied inline -->
+<!-- depends_on: spec-021 (done — `_best_timeslot_choices_hard/_soft` removed, `EnsureBestTimeslotChoices` engine-key removed, `ClubGameSpread` moved to `club_day` hard stage, `VenueEarliestSlotFill` + `ClubNoConcurrentSlot` atoms registered) and spec-024 (done — `ClubGameSpread` re-scoped to per-field). Both are fully landed; `validate_solver_stages(DEFAULT_STAGES)==[]`. Deleting `soft_only` is behaviour-neutral: `ClubGameSpread` is already in `club_day` (non-`soft_only`), so its hard part already runs; the `soft_optimisation` stage no longer carries any hard-bearing constraint. Shared files `constraints/registry.py`, `constraints/stages.py`, `config/defaults.py`, `run.py`, `main_staged.py` — rebase + re-run validate before merge. -->
 <!-- tier: complex -->
 
 # spec-023 — Constraint groups: composable, deduped, flag-selected; delete the hard/soft (`soft_only`) machinery
@@ -51,7 +51,12 @@ only "which whole constraints are in the set."
 ### What this is NOT
 
 - **NOT** a behaviour change to which rules are hard or soft (that's spec-016/017/021). Removing
-  `soft_only` is behaviour-neutral *given spec-021 has landed* — see Precondition.
+  `soft_only` is behaviour-neutral because spec-021 (done) moved `ClubGameSpread` to the
+  `club_day` hard stage and spec-024 (done) re-scoped it to per-field — the `soft_optimisation`
+  stage no longer contains any constraint with a live hard part. See Precondition for the full
+  verification checklist.
+  (review fix — C1: original said "given spec-021 has landed — see Precondition" but the
+  Precondition was stale; inlined the actual reason so the claim stands on its own.)
 - **NOT** a per-constraint hard/soft phase API. A group tag selects *whole* constraints; it never
   changes how much of a constraint applies.
 - **NOT** a rework of `--slack` (orthogonal: slack loosens *within* a constraint) or `--relax`
@@ -79,17 +84,31 @@ coarse dimensions the convenor asked for:
 | ClubVsClubStackedWeekends, ClubVsClubStackedCoLocation | `{core, club_alignment}` |
 | ClubDayParticipation, ClubDayIntraClubMatchup, ClubDayOpponentMatchup, ClubDaySameField, ClubDayContiguousSlots | `{core, club_day}` |
 | VenueEarliestSlotFill, ClubGameSpread, ClubNoConcurrentSlot | `{core}` |
-| MaximiseClubsPerTimeslotBroadmeadow, MinimiseClubsOnAFieldBroadmeadow, PreferredTimes, PreferredGames, SoftLexMatchupOrdering, NIHCFillWFBeforeEF, NIHCFillEFBeforeSF, TeamPairNoConcurrency, PreferredWeekendsAwayGround | `{soft, soft_optimisation}` |
+| PreferredTimes, PreferredGames, SoftLexMatchupOrdering, NIHCFillWFBeforeEF, NIHCFillEFBeforeSF, TeamPairNoConcurrency, PreferredWeekendsAwayGround | `{soft, soft_optimisation}` |
 
-> The spec-021 survivors are tagged `{core}` because spec-021 makes all three **hard**:
+> (review fix — Medium: `MaximiseClubsPerTimeslotBroadmeadow` and
+> `MinimiseClubsOnAFieldBroadmeadow` were deleted by spec-024 and are NOT in the registry —
+> listing them here would cause Unit A to fail at tagging time. Removed from the table.
+> Their spread intent is now owned by `ClubGameSpread` in `club_day`.)
+
+> The spec-021/024 atoms are tagged `{core}` because both specs make them **hard**:
 > `VenueEarliestSlotFill` (DoD 2 — replaces `EnsureBestTimeslotChoices` as a hard earliest-pack
-> rule), `ClubGameSpread` (DoD 6 + Open-decision A — hard strict no-gap, any residual spread is a
-> soft tuning term *within the same whole constraint*), and `ClubNoConcurrentSlot` (DoD 6 +
-> Open-decision B — extracted hard concurrency atom). They carry no legacy-stage tag because they
-> are newly-hard and belong to no original hard stage. Unit A reads the landed spec-021 registry
-> and tags exactly what shipped: if spec-021's Open decisions A/B resolved a survivor's hard/soft
-> nature differently from the above, Unit A tags to match the shipped code (that is the unit's job,
-> not a follow-up). `tester_only` entries (`ForcedGames`, `BlockedGames`, `ClubFieldConcentration`)
+> rule; wired into `critical_feasibility`), `ClubGameSpread` (DoD 6 + Open-decision A — the UPPER
+> contiguity HARD rule encoded with `slot_used` indicators; spec-024 re-scoped to per-field; both
+> hard and soft engine methods remain in `unified.py` — the completion signal is the non-`soft_only`
+> staging in `club_day`, not method deletion), and `ClubNoConcurrentSlot` (DoD 6b — extracted hard
+> concurrency atom). They carry no legacy-stage group tag (`critical_feasibility` etc.) in this
+> initial tagging pass; Unit A should reconcile against the actual `DEFAULT_STAGES` and add the
+> appropriate stage tag (e.g. `{core, critical_feasibility}` for `VenueEarliestSlotFill`,
+> `{core, club_day}` for `ClubGameSpread`/`ClubNoConcurrentSlot`) if the convenor wants `--stages`
+> to include them via legacy-stage group name. The three `{core}` assignments above are the minimum;
+> reconcile against the actual code at start time.
+> (review fix — C1/C3: original said "no legacy-stage tag because they are newly-hard and belong
+> to no original hard stage" which was wrong for `ClubGameSpread` — it has been in `club_day`
+> since spec-021 landed; clarified the note and corrected the implication that `_club_game_spread_*`
+> methods were deleted — they are intentionally kept/refactored.)
+>
+> `tester_only` entries (`ForcedGames`, `BlockedGames`, `ClubFieldConcentration`)
 > and obsolete legacy-only entries (`FiftyFiftyHomeandAway`, `ClubDay`, `ClubGradeAdjacency`,
 > `ClubVsClubAlignment`, `PHLAndSecondGradeTimes`, `EnsureBestTimeslotChoices`,
 > `PreferredTimes`-legacy-class) get **no production group** — they keep resolving for parity/legacy
@@ -201,11 +220,14 @@ is lower than the consumer's, so a future reorder that breaks the dependency tri
    set. `--staged`, `--stages`, `--stage-only`, `--skip-stage` still function (stage names treated
    as group names; severity staging via `resolve_group('severity_N')`). `--relax` left untouched
    (out of scope). `--list-stages` updated to also list group names (`--list-groups` or extend it).
-8. **Behaviour parity (rebased on spec-021):** a full-config 2026 build through the new group
-   dispatch produces **exactly** the same hard-constraint count, penalty buckets, and tester
-   violations as the pre-refactor build. The only intended delta — engine hard parts formerly
-   suppressed by `soft_only` — is nil once spec-021 has landed (it moved them to hard atoms). An
-   integration test asserts this parity against a recorded baseline.
+8. **Behaviour parity:** a full-config 2026 build through the new group dispatch produces
+   **exactly** the same hard-constraint count, penalty buckets, and tester violations as the
+   pre-refactor build. The expected delta from removing `soft_only` is **zero** — spec-021 (done)
+   moved `ClubGameSpread` to the non-`soft_only` `club_day` stage, so its hard part already runs;
+   and the only other constraints in `soft_optimisation` are pure-soft atoms with no hard engine
+   method. An integration test asserts this parity against a recorded baseline.
+   (review fix — C4: old wording said "nil once spec-021 has landed" implying spec-021 was not
+   yet done. spec-021 is done; the zero-delta is already the case, not a future condition.)
 9. **Metadata:** draw metadata records the **resolved group selection** (`groups_selected`, the
    list of group names) and the **applied constraint set** (canonical names), alongside the
    existing `constraints_applied`. The tester/`save_solver_output` read group membership from the
@@ -217,15 +239,15 @@ is lower than the consumer's, so a future reorder that breaks the dependency tri
 ## Implementation units
 
 > Heavily-shared files (`registry.py`, `stages.py`, `defaults.py`, `run.py`, `main_staged.py`).
-> Sequence as one worktree, commit per unit; rebase on spec-021 (and spec-018/022) before merge.
+> Sequence as one worktree, commit per unit; spec-021 and spec-024 are done — rebase on
+> tip-of-final-form before starting, then re-run `validate_solver_stages` to confirm `[]`.
 
 ### Unit A — Registry: `groups` field, tagging, resolver, canonical-order validation
 - Files: `constraints/registry.py`.
-- Add `groups: frozenset[str]`; tag **every** production constraint per the §1 table — including the
-  spec-021 survivors (`VenueEarliestSlotFill`, `ClubGameSpread`, `ClubNoConcurrentSlot`), read
-  straight from the landed spec-021 registry/stages and tagged to match what shipped (§1 gives the
-  expected `{core}` tags; reconcile against the actual code, which exists because this spec
-  `depends_on` spec-021). Implement `resolve_group`,
+- Add `groups: frozenset[str]`; tag **every** production constraint per the §1 table — including
+  the spec-021/024 survivors (`VenueEarliestSlotFill`, `ClubGameSpread`, `ClubNoConcurrentSlot`),
+  already registered in `constraints/registry.py` (confirmed landed). §1 gives the expected
+  `{core}` tags; reconcile against the actual registry before tagging. Implement `resolve_group`,
   `resolve_groups` (deduped union, registry order), `list_group_names`, `DERIVED_GROUPS`, and the
   producer-before-consumer order validator.
 - Test (GWT, no mocks, hand oracle): `resolve_groups(['core','soft'])` == hand-listed union, no
@@ -300,32 +322,41 @@ is lower than the consumer's, so a future reorder that breaks the dependency tri
 
 ## Precondition (review)
 
-spec-021 must be **fully** landed first. "Fully landed" means ALL of the following are true
-(verify by reading the repo before starting Unit A):
+spec-021 and spec-024 are **both fully landed** as of 2026-05-23 — this spec is startable now.
+The checklist below is left as a verification guide for the implementer (re-confirm by reading
+the repo before starting Unit A):
 
-- `VenueEarliestSlotFill` atom exists in `constraints/atoms/` and is wired into a non-`soft_only`
-  stage in `DEFAULT_STAGES`.
+- `VenueEarliestSlotFill` atom exists in `constraints/atoms/venue_earliest_slot_fill.py` and is
+  wired into `critical_feasibility` (non-`soft_only`) in `DEFAULT_STAGES`. ✓ VERIFIED
 - `_best_timeslot_choices_hard` and `_best_timeslot_choices_soft` methods are **removed** from
   `constraints/unified.py`, and `EnsureBestTimeslotChoices` is removed from `ENGINE_HARD_KEYS`
-  and `ENGINE_SOFT_KEYS` in `constraints/stages.py`.
-- `_club_game_spread_hard` and `_club_game_spread_soft` engine methods are **removed** from
-  `constraints/unified.py`. The `ClubGameSpread` engine-key dispatch in `apply_stage_1_hard()`
-  and `apply_stage_2_soft()` is gone. `ClubGameSpread` behaviour is fully handled by the new
-  atom-based encoding (or the refactored engine method + `ClubNoConcurrentSlot` atom, per
-  spec-021 DoD 6 — whichever form shipped).
-- `validate_solver_stages([]) == []` on the real `DEFAULT_STAGES`.
+  and `ENGINE_SOFT_KEYS` in `constraints/stages.py`. ✓ VERIFIED
+- `ClubGameSpread` is wired into a **non-`soft_only`** stage (`club_day`) in `DEFAULT_STAGES`.
+  `_club_game_spread_hard` and `_club_game_spread_soft` engine methods **remain in
+  `unified.py`** — spec-021 DoD 6 says "refactored," not deleted; spec-024 re-scoped them to
+  per-field. Their presence is correct and intentional. The completion signal is NOT method
+  removal but the non-`soft_only` staging. ✓ VERIFIED (`club_day` has `soft_only: False`)
+- `ClubNoConcurrentSlot` atom exists in `constraints/atoms/club_no_concurrent_slot.py` and is
+  registered in `constraints/registry.py`. ✓ VERIFIED
+- `validate_solver_stages(DEFAULT_STAGES) == []`. ✓ VERIFIED
 
-**Why this matters for spec-023:** the `soft_only` deletion is behaviour-neutral only when
-`ClubGameSpread` no longer has hard engine-method behaviour suppressed by the flag. As of
-2026-05-23, `_club_game_spread_hard` still exists in `unified.py` (spec-021 is `in_progress`),
-but `ClubGameSpread` is already in a non-`soft_only` stage (`club_day`), so its hard method
-already runs — making `soft_only` deletion safe in that respect. Nonetheless, rebase on the
-fully-done spec-021 before starting, to avoid modifying shared files (`stages.py`, `registry.py`,
-`defaults.py`) in two simultaneous PRs.
+**Why `soft_only` deletion is behaviour-neutral:** the `soft_optimisation` stage carries only
+atoms (`SoftLexMatchupOrdering`, `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`,
+`TeamPairNoConcurrency`, `PreferredWeekendsAwayGround`, `PreferredTimes`, `PreferredGames`)
+that are pure soft/penalty constraints. `ClubGameSpread` (the only atom that had a live hard
+engine method) was moved to `club_day` by spec-021; `EnsureBestTimeslotChoices` was replaced by
+`VenueEarliestSlotFill` in `critical_feasibility`. Removing `soft_only` from `soft_optimisation`
+therefore changes nothing: `apply_stage_1_hard()` will be called for `soft_optimisation` but
+those atoms' engine-key hard methods are either already absent (no dispatch path) or trivially
+return 0 for pure-soft engine keys like `PreferredTimesConstraint`. Verify this by checking the
+`soft_optimisation` atom list against `ENGINE_HARD_KEYS` before starting Unit B.
 
-(review fix — Medium: original Precondition only said "spec-021 must be landed"; tightened to
-enumerate the specific completion criteria, because spec-021 is `in_progress` with
-`_club_game_spread_hard/soft` still in `unified.py` as of review date.)
+(review fix — C2/C3/C4: prior Precondition said "spec-021 is `in_progress`", "NOT YET
+STARTABLE", and required `_club_game_spread_hard/_soft` to be deleted — all three were wrong.
+spec-021 and spec-024 are both `done`; the engine methods are intentionally kept (refactored);
+the staging is correct; the spec is startable. Root cause: the old review was written before
+spec-021 landed, and neither that review nor the subsequent review-fix caught that spec-021 had
+completed and that its DoD #6 said "refactored" not "deleted.")
 
 ## Doc registry
 
