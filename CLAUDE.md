@@ -596,7 +596,7 @@ When reviewing, testing, or publishing a draw, always check:
 
 - **NIHC field-fill order (WF → EF → SF)**: a SOFT symmetry-breaker (spec-016, was hard in spec-003). Atoms `NIHCFillWFBeforeEF` / `NIHCFillEFBeforeSF` (severity 5) add a small `nihc_fill_order` penalty per out-of-order fill and live in the `soft_optimisation` stage. The tester flags out-of-order fills via `_check_nihc_fill_wf_before_ef` / `_check_nihc_fill_ef_before_sf` as **soft pressure**, not hard failures — a draw can be publishable with a few out-of-order fills if FORCED placements demand it. See `docs/operator-human/PERENNIAL_RULES.md`.
 - **Rounds 1-2 at Broadmeadow only**: All games in rounds 1 and 2 must be at NIHC. No Maitland Park or Central Coast games. Enforced via `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`. (Perennial rule)
-- **7pm (19:00) games**: These are the worst timeslot. Flag any non-PHL-Friday games scheduled at 7pm — they should be minimised.
+- **7pm (19:00) games**: These are the worst timeslot. spec-021: the HARD `VenueEarliestSlotFill` atom packs each venue's games into the earliest timeslots (no gaps + earliest start), so 7pm is reached only when every earlier slot is full — it's avoided *structurally*, not by a dedicated penalty. Still worth a glance on a published draw: any non-PHL-Friday game at 7pm should mean the earlier slots really were full that day.
 
 ## Skills
 

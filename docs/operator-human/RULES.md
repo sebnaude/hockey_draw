@@ -150,17 +150,18 @@ dimension was dropped.
 
 ---
 
-### Rule 9: Optimal Timeslot Usage
-**Constraint:** `EnsureBestTimeslotChoices`
+### Rule 9: Venue Earliest-Slot Fill (spec-021)
+**Constraint:** `VenueEarliestSlotFill` (HARD, severity 2) — replaced the old soft `EnsureBestTimeslotChoices`.
 
-**Description:** 
-- No unused timeslots between two used timeslots on a day
-- Games should fill timeslots contiguously from earliest slots
-- Location-specific minimum timeslot enforcement
+**Description:**
+- Per (week, date, venue), games **pack into the earliest timeslots**: no unused slot between two used ones, AND the used block starts at the earliest offered slot (use slot *s* ⇒ slot *s−1* is used).
+- Combined across the venue's fields — a slot counts as used if any field at the venue hosts a game then.
 
-**Enforcement:** Uses indicator variables and ordering constraints to ensure contiguous scheduling.
+**Enforcement:** A combined-field `slot_used` indicator per slot + anchored monotone-fill implication chain (shared `constraints/atoms/_contiguity.py`). No `AddDivisionEquality` / range IntVars; HARD in `critical_feasibility`.
 
-**Rationale:** Reduces idle time at venues and improves operational efficiency.
+**Rationale:** Reduces idle time at venues, and because games pack early the worst slot (7pm at NIHC) is only used when everything earlier is full — so 7pm is avoided structurally with no dedicated penalty.
+
+**Sibling club rules:** `ClubGameSpread` keeps each club's games on a day near-contiguous (≤3 games → no holes, ≥4 → at most one); `ClubNoConcurrentSlot` caps a club's games per timeslot/venue (capacity-aware via `no_field_slots` — small venues allow forced double-ups).
 
 ---
 

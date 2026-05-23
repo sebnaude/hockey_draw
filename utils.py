@@ -3977,6 +3977,7 @@ def build_season_data(config: dict) -> dict:
         grade.num_teams = len(grade.teams)
     
     # Get time configurations from config
+    from config.defaults import compute_no_field_slots
     day_time_map = config['day_time_map']
     phl_game_times = config['phl_game_times']
     field_unavailabilities = config['field_unavailabilities']
@@ -4080,6 +4081,9 @@ def build_season_data(config: dict) -> dict:
         'locked_weeks': set(),
         'penalties': {},
         'day_time_map': day_time_map,
+        # spec-021: distinct game-times per location, derived from day_time_map.
+        # ClubNoConcurrentSlot reads this to size its per-slot cap.
+        'no_field_slots': compute_no_field_slots(day_time_map),
         'phl_game_times': phl_game_times,
         'second_grade_times': config.get('second_grade_times', {}),
         'max_day_slot_per_field': max_day_slot_per_field,

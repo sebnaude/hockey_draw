@@ -8,6 +8,7 @@ can't be flanked by used slots on both sides).
 from collections import defaultdict
 
 from constraints.atoms.base import Atom
+from constraints.atoms._contiguity import enforce_no_gaps, slot_used_indicators
 from constraints.atoms._club_day_shared import (
     club_day_game_keys, parse_club_day_entries,
 )
@@ -35,21 +36,10 @@ class ClubDayContiguousSlots(Atom):
             if len(slot_vars) < 3:
                 continue
 
-            slot_inds = {}
-            for ds, vars_list in slot_vars.items():
-                slot_inds[ds] = registry.get_or_create_bool(
-                    ('club_day_slot_used', club_name, ds),
-                    vars_list,
-                    f'cd_slot_{club_name}_{ds}',
-                )
-
-            sorted_slots = sorted(slot_inds.keys())
-            for i in range(1, len(sorted_slots) - 1):
-                ps, cs, ns = (
-                    sorted_slots[i - 1], sorted_slots[i], sorted_slots[i + 1],
-                )
-                model.Add(
-                    slot_inds[ps] + slot_inds[ns] <= 1
-                ).OnlyEnforceIf(slot_inds[cs].Not())
-                n += 1
+            # spec-021: shared floating no-gap primitive. The pool key
+            # ('club_day_slot_used', club_name, slot) is preserved exactly, so
+            # the channeled indicators are behaviour-identical to before.
+            slot_inds = slot_used_indicators(
+                registry, slot_vars, 'club_day_slot_used', club_name)
+            n += enforce_no_gaps(model, slot_inds)
         return n

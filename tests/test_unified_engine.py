@@ -858,62 +858,39 @@ class TestSkipConstraints:
 class TestHardConstraintEnforcement:
     """Tests that verify hard constraints actually PREVENT violations."""
 
-    def test_club_game_spread_hard_prevents_double_ups(self, mini_unified_data):
-        """ClubGameSpread hard with max_overlap=0 prevents double-ups."""
-        mini_unified_data['constraint_defaults'] = {
-            'club_game_spread_max_gap': 10,    # permissive gap
-            'club_game_spread_max_overlap': 0,  # no double-ups
-        }
+    def test_club_no_concurrent_slot_prevents_double_ups(self, mini_unified_data):
+        """spec-021: double-up prevention moved from ClubGameSpread to the
+        ClubNoConcurrentSlot atom. With no `no_field_slots` configured the cap
+        falls to 1, so no club may have two games in one timeslot."""
+        from constraints.atoms import ClubNoConcurrentSlot
+        from constraints.helper_vars import HelperVarRegistry
 
-        # Without spread constraint: can have two club games at same slot
-        model1, X1 = create_model_and_vars(
+        model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
         )
-        data1 = dict(mini_unified_data)
-        data1['penalties'] = {}
-        engine1 = UnifiedConstraintEngine(model1, X1, data1,
-                                          skip_constraints={'ClubGameSpread'})
-        engine1.build_groupings()
-        engine1.apply_stage_1_hard()
+        data = dict(mini_unified_data)
+        data['penalties'] = {}
+        engine = UnifiedConstraintEngine(model, X, data)
+        engine.build_groupings()
+        engine.apply_stage_1_hard()
+        # Apply the (non-engine) concurrency atom that now owns the no-double-up rule.
+        ClubNoConcurrentSlot().apply(model, X, data, HelperVarRegistry(model))
 
-        real_vars = [v for k, v in X1.items() if len(k) >= 11]
-        model1.Maximize(sum(real_vars))
+        real_vars = [v for k, v in X.items() if len(k) >= 11]
+        model.Maximize(sum(real_vars))
+        status, solver = solve_with_timeout(model, timeout_seconds=5.0)
+        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL)
 
-        status1, solver1 = solve_with_timeout(model1, timeout_seconds=5.0)
-
-        # With spread constraint
-        model2, X2 = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        data2 = dict(mini_unified_data)
-        data2['penalties'] = {}
-        engine2 = UnifiedConstraintEngine(model2, X2, data2)
-        engine2.build_groupings()
-        engine2.apply_stage_1_hard()
-
-        real_vars2 = [v for k, v in X2.items() if len(k) >= 11]
-        model2.Maximize(sum(real_vars2))
-
-        status2, solver2 = solve_with_timeout(model2, timeout_seconds=5.0)
-
-        # Both should be feasible
-        assert status1 in (cp_model.FEASIBLE, cp_model.OPTIMAL)
-        assert status2 in (cp_model.FEASIBLE, cp_model.OPTIMAL)
-
-        # The constraint should either reduce total games or maintain feasibility
-        # Verify no negative gap (no double-ups) in the constrained solution
-        if status2 in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            club_week_day_slot = defaultdict(int)
-            for key, var in X2.items():
-                if len(key) >= 11 and solver2.Value(var) == 1:
-                    t1, t2 = key[0], key[1]
-                    week, day, day_slot = key[6], key[3], key[4]
-                    for team in [t1, t2]:
-                        club = team.rsplit(' ', 1)[0]
-                        club_week_day_slot[(club, week, day, day_slot)] += 1
-            # With max_overlap=0, no club should have >1 game at the same slot
-            for key, cnt in club_week_day_slot.items():
-                assert cnt <= 1, f"Double-up found: {key} has {cnt} games"
+        # cap = max(1, ceil(team_count/slots)); slots unset -> cap 1 everywhere.
+        club_slot = defaultdict(int)
+        for key, var in X.items():
+            if len(key) >= 11 and solver.Value(var) == 1:
+                week, day, day_slot, loc = key[6], key[3], key[4], key[10]
+                for team in [key[0], key[1]]:
+                    club = team.rsplit(' ', 1)[0]
+                    club_slot[(club, week, day, day_slot, loc)] += 1
+        for key, cnt in club_slot.items():
+            assert cnt <= 1, f"Double-up found: {key} has {cnt} games"
 
     # spec-018: test_maitland_grouping_hard_sliding_window and
     # test_away_maitland_hard_reads_config removed — the MaitlandHomeGrouping /

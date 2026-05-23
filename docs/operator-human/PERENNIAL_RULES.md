@@ -49,6 +49,14 @@ This generalises the historical "last game of the day on West Field" preference 
 
 **Rationale:** Operational preference for West Field over East over South; ground staff have a fixed walk-up routine; spectators learn where the headline games live. Soft because field choice is genuinely symmetric — a strict ordering shouldn't be allowed to make a draw infeasible.
 
+### 2a. Venues fill the earliest timeslots first (and 7pm is avoided structurally)
+
+At every venue, games **pack into the earliest available timeslots**: no empty slot may sit between two used ones, and the block must start at the earliest offered slot (use slot *s* ⇒ slot *s−1* is used too). So a venue that needs 4 of its 8 slots uses slots 1–4, not 3–6.
+
+**Enforcement (spec-021):** the HARD atom `VenueEarliestSlotFill` (severity 2, `critical_feasibility`) — a combined-field anchored monotone-fill chain. Because games pack early, the worst timeslot (7pm at NIHC) is only ever used when every earlier slot is already full, so there is **no separate "avoid 7pm" penalty** — earliest-fill makes it moot. (It replaced the old soft `EnsureBestTimeslotChoices`, whose hard part never actually ran.)
+
+Per-club contiguity is the sibling rule: `ClubGameSpread` (HARD, `club_day` stage) keeps a club's games on a day in a near-contiguous block (≤3 games → no holes; ≥4 → at most one), and `ClubNoConcurrentSlot` (HARD) caps a club's games per timeslot/venue — capacity-aware so small venues (Central Coast, 2 timeslots) allow forced double-ups instead of going infeasible.
+
 ---
 
 ## Count-Budget Rules

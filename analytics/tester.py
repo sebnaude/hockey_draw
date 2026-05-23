@@ -90,6 +90,8 @@ CONSTRAINT_SEVERITY_LEVELS = {
     
     # spec-021: HARD anchored earliest-slot fill (was soft EnsureBestTimeslotChoices).
     'VenueEarliestSlotFill': 2,
+    # spec-021: HARD cross-grade club no-concurrency (extracted from ClubGameSpread).
+    'ClubNoConcurrentSlot': 2,
     # Level 5 - VERY LOW (timeslot preferences)
     'PreferredTimesConstraint': 5,
     # spec-016: NIHC field-fill order — soft symmetry-breaker.
@@ -1180,6 +1182,8 @@ class DrawTester:
             ('TeamPairNoConcurrency', self._check_team_pair_no_concurrency),
             ('ClubVsClubAlignment', self._check_club_vs_club_alignment),
             ('ClubGameSpread', self._check_club_game_spread),
+            # spec-021: cross-grade club no-concurrency (capacity-aware).
+            ('ClubNoConcurrentSlot', self._check_club_no_concurrent_slot),
             ('ClubFieldConcentration', self._check_club_field_concentration),
             # Level 4 - LOW
             ('MaximiseClubsPerTimeslotBroadmeadow', self._check_maximise_clubs_per_timeslot_broadmeadow),
@@ -2074,29 +2078,19 @@ class DrawTester:
         return violations
 
     def _check_club_game_spread(self) -> List[Violation]:
-        """Check ClubGameSpread: for each (club, week, day), gaps and double-ups.
+        """Check ClubGameSpread (spec-021): a club's games on a day are near-contiguous.
 
-        gap = (max_slot - min_slot + 1) - num_games
-        Positive gap = spread (unused slots in range).
-        Negative gap = double-ups (more games than slots in range).
-
-        Hard upper: gap <= club_game_spread_max_gap + slack
-        Hard lower: gap >= -(club_game_spread_max_overlap + slack)
-        Soft: reports any positive gaps as warnings.
+        holes = (max_used_slot - min_used_slot + 1) - num_distinct_used_slots
+        gap_cap = max(0, min(1, n_games - 3)) + slack
+          (<=3 games -> 0 holes allowed; >=4 games -> 1 hole allowed.)
+        Hard: holes > gap_cap is a violation. Soft: any hole within cap is a warning.
+        Double-ups are NOT checked here — that's `_check_club_no_concurrent_slot`.
         """
         violations = []
-        defaults = self.data.get('constraint_defaults', {})
-        max_gap_base = defaults.get('club_game_spread_max_gap', 2)
         config_slack = self.constraint_slack.get('ClubGameSpread', 0)
-        hard_upper = max_gap_base + config_slack
 
-        # Count teams per club for dynamic lower bound
-        club_team_count = defaultdict(int)
-        for t in self.data.get('teams', []):
-            club_team_count[t.club.name] += 1
-
-        # Group games by (club, week, day) -> {day_slot: set of game_ids}
-        # Only Broadmeadow — away venues have 1 field so gap/overlap is irrelevant
+        # Group games by (club, week, day) -> {day_slot: set of game_ids}.
+        # Only Broadmeadow — away venues have 1 field so contiguity is moot.
         club_week_day_slots = defaultdict(lambda: defaultdict(set))
         for game in self.draw.games:
             if game.field_location != 'Newcastle International Hockey Centre':
@@ -2107,60 +2101,76 @@ class DrawTester:
                     club_week_day_slots[(club, game.week, game.day)][game.day_slot].add(game.game_id)
 
         for (club, week, day), slot_games in club_week_day_slots.items():
-            all_game_ids = [gid for gids in slot_games.values() for gid in gids]
-            num_games = len(all_game_ids)
-            if num_games < 2:
+            all_game_ids = {gid for gids in slot_games.values() for gid in gids}
+            n_games = len(all_game_ids)
+            if n_games < 2:
                 continue
 
             slots = sorted(slot_games.keys())
-            min_slot = slots[0]
-            max_slot = slots[-1]
-            range_size = max_slot - min_slot + 1
-            gap = range_size - num_games
+            holes = (slots[-1] - slots[0] + 1) - len(slots)
+            gap_cap = max(0, min(1, n_games - 3)) + config_slack
 
-            # Dynamic lower bound: T//2 - 1 where T = club team count
-            T = club_team_count.get(club, 1)
-            max_overlap = max(0, T // 2 - 1) + config_slack
-            hard_lower = -max_overlap
-
-            if gap > hard_upper:
+            if holes > gap_cap:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
-                    message=f"Club '{club}' week {week} ({day}): gap={gap} exceeds upper limit {hard_upper} "
-                            f"(slots {slots}, {num_games} games in range {min_slot}-{max_slot})",
+                    message=f"Club '{club}' week {week} ({day}): {holes} hole(s) in slots {slots} "
+                            f"exceeds cap {gap_cap} ({n_games} games)",
                     affected_games=list(all_game_ids)[:5],
                     week=week,
                     affected_clubs=[club],
-                    metric_value=gap - hard_upper,
+                    metric_value=holes - gap_cap,
                 ))
-            elif gap < hard_lower:
+            elif holes > 0:
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
-                    message=f"Club '{club}' week {week} ({day}): gap={gap} below lower limit {hard_lower} "
-                            f"(too many double-ups: {num_games} games in {range_size} slots, "
-                            f"club has {T} teams, max overlap={max_overlap})",
-                    affected_games=list(all_game_ids)[:5],
-                    week=week,
-                    affected_clubs=[club],
-                    metric_value=hard_lower - gap,
-                ))
-            elif gap > 0:
-                violations.append(Violation.create(
-                    constraint="ClubGameSpread",
-                    message=f"[soft] Club '{club}' week {week} ({day}): {gap} gap(s) in slots {slots} "
-                            f"({num_games} games, within limit {hard_upper})",
-                    affected_games=list(all_game_ids)[:5],
-                    week=week
-                ))
-            elif gap < 0:
-                violations.append(Violation.create(
-                    constraint="ClubGameSpread",
-                    message=f"[soft] Club '{club}' week {week} ({day}): {-gap} double-up(s) "
-                            f"({num_games} games in {range_size} slots, within limit {max_overlap})",
+                    message=f"[soft] Club '{club}' week {week} ({day}): {holes} hole(s) in slots {slots} "
+                            f"({n_games} games, within cap {gap_cap})",
                     affected_games=list(all_game_ids)[:5],
                     week=week
                 ))
 
+        return violations
+
+    def _check_club_no_concurrent_slot(self) -> List[Violation]:
+        """Check ClubNoConcurrentSlot (spec-021): a club's games per (timeslot,
+        venue) stay within a capacity-aware cap.
+
+        cap = max(1, ceil(club_team_count / no_field_slots[location])).
+        Allows forced double-ups when a club has more games at a venue than the
+        venue has timeslots; flags any slot exceeding the cap.
+        """
+        violations = []
+        no_field_slots = self.data.get('no_field_slots', {})
+        club_team_count = defaultdict(set)
+        for t in self.data.get('teams', []):
+            club_team_count[t.club.name].add(t.name)
+
+        # (club, week, day_slot, location) -> set of game_ids.
+        groups = defaultdict(set)
+        for game in self.draw.games:
+            clubs = set()
+            for team in [game.team1, game.team2]:
+                club = self._team_to_club.get(team)
+                if club:
+                    clubs.add(club)
+            for club in clubs:
+                groups[(club, game.week, game.day_slot, game.field_location)].add(game.game_id)
+
+        for (club, week, slot, location), gids in groups.items():
+            count = len(gids)
+            slots = no_field_slots.get(location, 0)
+            n_teams = len(club_team_count.get(club, ()))
+            cap = max(1, -(-n_teams // slots)) if slots > 0 else 1  # ceil(n/slots)
+            if count > cap:
+                violations.append(Violation.create(
+                    constraint="ClubNoConcurrentSlot",
+                    message=f"Club '{club}' week {week} slot {slot} at {location}: "
+                            f"{count} concurrent games exceeds cap {cap}",
+                    affected_games=list(gids)[:5],
+                    week=week,
+                    affected_clubs=[club],
+                    metric_value=count - cap,
+                ))
         return violations
 
     def _check_club_field_concentration(self) -> List[Violation]:

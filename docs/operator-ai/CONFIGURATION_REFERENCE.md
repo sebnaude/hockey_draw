@@ -140,6 +140,15 @@ DAY_TIME_MAP = {
 - Defines ALL possible timeslots for lower grades (3rd-6th)
 - PHL and 2nd grade have their own filtering dicts (see below)
 
+**Derived: `no_field_slots` (spec-021).** `config.defaults.compute_no_field_slots(day_time_map)`
+computes, per location, the count of distinct game-times (max over its days) — e.g. NIHC = 8,
+Maitland Park = 6, Central Coast = 2 above. It is surfaced as `data['no_field_slots']` by
+`build_season_data`. The `ClubNoConcurrentSlot` atom reads it to size its per-(club, timeslot,
+venue) cap: `max(1, ceil(club_team_count / no_field_slots[location]))`. This is what lets a club
+with more teams than a small venue has timeslots (e.g. Central Coast's 2) take *forced* double-ups
+instead of going infeasible. It is **derived, not configured** — add a venue or a time to
+`DAY_TIME_MAP` and the cap updates automatically.
+
 ---
 
 ## PHL_GAME_TIMES (PHL Variable Filtering)

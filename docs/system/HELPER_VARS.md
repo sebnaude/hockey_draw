@@ -63,7 +63,19 @@ Current catalog (extend as Phase 3 atoms need new kinds):
 | `is_phl_friday` | `(week,)` | indicator: PHL plays Friday this week | PHL Friday count atoms |
 | `club_day_field_used` | `(club, field_name)` | indicator: any club_day game on field_name | `ClubDaySameField` |
 | `club_day_slot_used` | `(club, day_slot)` | indicator: any club_day game at day_slot | `ClubDayContiguousSlots` |
+| `venue_slot_used` | `(week, date, location, day_slot)` | OR across a venue's fields at that slot | `VenueEarliestSlotFill` (spec-021) |
+| `club_spread_slot_used` | `(club, week, day, day_slot)` | OR over a club's games at that slot | `ClubGameSpread` contiguity (spec-021) |
 | `phl_2nd_btb_pair` | `(clubs, round_no, field, slot1, slot2)` | back-to-back same-field indicator | `PHLAnd2ndBackToBackSameField` |
+
+## Shared contiguity primitive (spec-021)
+
+`constraints/atoms/_contiguity.py` factors out the `slot_used`-indicator pattern used by every "don't leave holes between used timeslots" rule, so the atoms share one cheap encoding without merging (GOALS §2 — extract a helper, don't merge):
+
+- `slot_used_indicators(registry, vars_by_slot, kind, *key_prefix)` — channels one `slot_used` BoolVar per slot via the pool API (`get_or_create_bool`), keyed `(kind, *key_prefix, slot)`.
+- `enforce_no_gaps(model, slot_inds)` — **floating**: the used block is contiguous but may start anywhere (`prev + next ≤ 1` when the middle slot is empty). Used by `ClubDayContiguousSlots` and `ClubGameSpread`.
+- `enforce_monotone_fill(model, slot_inds)` — **anchored**: use slot `s` ⇒ use slot `s-1`, so games pack into the *earliest* slots (strictly stronger than no-gaps). Used by `VenueEarliestSlotFill`.
+
+Both reduce to an implication/coincidence chain over BoolVar indicators — no `AddDivisionEquality` / range / min-max IntVars.
 
 ## API reference
 

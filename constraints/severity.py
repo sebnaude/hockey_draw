@@ -65,6 +65,8 @@ CONSTRAINT_TO_SEVERITY = {
     # Level 2 - HIGH (structural, club-specific)
     # spec-021: HARD anchored earliest-slot fill (was soft EnsureBestTimeslotChoices).
     'VenueEarliestSlotFill': 2,
+    # spec-021: HARD cross-grade club no-concurrency (extracted from ClubGameSpread).
+    'ClubNoConcurrentSlot': 2,
     'ClubDayConstraint': 2,
     'ClubDayConstraintAI': 2,
     # spec-018: `AwayAtMaitlandGrouping` (+ AI) removed — rule deleted.

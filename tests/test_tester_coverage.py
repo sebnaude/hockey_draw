@@ -830,10 +830,10 @@ class TestCheckClubVsClubAlignment:
 # ============== _check_club_game_spread ==============
 
 class TestCheckClubGameSpread:
-    def test_violation_large_gap(self):
-        """Club has games at slot 1 and slot 6, gap = (6-1+1)-2 = 4, default max is 2."""
-        data = make_data(constraint_defaults={'club_game_spread_max_gap': 2,
-                                               'club_game_spread_max_overlap': 0})
+    def test_violation_holes_exceed_cap(self):
+        """spec-021: 2 games at slots 1 and 6 -> holes=(6-1+1)-2=4; n=2 so
+        gap_cap=max(0,min(1,2-3))=0 -> 4 > 0 -> HARD violation."""
+        data = make_data(constraint_defaults={})
         games = [
             make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
                       day_slot=1),
@@ -842,22 +842,26 @@ class TestCheckClubGameSpread:
         ]
         tester = DrawTester(make_draw(games), data)
         violations = tester._check_club_game_spread()
-        hard_v = [v for v in violations if 'exceeds upper' in v.message]
+        hard_v = [v for v in violations if 'exceeds cap' in v.message]
         assert len(hard_v) >= 1
 
-    def test_soft_warning_small_gap(self):
-        """Club has games at slot 1 and slot 3, gap = 1 within limit but > 0."""
-        data = make_data(constraint_defaults={'club_game_spread_max_gap': 2,
-                                               'club_game_spread_max_overlap': 0})
+    def test_soft_warning_hole_within_cap(self):
+        """spec-021: 4 games at slots {1,2,3,5} -> holes=(5-1+1)-4=1; n=4 so
+        gap_cap=1 -> 1 hole is within cap but > 0 -> SOFT warning."""
+        data = make_data(constraint_defaults={})
         games = [
-            make_game('G1', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
+            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
                       day_slot=1),
-            make_game('G2', 'Tigers 4th', 'Wests 4th', '4th', 1, 1, '2025-04-01',
+            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
+                      day_slot=2),
+            make_game('G3', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
                       day_slot=3),
+            make_game('G4', 'Tigers 4th', 'Wests 4th', '4th', 1, 1, '2025-04-01',
+                      day_slot=5),
         ]
         tester = DrawTester(make_draw(games), data)
         violations = tester._check_club_game_spread()
-        soft_v = [v for v in violations if '[soft]' in v.message and 'gap' in v.message]
+        soft_v = [v for v in violations if '[soft]' in v.message and 'hole' in v.message]
         assert len(soft_v) >= 1
 
     def test_no_issue_single_game(self):

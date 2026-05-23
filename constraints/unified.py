@@ -101,8 +101,10 @@ class UnifiedConstraintEngine:
         self.registry = HelperVarRegistry(self.model)
         self.pool = self.registry
 
-        # CGS iteration keys (populated by _club_game_spread_hard for soft phase)
+        # CGS iteration keys + per-group hole indicators (populated by
+        # _club_game_spread_hard, consumed by _club_game_spread_soft).
         self._cgs_keys = []
+        self._cgs_hole_vars = {}
 
     # ================================================================
     # LOOKUPS
@@ -1017,12 +1019,20 @@ class UnifiedConstraintEngine:
         return n
 
     def _club_game_spread_hard(self):
-        """Hard: limit gap and double-ups between a club's games on a given day."""
+        """Hard: a club's games on a day form a near-contiguous block.
+
+        spec-021 (resolved decision A): the allowed hole count is games-derived,
+        ``gap_cap = max(0, min(1, n_games - 3))`` (+ ``--slack ClubGameSpread``).
+        A club with <=3 games that day must have NO interior holes; with >=4
+        games at most ONE (a soft penalty drives it to zero). Encoded with
+        ``slot_used`` indicators (shared ``_contiguity`` primitive) + per-position
+        "used-before/after" channels + a per-slot hole indicator — dropping all
+        the old range/min/max/spread/overlap IntVars. The lower no-double-up
+        bound moved to the ``ClubNoConcurrentSlot`` atom.
+        """
+        from constraints.atoms._contiguity import slot_used_indicators
         n = 0
-        defaults = self.data.get('constraint_defaults', {})
         config_slack = self.slack.get('ClubGameSpread', 0)
-        hard_limit = defaults.get('club_game_spread_max_gap', 2) + config_slack
-        max_overlap = defaults.get('club_game_spread_max_overlap', 0)
 
         # Regroup by (club, week, day)
         club_week_day_groups = defaultdict(dict)
@@ -1030,88 +1040,71 @@ class UnifiedConstraintEngine:
             club_week_day_groups[(club, week, day)][day_slot] = vars_list
 
         self._cgs_keys = []
+        self._cgs_hole_vars = {}
 
         for (club, week, day), slots_dict in club_week_day_groups.items():
-            unique_slots = sorted(slots_dict.keys())
-            if len(unique_slots) <= 1:
+            sorted_slots = sorted(slots_dict.keys())
+            if len(sorted_slots) < 2:
                 continue
 
-            min_slot, max_slot = unique_slots[0], unique_slots[-1]
-            is_active = {}
-            for s in unique_slots:
-                ia = self.pool.get_or_create_bool(
-                    ('cgs_active', club, week, day, s), slots_dict[s],
-                    f'u_cgs_act_{club}_w{week}_{day}_s{s}')
-                is_active[s] = ia
+            slot_inds = slot_used_indicators(
+                self.registry, slots_dict, 'club_spread_slot_used', club, week, day)
 
-            num_used = self.model.NewIntVar(0, len(unique_slots), f'u_cgs_used_{club}_w{week}_{day}')
-            self.model.Add(num_used == sum(is_active[s] for s in unique_slots))
+            # Channel "a used slot exists before / after each position".
+            m = len(sorted_slots)
+            pref = [slot_inds[sorted_slots[0]]] + [None] * (m - 1)
+            for i in range(1, m):
+                p = self.model.NewBoolVar(f'u_cgs_pref_{club}_w{week}_{day}_{i}')
+                self.model.AddMaxEquality(p, [pref[i - 1], slot_inds[sorted_slots[i]]])
+                pref[i] = p
+            suf = [None] * (m - 1) + [slot_inds[sorted_slots[m - 1]]]
+            for i in range(m - 2, -1, -1):
+                s = self.model.NewBoolVar(f'u_cgs_suf_{club}_w{week}_{day}_{i}')
+                self.model.AddMaxEquality(s, [suf[i + 1], slot_inds[sorted_slots[i]]])
+                suf[i] = s
 
-            # num_games counts total games (can be > num_used for double-ups)
-            all_vars_flat = []
-            for s in unique_slots:
-                all_vars_flat.extend(slots_dict[s])
-            num_games = self.model.NewIntVar(0, len(all_vars_flat), f'u_cgs_ngames_{club}_w{week}_{day}')
-            self.model.Add(num_games == sum(all_vars_flat))
+            # hole[i] = (used before) AND (used after) AND (this slot empty).
+            hole_vars = []
+            for i in range(1, m - 1):
+                used_before, used_after = pref[i - 1], suf[i + 1]
+                cur = slot_inds[sorted_slots[i]]
+                h = self.model.NewBoolVar(
+                    f'u_cgs_hole_{club}_w{week}_{day}_s{sorted_slots[i]}')
+                self.model.AddBoolAnd(
+                    [used_before, used_after, cur.Not()]).OnlyEnforceIf(h)
+                self.model.AddBoolOr(
+                    [used_before.Not(), used_after.Not(), cur]).OnlyEnforceIf(h.Not())
+                hole_vars.append(h)
 
-            min_active = self.model.NewIntVar(min_slot, max_slot, f'u_cgs_min_{club}_w{week}_{day}')
-            max_active = self.model.NewIntVar(min_slot, max_slot, f'u_cgs_max_{club}_w{week}_{day}')
-            for s in unique_slots:
-                self.model.Add(min_active <= s).OnlyEnforceIf(is_active[s])
-                self.model.Add(max_active >= s).OnlyEnforceIf(is_active[s])
+            # gap_cap = max(0, min(1, n_games - 3)) = (n_games >= 4 ? 1 : 0), + slack.
+            all_vars_flat = [v for s in sorted_slots for v in slots_dict[s]]
+            ge4 = self.model.NewBoolVar(f'u_cgs_ge4_{club}_w{week}_{day}')
+            self.model.Add(sum(all_vars_flat) >= 4).OnlyEnforceIf(ge4)
+            self.model.Add(sum(all_vars_flat) <= 3).OnlyEnforceIf(ge4.Not())
 
-            range_size = self.model.NewIntVar(1, max_slot - min_slot + 1, f'u_cgs_range_{club}_w{week}_{day}')
-            self.model.Add(range_size == max_active - min_active + 1)
+            if hole_vars:
+                self.model.Add(sum(hole_vars) <= config_slack).OnlyEnforceIf(ge4.Not())
+                self.model.Add(sum(hole_vars) <= 1 + config_slack).OnlyEnforceIf(ge4)
+                n += 1
 
-            # gap = range_size - num_games (can be negative for double-ups)
-            max_gap_val = max_slot - min_slot
-            gap = self.model.NewIntVar(-(max_slot - min_slot + 1), max_gap_val, f'u_cgs_gap_{club}_w{week}_{day}')
-            self.model.Add(gap == range_size - num_games)
-
-            has_multi = self.model.NewBoolVar(f'u_cgs_multi_{club}_w{week}_{day}')
-            self.model.Add(num_games >= 2).OnlyEnforceIf(has_multi)
-            self.model.Add(num_games <= 1).OnlyEnforceIf(has_multi.Not())
-            self.pool.register(('cgs_multi', club, week, day), has_multi)
-
-            # UPPER: spread (using num_used for gap, not num_games) <= max_gap + slack
-            spread = self.model.NewIntVar(0, max_gap_val, f'u_cgs_spread_{club}_w{week}_{day}')
-            self.model.Add(spread == range_size - num_used)
-            self.model.Add(spread <= hard_limit).OnlyEnforceIf(has_multi)
-
-            # LOWER: double-up prevention (num_games - num_used <= max_overlap + slack)
-            overlap = self.model.NewIntVar(0, len(all_vars_flat), f'u_cgs_overlap_{club}_w{week}_{day}')
-            self.model.Add(overlap == num_games - num_used)
-            self.model.Add(overlap <= max_overlap + config_slack).OnlyEnforceIf(has_multi)
-
-            n += 1
-
-            # Register for soft phase reuse via pool
-            self.pool.register(('cgs_gap', club, week, day), gap)
-            self.pool.register(('cgs_max_gap_val', club, week, day), max_gap_val)
+            self._cgs_hole_vars[(club, week, day)] = hole_vars
             self._cgs_keys.append((club, week, day))
         return n
 
     def _club_game_spread_soft(self):
-        """Soft: penalize gap between a club's games on a given day."""
+        """Soft: penalise every residual interior hole in a club's day block.
+
+        Drives the solver toward zero holes even when the hard cap permits one
+        (spec-021). Each hole indicator contributes one unit of penalty.
+        """
         n = 0
         weight = self._get_penalty_weight('ClubGameSpread', 5000)
         self.data['penalties']['ClubGameSpread'] = {'weight': weight, 'penalties': []}
-
-        for (club, week, day) in self._cgs_keys:
-            gap = self.pool.get(('cgs_gap', club, week, day))
-            has_multi = self.pool.get(('cgs_multi', club, week, day))
-            max_gap_val = self.pool.get(('cgs_max_gap_val', club, week, day))
-            if gap is None or has_multi is None:
-                continue
-
-            # Penalty on absolute gap (spread)
-            abs_gap = self.model.NewIntVar(0, max_gap_val, f'u_cgs_absgap_{club}_w{week}_{day}')
-            self.model.AddAbsEquality(abs_gap, gap)
-            pen = self.model.NewIntVar(0, max_gap_val, f'u_cgs_pen_{club}_w{week}_{day}')
-            self.model.Add(pen >= abs_gap).OnlyEnforceIf(has_multi)
-            self.model.Add(pen == 0).OnlyEnforceIf(has_multi.Not())
-            self.data['penalties']['ClubGameSpread']['penalties'].append(pen)
-            n += 1
+        hole_map = getattr(self, '_cgs_hole_vars', {})
+        for key in self._cgs_keys:
+            for h in hole_map.get(key, []):
+                self.data['penalties']['ClubGameSpread']['penalties'].append(h)
+                n += 1
         return n
 
     # ================================================================

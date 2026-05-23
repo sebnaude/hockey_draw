@@ -354,6 +354,15 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=3,
         slack_key='ClubGameSpread',
     ),
+    # spec-021: extracted from ClubGameSpread's lower no-double-up bound (which
+    # is concurrency, not contiguity). HARD, capacity-aware via no_field_slots.
+    'ClubNoConcurrentSlot': ConstraintInfo(
+        canonical_name='ClubNoConcurrentSlot',
+        solver_class_names=['ClubNoConcurrentSlot'],
+        tester_check_methods=['_check_club_no_concurrent_slot'],
+        tester_violation_names=['ClubNoConcurrentSlot'],
+        severity_level=2,
+    ),
     'ClubFieldConcentration': ConstraintInfo(
         canonical_name='ClubFieldConcentration',
         solver_class_names=[],  # Tester-only diagnostic
@@ -585,7 +594,6 @@ HELPER_VAR_CATALOG: Set[str] = {
     # slot_used indicators never collide.
     'venue_slot_used',        # (week, date, location, day_slot) — VenueEarliestSlotFill
     'club_spread_slot_used',  # (club, week, day, day_slot) — ClubGameSpread contiguity
-    'club_concurrent_slot',   # (club, week, day_slot) — ClubNoConcurrentSlot count helper
 }
 
 

@@ -64,9 +64,11 @@ class TestAffectedClubsPopulated:
         assert set(v.affected_clubs) == {'Tigers', 'Norths'}
         assert v.metric_value is not None and v.metric_value >= 1
 
-    def test_club_game_spread_flags_club_with_metric(self):
-        report = _run('club_game_spread_overlap.json')
-        v = next(v for v in report.violations if v.constraint == 'ClubGameSpread')
+    def test_club_no_concurrent_slot_flags_club_with_metric(self):
+        # spec-021: the stacked-into-one-slot overlap is now a ClubNoConcurrentSlot
+        # violation (was ClubGameSpread before the lower bound was extracted).
+        report = _run('club_no_concurrent_slot_overlap.json')
+        v = next(v for v in report.violations if v.constraint == 'ClubNoConcurrentSlot')
         assert v.affected_clubs  # club name populated
         assert v.metric_value is not None and v.metric_value >= 1
 

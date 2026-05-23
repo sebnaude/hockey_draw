@@ -84,8 +84,11 @@ class TestRegistryCompleteness:
         `MaitlandHomeGrouping`, `AwayAtNonDefaultGrouping`,
         `AwayAtMaitlandGrouping` and `MaitlandAlternateHomeAway`: 43 - 5 = 38.
         spec-020 DELETED `PreferredDates` and ADDED `PreferredGames` (the generic
-        soft FORCED analogue) — net 0: 38 - 1 + 1 = 38."""
-        assert len(CONSTRAINT_REGISTRY) == 38
+        soft FORCED analogue) — net 0: 38 - 1 + 1 = 38.
+        spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill`
+        (net 0) and ADDED `ClubNoConcurrentSlot` (extracted from ClubGameSpread's
+        lower no-double-up bound): 38 + 1 = 39."""
+        assert len(CONSTRAINT_REGISTRY) == 39
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.

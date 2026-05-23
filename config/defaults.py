@@ -206,6 +206,11 @@ DEFAULT_STAGES = [
             # Games at a venue pack into the earliest slots — no gaps + earliest
             # start, which structurally avoids the 7 pm slot.
             'VenueEarliestSlotFill',
+            # spec-021: HARD cross-grade club no-concurrency (extracted from
+            # ClubGameSpread's lower no-double-up bound). Capacity-aware via the
+            # derived no_field_slots, so small venues (e.g. Central Coast, 2
+            # times) allow forced double-ups instead of going infeasible.
+            'ClubNoConcurrentSlot',
         ],
     },
     {
@@ -250,6 +255,11 @@ DEFAULT_STAGES = [
         'atoms': [
             'ClubDayParticipation', 'ClubDayIntraClubMatchup',
             'ClubDayOpponentMatchup', 'ClubDaySameField', 'ClubDayContiguousSlots',
+            # spec-021: ClubGameSpread moved here from soft_optimisation (which is
+            # soft_only, so its HARD near-contiguity part never applied). This is
+            # a non-soft_only stage, so both the hard hole-cap and the soft
+            # hole-count penalty now run. Same fix pattern as spec-017 for spacing.
+            'ClubGameSpread',
         ],
     },
     {
@@ -259,8 +269,10 @@ DEFAULT_STAGES = [
         'atoms': [
             # spec-017: 'EqualMatchUpSpacing' moved to critical_feasibility so
             # its HARD part actually applies (this stage is soft_only, which
-            # skips apply_stage_1_hard). Its soft part still runs there.
-            'ClubGameSpread',
+            # skips apply_stage_1_hard).
+            # spec-021: 'ClubGameSpread' moved to club_day (hard) for the same
+            # reason — its near-contiguity hard part was dead here. Its soft
+            # hole-count penalty now runs in club_day too.
             # spec-005: `ClubVsClubDeficitPenalty` removed — the soft deficit
             # penalty is unnecessary because the stacking atom enforces the
             # exact Sunday-meeting count via a HARD `sum == budget`
