@@ -408,6 +408,13 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 # Lock weeks from prior draw, re-solve rest
 .\.venv\Scripts\python.exe run.py generate --year 2026 --locked draws/2026/current.json --lock-weeks 1,2,3
 
+# Regeneration mode (spec-026): freeze everything outside a scope, re-solve the rest.
+# Frozen games are PINNED to their date (time/slot/field freed); the freed scope is re-decided.
+# A game is FREE iff its grade is in --regen-grades OR its week is in --regen-weeks (union rule).
+# Regen is a solver run -> bumps MAJOR version. --regen-weeks must not overlap --lock-weeks (FATAL).
+.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --regen-from draws/2026/current.json --regen-grades 5th 6th
+.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --regen-from draws/2026/current.json --regen-weeks 10-22
+
 # Full command with exclusions, hints, and slack
 .\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3 --locked draws/2026/current.json --lock-weeks 1 --workers 20 --hint checkpoints/run_XX/simple_solve_intermediate_N/solution.pkl --exclude ConstraintName1 ConstraintName2
 

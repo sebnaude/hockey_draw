@@ -303,7 +303,7 @@ class DrawStorage(BaseModel):
         
         print(f"Loaded {len(locked_games)} locked games from weeks {weeks_label}")
         return locked_draw, locked_keys
-    
+
     @classmethod
     def from_excel(
         cls,
@@ -1050,6 +1050,108 @@ class DrawAnalytics:
 
 
 # ============== Utility Functions ==============
+
+def extract_locked_pairings(
+    draw: "DrawStorage",
+    *,
+    freeze_grades,
+    freeze_weeks,
+    exclude_weeks=frozenset(),
+) -> List[Dict[str, Any]]:
+    """Return a LOCKED_PAIRINGS list for use with the regen path (spec-026 DoD #1).
+
+    Each entry is a dict with keys ``teams``, ``grade``, ``date``, and
+    ``description`` — the same shape as a hand-authored LOCKED_PAIRINGS entry.
+    The slot/time/field keys are intentionally omitted so the solver is free to
+    re-time the game within the pinned date.
+
+    A game is included iff ALL of the following hold:
+      1. ``g.grade in freeze_grades``  (grade axis: frozen grade)
+      2. ``g.week  in freeze_weeks``   (week axis: frozen week)
+      3. ``g.week  not in exclude_weeks`` (played weeks, already hard-locked, must
+         not be double-pinned via LOCKED_PAIRINGS)
+
+    Empty-set semantics: an empty ``freeze_grades`` or ``freeze_weeks`` means
+    nothing matches along that axis, so the function returns [].
+
+    Bye/placeholder games — where ``team1`` or ``team2`` is falsy — are silently
+    skipped.  Real DrawStorage objects don't store bye entries as StoredGame
+    records (byes are computed dynamically in export), but this guard protects
+    against manually-constructed DrawStorage objects with a missing opponent.
+
+    Args:
+        draw: The source DrawStorage to extract pins from.
+        freeze_grades: Iterable of grade strings to freeze (e.g. ``{'PHL', '2nd'}``).
+        freeze_weeks: Iterable of week ints to freeze (e.g. ``{1, 2, 3}``).
+        exclude_weeks: Iterable of week ints to EXCLUDE from pinning even if they
+            would otherwise match.  Typically these are the hard-locked
+            already-played weeks passed via ``--lock-weeks``.  Defaults to the
+            empty frozenset (nothing excluded).
+
+    Returns:
+        A list of dicts shaped ``{'teams': [t1, t2], 'grade': str, 'date': str,
+        'description': str}``, one per frozen game.
+    """
+    freeze_grades_set = set(freeze_grades)
+    freeze_weeks_set = set(freeze_weeks)
+    exclude_weeks_set = set(exclude_weeks)
+
+    pins: List[Dict[str, Any]] = []
+    for g in draw.games:
+        # Bye / placeholder guard
+        if not g.team1 or not g.team2:
+            continue
+        # Grade and week membership tests
+        if g.grade not in freeze_grades_set:
+            continue
+        if g.week not in freeze_weeks_set:
+            continue
+        # Exclude hard-locked played weeks to avoid double-pinning
+        if g.week in exclude_weeks_set:
+            continue
+        pins.append({
+            'teams': [g.team1, g.team2],
+            'grade': g.grade,
+            'date': g.date,
+            'description': f"Regen pin: {g.team1} vs {g.team2} ({g.grade}) {g.date}",
+        })
+    return pins
+
+
+def count_games_changed(source: "DrawStorage", result: "DrawStorage") -> int:
+    """Count games whose time/slot/field differ between two draws (spec-026 DoD #6).
+
+    Two draws are matched game-by-game on the *pairing identity*
+    ``(team1, team2, grade, week)``.  For each pairing present in BOTH draws,
+    the game is counted as "changed" if any of its schedule fields differ:
+    ``time``, ``day_slot``, ``field_name``, or ``field_location``.
+
+    Pairings present in only one draw (added or removed) are NOT counted here —
+    this helper measures the re-timing footprint of a regen, not pairing churn.
+    A regen that freezes a grade keeps its pairings on the same date but may
+    re-time them; this helper counts exactly those re-timed games.
+
+    Args:
+        source: The source (pre-regen) draw.
+        result: The result (post-regen) draw.
+
+    Returns:
+        The number of common pairings whose time/slot/field changed.
+    """
+    def _ident(g: "StoredGame"):
+        return (g.team1, g.team2, g.grade, g.week)
+
+    def _sched(g: "StoredGame"):
+        return (g.time, g.day_slot, g.field_name, g.field_location)
+
+    src_by_ident = {_ident(g): _sched(g) for g in source.games}
+    changed = 0
+    for g in result.games:
+        ident = _ident(g)
+        if ident in src_by_ident and src_by_ident[ident] != _sched(g):
+            changed += 1
+    return changed
+
 
 def create_draw_from_solution(X_solution: Dict, description: str = "") -> DrawStorage:
     """Convenience function to create DrawStorage from X solution."""

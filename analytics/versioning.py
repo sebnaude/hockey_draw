@@ -789,6 +789,30 @@ class DrawVersionManager:
             preferred_outcomes.append(outcome)
         metadata['preferred_game_outcomes'] = preferred_outcomes
 
+        # spec-026 DoD #6: regeneration metadata block (additive / opt-in).
+        # Present ONLY for a regen solve (data['_regen_info'] set by run_generate
+        # and threaded through main_staged/main_simple). A non-regen run adds no
+        # `regen` block at all.
+        regen_info = data.get('_regen_info')
+        if regen_info:
+            games_changed = 0
+            source_path = regen_info.get('source_draw')
+            if source_path:
+                try:
+                    source_draw = DrawStorage.load(source_path)
+                    from .storage import count_games_changed
+                    games_changed = count_games_changed(source_draw, draw)
+                except Exception as e:
+                    print(f"Warning: could not compute regen games_changed: {e}")
+            metadata['regen'] = {
+                'source_draw': source_path,
+                'regen_grades': list(regen_info.get('regen_grades', [])),
+                'regen_weeks': list(regen_info.get('regen_weeks', [])),
+                'frozen_pin_count': regen_info.get('frozen_pin_count', 0),
+                'hard_locked_weeks': list(regen_info.get('hard_locked_weeks', [])),
+                'games_changed': games_changed,
+            }
+
         return metadata
 
     @staticmethod
