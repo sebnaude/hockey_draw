@@ -763,6 +763,31 @@ class DrawVersionManager:
             blocked_outcomes.append(outcome)
         metadata['blocked_game_outcomes'] = blocked_outcomes
 
+        # spec-025: LOCKED_PAIRINGS outcomes — mirror forced_game_outcomes. Each
+        # pin records the matched-var count and, when satisfied (exactly 1 match),
+        # the chosen game's resolved time/slot/field, plus satisfied: true/false.
+        locked_pairing_outcomes = []
+        for lp in data.get('locked_pairings', []):
+            outcome = dict(lp)  # copy config entry
+            matched = self._matching_locked_pairing_games(lp, scheduled)
+            outcome['matched_count'] = len(matched)
+            outcome['satisfied'] = (len(matched) == 1)
+            if len(matched) == 1:
+                k = matched[0]
+                # key layout: (t1,t2,grade,day,day_slot,time,week,date,round_no,
+                #              field_name,field_location)
+                outcome['resolved_time'] = k[5]
+                outcome['resolved_day_slot'] = k[4]
+                outcome['resolved_field_name'] = k[9]
+                outcome['resolved_field_location'] = k[10]
+            else:
+                outcome['resolved_time'] = None
+                outcome['resolved_day_slot'] = None
+                outcome['resolved_field_name'] = None
+                outcome['resolved_field_location'] = None
+            locked_pairing_outcomes.append(outcome)
+        metadata['locked_pairing_outcomes'] = locked_pairing_outcomes
+
         # spec-020: preferred (soft) game outcomes — matched count vs target,
         # constraint type, incurred deviation penalty, and satisfied flag.
         preferred_outcomes = []
@@ -777,6 +802,30 @@ class DrawVersionManager:
             outcome['satisfied'] = (penalty == 0)
             preferred_outcomes.append(outcome)
         metadata['preferred_game_outcomes'] = preferred_outcomes
+
+        # spec-026 DoD #6: regeneration metadata block (additive / opt-in).
+        # Present ONLY for a regen solve (data['_regen_info'] set by run_generate
+        # and threaded through main_staged/main_simple). A non-regen run adds no
+        # `regen` block at all.
+        regen_info = data.get('_regen_info')
+        if regen_info:
+            games_changed = 0
+            source_path = regen_info.get('source_draw')
+            if source_path:
+                try:
+                    source_draw = DrawStorage.load(source_path)
+                    from .storage import count_games_changed
+                    games_changed = count_games_changed(source_draw, draw)
+                except Exception as e:
+                    print(f"Warning: could not compute regen games_changed: {e}")
+            metadata['regen'] = {
+                'source_draw': source_path,
+                'regen_grades': list(regen_info.get('regen_grades', [])),
+                'regen_weeks': list(regen_info.get('regen_weeks', [])),
+                'frozen_pin_count': regen_info.get('frozen_pin_count', 0),
+                'hard_locked_weeks': list(regen_info.get('hard_locked_weeks', [])),
+                'games_changed': games_changed,
+            }
 
         return metadata
 
@@ -875,6 +924,36 @@ class DrawVersionManager:
                 if self._club_matches(k[0], teams[0]) or self._club_matches(k[1], teams[0]):
                     return True
         return False
+
+    def _matching_locked_pairing_games(self, lp, scheduled):
+        """Return scheduled keys matching a LOCKED_PAIRINGS pin (spec-025).
+
+        Mirrors `_check_forced_game`'s pairing/grade/date matching, but returns
+        the full list of matching scheduled variable keys (not just a bool) so
+        the caller can resolve the chosen game's time/slot/field and matched
+        count for `locked_pairing_outcomes`.
+        """
+        teams = lp.get('teams', [])
+        grade = lp.get('grade')
+        date = lp.get('date')
+
+        matched = []
+        for k in scheduled:
+            if len(k) < 11:
+                continue
+            if date and k[7] != date:
+                continue
+            if grade and k[2] != grade:
+                continue
+
+            if len(teams) == 2:
+                if (self._club_matches(k[0], teams[0]) and self._club_matches(k[1], teams[1])) or \
+                   (self._club_matches(k[0], teams[1]) and self._club_matches(k[1], teams[0])):
+                    matched.append(k)
+            elif len(teams) == 1:
+                if self._club_matches(k[0], teams[0]) or self._club_matches(k[1], teams[0]):
+                    matched.append(k)
+        return matched
 
     def _check_blocked_game(self, bg, scheduled):
         """Check if a blocked game config entry is respected (no violating games)."""

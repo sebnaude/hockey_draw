@@ -167,6 +167,9 @@ PREFERENCE_NO_PLAY = {
 # See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
 PREFERRED_GAMES = []
 
+# spec-025: pin pairing to its weekend, free the time. Empty = no pins.
+LOCKED_PAIRINGS = []
+
 # ============== Season Configuration ==============
 # Main configuration dictionary that pulls everything together
 
@@ -205,6 +208,7 @@ SEASON_CONFIG = {
     'blocked_games': BLOCKED_GAMES,
     'preference_no_play': PREFERENCE_NO_PLAY,
     'preferred_games': PREFERRED_GAMES,  # spec-020 soft FORCED analogue
+    'locked_pairings': LOCKED_PAIRINGS,  # spec-025 pin pairing to weekend
 
     # Home field mappings (from config/defaults.py, override if needed)
     'home_field_map': HOME_FIELD_MAP,

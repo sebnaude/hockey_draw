@@ -618,3 +618,63 @@ Same scope fields as `FORCED_GAMES` (see above), plus:
 - Filtering: `_build_blocked_game_rules()` and `_is_blocked_by_no_play()` in `utils.py`
 - Called from: `generate_X()` — checked for each variable after forced games check
 - Recorded in: draw JSON `metadata.blocked_games` + `metadata.blocked_game_outcomes` (with `respected` flag)
+
+---
+
+## LOCKED_PAIRINGS (Date-Pin Config, spec-025)
+
+Pins a pairing to its **date** (playing day) with `sum == 1`, leaving the time, day_slot, and field entirely FREE for the solver. It is the sister config to `FORCED_GAMES` for mechanical date-pins: after a draw is published and some pairings are decided but times/fields may need adjusting, `LOCKED_PAIRINGS` holds those decided pairings so a regeneration run (spec-026) keeps them on their weekends without re-opening the matchup choices.
+
+> **Rule:** if all you want is "this pairing, this weekend, any time" — use `LOCKED_PAIRINGS`, not `FORCED_GAMES`. Reserve `FORCED_GAMES` for count rules, marquee games that also lock a venue/time, or any entry that uses `count`, `constraint`, `time`, `day_slot`, `field_name`, `field_location`, or `day`.
+
+```python
+LOCKED_PAIRINGS = [
+    # Each entry pins a pairing to a date; time/slot/field are chosen by the solver.
+    {
+        'teams': ['Norths', 'Maitland'],  # or team1/team2 keys
+        'grade': 'PHL',
+        'date': '2026-05-08',             # YYYY-MM-DD
+        'description': 'Locked wk7 — Norths vs Maitland PHL',  # optional
+    },
+    {
+        'team1': 'Gosford',
+        'team2': 'Tigers',
+        'grade': '2nd',
+        'date': '2026-04-12',
+    },
+]
+```
+
+### Allowed fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `teams` | list | one of `teams` / `team1`+`team2` | Two club or team names. Resolved the same way as FORCED_GAMES `teams`. |
+| `team1` / `team2` | str | (alternative to `teams`) | Specify the two teams individually. |
+| `grade` | str | yes | Grade name (e.g. `'PHL'`, `'2nd'`). Used for team-name resolution. |
+| `date` | str | yes | Date string `'YYYY-MM-DD'`. |
+| `description` | str | no | Human-readable note; ignored by solver. |
+
+### Forbidden fields — FATAL if present
+
+The following keys are **not permitted** in a `LOCKED_PAIRINGS` entry. Presence of any is a validation FATAL (they would partially re-lock the time or slot, defeating the config's purpose):
+
+`time`, `day_slot`, `field_name`, `field_location`, `day`, `week`, `round_no`, `count`, `constraint`
+
+### Behaviour
+
+- **Enforcement:** `generate_X` builds a second scope-count pass parallel to FORCED. Each pin results in `model.Add(sum(candidate_vars_on_date) == 1)`. The sum covers all valid times/slots/fields for the pairing on that date; the solver picks exactly one.
+- **Separate scope dict:** `locked_pairing_scope_vars` is kept separate from `forced_scope_vars`. A variable may satisfy both a FORCED scope and a LOCKED_PAIRINGS scope; both constraints register it and both apply (additive, no elimination).
+- **Empty scope = FATAL:** a pin whose pairing has zero candidate variables on its date exits with a `LOCKED_PAIRINGS`-labelled diagnostic naming the `(teams, grade, date)`.
+- **Locked-week filtering:** entries whose `date` falls in a hard-locked week are stripped before the solver runs (those weeks are already pinned by the locked-weeks machinery; double-applying the pin would be redundant and could conflict).
+- **Metadata:** draw JSON gains a `locked_pairing_outcomes` section (per pin: matched-var count, resolved time/slot/field, `satisfied: true/false`) alongside `forced_game_outcomes`.
+- **Tester:** `analytics/tester.py::_check_locked_pairings` (registered in `constraints/registry.py` as `LockedPairings`, `tester_only`, severity 1) flags any pinned pairing not present on its date in the finished draw.
+
+### Implementation
+
+- Config: `LOCKED_PAIRINGS` list in `config/season_{year}.py` (default `[]` in `config/defaults.py`)
+- Passed through: `SEASON_CONFIG['locked_pairings']` → `build_season_data()` → `data['locked_pairings']`
+- Enforcement: `generate_X()` — second scope-count pass after FORCED, using `_build_scope_count_rules(..., label='LOCKED_PAIRINGS', unique_per_entry=True)`
+- Validation: `validate_game_config` — forbidden-field check + locked-week filter + empty-scope pre-check
+- Recorded in: draw JSON `metadata.locked_pairing_outcomes` (with `satisfied` flag)
+- Regen tooling: spec-026 (`--regen-from`) reads and writes to this list automatically

@@ -264,6 +264,77 @@ Ready for Phase 3b (ClubDayConstraint atomization)?
 
 ---
 
+## `LOCKED_PAIRINGS`: the sister config for mechanical date-pins (spec-025)
+
+`LOCKED_PAIRINGS` is a separate config list (a sister to `FORCED_GAMES`) that pins a pairing to its **date** (playing day) with `sum == 1`, while leaving the time, slot, and field entirely free for the solver. It was introduced in spec-025 to clear the ~246 mechanical `"Locked wk…"` entries out of `FORCED_GAMES` and give the regen tooling (spec-026) a clean place to write auto-extracted date-pins.
+
+### The rule
+
+> **If all you want is "this pairing, this weekend, any time" — use `LOCKED_PAIRINGS`, not `FORCED_GAMES`.**
+
+Use `FORCED_GAMES` for:
+- Count budgets (e.g. "exactly 8 PHL Friday games at Gosford per season")
+- Marquee game pinning that also locks the venue, time, or matchup (e.g. "Norths vs Maitland on May 8, at NIHC, on a Friday")
+- Any rule with `count`, `constraint`, `time`, `day_slot`, `field_name`, `field_location`, or `day` scope fields
+
+Use `LOCKED_PAIRINGS` for:
+- "This pairing has already been decided for this weekend; re-solve only the time/slot/field"
+- "Keep these pairings on their dates across a regeneration run"
+- Entries the regen mode (spec-026) auto-extracts from a published draw
+
+### Entry grammar
+
+```python
+LOCKED_PAIRINGS = [
+    # Pin a pairing to a date; time/slot/field are free for the solver.
+    {
+        'teams': ['Norths', 'Maitland'],
+        'grade': 'PHL',
+        'date': '2026-05-08',
+        'description': 'Locked wk7 — Norths vs Maitland PHL',  # optional
+    },
+    # team1/team2 form is also accepted (equivalent to teams=[t1, t2]):
+    {
+        'team1': 'Gosford',
+        'team2': 'Maitland',
+        'grade': '2nd',
+        'date': '2026-04-12',
+    },
+]
+```
+
+**Allowed keys:** `teams` (or `team1`/`team2`), `grade`, `date`, `description`.
+
+**Forbidden keys — presence is a validation FATAL:** `time`, `day_slot`, `field_name`, `field_location`, `day`, `week`, `round_no`, `count`, `constraint`. These fields would partially re-lock the time or slot and defeat the config's purpose.
+
+### How it works
+
+Under the hood, each entry builds a scope of `{grade, date, _entry_idx}` + a `('pair', t1, t2)` team-matcher, and applies `model.Add(sum(matching_vars) == 1)` over all candidate variables for that pairing on that date (across every valid time, slot, and field for the date). The solver picks exactly one. This is mechanically identical to a FORCED entry with the same keys — but the two configs are kept in **separate scope-var dicts** (`forced_scope_vars` vs `locked_pairing_scope_vars`) so FORCED count math is never touched by LOCKED_PAIRINGS and the two configs compose cleanly when a variable matches both.
+
+Locked-week filtering: entries whose `date` falls in a hard-locked week are stripped before the solver runs (those weeks are already pinned to exact keys by the locked-weeks machinery).
+
+Empty scope = FATAL: a pin whose pairing has zero candidate variables on its date is diagnosed and the solver exits (same as FORCED).
+
+Outcomes: the draw metadata gains a `locked_pairing_outcomes` section (parallel to `forced_game_outcomes`) so the convenor can audit that every pinned pairing kept its date after a regeneration run.
+
+### Season-config injection
+
+`LOCKED_PAIRINGS` defaults to `[]` in `config/defaults.py` and is exposed as `data['locked_pairings']` by `build_season_data`. Each season file can populate it:
+
+```python
+# In config/season_2026.py
+LOCKED_PAIRINGS = [
+    # ~246 entries migrated from FORCED_GAMES "Locked wk…" pins (spec-025)
+    {'teams': ['Norths', 'Maitland'], 'grade': 'PHL', 'date': '2026-05-08',
+     'description': 'Locked wk7 — Norths vs Maitland PHL'},
+    ...
+]
+```
+
+The regen tooling (spec-026) reads and writes to this list automatically — hand-authored entries are fully usable without regen.
+
+---
+
 ## Soft variant: `PREFERRED_GAMES` + the `PreferredGames` atom (spec-020)
 
 `FORCED_GAMES` is HARD — a count entry adds `model.Add(sum(vars) <op> count)` and

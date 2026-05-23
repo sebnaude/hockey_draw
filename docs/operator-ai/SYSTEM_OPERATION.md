@@ -104,6 +104,55 @@ Generates comprehensive analytics Excel file.
 .\.venv\Scripts\python.exe run.py generate --year 2026 --resume run_13 stage1_required
 ```
 
+### Regeneration Mode (spec-026)
+
+Freeze everything outside a chosen scope and re-solve only that scope — for a
+roster change (regenerate the affected grades) or a mid-season re-time
+(regenerate future weeks). The frozen games are **pinned to their dates** (time/
+slot/field freed), so their pairings and weekends stay put while the freed scope
+is re-decided.
+
+```powershell
+# Regenerate 5th + 6th grade after a roster move (all other grades pinned)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+    --regen-from draws/2026/current.json --regen-grades 5th 6th
+
+# Re-time weeks 10-22 (pairings/weekends kept, time-on-day re-solved)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+    --regen-from draws/2026/current.json --regen-weeks 10-22
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--regen-from SOURCE` | Source draw JSON to freeze from. Its presence enables regen mode. |
+| `--regen-grades G [G ...]` | Grades to **regenerate** (free). Omitted → no grade freed by the grade axis. |
+| `--regen-weeks SPEC` | Weeks to **regenerate** (free), as `10-22` or `10,12,14` or `10-12,15`. Omitted → no week freed by the week axis. |
+
+**Union free-scope rule (the one non-obvious rule):** a game is **free** iff its
+grade ∈ `--regen-grades` **OR** its week ∈ `--regen-weeks`; everything else is
+frozen (pinned to its date). `--regen-grades 6th` frees all weeks of 6th grade;
+`--regen-weeks 10-22` frees all grades in those weeks; passing both frees the
+union.
+
+**Interaction with `--lock-weeks`:** a `--lock-weeks` (already-played) week is
+**hard-locked** (exact keys pinned, nothing moves) and is never pinned-by-date; a
+future week not in `--regen-weeks` is **pinned**; a `--regen-weeks` week is
+**free**. `--regen-weeks` and `--lock-weeks` must not overlap (FATAL). A
+`--regen-weeks` value that does not exist in the source draw is also FATAL (catches
+typos / off-by-one). A regen is a solver run, so it bumps the **MAJOR** version
+(vN.M → v{N+1}.0).
+
+**Metadata:** the output draw records a `regen` block in `metadata` with
+`source_draw`, `regen_grades`, `regen_weeks`, `frozen_pin_count`,
+`hard_locked_weeks`, and `games_changed` (count of games re-timed vs the source).
+A non-regen run adds no `regen` block.
+
+**spec-027 warning:** until the regen soft-constraint group (spec-027) and the
+groups machinery (spec-023) land, regen runs under the **full hard constraint set**
+and prints `WARNING: spec-027 regen group not available …`. Small scopes (e.g.
+`--regen-grades 6th`, which doesn't touch PHL/2nd adjacency) stay feasible; large
+re-times may be infeasible until spec-027 softens the relevant rules.
+
 ---
 
 ## Staged Solving

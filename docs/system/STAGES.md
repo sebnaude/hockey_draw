@@ -187,6 +187,20 @@ legal because a solve applies the deduped union. `utils.py::validate_game_config
 still runs `_validate_stages` (Phase 22) when `data['solver_stages']` is present;
 errors become FATAL config errors.
 
+## Regeneration group (spec-026 → spec-027)
+
+A regeneration run (`--regen-from`, spec-026) selects a dedicated **`regen`
+constraint group** via `run.py::_select_regen_group()` →
+`resolve_groups(['regen'])` (the groups machinery is spec-023; the `regen`
+group's soft atoms are spec-027). The regen group softens the hard rules that
+assume the solver controls game times (adjacency/spacing/co-location) so that
+frozen-but-retimed pins stay feasible — see `spec-027-regen-soft-constraint-group.md`.
+
+Until spec-023 and spec-027 land, `_select_regen_group()` returns `None`, prints
+`WARNING: spec-027 regen group not available …`, and the regen run falls back to
+the full hard constraint set (feasible only for small scopes such as
+`--regen-grades 6th`). A normal (non-regen) run never selects the `regen` group.
+
 ## Config validation phase
 
 `utils.py::validate_game_config` Phase 22 `_validate_stages` runs

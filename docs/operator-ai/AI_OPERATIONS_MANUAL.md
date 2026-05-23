@@ -221,6 +221,50 @@ forced/blocked games, friday night config, locked weeks, year, and constraints a
 5. Constraints skip locked weeks entirely
 6. Solves remaining weeks with all constraints
 
+### Workflow 2b: Regeneration Mode (spec-026)
+
+Freeze everything outside a chosen scope (grades and/or weeks) and re-solve only
+that scope. Used for roster changes (`--regen-grades`) or mid-season re-times
+(`--regen-weeks`). See `docs/operator-ai/SYSTEM_OPERATION.md` for the CLI table
+and the union free-scope rule.
+
+```powershell
+# Roster move: regenerate 5th + 6th, pin everything else to its date
+.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+    --regen-from draws/2026/current.json --regen-grades 5th 6th
+```
+
+**Orchestration flow** (`run.py::_compute_regen_state` →
+`main_staged`/`main_simple` → `save_solver_output`):
+
+1. **Load source draw** — `DrawStorage.load(--regen-from)`.
+2. **Validate** — `--regen-weeks` ∩ `--lock-weeks` must be empty (FATAL); every
+   `--regen-weeks` value must exist in the source draw (FATAL).
+3. **Hard-lock played weeks** — `--lock-weeks` go through the existing locked-keys
+   path (`model.Add(X[key]==1)` + zero others). These are NEVER pinned-by-date.
+4. **Compute frozen set** — `resolve_regen_scope(games, regen_grades, regen_weeks,
+   lock_weeks)` partitions games by the union rule (free iff grade ∈ regen-grades
+   OR week ∈ regen-weeks); hard-locked weeks land in neither set.
+5. **Extract date pins** — `_build_regen_pins` turns each frozen StoredGame into a
+   `{teams, grade, date, description}` pin (time/slot/field dropped). Exactly one
+   pin per frozen non-bye game; zero for free or hard-locked games.
+6. **Concatenate with config LOCKED_PAIRINGS** — inside `main_staged`/`main_simple`
+   (after `load_data()`, per the INJECTION ORDER NOTE — `run_generate` has no
+   `data`), `_merge_regen_pins` appends the extracted pins to
+   `data['locked_pairings']`, deduping by `(tuple(teams), grade, date)` so a
+   hand-authored pin that duplicates an extracted one is not double-applied
+   (config pin wins).
+7. **Select regen group (guarded)** — `_select_regen_group()` tries
+   `resolve_groups(['regen'])` (spec-023/spec-027). If unavailable it prints the
+   `WARNING: spec-027 regen group not available …` message and falls back to the
+   full hard constraint set. A non-regen run never calls this and is unaffected.
+8. **Solve** — spec-025's `generate_X` pass enforces every pin (date pinned, time
+   free); the freed scope is generated fresh.
+9. **MAJOR version** — `save_solver_output(..., is_major=True)` bumps vN.M →
+   v{N+1}.0 (a regen IS a solver run) and writes the `regen` metadata block
+   (`source_draw`, `regen_grades`, `regen_weeks`, `frozen_pin_count`,
+   `hard_locked_weeks`, `games_changed`).
+
 ### Workflow 3: Test Draw for Violations (Post-Hoc)
 
 ```powershell

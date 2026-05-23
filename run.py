@@ -134,6 +134,27 @@ Examples:
     gen_parser.add_argument('--list-groups', action='store_true',
                             help='Print all known constraint group names (explicit tags + '
                                  'derived severity_N/default) and exit.')
+    gen_parser.add_argument('--regen-from', type=str, metavar='SOURCE',
+                            help='Source draw JSON to freeze from (e.g. draws/2026/current.json). '
+                                 'Presence of this flag enables regeneration mode: games outside '
+                                 'the regen scope (--regen-grades / --regen-weeks) are pinned to '
+                                 'their existing dates via LOCKED_PAIRINGS, while games inside the '
+                                 'scope are solved fresh. Played weeks supplied via --lock-weeks '
+                                 'are hard-locked (exact game key) and are never pinned — '
+                                 '--lock-weeks and --regen-weeks must not overlap.')
+    gen_parser.add_argument('--regen-grades', nargs='+', metavar='GRADE',
+                            help='Grades to REGENERATE (re-solve freely). Games in grades NOT '
+                                 'listed here are frozen (pinned to their date). Omit to leave '
+                                 'all grades free along the grade axis. Union semantics: a game '
+                                 'is FREE if its grade is in --regen-grades OR its week is in '
+                                 '--regen-weeks (either axis frees it).')
+    gen_parser.add_argument('--regen-weeks', type=str, metavar='SPEC',
+                            help='Weeks to REGENERATE (re-solve freely), as a range or list '
+                                 '(e.g. "10-22", "10,12,14", "10-12,15"). Future weeks NOT '
+                                 'listed here are frozen (pinned to their date). Omit to leave '
+                                 'all weeks free along the week axis. Union semantics: a game '
+                                 'is FREE if its grade is in --regen-grades OR its week is in '
+                                 '--regen-weeks. Must not overlap with --lock-weeks (FATAL).')
 
     # Test command
     test_parser = subparsers.add_parser('test', help='Test draw for violations')
@@ -304,6 +325,294 @@ def _load_locked_keys(path: str, locked_weeks: set) -> list:
     print(f"ERROR: Unknown locked file format: {path}")
     print(f"  Expected: .json (draw), .pkl (pickle), or directory (checkpoint)")
     sys.exit(1)
+
+
+def _parse_week_spec(spec: str) -> set:
+    """Parse a week specification string into a set of ints.
+
+    Supports:
+    - Comma-separated values:  "10,12,14"  → {10, 12, 14}
+    - Closed ranges:           "10-22"     → {10, 11, ..., 22}
+    - Combinations:            "10-12,15"  → {10, 11, 12, 15}
+
+    Whitespace around tokens is stripped.  An empty string returns the
+    empty set.
+
+    Raises:
+        ValueError: If a token cannot be parsed as an int or a valid A-B
+            range, or if A > B in a range.
+    """
+    if not spec or not spec.strip():
+        return set()
+
+    result: set = set()
+    for token in spec.split(','):
+        token = token.strip()
+        if not token:
+            continue
+        if '-' in token:
+            # Could be a range like "10-22"
+            parts = token.split('-', 1)
+            try:
+                a, b = int(parts[0].strip()), int(parts[1].strip())
+            except ValueError:
+                raise ValueError(
+                    f"Invalid week range token {token!r}: expected A-B with integers"
+                )
+            if a > b:
+                raise ValueError(
+                    f"Invalid week range {token!r}: start {a} > end {b}"
+                )
+            result.update(range(a, b + 1))
+        else:
+            try:
+                result.add(int(token))
+            except ValueError:
+                raise ValueError(
+                    f"Invalid week token {token!r}: expected an integer"
+                )
+    return result
+
+
+def resolve_regen_scope(games, regen_grades, regen_weeks, lock_weeks=None):
+    """Partition games into (free_ids, frozen_ids) using the union free-scope rule.
+
+    The rule (the one non-obvious thing — document it here):
+        A game is FREE iff its grade ∈ regen_grades OR its week ∈ regen_weeks.
+        Everything else is frozen (to be pinned via LOCKED_PAIRINGS).
+
+    Rationale: regenerating a grade means ALL weeks of that grade move;
+    regenerating weeks 10-22 means ALL grades in those weeks move; doing
+    both frees the union.  This matches the convenor's use cases:
+      - Roster change → --regen-grades 5th 6th (all weeks of those grades)
+      - Re-time future weeks → --regen-weeks 10-22 (all grades in those weeks)
+      - Both together frees the union.
+
+    Args:
+        games: Iterable of StoredGame (or any object with .game_id, .grade,
+            .week attributes).
+        regen_grades: Set/iterable of grade strings to REGENERATE (free).
+            Empty → no game freed along the grade axis.
+        regen_weeks: Set/iterable of week ints to REGENERATE (free).
+            None or empty → no game freed along the week axis.
+        lock_weeks: Set/iterable of hard-locked played weeks (from
+            --lock-weeks).  These are excluded from both free and frozen sets
+            because they are handled by the hard-lock path, not by pinning.
+            Defaults to None (empty).
+
+    Returns:
+        (free_ids, frozen_ids): Two sets of game_id strings.
+        - free_ids:   games inside the regen scope (solver re-decides them).
+        - frozen_ids: games outside the regen scope (to be pinned).
+        Note: games in hard-locked played weeks appear in NEITHER set.
+    """
+    regen_grades_set = set(regen_grades) if regen_grades else set()
+    regen_weeks_set = set(regen_weeks) if regen_weeks else set()
+    lock_weeks_set = set(lock_weeks) if lock_weeks else set()
+
+    free_ids: set = set()
+    frozen_ids: set = set()
+
+    for game in games:
+        # Hard-locked played weeks are handled by the locked-keys path, not pinning.
+        if game.week in lock_weeks_set:
+            continue
+        # Union rule: free if grade ∈ regen_grades OR week ∈ regen_weeks.
+        if game.grade in regen_grades_set or game.week in regen_weeks_set:
+            free_ids.add(game.game_id)
+        else:
+            frozen_ids.add(game.game_id)
+
+    return free_ids, frozen_ids
+
+
+def _validate_regen_lock_weeks_overlap(regen_weeks: set, lock_weeks: set) -> None:
+    """Validate that --regen-weeks and --lock-weeks do not overlap.
+
+    A week cannot be both hard-locked (already played, pinned exactly) and
+    re-solved (free) at the same time.  If they overlap, exit non-zero with a
+    clear error message naming the overlapping weeks.
+
+    Args:
+        regen_weeks: Parsed set of ints from --regen-weeks.
+        lock_weeks: Parsed set of ints from --lock-weeks.
+
+    Raises:
+        SystemExit(1): if the two sets intersect.
+    """
+    overlap = regen_weeks & lock_weeks
+    if overlap:
+        weeks_str = ', '.join(str(w) for w in sorted(overlap))
+        print(
+            f"ERROR: --regen-weeks and --lock-weeks overlap on week(s): {weeks_str}. "
+            f"A week cannot be both hard-locked (played) and re-solved (free). "
+            f"Remove the overlapping week(s) from one of the flags."
+        )
+        sys.exit(1)
+
+
+def _validate_regen_weeks_in_source(regen_weeks: set, source_weeks: set) -> None:
+    """Validate that every --regen-weeks value exists in the source draw (L3).
+
+    A regen week absent from the source draw is almost always a typo or an
+    off-by-one (e.g. requesting week 0 or week 30 against a 22-week draw).
+    Silently accepting it would free nothing along the week axis for that
+    value, masking the mistake.  FATAL with a clear message instead.
+
+    Args:
+        regen_weeks: Parsed set of ints from --regen-weeks.
+        source_weeks: Set of week ints actually present in the source draw.
+
+    Raises:
+        SystemExit(1): if any regen week is not present in the source draw.
+    """
+    missing = regen_weeks - source_weeks
+    if missing:
+        missing_str = ', '.join(str(w) for w in sorted(missing))
+        present_str = ', '.join(str(w) for w in sorted(source_weeks))
+        print(
+            f"ERROR: --regen-weeks references week(s) not present in the source "
+            f"draw: {missing_str}. Source draw weeks are: {present_str}. "
+            f"Check the week numbers against the source draw."
+        )
+        sys.exit(1)
+
+
+def _build_regen_pins(source_draw, frozen_ids):
+    """Build a LOCKED_PAIRINGS pin list for EXACTLY the frozen games (spec-026 DoD #1/#3).
+
+    Pins are built directly from the frozen StoredGame objects (matched by
+    game_id) rather than re-deriving via grade/week sets.  This is the cleanest
+    approach per the Unit C INJECTION ORDER NOTE: it guarantees exactly one pin
+    per frozen non-bye game and zero pins for free or hard-locked games.
+
+    Re-deriving via ``extract_locked_pairings(freeze_grades=..., freeze_weeks=...)``
+    would OVER-include under the union free-scope rule: e.g. if PHL is frozen
+    across weeks 1-3 and week 1 of 6th is also frozen, the grade set {PHL, 6th}
+    crossed with the week set {1,2,3} would wrongly pin freed 6th-grade games in
+    weeks 2-3.  Building from the frozen game_ids avoids that entirely.
+
+    Each pin keeps ``(teams, grade, date)`` and drops time/slot/field — the
+    same shape ``extract_locked_pairings`` produces, so spec-025's generate_X
+    pass treats auto-extracted and hand-authored pins identically.
+
+    Args:
+        source_draw: The source DrawStorage.
+        frozen_ids: Set of game_id strings that must be pinned.
+
+    Returns:
+        A list of pin dicts (one per frozen non-bye game).
+    """
+    pins = []
+    for g in source_draw.games:
+        if g.game_id not in frozen_ids:
+            continue
+        # Bye / placeholder guard — mirrors extract_locked_pairings.
+        if not g.team1 or not g.team2:
+            continue
+        pins.append({
+            'teams': [g.team1, g.team2],
+            'grade': g.grade,
+            'date': g.date,
+            'description': f"Regen pin: {g.team1} vs {g.team2} ({g.grade}) {g.date}",
+        })
+    return pins
+
+
+def _select_regen_group():
+    """Select the regen constraint group if spec-023/spec-027 have landed (DoD #3).
+
+    Guarded: until ``constraints.groups.resolve_groups`` exists (spec-023) with a
+    ``'regen'`` group (spec-027), this returns ``None`` and prints the documented
+    WARNING. A normal (non-regen) run never calls this, so it is unaffected.
+
+    Returns:
+        The resolved group object from ``resolve_groups(['regen'])`` if available,
+        else ``None`` (caller falls back to the full hard constraint set).
+    """
+    try:
+        from constraints.groups import resolve_groups  # type: ignore
+        return resolve_groups(['regen'])
+    except (ImportError, KeyError, AttributeError):
+        print(
+            "WARNING: spec-027 regen group not available — using full hard "
+            "constraints; regen may be infeasible if frozen-but-retimed games "
+            "violate adjacency/spacing/co-location rules."
+        )
+        return None
+
+
+def _compute_regen_state(args, locked_weeks):
+    """Compute (regen_locked_pairings, regen_info, regen_groups) for a regen run.
+
+    When ``--regen-from`` is given, freeze everything outside the regen scope
+    (--regen-grades / --regen-weeks) by pinning those pairings to their dates,
+    while the scope is solved fresh. Hard-locked played weeks (--lock-weeks)
+    are NEVER pinned (they are pinned exactly by the locked-keys path).
+
+    Returns ``(None, None, None)`` for a non-regen run (no --regen-from).
+
+    Args:
+        args: The parsed argparse Namespace.
+        locked_weeks: Set of hard-locked played weeks (from --lock-weeks).
+
+    Returns:
+        (regen_locked_pairings, regen_info, regen_groups):
+        - regen_locked_pairings: list of pin dicts (one per frozen game) or None.
+        - regen_info: dict for the `regen` metadata block (DoD #6) or None.
+        - regen_groups: resolved regen constraint group or None (DoD #3 guard).
+    """
+    if not getattr(args, 'regen_from', None):
+        # Warn if regen scope flags were given without --regen-from (the enabler)
+        # so the user isn't silently ignored.
+        if getattr(args, 'regen_grades', None) or getattr(args, 'regen_weeks', None):
+            print(
+                "WARNING: --regen-grades/--regen-weeks ignored because "
+                "--regen-from was not specified (it is what enables regen mode)."
+            )
+        return None, None, None
+
+    from analytics.storage import DrawStorage
+
+    regen_grades = set(getattr(args, 'regen_grades', None) or [])
+    regen_weeks = _parse_week_spec(getattr(args, 'regen_weeks', None) or '')
+
+    # FATAL: --regen-weeks and --lock-weeks cannot overlap.
+    _validate_regen_lock_weeks_overlap(regen_weeks, locked_weeks)
+
+    print(f"\n[*] REGENERATION MODE — source: {args.regen_from}")
+    source_draw = DrawStorage.load(args.regen_from)
+    source_weeks = {g.week for g in source_draw.games}
+
+    # FATAL: every --regen-weeks value must exist in the source draw (L3).
+    _validate_regen_weeks_in_source(regen_weeks, source_weeks)
+
+    # Compute the frozen set (excludes hard-locked weeks via lock_weeks arg).
+    free_ids, frozen_ids = resolve_regen_scope(
+        source_draw.games, regen_grades, regen_weeks, lock_weeks=locked_weeks
+    )
+    regen_locked_pairings = _build_regen_pins(source_draw, frozen_ids)
+
+    print(f"    Regen grades (free):  {sorted(regen_grades) or '(none)'}")
+    print(f"    Regen weeks  (free):  {sorted(regen_weeks) or '(all)'}")
+    print(f"    Free games:           {len(free_ids)}")
+    print(f"    Frozen (pinned):      {len(frozen_ids)} "
+          f"-> {len(regen_locked_pairings)} pins")
+    print(f"    Hard-locked weeks:    {sorted(locked_weeks) or '(none)'}")
+
+    # DoD #3: select the regen constraint group if spec-023/spec-027 landed.
+    regen_groups = _select_regen_group()
+
+    # Metadata block (DoD #6) — written into draw metadata by save_solver_output.
+    regen_info = {
+        'source_draw': args.regen_from,
+        'regen_grades': sorted(regen_grades),
+        'regen_weeks': sorted(regen_weeks),
+        'frozen_pin_count': len(regen_locked_pairings),
+        'hard_locked_weeks': sorted(locked_weeks),
+    }
+
+    return regen_locked_pairings, regen_info, regen_groups
 
 
 def _resolve_solver_stages(args, season_config):
@@ -564,6 +873,24 @@ def run_generate(args):
     if hint_path:
         provenance['hint_source'] = hint_path
 
+    # ----- spec-026: Regeneration mode wiring -----
+    regen_locked_pairings, regen_info, regen_groups = _compute_regen_state(
+        args, locked_weeks
+    )
+    # DoD #3: pass the regen group through to the solver IF the spec-023 API
+    # produced one. Until spec-023/spec-027 land, regen_groups is always None
+    # (the guard in _select_regen_group warns and returns None) and the main_*
+    # functions have no `groups` kwarg yet — so there is nothing to forward.
+    # This branch is the spec-023-landed integration seam (dark until then).
+    # TODO(spec-023): when the groups machinery lands, wire regen_groups through:
+    #   (1) add a `groups=None` kwarg to both main_staged and main_simple,
+    #   (2) replace the print below with forwarding regen_groups via that kwarg
+    #       at both call sites in run_generate, and
+    #   (3) have the constraint engine apply the resolved group (select the
+    #       regen soft/hard set per spec-027) instead of the full hard set.
+    if regen_groups is not None:
+        print(f"[*] Regen constraint group resolved: {regen_groups}")
+
     # Resolve --stages-config / --stage-only / --skip-stage. Used for
     # SOLVER_STAGES dispatch in main_staged.
     resolved_stages = None
@@ -593,6 +920,8 @@ def run_generate(args):
             provenance=provenance,
             constraint_names=constraint_names,
             groups_selected=group_names,
+            regen_locked_pairings=regen_locked_pairings,
+            regen_info=regen_info,
         )
     else:
         stages = getattr(args, 'stages', None)
@@ -616,8 +945,10 @@ def run_generate(args):
             solver_stages=resolved_stages,
             constraint_names=staged_constraint_filter,
             groups_selected=group_names,
+            regen_locked_pairings=regen_locked_pairings,
+            regen_info=regen_info,
         )
-    
+
     if solution:
         print("\n[OK] Draw generated successfully!")
         print(f"  Latest draw:    draws/{args.year}/current.json")

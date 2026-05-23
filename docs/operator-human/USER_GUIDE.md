@@ -339,6 +339,42 @@ python run.py generate --help
 python run.py diagnose --help
 ```
 
+### Regenerating part of a published draw
+
+When the season draw is already published and you need to change only part of
+it — without re-rolling everything — use **regeneration mode**. You freeze
+everything outside a chosen scope (the rest keeps its exact pairings and
+weekends) and the solver re-decides only the scope you name. The scope is set
+by **grade**, by **week**, or both.
+
+**Recipe A — a team changed grade (e.g. 5th → 6th):** regenerate the affected
+grades. Every other grade stays exactly as published (it may only shift the
+time-on-the-day, never the date or the opponent).
+
+```powershell
+python run.py generate --year 2026 --simple `
+    --regen-from draws/2026/current.json --regen-grades 5th 6th
+```
+
+**Recipe B — re-time future weeks (e.g. a venue freed up for weeks 10-22):**
+regenerate those weeks. Pairings and weekends stay; only the time/field can
+move.
+
+```powershell
+python run.py generate --year 2026 --simple `
+    --regen-from draws/2026/current.json --regen-weeks 10-22
+```
+
+**Already-played weeks:** add `--lock-weeks 1,2,3 --locked draws/2026/current.json`
+to hard-lock played weeks exactly (nothing in them moves at all). A week cannot
+be both `--lock-weeks` and `--regen-weeks` (the system refuses with an error).
+
+**What you get:** a new MAJOR version (e.g. v20.0 → v21.0) — a regen is a solver
+run, not a hand edit. The changelog and draw metadata record what was
+regenerated and how many games were re-timed. Note: until the regen
+soft-constraint support ships, large re-times may be reported infeasible (the
+run prints a warning); small scopes like a single grade are fine.
+
 ---
 
 ## Output Files

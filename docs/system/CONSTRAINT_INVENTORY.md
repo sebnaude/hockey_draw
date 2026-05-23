@@ -2,7 +2,7 @@
 
 Single-source-of-truth table of every registered constraint, what it actually does (extracted from code, not docstring), its severity / slack key, and the atom-target name(s) it splits into during atomization.
 
-Generated against `final-form` and updated through spec-002 + spec-003 + spec-004 + spec-005 + spec-006 + spec-007 + spec-018. The registry currently has **38 entries**. spec-018 removed the three venue-sequencing constraints (`NonDefaultHomeGrouping` / `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping` / `AwayAtMaitlandGrouping` alias, and the soft `MaitlandAlternateHomeAway`) — the convenor no longer wants ANY home/away weekend sequencing (back-to-back home weekends and long away runs are both acceptable). The per-club home-weekend totals (`AwayClubHomeWeekendsCount`) and per-pair/aggregate 50/50 balance (`AwayClubPerOpponentAndAggregateHomeBalance`) from spec-004 remain.
+Generated against `final-form` and updated through spec-002 + spec-003 + spec-004 + spec-005 + spec-006 + spec-007 + spec-018 + spec-025. The registry currently has **38 entries** (spec-025 added `LockedPairings` as a `tester_only` entry, bringing the count from 37 to 38). spec-018 removed the three venue-sequencing constraints (`NonDefaultHomeGrouping` / `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping` / `AwayAtMaitlandGrouping` alias, and the soft `MaitlandAlternateHomeAway`) — the convenor no longer wants ANY home/away weekend sequencing (back-to-back home weekends and long away runs are both acceptable). The per-club home-weekend totals (`AwayClubHomeWeekendsCount`) and per-pair/aggregate 50/50 balance (`AwayClubPerOpponentAndAggregateHomeBalance`) from spec-004 remain.
 
 Legend
 - **Source** is the legacy class location. Parity is asserted between `original.py` and `ai.py` versions (5 + 1 historical bug-fixes documented in `CLAUDE.md`).
@@ -59,6 +59,7 @@ a constraint via two groups applies it once. Derived groups (`severity_1..5`,
 | PreferredGames | soft, soft_optimisation |
 | ForcedGames | — (tester-only; no production group) |
 | BlockedGames | — (tester-only; no production group) |
+| LockedPairings | — (spec-025 tester-only; no production group) |
 
 Entries with no production group (`tester_only` diagnostics and the obsolete
 legacy-only classes `FiftyFiftyHomeandAway`, `PHLAndSecondGradeTimes`, `ClubDay`,
@@ -120,6 +121,7 @@ fine). The only home/away rules that remain are the spec-004 atoms
 | ClubFieldConcentration | tester only | Reports clubs concentrated on a small number of fields (no solver enforcement) | 3 |
 | ForcedGames | enforced via `generate_X` (variable-elimination) | Verifies each FORCED entry's scope sum matches `count` and `constraint` (default sum==1) | 1 |
 | BlockedGames | enforced via `generate_X` (variable-elimination) | Verifies no game key matches a BLOCKED scope+team-matcher. **spec-001 exemption:** a BLOCKED entry whose source dict carries `'perennial': True` (e.g. every entry in `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`) is *overridable* — a variable matched by a perennial scope is kept iff any `FORCED_GAMES` entry also matches it. Vars matched by ANY non-perennial BLOCKED scope are always eliminated, even when FORCED matches. Implementation: `utils._build_blocked_game_rules_with_perennial` + `_matching_blocked_scope_keys` + the `matched_block_scopes`/`all_perennial` branch in `generate_X`. Validator `_check_forced_game_feasibility` applies the same rule when counting surviving vars for each FORCED entry. | 1 |
+| LockedPairings | `analytics/tester.py::_check_locked_pairings` (registered in `constraints/registry.py` as `tester_only`, spec-025) | Verifies each `LOCKED_PAIRINGS` entry is satisfied: the pinned pairing appears in the draw on its specified date. Analogous to `ForcedGames` but scoped to date-pin entries only (time/slot/field are free). Draw metadata gains a `locked_pairing_outcomes` section with per-pin matched-var count, resolved time/slot/field, and `satisfied: true/false`. | 1 |
 
 ## 3. Atomization summary (count)
 
@@ -138,9 +140,9 @@ fine). The only home/away rules that remain are the spec-004 atoms
 | NIHCFieldFillOrder (spec-003) | 0 (new atoms, no legacy class; replaces a review-only perennial rule) | 2 — `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF` | +2 |
 | PreferredWeekendsAwayGround (spec-006) | 0 (new atom, no legacy class) | 1 — `PreferredWeekendsAwayGround` | +1 |
 | PreferredGames (spec-020) | 0 (new atom; replaces the deleted `PreferredDates` 1:1) | 1 — `PreferredGames` (generic soft FORCED analogue) | 0 |
-| **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** (was 32 before spec-018 removed the 3 venue-sequencing atoms; spec-020 swaps `PreferredDates`→`PreferredGames`, net 0) | **+11** |
+| **Total** | **18 solver + 3 tester-only** | **29 solver + 4 tester-only** (was 32 before spec-018 removed the 3 venue-sequencing atoms; spec-020 swaps `PreferredDates`→`PreferredGames`, net 0; spec-025 adds `LockedPairings` tester-only entry) | **+11** |
 
-Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **37** (was 43 before spec-018 deleted the 5 home/away-grouping registry entries: `NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`; spec-020 deleted `PreferredDates` and added `PreferredGames` — net 0; spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill` (net 0) and added `ClubNoConcurrentSlot`: 38 + 1 = 39; spec-024 then deleted `MaximiseClubsPerTimeslotBroadmeadow` and `MinimiseClubsOnAFieldBroadmeadow` (net −2): 39 − 2 = 37).
+Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **38** (the test assert at `tests/test_constraint_registry.py` is `== 38`). History: was 43 before spec-018 deleted the 5 home/away-grouping entries (`NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`); spec-020 deleted `PreferredDates` and added `PreferredGames` (net 0); spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill` (net 0) and added `ClubNoConcurrentSlot` (39); spec-024 then deleted `MaximiseClubsPerTimeslotBroadmeadow` and `MinimiseClubsOnAFieldBroadmeadow` (net −2 → 37); spec-025 added `LockedPairings` as a `tester_only` entry (+1 → **38**). spec-023 added the `groups` field to every entry but no new entries (net 0).
 
 ## 4. Per-atom engineering detail
 

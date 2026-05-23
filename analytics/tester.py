@@ -103,6 +103,7 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # Config-driven checks
     'ForcedGames': 1,   # CRITICAL - forced games must happen
     'BlockedGames': 1,  # CRITICAL - blocked games must not happen
+    'LockedPairings': 1,  # CRITICAL - spec-025 pins must keep their date
 }
 
 # Mapping from severity level to label
@@ -1208,6 +1209,8 @@ class DrawTester:
             # Config-driven checks (forced/blocked games)
             ('ForcedGames', self._check_forced_games),
             ('BlockedGames', self._check_blocked_games),
+            # spec-025: locked-pairing date pins must keep their date
+            ('LockedPairings', self._check_locked_pairings),
             # spec-020: soft preferred-games deviation (reported as soft pressure)
             ('PreferredGames', self._check_preferred_games),
         ]
@@ -2568,6 +2571,42 @@ class DrawTester:
                                 f"on {game.date} at {game.field_location}",
                         affected_games=[game.game_id],
                     ))
+
+        return violations
+
+    def _check_locked_pairings(self) -> List[Violation]:
+        """Check that LOCKED_PAIRINGS date-pins are honoured in the draw (spec-025).
+
+        Each pin is a mechanical date-pin: a pairing (+ grade) that must appear on
+        its `date` in the finished draw, with time/slot/field left free. The
+        generate_X pass enforces this as a hard `sum == 1` over candidate vars on
+        the pin's date, so a violation here is structural (CRITICAL). Mirrors
+        `_check_forced_games`' scope/team matching, but the threshold is fixed:
+        exactly one matching game must exist on the pin's date.
+        """
+        violations = []
+        locked_pairings = self.data.get('locked_pairings', [])
+        if not locked_pairings:
+            return violations
+
+        for entry in locked_pairings:
+            desc = entry.get('description', str({k: v for k, v in entry.items()
+                                                  if k not in ('description', 'reason')}))
+
+            matching_games = []
+            for game in self.draw.games:
+                if self._game_matches_scope(game, entry) and \
+                   self._game_matches_teams(game, entry, self.teams):
+                    matching_games.append(game.game_id)
+
+            count = len(matching_games)
+            if count != 1:
+                violations.append(Violation.create(
+                    constraint="LockedPairings",
+                    message=f"Locked pairing '{desc}': expected exactly 1 game "
+                            f"on {entry.get('date')}, found {count}",
+                    affected_games=matching_games,
+                ))
 
         return violations
 

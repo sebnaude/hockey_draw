@@ -318,6 +318,13 @@ DEFAULT_STAGES = [
 PREFERRED_GAMES = []
 
 
+# spec-025: dedicated "pin pairing to its weekend, free the time" config. Entry
+# grammar is a strict subset of FORCED_GAMES — {teams:[t1,t2] (or team1/team2),
+# grade, date, optional description}; time/day_slot/field/day/week/round_no/
+# count/constraint are forbidden. Read as `data['locked_pairings']`.
+LOCKED_PAIRINGS = []
+
+
 # Each PERENNIAL entry carries `'perennial': True`. This flag is read by
 # generate_X (utils.py) as a permission-to-be-overridden marker: a variable
 # that matches BOTH a perennial BLOCKED scope AND any FORCED_GAMES scope is

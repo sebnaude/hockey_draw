@@ -444,6 +444,33 @@ the per-pair / aggregate 50/50 balance and the per-club home-weekend totals
 
 ---
 
+### Rule 23: Locked Pairings — Pin the Weekend, Free the Time (spec-025)
+
+**Description:** When the convenor has already decided which teams play each other on a given weekend but wants to leave the *time, slot, and field* open for the solver to optimise, those pairings go into `LOCKED_PAIRINGS` in the season config.
+
+This is different from `FORCED_GAMES`:
+- **`LOCKED_PAIRINGS`** — "this pair plays on this date, at whatever time fits." The solver keeps the matchup on that weekend but freely picks the start time, day_slot, and field.
+- **`FORCED_GAMES`** — count rules, marquee games, and anything that also pins a venue, time, or match format (e.g. "exactly 8 PHL Friday games at Gosford", "Norths vs Maitland on May 8 at NIHC").
+
+**When to use it:** After a draw is published and a roster change or a regeneration run is needed, the already-decided pairings go into `LOCKED_PAIRINGS` so the solver keeps them on their weekends without reopening the matchup choices. The regen tooling (spec-026) reads and writes `LOCKED_PAIRINGS` automatically.
+
+**Entry format (convenor-facing summary):**
+```
+teams: [Club A, Club B]
+grade: PHL
+date: YYYY-MM-DD
+description: optional note
+```
+Only the pairing, grade, and date are needed. Do **not** add a time, venue, or slot — the whole point is to leave those free.
+
+**Enforcement:** Hard constraint. If a pinned pairing has no valid game variables on its date, the solver reports a FATAL error naming the pairing so you can correct the config.
+
+**Audit trail:** The published draw JSON records a `locked_pairing_outcomes` section listing every pin, whether it was satisfied, and what time/field was chosen — so you can verify at a glance that every decided matchup kept its weekend.
+
+**Rationale:** Separating mechanical date-pins from deliberate count rules keeps `FORCED_GAMES` readable and gives the regen tooling a clean, dedicated place to write auto-extracted pins without disturbing hand-curated rules.
+
+---
+
 ## Implied Rules
 
 These rules arise from the combination of constraints or data filtering.

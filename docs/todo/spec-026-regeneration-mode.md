@@ -1,9 +1,10 @@
-<!-- status: under_review -->
+<!-- status: done -->
+<!-- completed: 2026-05-24 — Units A+B+C merged to final-form (6f39b83). 92 regen tests (extract 20 + cli 40 + e2e 32) + 219 regression green. Post-merge: regen wiring verified end-to-end on a real draw (regen mode entry, 90 free / 339 frozen→339 pins, merge into data['locked_pairings'], spec-025 pin validation). DoD #8 full feasible solve not demonstrated: the only available source draw (main-repo current.json) was built against a different season calendar, so spec-025 correctly FATALs on a pin date (2026-05-07) with no timeslots in final-form's calendar — a source/config mismatch, not a defect. A real same-config regen won't hit this; a full feasible solve needs a calendar-matching source (hours to produce). spec-023 group-selection seam marked TODO(spec-023). -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
-<!-- depends_on: spec-025 (LOCKED_PAIRINGS config + generate_X enforcement — regen writes pins into it). Builds on the already-shipped locked-weeks architecture (run.py:71-79, main_staged.py:1037-1059). The regen soft-constraint group (spec-027) is selected by this mode but is NOT a blocker: without spec-027 the regen still runs, just with the normal hard constraints (which is the "may be infeasible" case spec-027 fixes). Shares run.py + main_staged.py + analytics/storage.py with spec-021/022/023 — rebase before merge. -->
-<!-- owner: session=none claimed=none -->
-<!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
+<!-- depends_on: spec-025 (LOCKED_PAIRINGS config + generate_X enforcement — regen writes pins into it). LANDED on final-form 2026-05-23 (merge 7afc656); data['locked_pairings'] confirmed present in build_season_data. spec-023 is NOT a hard dependency: DoD 3 guards the resolve_groups(['regen']) call and falls back to full hard constraints + warning if spec-023 is unavailable. The regen soft-constraint group (spec-027) is selected by this mode but is NOT a blocker: without spec-027 the regen still runs, just with the normal hard constraints (which is the "may be infeasible" case spec-027 fixes). Builds on the already-shipped locked-weeks architecture (run.py:71-79, main_staged.py:1037-1059). Shares run.py + main_staged.py + analytics/storage.py with spec-023 (currently building) — rebase before merge. STARTABLE: spec-025 has landed. -->
+<!-- owner: session=opus-3d72814-20260523T100153Z claimed=2026-05-23T10:01:53Z -->
+<!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — dependency audit) — fixes applied inline -->
 
 # spec-026 — Unified regeneration mode: freeze everything outside a scope, re-solve the rest
 
@@ -50,8 +51,12 @@ swap.
 - **Pinning is the soft-freeze half (spec-025).** `LOCKED_PAIRINGS` pins a pairing to its date,
   freeing time/slot/field. spec-026 *generates* these pins from the source draw. The config key
   is `data['locked_pairings']` (injected by `build_season_data`, per spec-025 DoD 2); the
-  extractor must write into this same key.
+  extractor must write into this same key. **VERIFIED: `data['locked_pairings']` does NOT yet
+  exist in production code** (`build_season_data` at `utils.py:4073-4106` has no such key as of
+  2026-05-23) — it is created by spec-025. This plan cannot start until spec-025 lands.
   (review fix — added explicit config key name to avoid any ambiguity at the injection site.)
+  (review fix — re-review dependency audit: confirmed via source inspection that
+  `data['locked_pairings']` is not in `build_season_data`; hard-not-started gate added.)
 - **Extraction primitives already exist on `DrawStorage`.** `to_key()`
   (`analytics/storage.py:49-55`) yields the 11-tuple; `get_locked_games(weeks)`
   (`:209-218`), `get_remaining_games(weeks)` (`:220-229`), and `lock_and_split(weeks)`
@@ -119,9 +124,12 @@ swap.
    - load the source draw;
    - hard-lock `--lock-weeks` via the existing path (unchanged);
    - compute the frozen set = all games NOT free (per DoD 2) and NOT in a hard-locked week;
-   - call `extract_locked_pairings` over the frozen set and feed the result as
+   - call `extract_locked_pairings` over the frozen set and pass the result as
+     `regen_locked_pairings` to `main_simple`/`main_staged`; inside those functions (after
+     `load_data()`), concatenate with `data.get('locked_pairings', [])` and store back into
      `data['locked_pairings']` (in addition to any hand-authored `LOCKED_PAIRINGS` from config —
-     concatenate; spec-025 enforces both);
+     concatenate; spec-025 enforces both); NOTE: injection CANNOT happen in `run_generate` since
+     `data` is not loaded there — see Risks / Unit C INJECTION ORDER NOTE;
    - if spec-027 has landed (i.e. `resolve_groups(['regen'])` succeeds without ImportError/
      KeyError), select the **regen constraint group** by calling `resolve_groups(['regen'])`
      and passing the result to `main_simple`/`main_staged` via the `groups` kwarg (spec-023
@@ -136,19 +144,18 @@ swap.
    every game is pinned to its date. A test asserts: after a 5th→6th roster move, a regen with
    `--regen-grades 5th 6th` generates vars for the new 5th/6th team lists and pins every
    PHL/2nd/3rd/4th game to its original date.
-5. **Output versioning:** a regen solve calls `save_solver_output(…, is_major=False)` (the
-   `is_major` kwarg already exists in `analytics/versioning.py:save_solver_output` with
-   default `True`). This triggers the `save_modified_draw` path, bumping MINOR (vN.M →
-   vN.M+1). The regen diff (grades/weeks freed, pin count, games changed vs source) is recorded
-   in the `regen` metadata block (DoD 6) so the CHANGELOG entry is self-contained.
-   **Convention note:** `CLAUDE.md` and `feedback_versioning` say "Solver runs bump MAJOR; hand
-   edits bump MINOR." A regen IS a solver run — but it is a scoped modification of a published
-   draw, not a fresh season-wide solve. The implementer MUST confirm with the convenor before
-   shipping whether MINOR is the right call here (the spec's current position is MINOR). If the
-   convenor says MAJOR, change `is_major=True` and remove the `save_modified_draw` path. This
-   is an open implementation decision, not blocked, but must be resolved before Unit C merges.
-   (review fix — surfaced the MAJOR/MINOR convention tension explicitly; made the `is_major`
-   kwarg cite concrete; added a required pre-merge confirmation step.)
+5. **Output versioning — MAJOR (convenor decision 2026-05-23):** a regen solve calls
+   `save_solver_output(…, is_major=True)` (the `is_major` kwarg already exists in
+   `analytics/versioning.py:save_solver_output`, default `True`), bumping MAJOR (vN.M →
+   v{N+1}.0) and going through the normal solver-output path — NOT `save_modified_draw`. The
+   regen diff (grades/weeks freed, pin count, games changed vs source) is recorded in the `regen`
+   metadata block (DoD 6) so the CHANGELOG entry is self-contained.
+   **Rationale:** `CLAUDE.md` and `feedback_versioning` say "Solver runs bump MAJOR; hand edits
+   bump MINOR." A regen IS a solver run (the solver re-decides the freed scope), so it bumps
+   MAJOR — the convenor confirmed this on 2026-05-23, resolving the earlier MINOR/MAJOR open
+   question. The `save_modified_draw` (MINOR-bump, hand-edit) path is therefore NOT used by regen.
+   (review fix — surfaced the convention tension; convenor RESOLVED it MAJOR on 2026-05-23 — DoD
+   now prescribes `is_major=True` and explicitly excludes the `save_modified_draw` path.)
 6. **Metadata:** draw metadata records a `regen` block: `source_draw`, `regen_grades`,
    `regen_weeks`, `frozen_pin_count`, `hard_locked_weeks`, and a `games_changed` count
    (games whose time/slot/field differ from the source). Written by `save_solver_output`.
@@ -178,8 +185,13 @@ swap.
   `grade='4th'` and `date='2026-04-05'` (hand-listed). GIVEN `exclude_weeks={2}`, WHEN the same
   call is made THEN 0 pins are returned (the week-2 game is excluded). GIVEN a draw containing
   a game with `team2=''` (bye/placeholder), THEN that game produces no pin.
+  Note: real `DrawStorage` objects do not store bye entries as `StoredGame` records — byes are
+  computed dynamically in export functions by finding teams not in a given week's games. The
+  `team2=''` test is defensive guard against a future schema change or a manually-constructed
+  DrawStorage; it does not test a live code path as of 2026-05-23.
   (review fix — replaced `freeze_weeks=all` (invalid Python) with a concrete, hand-computed
   frozenset; added explicit key-whitelist assertion; added the bye test case required by DoD 1.)
+  (review note — Low: bye test guards a currently unreachable code path in real DrawStorage.)
 
 ### Unit B — CLI flags + scope resolution + validation
 - Files: `run.py` (`--regen-from`, `--regen-grades`, `--regen-weeks`; the union free-scope
@@ -196,20 +208,32 @@ swap.
 
 ### Unit C — Orchestration wiring + group selection + metadata + versioning
 - Files: `run.py::run_generate` (new `--regen-from`/`--regen-grades`/`--regen-weeks` wiring;
-  `data['locked_pairings']` population; spec-023 group selection guard),
-  `main_staged.py` (both `main_staged` and `main_simple` at line 1239 — feed
-  `data['locked_pairings']` as concatenation of config + extracted pins),
-  `analytics/versioning.py` (`save_solver_output` called with `is_major=False`; `regen`
-  metadata block written by `_build_draw_metadata`) /
+  frozen-set computation; passes extracted pins as a new kwarg `regen_locked_pairings` to
+  `main_simple`/`main_staged`; spec-023 group selection guard),
+  `main_staged.py` (both `main_staged` and `main_simple` at line 1239 — accept
+  `regen_locked_pairings` kwarg; AFTER `load_data()` / `data = load_data(year)`, concatenate
+  `regen_locked_pairings` with `data.get('locked_pairings', [])` and store back into
+  `data['locked_pairings']` so spec-025's `generate_X` pass sees the merged list),
+  `analytics/versioning.py` (`save_solver_output` called with `is_major=True` — MAJOR bump,
+  convenor decision 2026-05-23; `regen` metadata block written by `_build_draw_metadata`) /
   `analytics/storage.py` (`games_changed` diff helper if not already present).
+- **INJECTION ORDER NOTE:** `run.py::run_generate` does NOT have access to `data`; the
+  `data` dict is loaded inside `main_staged`/`main_simple` via `load_data(year)`. Therefore
+  the concatenation `data['locked_pairings'] = config_pins + extracted_pins` MUST happen inside
+  `main_staged`/`main_simple` after `load_data()`, NOT in `run_generate`. Pass the extracted
+  pins as a separate kwarg (e.g. `regen_locked_pairings: list`) to the main functions.
+  (review fix — re-review dependency audit: clarified that data is not available in run.py;
+  injection must be in main_staged/main_simple after load_data(); explicit kwarg threading
+  pattern specified to prevent builder from attempting injection in the wrong location.)
 - Depends on Units A+B.
-- MUST resolve the MAJOR/MINOR convention with the convenor before merge (see DoD 5).
+- Versioning is MAJOR (convenor decision 2026-05-23, see DoD 5) — no pre-merge convention
+  question remains.
 - Test (`tests/test_regen_end_to_end.py`, no mocks): the DoD-7 frozen-pairings-keep-their-dates
   assertion on a real 2026 draw; metadata `regen` block populated with all 6 required keys
   (`source_draw`, `regen_grades`, `regen_weeks`, `frozen_pin_count`, `hard_locked_weeks`,
-  `games_changed`); version bumped MINOR (confirm `vN.M` → `vN.{M+1}`).
-  (review fix — made the 6 required metadata keys explicit in the test assertion; added
-  MAJOR/MINOR resolution gate; listed all three affected files explicitly.)
+  `games_changed`); version bumped MAJOR (confirm `vN.M` → `v{N+1}.0`).
+  (review fix — made the 6 required metadata keys explicit in the test assertion; convenor
+  resolved versioning as MAJOR 2026-05-23; listed all three affected files explicitly.)
 
 ## Doc registry
 
@@ -220,8 +244,19 @@ swap.
   regenerate part of a draw" recipe (roster change → `--regen-grades`; future re-time →
   `--regen-weeks`).
 - `docs/operator-ai/AI_OPERATIONS_MANUAL.md` — the regen orchestration flow (load → hard-lock →
-  extract pins → select group → solve → MINOR-version).
+  extract pins → select group → solve → MAJOR-version).
+- `docs/operator-ai/SYSTEM_OPERATION.md` — add the three new `run.py generate` flags
+  (`--regen-from`, `--regen-grades`, `--regen-weeks`) to the CLI reference section with their
+  semantics and the union-free-scope rule. This is the primary CLI reference and must be updated
+  in the same commit as the flags land in `run.py`.
+  (review fix — re-review dependency audit: this doc was missing from the registry; verified
+  it exists at `docs/operator-ai/SYSTEM_OPERATION.md`.)
 - `docs/system/STAGES.md` — note that regen selects the `regen` group (cross-ref spec-027).
+- `docs/system/HARNESS.md` — add the regen pipeline path to the end-to-end solver pipeline
+  description (load source draw → extract pins → concatenate with config LOCKED_PAIRINGS →
+  hard-lock played weeks → solve → MAJOR version).
+  (review fix — re-review dependency audit: HARNESS.md covers the generate_X→engine→output
+  pipeline; regen is a new pipeline entry point and must be documented there.)
 - `docs/todo/GOALS.md` — add the spec-026 row + summary; reflect regen as a shipped success
   criterion (GOALS §4 item 5 "apply a convenor edit … all in one script" extends to scoped
   regen).
@@ -257,6 +292,15 @@ swap.
   scopes are identical) but the implementer should document the dedup behaviour or explicitly
   dedup by `(teams, grade, date)` before passing. Flag if dedup is missing.
   (review fix — added this new risk; the spec was silent about it.)
+- **`main_staged`/`main_simple` kwarg threading.** `run.py::run_generate` does not have access
+  to the loaded `data` dict — that dict is created inside `main_staged`/`main_simple` by
+  `load_data(year)`. The extracted LOCKED_PAIRINGS list must be passed as a NEW kwarg (e.g.
+  `regen_locked_pairings`) to both `main_staged` (line 528) and `main_simple` (line 510 of
+  `run.py`), and concatenated with `data.get('locked_pairings', [])` after `load_data()` runs.
+  Both signatures in `main_staged.py` need the new kwarg. This also means the
+  `run_generate` → `main_staged`/`main_simple` call sites in `run.py` (lines 510-524 and
+  528-545) need to forward `regen_locked_pairings`.
+  (review fix — re-review dependency audit: injection point ambiguity in Unit C resolved.)
 
 ## Out of scope
 

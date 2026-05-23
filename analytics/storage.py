@@ -303,7 +303,7 @@ class DrawStorage(BaseModel):
         
         print(f"Loaded {len(locked_games)} locked games from weeks {weeks_label}")
         return locked_draw, locked_keys
-    
+
     @classmethod
     def from_excel(
         cls,
@@ -418,6 +418,7 @@ class DrawStorage(BaseModel):
         filename: str,
         weeks: Optional[List[int]] = None,
         sheet_title: Optional[str] = None,
+        weekend_notes: Optional[Dict[int, List[str]]] = None,
     ) -> None:
         """Export draw to a nicely formatted Excel schedule.
 
@@ -425,10 +426,20 @@ class DrawStorage(BaseModel):
         field sub-headers, borders, and bye listings.  Works directly from
         DrawStorage (no Roster / ``data`` dict needed).
 
+        When ``weekend_notes`` is supplied (a ``{week: [note_line, ...]}`` dict
+        as returned by ``analytics.notes.build_weekend_notes``), a Notes column
+        is written in column N.  Columns L and M are left blank as spacers.
+        When ``weekend_notes`` is ``None`` (the default) the output is identical
+        to the pre-notes behaviour in columns A–K and nothing is written to L–N.
+
         Args:
             filename: Output .xlsx path.
             weeks: Optional list of week numbers to include.  ``None`` = all.
             sheet_title: Worksheet title (default auto-generated).
+            weekend_notes: Optional mapping of week number → list of formatted
+                note strings (e.g. ``"Field: Masters SC weekend"``).  When
+                supplied, notes are stacked from the week's first game row
+                downward in column N.
         """
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -476,9 +487,13 @@ class DrawStorage(BaseModel):
         COL_WIDTHS = {
             'A': 8, 'B': 8, 'C': 14, 'D': 10, 'E': 8, 'F': 6,
             'G': 28, 'H': 28, 'I': 8, 'J': 8, 'K': 38,
+            'L': 3, 'M': 3, 'N': 60,
         }
         FIELD_ORDER = {'EF': 0, 'WF': 1, 'SF': 2}
         NUM_COLS = len(HEADERS)
+        # Notes column index: two blank spacer columns (L=NUM_COLS+1, M=NUM_COLS+2)
+        # then Notes in N=NUM_COLS+3.  Using the constant means it tracks HEADERS.
+        notes_col = NUM_COLS + 3  # = 14 when NUM_COLS=11
 
         # --- build workbook --------------------------------------------------
         wb = openpyxl.Workbook()
@@ -498,19 +513,35 @@ class DrawStorage(BaseModel):
                                   end_color=week_colour, fill_type='solid')
 
             # Week title row
+            title_row = row
             c = ws.cell(row=row, column=1, value=f'Week {week}')
             c.font = week_font
             for ci in range(1, NUM_COLS + 1):
                 ws.cell(row=row, column=ci).fill = week_bg
+            # When notes active: extend the week background colour to column N
+            # so the title band visually spans to the notes column.
+            if weekend_notes is not None:
+                ws.cell(row=title_row, column=notes_col).fill = week_bg
             row += 1
 
             # Column headers
+            header_row = row
             for ci, h in enumerate(HEADERS, 1):
                 c = ws.cell(row=row, column=ci, value=h)
                 c.font = header_font
                 c.fill = header_fill
                 c.border = thin_border
+            # Write Notes header in column N (separate from HEADERS so NUM_COLS
+            # is not changed and the week-title fill range A–K stays correct).
+            if weekend_notes is not None:
+                c = ws.cell(row=header_row, column=notes_col, value="Notes")
+                c.font = header_font
+                c.fill = header_fill
+                c.border = thin_border
             row += 1
+
+            # Track the first game data row within this week (for note stacking).
+            first_game_row: Optional[int] = None
 
             # Group by date → field
             by_date: Dict[str, list] = defaultdict(list)
@@ -545,6 +576,9 @@ class DrawStorage(BaseModel):
 
                     # Game rows
                     for g in field_games:
+                        # Capture the first game data row for note placement.
+                        if first_game_row is None:
+                            first_game_row = row
                         vals = [g.week, g.round_no, g.date, g.day, g.time,
                                 g.day_slot, g.team1, g.team2, g.grade,
                                 g.field_name, g.field_location]
@@ -553,6 +587,16 @@ class DrawStorage(BaseModel):
                             c.border = thin_border
                             c.fill = week_bg
                         row += 1
+
+            # Write stacked notes for this week in column N (A–K are never
+            # touched here; notes live in their own column).
+            if weekend_notes is not None and first_game_row is not None:
+                for i, note_text in enumerate(weekend_notes.get(week, [])):
+                    note_row = first_game_row + i
+                    c = ws.cell(row=note_row, column=notes_col, value=note_text)
+                    c.font = Font(italic=False)
+                    c.border = thin_border
+                    c.fill = week_bg
 
             # Byes
             playing: Dict[str, set] = defaultdict(set)
@@ -1006,6 +1050,108 @@ class DrawAnalytics:
 
 
 # ============== Utility Functions ==============
+
+def extract_locked_pairings(
+    draw: "DrawStorage",
+    *,
+    freeze_grades,
+    freeze_weeks,
+    exclude_weeks=frozenset(),
+) -> List[Dict[str, Any]]:
+    """Return a LOCKED_PAIRINGS list for use with the regen path (spec-026 DoD #1).
+
+    Each entry is a dict with keys ``teams``, ``grade``, ``date``, and
+    ``description`` — the same shape as a hand-authored LOCKED_PAIRINGS entry.
+    The slot/time/field keys are intentionally omitted so the solver is free to
+    re-time the game within the pinned date.
+
+    A game is included iff ALL of the following hold:
+      1. ``g.grade in freeze_grades``  (grade axis: frozen grade)
+      2. ``g.week  in freeze_weeks``   (week axis: frozen week)
+      3. ``g.week  not in exclude_weeks`` (played weeks, already hard-locked, must
+         not be double-pinned via LOCKED_PAIRINGS)
+
+    Empty-set semantics: an empty ``freeze_grades`` or ``freeze_weeks`` means
+    nothing matches along that axis, so the function returns [].
+
+    Bye/placeholder games — where ``team1`` or ``team2`` is falsy — are silently
+    skipped.  Real DrawStorage objects don't store bye entries as StoredGame
+    records (byes are computed dynamically in export), but this guard protects
+    against manually-constructed DrawStorage objects with a missing opponent.
+
+    Args:
+        draw: The source DrawStorage to extract pins from.
+        freeze_grades: Iterable of grade strings to freeze (e.g. ``{'PHL', '2nd'}``).
+        freeze_weeks: Iterable of week ints to freeze (e.g. ``{1, 2, 3}``).
+        exclude_weeks: Iterable of week ints to EXCLUDE from pinning even if they
+            would otherwise match.  Typically these are the hard-locked
+            already-played weeks passed via ``--lock-weeks``.  Defaults to the
+            empty frozenset (nothing excluded).
+
+    Returns:
+        A list of dicts shaped ``{'teams': [t1, t2], 'grade': str, 'date': str,
+        'description': str}``, one per frozen game.
+    """
+    freeze_grades_set = set(freeze_grades)
+    freeze_weeks_set = set(freeze_weeks)
+    exclude_weeks_set = set(exclude_weeks)
+
+    pins: List[Dict[str, Any]] = []
+    for g in draw.games:
+        # Bye / placeholder guard
+        if not g.team1 or not g.team2:
+            continue
+        # Grade and week membership tests
+        if g.grade not in freeze_grades_set:
+            continue
+        if g.week not in freeze_weeks_set:
+            continue
+        # Exclude hard-locked played weeks to avoid double-pinning
+        if g.week in exclude_weeks_set:
+            continue
+        pins.append({
+            'teams': [g.team1, g.team2],
+            'grade': g.grade,
+            'date': g.date,
+            'description': f"Regen pin: {g.team1} vs {g.team2} ({g.grade}) {g.date}",
+        })
+    return pins
+
+
+def count_games_changed(source: "DrawStorage", result: "DrawStorage") -> int:
+    """Count games whose time/slot/field differ between two draws (spec-026 DoD #6).
+
+    Two draws are matched game-by-game on the *pairing identity*
+    ``(team1, team2, grade, week)``.  For each pairing present in BOTH draws,
+    the game is counted as "changed" if any of its schedule fields differ:
+    ``time``, ``day_slot``, ``field_name``, or ``field_location``.
+
+    Pairings present in only one draw (added or removed) are NOT counted here —
+    this helper measures the re-timing footprint of a regen, not pairing churn.
+    A regen that freezes a grade keeps its pairings on the same date but may
+    re-time them; this helper counts exactly those re-timed games.
+
+    Args:
+        source: The source (pre-regen) draw.
+        result: The result (post-regen) draw.
+
+    Returns:
+        The number of common pairings whose time/slot/field changed.
+    """
+    def _ident(g: "StoredGame"):
+        return (g.team1, g.team2, g.grade, g.week)
+
+    def _sched(g: "StoredGame"):
+        return (g.time, g.day_slot, g.field_name, g.field_location)
+
+    src_by_ident = {_ident(g): _sched(g) for g in source.games}
+    changed = 0
+    for g in result.games:
+        ident = _ident(g)
+        if ident in src_by_ident and src_by_ident[ident] != _sched(g):
+            changed += 1
+    return changed
+
 
 def create_draw_from_solution(X_solution: Dict, description: str = "") -> DrawStorage:
     """Convenience function to create DrawStorage from X solution."""
