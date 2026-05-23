@@ -1,129 +1,184 @@
-# Solver Stages — `SOLVER_STAGES` config
+# Constraint groups — named, overlapping, deduped-union, flag-selected
 
-Phase 7b foundation. Lists how solver stages are configured by canonical atom
-name, validated, and inspected. This document covers the foundation that
-shipped (`config/defaults.py::DEFAULT_STAGES`, `constraints/stages.py`); the
-`main_staged.py` rewire and CLI flags are tracked in
-`docs/ATOMIZATION_HANDOFF.md` as the "final-final" remaining work.
+> **spec-023 reframe.** What used to be a strict *stage partition* is now a set
+> of **named constraint groups**. A group is a named, possibly-**overlapping**
+> set of WHOLE constraints. A solve applies the **deduped union** of the
+> selected groups, in one canonical order; selecting the same constraint via two
+> groups applies it **exactly once**. The legacy stage names
+> (`critical_feasibility`, `home_away_balance`, `club_alignment`, `club_day`,
+> `soft_optimisation`) are still valid group names — they keep `--stages` /
+> `--stage-only` / `--skip-stage` working — but they are no longer a partition:
+> the coarse `core` / `soft` / `severity_N` / `default` groups overlap them
+> freely.
 
-## Schema
+## The whole-constraint principle
 
-A stage is a dict with these keys:
+A constraint — whether one atom or a bundle of atoms — is applied as a **whole**:
+its hard part sets the cap, its soft part improves within the cap, and the two
+are never applied separately. A group tag selects *whole* constraints; it never
+changes how much of a constraint applies. **If you genuinely need to apply one
+idea of a constraint without another, split it into two atoms** — do not give an
+atom a hard/soft phase switch. (This is exactly why the old `soft_only` lever was
+deleted — see below.)
 
-| Key | Type | Required | Description |
-|---|---|---|---|
-| `name` | str | yes | Short identifier; unique within the stage list. Used by `--stage-only` / `--skip-stage` CLI. |
-| `description` | str | no | Human-readable summary printed by `--list-stages`. |
-| `atoms` | list[str] | yes | Canonical atom names from `CONSTRAINT_REGISTRY`. Non-empty, no duplicates across stages. |
-| `time_limit_seconds` | int/float | no | Per-stage solver time limit. Defaults to `SEASON_CONFIG['max_time_per_stage']`. |
-| `use_prior_solution_as_hint` | bool | no | Default True. If False, the stage starts from scratch. |
-| `soft_only` | bool | no | Default False. If True, only soft penalties; no hard constraints added. |
-| `requires_complete_solution` | bool | no | Default True. If False, the stage can run on partial solutions. |
+`--slack` is orthogonal: it loosens *within* a constraint and is unaffected by
+group selection.
 
-## Default stages (`config/defaults.py::DEFAULT_STAGES`)
+## Group membership is registry metadata (single source of truth)
 
-The live default stage list is defined in `config/defaults.py::DEFAULT_STAGES`
-(starting at line 144); this document deliberately does not duplicate the atom
-membership of each stage to avoid drift. Read the config file directly when you
-need the current canonical atom names for a stage.
+Each `ConstraintInfo` in `constraints/registry.py` carries
+`groups: frozenset[str]`. Tags are the only hand-maintained membership store.
+Derived groups are **computed, never stored**, so there is no second source of
+truth:
 
-The default pipeline ships five stages, in the order they run. Each stage's
-*intent* — what the stage exists to enforce in the solve, independent of which
-atoms currently implement it — is summarised below.
+- **Explicit tags** — `core`, `soft`, plus the legacy stage names
+  (`critical_feasibility`, `home_away_balance`, `club_alignment`, `club_day`,
+  `soft_optimisation`) and the coarse dimensions (`home_away_balance`,
+  `club_alignment`, `critical_feasibility`, `soft_optimisation`).
+- **Derived predicates** — `DERIVED_GROUPS` in the registry:
+  - `severity_1` … `severity_5` = every constraint whose
+    `ConstraintInfo.severity_level == n`.
+  - `default` / `all` / `production` (alias) = every constraint with a non-empty
+    `groups` set (i.e. every production constraint). This is the selection a run
+    with no `--groups` flag uses — identical to today's full build.
 
-| Stage name | Intent |
-|---|---|
-| `critical_feasibility` | Hard feasibility prerequisites for any valid draw — no team or field is double-booked, every team plays its required games against the right opponents, season-wide PHL / 2nd-grade concurrency rules at Broadmeadow hold, same-club PHL/2nd games are back-to-back at one venue or ≥3 h apart across venues, byes are spread evenly across the season, and repeat meetings of any pair are spaced out (matchup spacing, hard since spec-017, with `--slack` relief). spec-021 added two hard structural rules here: `VenueEarliestSlotFill` (games at a venue pack into the earliest timeslots — no gaps + earliest start, which structurally avoids 7pm) and `ClubNoConcurrentSlot` (a club's games per timeslot/venue capped capacity-aware via `no_field_slots`). Gosford-Friday-round placement is no longer here — it's expressed via `FORCED_GAMES` count entries (spec-015). Anything in this stage is non-negotiable; failure here means the draw cannot be published. |
-| `home_away_balance` | Home/away fairness for clubs whose home venue is not Broadmeadow. Enforces the per-pair and per-team aggregate balance of home vs away games and pins per-club season totals for home weekends (Friday / Sunday / overall). (The consecutive-home-week cap and away-clubs-per-weekend cap were removed in spec-018 — there is no longer any weekend *sequencing* dimension.) |
-| `club_alignment` | Cross-grade, same-club / same-opponent alignment at Broadmeadow. Decides which weekends two clubs' grades stack together at the venue and, when they do stack, how their games co-locate on fields and timeslots. Order-sensitive within the stage: the stacking decision must be made before the co-location decision that depends on it. |
-| `club_day` | Per-club day-of-week scheduling preferences. For each club that has a preferred playing day, governs which of its teams participate that day, how same-club matchups slot in, how opponents are routed onto that day, field consistency across the day, and contiguity of the club's slots so a club's day reads as a single block. spec-021 moved `ClubGameSpread` here (from `soft_optimisation`, where its hard part was dead): a club's games on a day form a near-contiguous block — ≤3 games allow no holes, ≥4 allow one — with a soft penalty driving residual holes to zero. |
-| `soft_optimisation` | Soft penalties and optimisation only — no new hard constraints. Honours preferred / avoided dates and weekends, biases the solver toward the convenor's preferred times, encourages multiple clubs per Broadmeadow timeslot while keeping any one field from being monopolised by a single club, applies a stable alphabetical tie-break for matchups, prefers the canonical NIHC field-fill order WF→EF→SF (soft symmetry-breaker, spec-016), and honours convenor-supplied per-team-pair no-concurrency requests. (The matchup-spacing *density* penalty still runs too — its atom now lives in `critical_feasibility`, whose dispatch always applies the soft pass alongside the hard one.) |
-
-Season configs may override by setting `'solver_stages'` in their
-`SEASON_CONFIG` dict. The override fully replaces `DEFAULT_STAGES` (no merge).
-
-## API
+### Resolver API
 
 ```python
-from constraints.stages import (
-    load_solver_stages, validate_solver_stages, list_stages,
+from constraints.registry import (
+    resolve_group,        # one group name -> set[str] of canonical names
+    resolve_groups,        # iterable of group names -> DEDUPED UNION, canonical order
+    list_group_names,      # explicit tags ∪ derived names
+    validate_group_order,  # producer-before-consumer helper-var dep check
 )
 
-stages = load_solver_stages(season_config)  # falls back to DEFAULT_STAGES
-errors = validate_solver_stages(stages)     # list[str], empty = valid
-print(list_stages(stages))                  # human-readable
+names = resolve_groups(['core', 'soft'])   # deduped, canonical (registry) order
 ```
 
-`validate_solver_stages` enforces:
-- Every stage has `name` (string, unique) and `atoms` (non-empty list).
-- Every atom name exists in `CONSTRAINT_REGISTRY`.
-- No atom appears in more than one stage.
-- Optional keys are spelled correctly.
+`resolve_groups` is the heart of the dedup-union guarantee: it builds a `set`
+union of canonical names across all requested groups, then returns them sorted by
+**canonical order** (registry insertion order). Asking for two groups that both
+contain `ClubDayParticipation` yields it **once**.
 
-## Dispatcher
+## Canonical apply order = registry insertion order
 
-`constraints/stages.py::apply_solver_stage` is the single entry point that
-the solver uses to apply a stage's atoms to the model. It splits each stage's
-atoms into:
+When a deduped union is applied to one model, the only correctness-relevant
+ordering is **producer-before-consumer for shared helper vars** (CP-SAT is
+declarative; otherwise `Add*` order does not change the feasible region). The
+single global canonical order is the **`CONSTRAINT_REGISTRY` dict insertion
+order**, which already places producers before consumers (e.g.
+`ClubVsClubStackedWeekends` precedes `ClubVsClubStackedCoLocation`, which reads
+the helpers Weekends registers). `validate_group_order()` asserts every known
+producer/consumer helper relationship has the producer at a lower registry index;
+a reorder that breaks a dependency trips a red test. See
+`docs/system/HELPER_VARS.md`.
 
-- **engine atoms** — handled by `UnifiedConstraintEngine` via its
-  `skip_constraints` set. The dispatcher computes the set of engine
-  skip-keys for the stage and runs `apply_stage_1_hard` / `apply_stage_2_soft`
-  with the inverse skip mask. `applied_engine_keys` is threaded across
-  stages so a cluster's hard atoms never get re-added.
-- **non-engine atoms** — atoms whose canonical names don't map to an
-  engine method (e.g. `PreferredTimes`). The
-  dispatcher resolves the legacy solver class via `solver_class_names` in
-  the registry and instantiates it directly.
+## `soft_only` is gone
 
-The mapping atom canonical name → engine skip-key lives in
-`atom_to_engine_key()`. Atoms with `atom_group` set (atomized clusters)
-return their parent's name; Phase-6 aliases (e.g. `PreferredTimes`) return
-their legacy counterparts. (The `NonDefaultHomeGrouping` /
-`AwayAtNonDefaultGrouping` aliases were removed in spec-018.) Atoms whose
-canonical name is itself a legacy combined name
-return that name. Anything else returns `None` (legacy class fallback).
+The old `soft_only: True` stage key told the engine to skip
+`apply_stage_1_hard()` for engine-key constraints — silently suppressing the
+*hard half* of a whole constraint. It was deleted (spec-023): there is no longer
+any "hard pass / soft pass" toggle. Engine keys in **any** selected set always
+run hard **and** soft. Removing it was behaviour-neutral (spec-021 had already
+moved `ClubGameSpread` to the non-`soft_only` `club_day` group, and the
+remaining `soft_optimisation` members are pure-soft atoms) — verified by the
+DoD-8 parity test (`tests/test_groups_full_build_parity.py`): the staged-legacy
+and staged-default builds emit an identical hard-constraint count.
 
-`StagedScheduleSolver.run_solver_stages_solve` drives the loop: builds
-engine + groupings once, then per-stage applies the dispatcher, builds
-the objective, solves, saves a checkpoint, and carries the solution as
-hints into the next stage.
+## The default groups (intent)
 
-## CLI flags
+The live group memberships are defined on each `ConstraintInfo.groups` in
+`constraints/registry.py` — read the registry for the current canonical
+membership rather than trusting a duplicated table here. The legacy-named groups'
+*intent*:
 
-`run.py generate` accepts:
+| Group name | Intent |
+|---|---|
+| `critical_feasibility` | Hard feasibility prerequisites for any valid draw — no team/field double-booking, every team plays its required games against the right opponents, season-wide PHL/2nd-grade concurrency at Broadmeadow, same-club PHL/2nd back-to-back at one venue or ≥3 h apart across venues, byes spread evenly, repeat-meeting spacing (hard since spec-017, `--slack` relief). spec-021 added `VenueEarliestSlotFill` (games pack into earliest slots — no gaps, earliest start, structurally avoids 7pm) and `ClubNoConcurrentSlot` (a club's games per timeslot/venue capped). Non-negotiable. |
+| `home_away_balance` | Home/away fairness for clubs whose home venue is not Broadmeadow — per-pair and per-team aggregate balance, per-club season home-weekend totals. |
+| `club_alignment` | Cross-grade same-club / same-opponent alignment at Broadmeadow — which weekends two clubs' grades stack, and how they co-locate. Order-sensitive: stacking decision before the co-location decision that reads its helpers. |
+| `club_day` | Per-club day-of-week preferences — participation, intra-club matchups, opponent routing, field consistency, slot contiguity. spec-021 moved `ClubGameSpread` here (its hard part was dead in `soft_optimisation`). |
+| `soft_optimisation` | Soft penalties / optimisation only — preferred & avoided dates/weekends, preferred times, multiple clubs per Broadmeadow timeslot without monopolising a field, alphabetical matchup tie-break, NIHC fill order WF→EF→SF (soft symmetry-breaker), per-team-pair no-concurrency requests. |
+| `core` | The deduped union of every constraint a normal full build needs hard+soft (overlaps the four feasibility/balance/alignment/day groups). |
+| `soft` | The soft-optimisation constraints (overlaps `soft_optimisation`). |
+| `default` / `all` / `production` | Every production constraint — the no-`--groups` selection. |
+| `severity_1` … `severity_5` | Derived: constraints at each severity level. |
+
+Season configs may still override the legacy stage list by setting
+`'solver_stages'` in `SEASON_CONFIG` (full replace, no merge) — those names are
+treated as group names.
+
+## Dispatch
+
+`constraints/stages.py::apply_constraint_set(canonical_names, *, model, X, data,
+engine, applied_engine_keys, applied_atoms)` is the single dispatch entry point.
+Given a resolved/ordered/deduped list of WHOLE constraints it:
+
+- runs each **engine key**'s `apply_stage_1_hard()` **and** `apply_stage_2_soft()`
+  (no `soft_only` toggle); and
+- runs each **non-engine atom**'s full `apply(model, X, data, registry)` (the
+  legacy solver class resolved via `solver_class_names` in the registry, e.g.
+  `PreferredTimes`).
+
+`applied_engine_keys` / `applied_atoms` are threaded across calls so a constraint
+is never double-applied — this is what makes overlapping groups safe.
+`apply_solver_stage(stage, …)` is a thin wrapper that resolves a stage's `atoms`
+and calls `apply_constraint_set`, so the staged solver
+(`StagedScheduleSolver.run_solver_stages_solve`) keeps working unchanged.
+
+## CLI
+
+```bash
+# Select by group (varargs). Deduped union, minus --exclude.
+run.py generate --year 2026 --groups core soft
+run.py generate --year 2026 --groups core --exclude ClubGameSpread
+run.py generate --year 2026 --simple --groups core   # simple path honours it too
+
+# No --groups -> the `default` group (every production constraint), identical
+# selection to the legacy full DEFAULT_STAGES union.
+run.py generate --year 2026
+
+# List the available group names (and the legacy stage list).
+run.py generate --list-groups
+```
+
+**Adding a new grouping requires no new flag and no code change** — tag
+constraints (or add a `DERIVED_GROUPS` predicate) and pass the name. `core`,
+`soft`, `test`, `test-2` are all just names.
+
+Legacy stage flags still function by treating the legacy stage names as group
+names:
 
 | Flag | Purpose |
 |---|---|
-| `--stages-config FILE` | Load a custom stage list from a JSON file (replaces season config + defaults). |
-| `--stage-only NAME` | Restrict the run to a single stage by name. |
-| `--skip-stage NAME` | Skip a stage by name. May be passed multiple times. |
-| `--list-stages` | Print the resolved stage list and exit. Honours the other three flags. |
+| `--groups NAME...` | Select the deduped union of these groups (minus `--exclude`). |
+| `--list-groups` | Print available group names and exit. |
+| `--stages-config FILE` | Load a custom stage/group list from JSON. |
+| `--stage-only NAME` | Restrict to a single stage/group by name. |
+| `--skip-stage NAME` | Skip a stage/group by name (repeatable). |
+| `--list-stages` | Print the resolved stage list and exit. |
 
-`_resolve_solver_stages` in `run.py` wires the flags into the stage list.
-Validation runs before solving; an unknown atom or invalid stage name
-exits non-zero.
+`--staged` / severity staging is kept working: `severity_solver_stages()` is
+reimplemented over `resolve_group('severity_N')` and remains a naturally
+non-overlapping ordered selection. `--slack` and `--relax` are untouched.
+
+## Validation
+
+`validate_solver_stages(stages)` (spec-023 rewrite):
+
+- Every stage/group has a unique `name` and a non-empty `atoms` list.
+- Every member is a registered canonical name **or** a resolvable group name.
+- The canonical-order helper-var producer/consumer check (`validate_group_order`)
+  passes.
+- Optional keys are well-typed.
+
+The **no-atom-in-two-stages (no-overlap) rule is removed** — overlap is now
+legal because a solve applies the deduped union. `utils.py::validate_game_config`
+still runs `_validate_stages` (Phase 22) when `data['solver_stages']` is present;
+errors become FATAL config errors.
 
 ## Config validation phase
 
-`utils.py::validate_game_config` includes a Phase 22 step
-`_validate_stages` that runs `validate_solver_stages(data['solver_stages'])`
-when the key is present. Any errors become FATAL config errors via the
-existing fatals/warnings collection.
-
-## Status (as of `final-form` after Phase 7c completion commit `0140495`)
-
-- ✅ `DEFAULT_STAGES` config + `constraints/stages.py` API + 10 tests in
-  `tests/test_solver_stages.py`.
-- ✅ `main_staged.py` dispatch rewire (`run_solver_stages_solve`).
-  Default `main_staged()` path is now SOLVER_STAGES; `severity_staged`
-  builds its stage list from the registry via
-  `severity_solver_stages()`.
-- ✅ CLI flags `--stages-config`, `--stage-only`, `--skip-stage`,
-  `--list-stages`. 18 dispatch tests in `tests/test_solver_stages_dispatch.py`.
-- ✅ Config-validation Phase 22 `_validate_stages`.
-- ✅ Legacy `STAGES` / `STAGES_AI` / `STAGES_UNIFIED` /
-  `STAGES_SEVERITY[_AI]` dicts deleted (Phase 7c).
-- ✅ `--ai` CLI flag removed; `run_list_constraints` reads the
-  registry; `run_diagnose` ported to drive the unified engine via
-  `apply_solver_stage` with cluster-level removal testing.
+`utils.py::validate_game_config` Phase 22 `_validate_stages` runs
+`validate_solver_stages(data['solver_stages'])` when the key is present; errors
+become FATAL.

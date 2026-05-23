@@ -10,6 +10,63 @@ Legend
 - **Slack key** matches `ConstraintInfo.slack_key` (where applicable).
 - **Atom target** lists the post-atomization atom name(s). Single-idea constraints stay as one atom (sometimes renamed for the generic-home-ground refactor in Phase 6). Multi-idea constraints split.
 
+## 0. Group membership (spec-023 — SSoT for selection)
+
+Each constraint's `ConstraintInfo.groups` frozenset in `constraints/registry.py`
+is the **single source of truth for which groups select it**. A solve applies the
+deduped union of the selected `--groups` (see `docs/system/STAGES.md`); selecting
+a constraint via two groups applies it once. Derived groups (`severity_1..5`,
+`default`/`all`/`production`) are computed from `severity_level` / a non-empty
+`groups` set and are never stored. The table below is generated from the registry
+— **read the registry, not this table, when in doubt**.
+
+| Canonical name | groups |
+|---|---|
+| NoDoubleBookingTeams | core, critical_feasibility |
+| NoDoubleBookingFields | core, critical_feasibility |
+| EqualGamesAndBalanceMatchUps | core, critical_feasibility |
+| FiftyFiftyHomeandAway | — (obsolete; no production group) |
+| AwayClubHomeWeekendsCount | core, home_away_balance |
+| AwayClubPerOpponentAndAggregateHomeBalance | core, home_away_balance |
+| PHLAnd2ndAdjacency | core, critical_feasibility |
+| PHLAndSecondGradeTimes | — (obsolete; no production group) |
+| PHLConcurrencyAtBroadmeadow | core, critical_feasibility |
+| PHLAnd2ndConcurrencyAtBroadmeadow | core, critical_feasibility |
+| EqualMatchUpSpacing | core, critical_feasibility |
+| BalancedByeSpacing | core, critical_feasibility |
+| ClubDay | — (obsolete legacy combined; no production group) |
+| ClubDayParticipation | club_day, core |
+| ClubDayIntraClubMatchup | club_day, core |
+| ClubDayOpponentMatchup | club_day, core |
+| ClubDaySameField | club_day, core |
+| ClubDayContiguousSlots | club_day, core |
+| TeamConflict | — (no production group) |
+| ClubGradeAdjacency | — (obsolete; no production group) |
+| SameGradeSameClubNoConcurrency | core, critical_feasibility |
+| TeamPairNoConcurrency | soft, soft_optimisation |
+| NIHCFillWFBeforeEF | soft, soft_optimisation |
+| NIHCFillEFBeforeSF | soft, soft_optimisation |
+| ClubVsClubAlignment | — (obsolete; no production group) |
+| ClubVsClubStackedWeekends | club_alignment, core |
+| ClubVsClubStackedCoLocation | club_alignment, core |
+| ClubGameSpread | club_day, core |
+| ClubNoConcurrentSlot | core, critical_feasibility |
+| ClubFieldConcentration | — (tester-only; no production group) |
+| VenueEarliestSlotFill | core, critical_feasibility |
+| PreferredTimes | soft, soft_optimisation |
+| SoftLexMatchupOrdering | soft, soft_optimisation |
+| PreferredWeekendsAwayGround | soft, soft_optimisation |
+| PreferredGames | soft, soft_optimisation |
+| ForcedGames | — (tester-only; no production group) |
+| BlockedGames | — (tester-only; no production group) |
+
+Entries with no production group (`tester_only` diagnostics and the obsolete
+legacy-only classes `FiftyFiftyHomeandAway`, `PHLAndSecondGradeTimes`, `ClubDay`,
+`ClubGradeAdjacency`, `ClubVsClubAlignment`) keep resolving for parity/legacy
+lookups but are **not selected by any group** — a `--groups default` run does not
+apply them. `severity_N` derived groups still cover every registry entry by
+`severity_level` regardless of `groups`.
+
 ## 1. Solver-applied constraints
 
 | Canonical name | Source | Actual behavior | Severity | Slack key | Atom target(s) |

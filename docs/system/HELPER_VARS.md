@@ -78,6 +78,27 @@ registry.diagnostics()                 # dict: pool_created, pool_hits, created,
 4. **`required_helpers` on `ConstraintInfo` must reference catalog kinds.** `validate_required_helpers()` returns offending pairs.
 5. **Don't reach past the registry** — never call `model.NewBoolVar` and `AddMaxEquality` directly inside an atom for a helper that another atom might want. Ask the registry via the pool-style API.
 
+## Producer-before-consumer canonical order (spec-023)
+
+When a deduped union of groups is applied to one model (see
+`docs/system/STAGES.md`), the only correctness-relevant ordering is
+**producer-before-consumer for shared helper vars**: a constraint that *reads* a
+helper must be applied after the constraint that *registers* it, otherwise the
+consumer would build its own (duplicate) helper or miss the channeling.
+
+The single global canonical apply order is the **`CONSTRAINT_REGISTRY` dict
+insertion order**, which already places producers before consumers. The
+canonical example is the spec-005 club-vs-club stacking bundle:
+**`ClubVsClubStackedWeekends` → `ClubVsClubStackedCoLocation`** — CoLocation
+reads the `cvc_stack_play` helpers that Weekends registers, so Weekends must have
+the lower registry index.
+
+`constraints/registry.py::validate_group_order()` enforces this: for every known
+producer/consumer helper relationship it asserts the producer's registry index is
+lower than the consumer's. A future reorder of `CONSTRAINT_REGISTRY` that places
+a consumer before its producer trips a red test. `validate_solver_stages` calls
+this check, so a bad order is caught at config-validation time too.
+
 ## Tests
 
 - `tests/test_helper_var_registry.py` — pool-style API (dedup, empty-list-forces-zero, max/presence channeling, register/lookup), the single-pathway guard (no `declare`/`freeze`/`get_declared`/`HelperVar`/`Atom.declare_helpers`), diagnostics shape, and the `required_helpers` ∈ catalog key-convention check.
