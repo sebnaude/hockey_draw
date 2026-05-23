@@ -23,6 +23,7 @@ from .storage import (
     SlotAnalyzer,
     get_slot_analyzer,
     extract_locked_pairings,
+    count_games_changed,
 )
 from .tester import DrawTester, ViolationReport, Violation, test_draw, what_if_move_game
 from .reports import (
@@ -48,6 +49,7 @@ __all__ = [
     'SlotAnalyzer',
     'get_slot_analyzer',
     'extract_locked_pairings',
+    'count_games_changed',
 
     # Versioning
     'DrawVersionManager',

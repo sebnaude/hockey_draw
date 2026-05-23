@@ -1118,6 +1118,41 @@ def extract_locked_pairings(
     return pins
 
 
+def count_games_changed(source: "DrawStorage", result: "DrawStorage") -> int:
+    """Count games whose time/slot/field differ between two draws (spec-026 DoD #6).
+
+    Two draws are matched game-by-game on the *pairing identity*
+    ``(team1, team2, grade, week)``.  For each pairing present in BOTH draws,
+    the game is counted as "changed" if any of its schedule fields differ:
+    ``time``, ``day_slot``, ``field_name``, or ``field_location``.
+
+    Pairings present in only one draw (added or removed) are NOT counted here —
+    this helper measures the re-timing footprint of a regen, not pairing churn.
+    A regen that freezes a grade keeps its pairings on the same date but may
+    re-time them; this helper counts exactly those re-timed games.
+
+    Args:
+        source: The source (pre-regen) draw.
+        result: The result (post-regen) draw.
+
+    Returns:
+        The number of common pairings whose time/slot/field changed.
+    """
+    def _ident(g: "StoredGame"):
+        return (g.team1, g.team2, g.grade, g.week)
+
+    def _sched(g: "StoredGame"):
+        return (g.time, g.day_slot, g.field_name, g.field_location)
+
+    src_by_ident = {_ident(g): _sched(g) for g in source.games}
+    changed = 0
+    for g in result.games:
+        ident = _ident(g)
+        if ident in src_by_ident and src_by_ident[ident] != _sched(g):
+            changed += 1
+    return changed
+
+
 def create_draw_from_solution(X_solution: Dict, description: str = "") -> DrawStorage:
     """Convenience function to create DrawStorage from X solution."""
     return DrawStorage.from_X_solution(X_solution, description)

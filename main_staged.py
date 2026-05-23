@@ -892,6 +892,60 @@ def load_data(year: int) -> dict:
     return load_season_data(year)
 
 
+def _merge_regen_pins(data: dict, regen_locked_pairings: list) -> None:
+    """Concatenate auto-extracted regen pins into data['locked_pairings'] (spec-026 DoD #3).
+
+    Called AFTER load_data() inside main_staged/main_simple (the INJECTION ORDER
+    NOTE: run_generate has no `data`, so the merge must happen here).  The
+    extracted regen pins are appended to any hand-authored LOCKED_PAIRINGS from
+    config so spec-025's generate_X pass enforces BOTH.
+
+    Dedup: a hand-authored config pin that duplicates an extracted pin is
+    collapsed so the same pairing is not double-pinned (Risks bullet —
+    "data['locked_pairings'] concatenation order").  Two pins are the same iff
+    they share ``(tuple(teams), grade, date)``.  Existing config pins win
+    (kept in their original order); duplicate regen pins are dropped.  Pins
+    that lack a ``teams`` key (scope-only hand-authored entries) are never
+    deduped against and are passed through untouched.
+
+    Mutates ``data['locked_pairings']`` in place.
+    """
+    if not regen_locked_pairings:
+        return
+
+    existing = data.get('locked_pairings', []) or []
+
+    def _dedup_key(pin):
+        # Only team-shaped pins participate in dedup; scope-only entries return
+        # None and are always kept (no false collapse).
+        if 'teams' not in pin:
+            return None
+        return (tuple(pin['teams']), pin.get('grade'), pin.get('date'))
+
+    seen = set()
+    merged = []
+    for pin in existing:
+        merged.append(pin)
+        k = _dedup_key(pin)
+        if k is not None:
+            seen.add(k)
+    dropped = 0
+    for pin in regen_locked_pairings:
+        k = _dedup_key(pin)
+        if k is not None and k in seen:
+            dropped += 1
+            continue
+        merged.append(pin)
+        if k is not None:
+            seen.add(k)
+
+    data['locked_pairings'] = merged
+    msg = (f"  Regen: merged {len(regen_locked_pairings)} extracted pin(s) with "
+           f"{len(existing)} config pin(s) -> {len(merged)} total "
+           f"({dropped} duplicate(s) collapsed)")
+    print(msg)
+
+
 # ============== Main Entry Points ==============
 
 def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = None,
@@ -901,7 +955,9 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 severity_staged: bool = False, hint_solution: dict = None,
                 exclude_constraints: list = None,
                 description: str = '', provenance: dict = None,
-                solver_stages: list = None):
+                solver_stages: list = None,
+                regen_locked_pairings: list = None,
+                regen_info: dict = None):
     """Main entry point for staged solving (Phase 7c-clean).
 
     Args:
@@ -950,17 +1006,23 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
     logger.info(f"Loading data for year {year}...")
     print(f"\nLoading data for year {year}...")
     data = load_data(year)
-    
+
+    # spec-026: merge auto-extracted regen pins into data['locked_pairings']
+    # (INJECTION ORDER NOTE — data is only available here, not in run_generate).
+    _merge_regen_pins(data, regen_locked_pairings)
+    if regen_info:
+        data['_regen_info'] = regen_info
+
     # Set locked weeks in data for constraints to use
     if locked_weeks:
         data['locked_weeks'] = set(locked_weeks)
-    
+
     # Apply constraint slack overrides
     if constraint_slack:
         data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
         logger.info(f"  Constraint slack overrides: {constraint_slack}")
         print(f"  Constraint slack overrides: {constraint_slack}")
-    
+
     logger.info(f"  Teams: {len(data['teams'])}")
     logger.info(f"  Grades: {len(data['grades'])}")
     logger.info(f"  Timeslots: {len(data['timeslots'])}")
@@ -1241,7 +1303,9 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
                 relax_config: dict = None, fix_round_1: bool = False,
                 constraint_slack: dict = None, hint_solution: dict = None,
                 use_unified: bool = True, run_id: str = None,
-                description: str = '', provenance: dict = None):
+                description: str = '', provenance: dict = None,
+                regen_locked_pairings: list = None,
+                regen_info: dict = None):
     """Simple (non-staged) main entry point — single solve via the unified engine.
 
     Phase 7c: the legacy iterate-classes path is gone. ``--simple`` always
@@ -1284,11 +1348,17 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
     # Load data
     print(f"\nLoading data for year {year}...")
     data = load_data(year)
-    
+
+    # spec-026: merge auto-extracted regen pins into data['locked_pairings']
+    # (INJECTION ORDER NOTE — data is only available here, not in run_generate).
+    _merge_regen_pins(data, regen_locked_pairings)
+    if regen_info:
+        data['_regen_info'] = regen_info
+
     # Set locked weeks in data for constraints to use
     if locked_weeks:
         data['locked_weeks'] = set(locked_weeks)
-    
+
     # Apply constraint slack overrides
     if constraint_slack:
         data['constraint_slack'] = {**data.get('constraint_slack', {}), **constraint_slack}
