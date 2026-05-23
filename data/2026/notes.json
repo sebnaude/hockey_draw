@@ -1,0 +1,28 @@
+{
+  "_comment": "Hand-authored per-weekend notes for the 2026 season draw export. Keyed by ISO date (YYYY-MM-DD). Each date maps to a list of note objects with 'category' (Field|Request|Preferred|Blocked|Forced, default 'Note') and 'text' (required). Bare strings also accepted: ['plain note'] -> category 'Note'. This file is presentation-only — it does not affect the solver. See spec-028 for schema details.",
+
+  "2026-05-15": [
+    {
+      "category": "Field",
+      "text": "Masters SC at Broadmeadow — no games before 1:00 pm; PHL Friday night at Gosford instead"
+    }
+  ],
+
+  "2026-08-16": [
+    {
+      "category": "Field",
+      "text": "State Masters at NIHC — morning timeslots unavailable; games from 12:30 pm onwards"
+    },
+    {
+      "category": "Request",
+      "text": "Maitland requested lighter load this weekend (NRL Knights vs Titans clash)"
+    }
+  ],
+
+  "2026-06-12": [
+    {
+      "category": "Request",
+      "text": "Gosford unavailable entire weekend — all Gosford home games rescheduled; Norths vs Wests 80th Anniversary Friday at NIHC"
+    }
+  ]
+}

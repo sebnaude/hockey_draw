@@ -164,12 +164,14 @@ constraints/
 
 analytics/
   storage.py              # DrawStorage, DrawAnalytics
+  notes.py                # build_weekend_notes() — per-weekend notes for xlsx export (spec-028)
   tester.py               # DrawTester, violation checks (slack-aware)
   versioning.py           # DrawVersionManager
   reports.py              # Club/grade reports
   preseason_report.py     # Pre-season reports
 
 data/{year}/teams/*.csv   # Team nominations per club
+data/{year}/notes.json    # Hand-authored per-weekend notes (spec-028, optional, see Export Functions)
 draws/{year}/             # Output draws (versioned)
   current.json            # Latest draw (always check here first)
   current.xlsx            # Latest schedule
@@ -432,6 +434,20 @@ python -c "from analytics.storage import DrawStorage; d=DrawStorage.load('draws/
 # Export subset of weeks
 python -c "from analytics.storage import DrawStorage; d=DrawStorage.load('draws/2026/current.json'); d.export_schedule_xlsx('first_4_weeks.xlsx', weeks=[1,2,4,5], sheet_title='First 4 Playing Weeks')"
 
+# Export with per-weekend notes column (spec-028) — builds notes from config +
+# data/2026/notes.json, then passes to export_schedule_xlsx(weekend_notes=...).
+# Notes appear in column N; L/M are blank spacers. Omit weekend_notes= for a
+# notes-free export identical to today.
+python -c "
+from analytics.storage import DrawStorage
+from analytics.notes import build_weekend_notes
+from config import load_season_data
+draw = DrawStorage.load('draws/2026/current.json')
+data = load_season_data(2026)
+notes = build_weekend_notes(draw, data)
+draw.export_schedule_xlsx('2026_Season_Draw_with_notes.xlsx', weekend_notes=notes)
+"
+
 # Export to Revo format (external hockey system)
 python -c "from analytics.storage import DrawStorage, export_draw_to_revformat; from config import load_season_data; d=DrawStorage.load('draws/2026/current.json'); export_draw_to_revformat(d, load_season_data(2026))"
 ```
@@ -446,9 +462,17 @@ draw = DrawStorage.load('draws/2026/current.json')
 draw.export_schedule_xlsx('output.xlsx')                          # full draw
 draw.export_schedule_xlsx('subset.xlsx', weeks=[1,2,4,5])         # specific weeks
 draw.export_schedule_xlsx('subset.xlsx', weeks=[1,2], sheet_title='Rounds 1-2')
+
+# With per-weekend notes column (spec-028): columns A–K = games, L/M = spacers, N = Notes
+from analytics.notes import build_weekend_notes
+from config import load_season_data
+notes = build_weekend_notes(draw, load_season_data(2026))         # {week: [lines]}
+draw.export_schedule_xlsx('output_with_notes.xlsx', weekend_notes=notes)
 ```
 
 Features: alternating week background colours, blue field sub-headers, column headers, borders, bye listings per week. Grouped by week → date → field (EF/WF/SF at NIHC first, then away venues).
+
+When `weekend_notes` is supplied, column N shows per-weekend notes stacked from the first game row. Notes are sourced from `data/{year}/notes.json` (hand-authored) and opt-in `'note'` fields on `BLOCKED_GAMES`, `FORCED_GAMES`, and `PREFERRED_WEEKENDS` entries. Omit the param (or pass `None`) for a notes-free export identical to the pre-spec-028 output.
 
 ### export_draw_to_revformat()
 Exports CSV for the Revo hockey management system with full club name mapping, grade mapping, and bye entries. Supports `week_limit` parameter.
@@ -491,6 +515,7 @@ Register in `main_staged.py` STAGES or STAGES_AI dict, and add to `CONSTRAINT_TO
 | `generate_X()` | `utils.py` | Create decision variables (filtering happens here) |
 | `convert_X_to_roster()` | `utils.py` | Solution -> Roster |
 | `max_games_per_grade()` | `utils.py` | Calculate games per team per grade (3-tier override) |
+| `build_weekend_notes()` | `analytics/notes.py` | Build {week: [note lines]} dict for xlsx Notes column (spec-028) |
 | `DrawStorage.load()` | `analytics/storage.py` | Load draw from JSON |
 | `DrawStorage.from_X_solution()` | `analytics/storage.py` | Create draw from checkpoint pickle |
 | `DrawStorage.export_schedule_xlsx()` | `analytics/storage.py` | Export formatted schedule xlsx (week colours, field headers, byes) |

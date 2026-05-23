@@ -233,6 +233,7 @@ BLOCKED_GAMES = [
         'date': '2026-04-19',  # Sunday Apr 19 is the playing date
         'description': 'Crusaders 6th - NSW Masters at Moorebank',
         'reason': 'NSW Masters Men\'s at Moorebank',
+        'note': True,  # spec-028: surface in published draw notes column
     },
     # Colts: 4th, 5th Gold, 6th blocked
     {
@@ -563,6 +564,7 @@ FORCED_GAMES = [
         'day': 'Friday',
         'field_location': 'Newcastle International Hockey Centre',
         'description': 'NIHC Friday Night - Norths vs Wests (80th Anniversary)',
+        'note': True,  # spec-028: surface in published draw notes column
     },
     # Maitland vs Souths PHL — exactly 1 NIHC Friday night (solver picks date)
     {
@@ -1052,6 +1054,7 @@ PREFERRED_WEEKENDS = [
         'field_location': 'Maitland Park',
         'mode': 'avoid',
         'description': 'NRL Knights vs Raiders at Maitland (Maitland HC prefers not to play)',
+        'note': True,  # spec-028: surface in published draw notes column
     },
     {
         'date': '2026-04-26',
