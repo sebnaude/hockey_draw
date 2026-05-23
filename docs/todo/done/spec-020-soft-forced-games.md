@@ -1,5 +1,6 @@
 <!-- status: done -->
 <!-- owner: session=goal-final-form claimed=2026-05-22 -->
+<!-- reviewed: adversarial Sonnet review 2026-05-22 — fixes applied inline (see "(review fix — …)" annotations) -->
 <!-- depends_on: none (shares config/defaults.py DEFAULT_STAGES + constraints/registry.py + utils.py FORCED machinery with spec-014..018; rebase + re-run validate_solver_stages before merge) -->
 
 # spec-020 — `PreferredGames`: a soft, weighted analogue of the whole FORCED_GAMES grammar (and delete `PreferredDates`)

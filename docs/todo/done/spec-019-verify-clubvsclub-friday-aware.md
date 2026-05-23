@@ -1,5 +1,6 @@
 <!-- status: done -->
 <!-- owner: session=goal-final-form claimed=2026-05-22 -->
+<!-- reviewed: adversarial Sonnet review 2026-05-22 — fixes applied inline (see "(review fix — …)" annotations) -->
 <!-- depends_on: none (additive — new test only; no shared-file edits) -->
 
 # spec-019 — Lock in `ClubVsClubStackedWeekends` per-pair Friday-awareness with a regression test
