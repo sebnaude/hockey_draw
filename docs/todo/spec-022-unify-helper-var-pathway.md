@@ -1,5 +1,6 @@
 <!-- status: ready -->
 <!-- owner: session=none claimed=none -->
+<!-- reviewed: adversarial Sonnet review 2026-05-22 + 2026-05-23 second pass — all fixes applied inline (see "(review fix — …)" annotations) -->
 <!-- depends_on: none (touches constraints/helper_vars.py, constraints/atoms/base.py, constraints/stages.py, tests/test_helper_var_registry.py — minimal overlap with spec-014..019; rebase before merge) -->
 
 # spec-022 — One pathway for shared helper variables: remove the vestigial declarative API
@@ -27,25 +28,35 @@ Research (this session) shows the declarative pathway is **entirely vestigial**:
 - Nothing calls `declare_helpers`, `registry.declare(...)`, or `get_declared(...)` in
   production code (the only hits are docstrings + error strings in `helper_vars.py` itself,
   `atoms/base.py`, `atoms/__init__.py`, and `nihc_fill_wf_before_ef.py`).
-- The sole **production** `freeze()` callsite is `constraints/stages.py:322`
-  (`_ephemeral_registry`) on an **empty** `_declared` — a no-op.
-  (review fix — C1/H1: was "line 319"; verified line is 322. Also: `freeze()` is used in
-  11 atom test fixtures as a test-harness pattern — see C1 below — those are NOT declarative
-  API tests but they must be cleaned up as part of this spec.)
+- The sole **production** `freeze()` callsite is `constraints/stages.py:326`
+  (`_ephemeral_registry`, function defined at line 317) on an **empty** `_declared` — a no-op.
+  (review fix — C1/H1: original claim was "line 319"; a prior review pass "corrected" it to
+  322 but that is also wrong — verified by reading the file: `reg.freeze({}, {})` is on
+  line 326, function starts at line 317. Also: `freeze()` is used in 12 atom test fixtures —
+  see C1 below — those are NOT declarative API tests but they must be cleaned up as part of
+  this spec.)
 - No code outside `helper_vars.py` consumes the declarative diagnostics
   (`declared_total`, `declared_kinds`, `redeclared_same_kind`).
 - The engine (`unified.py`) never calls `freeze` or `declare_helpers`; it uses pool-style
-  exclusively (`self.pool is self.registry`, one instance — verified `unified.py:102-103`).
+  exclusively (`self.pool is self.registry`, one instance — verified `unified.py:101-102`;
+  the "declarative API for atoms" comment is at line 99, registry assignment at line 101,
+  pool alias at line 102).
+  (review fix — M5: prior annotation said "verified unified.py:102-103" but those lines are
+  actually 101-102; the clarification above is accurate. Not a blocking issue but corrected
+  to avoid implementer confusion.)
 - `tests/test_helper_var_registry.py` tests the declarative API explicitly.
-- 11 atom test fixtures (`tests/atoms/test_phl_atoms.py`,
+- **12** atom test fixtures (`tests/atoms/test_phl_atoms.py`,
   `test_phl_2nd_adjacency.py`, `test_nihc_field_fill_order.py`,
   `test_preferred_weekends_away_ground.py`, `test_soft_lex_matchup_ordering.py`,
   `test_double_up_handling.py`, `test_same_grade_same_club_no_concurrency.py`,
   `test_team_pair_no_concurrency.py`, `test_balanced_bye_spacing.py`,
-  `test_away_club_home_weekends_count.py`, `test_away_club_home_balance.py`) call
-  `r.freeze({}, {})` as a "ready a blank registry before calling atom.apply()" idiom —
-  NOT as declarative API tests. These calls must be removed (they break once `freeze` is
-  deleted). Unit B must list all of them.
+  `test_away_club_home_weekends_count.py`, `test_away_club_home_balance.py`,
+  `test_preferred_games.py`) call `r.freeze({}, {})` as a "ready a blank registry before
+  calling atom.apply()" idiom — NOT as declarative API tests. These calls must be removed
+  (they break once `freeze` is deleted). Unit B must list all of them.
+  (review fix — C2: prior version listed 11 files but `tests/atoms/test_preferred_games.py`
+  line 25 also has `reg.freeze({}, {})`. Verified by grep. Without removing it, the
+  DoD 7 grep-clean for `.freeze(` cannot pass.)
 
 So the "majority convention" is pool-style `_cache`, and the minority has **zero production
 callsites to migrate**. This spec removes the dead second pathway and adds a guard so a
@@ -92,8 +103,9 @@ meaningful.
    constraints.stages, constraints.atoms`); grep-clean across `constraints/`, `analytics/`,
    `tests/` for `declare(`, `get_declared`, `declare_helpers`, `HelperVar(` , `.freeze(`
    (none remain except this spec's guard test referencing their absence).
-   (review fix — C1: the grep-clean for `.freeze(` cannot pass unless the 11 atom test
-   fixtures listed in the Why section above have their `r.freeze({}, {})` call removed.
+   (review fix — C1/C2: the grep-clean for `.freeze(` cannot pass unless ALL 12 atom test
+   fixtures listed in the Why section above have their `r.freeze({}, {})` call removed
+   (the original "11" was wrong — `test_preferred_games.py` was missing from the list).
    The implementer must treat those atom-test files as Unit B deliverables, not just
    `test_helper_var_registry.py`. Removing `r.freeze({}, {})` from atom tests is a
    one-line deletion per file — no logic change is needed since `freeze` on an empty
@@ -118,15 +130,18 @@ meaningful.
 
 ### Unit A — Strip the declarative API
 - Files: `constraints/helper_vars.py` (remove declarative methods/fields/dataclass; trim
-  diagnostics), `constraints/atoms/base.py` (remove `declare_helpers` + docstring), 
+  diagnostics), `constraints/atoms/base.py` (remove `declare_helpers` + docstring),
   `constraints/atoms/__init__.py` (docstring), `constraints/stages.py`
-  (`_ephemeral_registry` at line 322: drop `reg.freeze({}, {})` call — just return
-  `HelperVarRegistry(model)` directly),
-  `constraints/unified.py` (line 100 comment: remove "declarative API for atoms"
+  (`_ephemeral_registry` defined at line 317: drop `reg.freeze({}, {})` call at line 326 —
+  just return `HelperVarRegistry(model)` directly),
+  `constraints/unified.py` (line 99 comment: remove "declarative API for atoms"
   wording — update to pool-style-only description).
-  (review fix — H1: stages.py line is 322, not 319.)
-  (review fix — M3: unified.py line 100 comment says "declarative API for atoms; pool-style
-  methods for legacy engine" — this becomes wrong after the spec; add it to Unit A file list.)
+  (review fix — H1: stages.py `_ephemeral_registry` starts at line 317; freeze call is at
+  line 326. A prior review pass changed "319" to "322" but 322 was still wrong. Verified
+  by reading the file.)
+  (review fix — M3: unified.py comment is at line 99 not 100; text reads "declarative API
+  for atoms; pool-style methods for legacy engine" — must be updated to pool-style-only.
+  Verified by reading unified.py:99.)
 - Test: import smoke; `validate_solver_stages(DEFAULT_STAGES) == []`; a generation/checkpoint
   re-test shows unchanged variable count + violations (DoD 8).
 
@@ -134,10 +149,13 @@ meaningful.
 - Files: `tests/test_helper_var_registry.py` (rewrite per DoD 5), new guard test per DoD 4,
   key-convention test per DoD 6. Check `tests/test_constraint_registry.py` keeps
   `validate_required_helpers` (file is at `tests/test_constraint_registry.py` — confirmed
-  present; the `validate_required_helpers` test is at line 273 — leave unchanged).
-  **Additionally** (review fix — C1): remove the `r.freeze({}, {})` harness call from each
-  of the following 11 atom test files (one-line deletion per file; no other logic change):
-    - `tests/atoms/test_phl_atoms.py` (line 32)
+  present; the `validate_required_helpers` test function is at line 277 — leave unchanged).
+  (review fix — H2: prior claim said "line 273" but the test function `test_required_helpers_are_in_catalog`
+  is actually at line 277. Verified by reading the file.)
+  **Additionally** (review fix — C1/C2): remove the `r.freeze({}, {})` harness call from each
+  of the following **12** atom test files (one-line deletion per file; no other logic change):
+    - `tests/atoms/test_phl_atoms.py` (line 31)
+      (review fix — H4: prior claim said "line 32"; actual is line 31. Verified by grep.)
     - `tests/atoms/test_phl_2nd_adjacency.py` (line 25)
     - `tests/atoms/test_nihc_field_fill_order.py` (line 26)
     - `tests/atoms/test_preferred_weekends_away_ground.py` (line 146)
@@ -151,6 +169,9 @@ meaningful.
       API tests)
     - `tests/atoms/test_away_club_home_balance.py` (lines 189, 219, 239, 261 — four
       occurrences; all are `registry.freeze(X, data)` harness calls)
+    - `tests/atoms/test_preferred_games.py` (line 25 — `reg.freeze({}, {})` in the
+      `_registry` helper; this file was missing from the prior "11" list)
+      (review fix — C2: added here; verified by grep. The DoD 7 grep-clean fails without it.)
 - Depends on Unit A.
 - Test: full suite green; the guard test fails if `declare`/`get_declared`/`declare_helpers`
   are reintroduced (verify by temporarily re-adding one locally, then removing).
@@ -171,27 +192,29 @@ meaningful.
   one (pool-style only).
 - `constraints/atoms/base.py` + `constraints/atoms/__init__.py` docstrings — atoms create
   helpers via the pool API in `apply()`; drop `declare_helpers` lifecycle step.
-  Also remove the comment in `constraints/atoms/nihc_fill_wf_before_ef.py` (approx. line 92)
+  Also remove the comment in `constraints/atoms/nihc_fill_wf_before_ef.py` (line 92 exactly)
   that says "the engine freezes after `declare_helpers`" — pool-style is always valid; there
   is no freeze lifecycle constraint. (review fix — H3: this comment becomes misleading once
-  freeze is removed.)
+  freeze is removed. "approx. line 92" tightened to exact line 92 — verified by reading file.)
 - `docs/todo/GOALS.md` §2:
   - Line 37: change "declared via `HelperVarRegistry`" to "registered with `HelperVarRegistry`
     via the pool-style API (`get_or_create_bool`, `get_or_create_presence`, `register`)".
-  - Step 3 in the How-to: change "Declare helpers via `data['helper_registry']`" to "Register
-    shared helpers via the `registry` arg passed to `atom.apply()` — use `get_or_create_bool`,
-    `get_or_create_presence`, or `register`." (review fix — M4: `data['helper_registry']` is
-    not a real data-dict key; the registry arrives as the fourth arg to `apply()`, not via
-    `data`. Pre-existing stale doc; correct it here since we're touching this section.)
+  - Step 3 in the How-to (GOALS.md line 73): change "Declare helpers via `data['helper_registry']`"
+    to "Register shared helpers via the `registry` arg passed to `atom.apply()` — use
+    `get_or_create_bool`, `get_or_create_presence`, or `register`."
+    (review fix — M4: `data['helper_registry']` is not a real data-dict key; the registry
+    arrives as the fourth arg to `apply()`, not via `data`. Pre-existing stale doc; correct
+    it here since we're touching this section.)
   - Add spec-022 row to the spec table (already planned).
   (review fix — M2: GOALS.md prose must change, not just gain a spec-022 table row.)
 - `docs/operator-ai/CONSTRAINT_APPLICATION.md` — grep confirms no `declare_helpers` reference
   in this file; no change needed.
   (review note — Low: confirming this file is clean so implementer does not waste time.)
-- `docs/system/HARNESS.md` — line 93–96 says "HelperVarRegistry (declarative) +
+- `docs/system/HARNESS.md` — line 93 says "HelperVarRegistry (declarative) +
   SharedVariablePool-style `.get()` (legacy)"; change to "HelperVarRegistry (pool-style API)
   + `SharedVariablePool` alias for back-compat." Remove the word "declarative" throughout.
-  (review fix — L1: HARNESS.md was missing from the doc registry.)
+  (review fix — L1: HARNESS.md was missing from the doc registry. Also: prior range "93-96"
+  corrected to "line 93" — the problematic text is on line 93 specifically.)
 
 ## Out of scope
 

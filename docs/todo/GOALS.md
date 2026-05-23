@@ -142,8 +142,12 @@ Each spec below describes a target behaviour. Some are partially implemented, so
 | spec-020 | `PreferredGames`: soft, weighted analogue of the whole FORCED_GAMES grammar (penalty-on-deviation); delete `PreferredDates` | `done/spec-020-soft-forced-games.md` | done |
 | spec-021 | Shared contiguity pattern: anchored monotone-fill (venue) + floating no-gap (club); drop heavy IntVar encodings; fix the soft_only-trap so hard parts actually run; drop WF/7pm | `done/spec-021-contiguity-primitive.md` | done |
 | spec-022 | One pathway for shared helper vars — remove the vestigial declarative API; keep pool-style `_cache` + guard against a second pathway | `spec-022-unify-helper-var-pathway.md` | ready |
-| spec-023 | Atoms expose hard/soft *phases*; a stage is a uniform `(atoms, phases)` collection — no dedicated hard-vs-soft machinery; `soft_only` trap becomes structurally impossible | `spec-023-atom-hard-soft-phases.md` | delayed (user hold) |
+| spec-023 | Constraint groups: composable, deduped, flag-selected (`--groups`); a constraint is applied whole (hard+soft together); delete the `soft_only` hard/soft machinery (supersedes the rejected atom-hard-soft-phases design) | `spec-023-constraint-groups.md` | ready |
 | spec-024 | Delete `MaximiseClubsPerTimeslotBroadmeadow` + `MinimiseClubsOnAFieldBroadmeadow`; re-scope `ClubGameSpread` to per-field contiguity (≤3 games/field contiguous, ≥4 ≤1 hole) + a multi-field (off-primary) soft penalty, all venues | `done/spec-024-field-spread-replaces-club-balance.md` | done |
+| spec-025 | `LOCKED_PAIRINGS`: dedicated sister config to FORCED_GAMES that pins a pairing to its date/weekend but frees time/slot/field; substrate for regen | `spec-025-locked-pairings-config.md` | ready |
+| spec-026 | Unified regeneration mode (`--regen-from`/`--regen-grades`/`--regen-weeks`): freeze everything outside a grade/week scope (hard-lock played weeks + auto-extract date pins), re-solve the scope | `spec-026-regeneration-mode.md` | ready |
+| spec-027 | Regeneration soft-constraint group: soft analogues of every hard rule except a small core-hard physical set; selected as the `regen` group; documented in `REGEN_CONSTRAINTS.md` | `spec-027-regen-soft-constraint-group.md` | ready |
+| spec-028 | Per-weekend notes column in the published season xlsx export | `spec-028-weekend-notes-export-column.md` | ready |
 
 ### spec-001 — Rounds 1–2 Broadmeadow-only rule must exempt FORCED games
 
