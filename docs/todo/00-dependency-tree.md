@@ -17,7 +17,7 @@ writing: spec-001…022 and **spec-024** (field-spread, replaced the club-balanc
 spec-021 (done) ──▶ spec-023 (building, constraint-groups) ─┐
                                                             ├─▶ spec-027 (ready, regen-soft)
 spec-022 (done, independent)                                │
-spec-025 (done, independent) ─▶ spec-026 (building) ────────┘
+spec-025 (done, independent) ─▶ spec-026 (done) ────────────┘
 spec-028 (done, independent)
 ```
 
@@ -31,19 +31,19 @@ Edges:
   behaviour-neutral). **`building`** (claimed 2026-05-23 by a concurrent session).
   already-shipped locked-weeks + FORCED machinery. **Done** (2026-05-23, merged `7afc656`).
 - **spec-026** — unified regeneration mode. Depends on spec-025 (writes pins into
-  `LOCKED_PAIRINGS`). **`building`** (claimed 2026-05-23) — spec-025 has landed, so its only hard
-  dep is satisfied. spec-023 is NOT a hard dep (DoD 3 guards the `resolve_groups(['regen'])` call
-  and falls back to full hard constraints).
+  `LOCKED_PAIRINGS`). **Done** (2026-05-24, merged `6f39b83`). Group selection (`--groups regen`)
+  is guarded: until spec-023 lands, regen falls back to the full hard constraint set with a
+  warning (the spec-023-landed seam is marked `TODO(spec-023)` in `run.py::run_generate`).
 - **spec-027** — regeneration soft-constraint group. Depends on spec-023 (groups machinery) +
   spec-026 (regen mode selects the `regen` group); pins via spec-025 indirectly. Status `ready`
-  (hardened) but **NOT startable yet**: spec-025 is `done`, but spec-023 is `building` and
-  spec-026 is `building` (neither landed yet). The constraint-groups machinery (`resolve_groups`,
+  (hardened) but **NOT startable yet**: spec-025 and spec-026 are now `done`, but spec-023 is
+  still `building` (not landed). The constraint-groups machinery (`resolve_groups`,
   `DERIVED_GROUPS`, `--groups`, `ConstraintInfo.groups`) and the `soft_only` deletion are NOT on
-  `final-form` yet — spec-027 must wait for spec-023 and spec-026 to land.
+  `final-form` yet — spec-027 must wait for spec-023 to land.
 - **spec-028** — per-weekend notes export column. Independent (`depends_on: none`). **Done**
   (2026-05-23, merged `c077c28`).
 
 ## Ready to start in parallel right now
 
-- (none unclaimed) — spec-023 and spec-026 are both `building`; spec-027 unblocks only once they
-  both land.
+- (none unclaimed) — spec-023 is `building`; spec-027 unblocks the moment spec-023 lands
+  (spec-025 + spec-026 deps already satisfied).
