@@ -251,7 +251,6 @@ class TestAwayClubHomeWeekendsCount:
         model.Add(sum(forced_vars) == 2)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         atom = AwayClubHomeWeekendsCount()
         atom.apply(model, X, data, registry)
 
@@ -278,7 +277,6 @@ class TestAwayClubHomeWeekendsCount:
         _add_basic_hard_constraints(model, X, data)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubHomeWeekendsCount().apply(model, X, data, registry)
 
         fri, sun, total = _solve_and_count(model, X, data, 'Maitland')
@@ -316,7 +314,6 @@ class TestAwayClubHomeWeekendsCount:
         model.Add(sum(forced_vars) == 3)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubHomeWeekendsCount().apply(model, X, data, registry)
 
         fri, sun, total = _solve_and_count(model, X, data, 'Maitland')
@@ -361,7 +358,6 @@ class TestAwayClubHomeWeekendsCount:
         model.Add(sum(forced_vars) == 2)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubHomeWeekendsCount().apply(model, X, data, registry)
 
         fri, sun, total = _solve_and_count(model, X, data, 'Maitland')
@@ -377,6 +373,5 @@ class TestAwayClubHomeWeekendsCount:
         model = cp_model.CpModel()
         X = _build_X(model, data)
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         count = AwayClubHomeWeekendsCount().apply(model, X, data, registry)
         assert count == 0

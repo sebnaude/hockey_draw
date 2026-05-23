@@ -34,7 +34,7 @@ Every rule in the schedule (e.g. "PHL and 2nd grade games at Broadmeadow run bac
 - **Tested in isolation** in `tests/atoms/` against a small CP-SAT fixture, plus a parity test that pins behaviour against the pre-atomization implementation.
 - **Visible in the violation report** with per-club / per-type / soft-pressure breakdowns when violated.
 
-Helper variables (coincidence BoolVars, count-summing IntVars) are declared via `HelperVarRegistry` so two atoms asking for the same helper share one variable — no hand-rolled duplicates.
+Helper variables (coincidence BoolVars, count-summing IntVars) are registered with `HelperVarRegistry` via the pool-style API (`get_or_create_bool`, `get_or_create_presence`, `register`) so two atoms asking for the same helper share one variable — no hand-rolled duplicates.
 
 ### Why this matters
 
@@ -70,7 +70,7 @@ When you need to add or change a constraint:
 
 1. **Identify the smallest unit.** If the rule has two clauses you could imagine slacking independently, that's two atoms.
 2. **Write the atom** in `constraints/atoms/<descriptive_name>.py`. Subclass `Constraint` (from `constraints.atoms.base`). One `apply(model, X, data)` method. Skip dummy keys (`len(key) < 11`) and locked weeks (`key[6] <= data.get('current_week', 0)`).
-3. **Declare helpers** via `data['helper_registry']` (a `HelperVarRegistry`), not by creating BoolVars/IntVars directly. See `docs/HELPER_VARS.md`.
+3. **Register shared helpers** via the `registry` arg passed to `atom.apply()` — use `get_or_create_bool`, `get_or_create_presence`, or `register`, not by creating BoolVars/IntVars directly. See `docs/system/HELPER_VARS.md`.
 4. **Register** in `constraints/registry.py` with: canonical name, severity, slack key (if applicable), helper-var catalog entries it consumes.
 5. **Wire into a stage** in `config/defaults.py::DEFAULT_STAGES` (or whatever stage is appropriate). Use the canonical name.
 6. **Test in isolation** in `tests/atoms/test_<name>.py` against a tiny CP-SAT fixture. Add a parity test if there's a legacy implementation to match.

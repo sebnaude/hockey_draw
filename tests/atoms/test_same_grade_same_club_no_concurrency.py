@@ -30,7 +30,6 @@ from models import Club, Grade, PlayingField, Team, Timeslot
 
 def _registry(model):
     r = HelperVarRegistry(model)
-    r.freeze({}, {})
     return r
 
 

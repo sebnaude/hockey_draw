@@ -1,37 +1,12 @@
 # Helper-Variable Registry
 
-Atoms (Phase 3+) declare the helper variables they need via `HelperVarRegistry` instead of hand-rolling them. The registry deduplicates by `(kind, key)` so multiple atoms asking for the same helper share one variable.
+Atoms and the engine create the shared helper variables they need via `HelperVarRegistry` instead of hand-rolling them. The registry deduplicates by pool key so multiple callers asking for the same helper share one variable.
 
 Defined in `constraints/helper_vars.py`. Wired into `UnifiedConstraintEngine` as `self.registry` (and aliased as `self.pool` for legacy code).
 
-## Two usage modes
+There is a **single** pathway: pool-style `get_or_create_*`. (spec-022 removed the vestigial declarative `declare`/`freeze`/`get_declared` API — it had zero production callsites, and a second store risked two CP-SAT variables for one concept.)
 
-### 1. Declarative (atoms — preferred)
-
-```python
-def declare_helpers(self, registry, data):
-    for week, day, location, slot in self._needed_slots(data):
-        registry.declare(
-            kind='is_slot_used',
-            key=(week, day, location, slot),
-            builder=lambda m, X, d, w=week, day=day, loc=location, s=slot: (
-                _build_slot_used_indicator(m, X, w, day, loc, s)
-            ),
-            description=f'slot {slot} at {location} on week {week} {day}',
-        )
-
-def apply(self, model, X, data, registry):
-    for week, day, location, slot in self._needed_slots(data):
-        ind = registry.get_declared('is_slot_used', (week, day, location, slot))
-        # use ind as a normal CP-SAT BoolVar
-```
-
-The engine flow:
-1. Each atom's `declare_helpers()` runs — registry collects intents.
-2. `registry.freeze(X, data)` runs once — every distinct helper var is built exactly once.
-3. Each atom's `apply()` runs and calls `registry.get_declared(kind, key)` to fetch.
-
-### 2. Pool-style (legacy, retained for back-compat)
+## Usage (pool-style)
 
 ```python
 ind = registry.get_or_create_bool(key, vars_list, label)        # max-equality channeling
@@ -41,7 +16,7 @@ v = registry.get(key)        # cache lookup; None if missing
 v = registry.lookup(key)     # same as .get()
 ```
 
-Pool-style cache is keyed by raw `key` (no `kind` discriminator). The legacy `UnifiedConstraintEngine._*_hard()` / `_*_soft()` methods use this path; new atoms must use the declarative path.
+The cache is keyed by the raw pool `key`. **Key convention:** a shared helper's pool key is `(kind, *discriminators)` with `kind` ∈ `HELPER_VAR_CATALOG` — keeping `kind` first keeps the catalog meaningful and lets two callers asking for the same logical helper land on the same cache entry. Both the engine's `_*_hard()` / `_*_soft()` methods and new atoms (inside `apply()`) use this same path.
 
 ## Helper-var catalog
 
@@ -84,14 +59,7 @@ from constraints.helper_vars import HelperVarRegistry
 
 registry = HelperVarRegistry(model)
 
-# Declarative
-registry.declare(kind, key, builder, description='')
-registry.freeze(X, data)               # idempotent
-var = registry.get_declared(kind, key) # raises if not declared
-registry.declared_kinds()              # introspection
-registry.declared_count(kind=None)     # counts
-
-# Pool-style (legacy)
+# Pool-style (the single pathway)
 var = registry.get_or_create_bool(key, vars_list, label)
 var = registry.get_or_create_presence(key, vars_list, label)
 registry.register(key, custom_var)
@@ -99,21 +67,21 @@ maybe_var = registry.get(key)          # cache lookup, None if missing
 maybe_var = registry.lookup(key)       # alias for .get()
 
 # Diagnostics
-registry.diagnostics()                 # dict: declared, pool_created, pool_hits, pool_size, frozen, ...
+registry.diagnostics()                 # dict: pool_created, pool_hits, created, hits, pool_size
 ```
 
 ## Rules
 
-1. **Declare in `declare_helpers`, fetch in `apply`.** Calling `declare` after `freeze` raises `RuntimeError`.
-2. **Re-declaring `(kind, key)` is a no-op** — first builder wins. Stat counter `redeclared_same_kind` tracks this.
-3. **Distinct kinds with the same key get distinct helpers** — kind is part of the registry key.
+1. **Create/look-up helpers in `apply()`** via `get_or_create_bool` / `get_or_create_presence` / `register`. The first caller for a key builds and channels the var; later callers with the same key get it back from the cache.
+2. **Re-requesting the same pool key is a cache hit** — first var wins. Stat counter `pool_hits` tracks this.
+3. **`kind` is part of the pool key** — by convention the first element. Distinct kinds with the same discriminators get distinct helpers; same `(kind, *discriminators)` share one.
 4. **`required_helpers` on `ConstraintInfo` must reference catalog kinds.** `validate_required_helpers()` returns offending pairs.
-5. **Don't reach past the registry** — never call `model.NewBoolVar` and `AddMaxEquality` directly inside an atom for a helper that another atom might want. Ask the registry.
+5. **Don't reach past the registry** — never call `model.NewBoolVar` and `AddMaxEquality` directly inside an atom for a helper that another atom might want. Ask the registry via the pool-style API.
 
 ## Tests
 
-- `tests/test_helper_var_registry.py` — 15 unit tests covering both APIs, declared/built lifecycle, diagnostics, back-compat alias.
+- `tests/test_helper_var_registry.py` — pool-style API (dedup, empty-list-forces-zero, max/presence channeling, register/lookup), the single-pathway guard (no `declare`/`freeze`/`get_declared`/`HelperVar`/`Atom.declare_helpers`), diagnostics shape, and the `required_helpers` ∈ catalog key-convention check.
 
-## Migration path from `SharedVariablePool`
+## `SharedVariablePool` alias
 
-`SharedVariablePool` is now a `from constraints.helper_vars import SharedVariablePool` alias for `HelperVarRegistry`. Existing call sites (`pool.get_or_create_bool`, `pool.register`, `pool.get`) keep working. New code should use `HelperVarRegistry` and the declarative API.
+`SharedVariablePool` is a `from constraints.helper_vars import SharedVariablePool` alias for `HelperVarRegistry`. Existing call sites (`pool.get_or_create_bool`, `pool.register`, `pool.get`) keep working. New code uses `HelperVarRegistry` directly via the pool-style API.

@@ -186,7 +186,6 @@ class TestAwayClubHomeBalance:
         _add_basic_hard(model, X, data)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubPerOpponentAndAggregateHomeBalance().apply(model, X, data, registry)
 
         per_pair = _solve_pair_home_away(model, X, data)
@@ -216,7 +215,6 @@ class TestAwayClubHomeBalance:
         _add_basic_hard(model, X, data)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubPerOpponentAndAggregateHomeBalance().apply(model, X, data, registry)
 
         per_pair = _solve_pair_home_away(model, X, data)
@@ -236,7 +234,6 @@ class TestAwayClubHomeBalance:
         _add_basic_hard(model, X, data)
 
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         AwayClubPerOpponentAndAggregateHomeBalance().apply(model, X, data, registry)
 
         per_pair = _solve_pair_home_away(model, X, data)
@@ -258,7 +255,6 @@ class TestAwayClubHomeBalance:
         model = cp_model.CpModel()
         X = _build_X(model, data)
         registry = HelperVarRegistry(model)
-        registry.freeze(X, data)
         count = AwayClubPerOpponentAndAggregateHomeBalance().apply(
             model, X, data, registry,
         )

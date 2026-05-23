@@ -143,7 +143,6 @@ def _build_model_X(data: Dict) -> Tuple[cp_model.CpModel, Dict]:
 
 def _registry(model) -> HelperVarRegistry:
     r = HelperVarRegistry(model)
-    r.freeze({}, {})
     return r
 
 

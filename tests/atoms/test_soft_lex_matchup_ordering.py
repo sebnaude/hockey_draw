@@ -115,7 +115,6 @@ def _build_model_X(data: Dict):
 
 def _registry(model):
     r = HelperVarRegistry(model)
-    r.freeze({}, {})
     return r
 
 

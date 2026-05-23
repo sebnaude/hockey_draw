@@ -90,8 +90,8 @@ Variable key is an 11-tuple:
 
 ## Helper variable registry
 
-`HelperVarRegistry` (declarative) + `SharedVariablePool`-style `.get()`
-(legacy) live in `constraints/helper_vars.py`. The engine assigns
+`HelperVarRegistry` (pool-style API) + `SharedVariablePool` alias for
+back-compat live in `constraints/helper_vars.py`. The engine assigns
 `self.registry = HelperVarRegistry(model)` and aliases `self.pool = self.registry`
 so legacy methods keep working.
 

@@ -22,7 +22,6 @@ from tests.atoms.conftest import build_model_X, solve_with_timeout
 
 def _registry(model):
     r = HelperVarRegistry(model)
-    r.freeze({}, {})
     return r
 
 

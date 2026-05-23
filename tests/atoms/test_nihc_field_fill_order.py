@@ -23,7 +23,6 @@ from constraints.helper_vars import HelperVarRegistry
 
 def _registry(model):
     r = HelperVarRegistry(model)
-    r.freeze({}, {})
     return r
 
 
