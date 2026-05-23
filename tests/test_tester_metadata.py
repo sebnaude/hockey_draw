@@ -118,7 +118,7 @@ class TestNoMetadataRunsAllChecks:
         report = tester.run_violation_check()
 
         # Should have constraint_results for all canonical constraints (22 incl. TeamPairNoConcurrency from spec-007)
-        assert len(report.constraint_results) == 25  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25)
+        assert len(report.constraint_results) == 23  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25); spec-024 -2 Maximise/MinimiseClubs (25 -> 23)
         assert report.metadata_source == 'none'
         # Every result should be PASSED or VIOLATED (none SKIPPED)
         statuses = {r.status for r in report.constraint_results}
@@ -323,7 +323,7 @@ class TestFromCheckpointLoadsMetadata:
             tester = DrawTester.from_checkpoint(tmpdir, data)
             assert tester._constraints_applied is None  # legacy mode
             report = tester.run_violation_check()
-            assert len(report.constraint_results) == 25  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25)
+            assert len(report.constraint_results) == 23  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25); spec-024 -2 Maximise/MinimiseClubs (25 -> 23)
 
 
 class TestFromFileAutodetectsJson:
@@ -384,7 +384,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 25  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25)
+        assert len(report.constraint_results) == 23  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25); spec-024 -2 Maximise/MinimiseClubs (25 -> 23)
         assert report.metadata_source == 'none'
 
     def test_legacy_draw_empty_metadata(self):
@@ -393,7 +393,7 @@ class TestLegacyDrawNoMetadata:
         draw.metadata = {}
         tester = DrawTester(draw, data)
         report = tester.run_violation_check()
-        assert len(report.constraint_results) == 25  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25)
+        assert len(report.constraint_results) == 23  # spec-018 -2 Maitland; spec-020 +preferred_games; spec-021 +club_no_concurrent_slot (24 -> 25); spec-024 -2 Maximise/MinimiseClubs (25 -> 23)
 
 
 class TestSolverNameNormalization:

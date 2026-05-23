@@ -225,10 +225,15 @@ class TestBuildGroupings:
     # `maitland_all_week` / `non_default_*` grouping maps were deleted along
     # with the venue-sequencing rules that consumed them.
 
-    def test_broadmeadow_slot_club_populated(self, mini_engine):
-        """bm_slot_club has entries for Broadmeadow timeslots."""
+    def test_club_week_day_field_slot_populated(self, mini_engine):
+        """spec-024: by_club_week_day_field_slot has per-(club, week, day, field)
+        entries (replaces the deleted bm_slot_club grouping that fed
+        Maximise/MinimiseClubsBroadmeadow)."""
         mini_engine.build_groupings()
-        assert len(mini_engine.bm_slot_club) > 0
+        assert len(mini_engine.by_club_week_day_field_slot) > 0
+        sample_key = next(iter(mini_engine.by_club_week_day_field_slot))
+        assert len(sample_key) == 4  # (club, week, day, field_name)
+        assert not hasattr(mini_engine, 'bm_slot_club')
 
     def test_home_away_venue_populated(self, mini_engine):
         """home_away_venue has entries for Maitland team pairs."""

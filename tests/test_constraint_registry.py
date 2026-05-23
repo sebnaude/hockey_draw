@@ -87,8 +87,11 @@ class TestRegistryCompleteness:
         soft FORCED analogue) — net 0: 38 - 1 + 1 = 38.
         spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill`
         (net 0) and ADDED `ClubNoConcurrentSlot` (extracted from ClubGameSpread's
-        lower no-double-up bound): 38 + 1 = 39."""
-        assert len(CONSTRAINT_REGISTRY) == 39
+        lower no-double-up bound): 38 + 1 = 39.
+        spec-024 DELETED `MaximiseClubsPerTimeslotBroadmeadow` and
+        `MinimiseClubsOnAFieldBroadmeadow` (their club-spread intent is now the
+        field-aware `ClubGameSpread`): 39 - 2 = 37."""
+        assert len(CONSTRAINT_REGISTRY) == 37
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.

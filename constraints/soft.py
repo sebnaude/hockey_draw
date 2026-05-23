@@ -11,7 +11,7 @@ Severity Levels (from tester.py):
 - Level 1: CRITICAL - Never softened (NoDoubleBooking, EqualGames, etc.)
 - Level 2: HIGH - ClubDayConstraint, AwayAtMaitlandGrouping, TeamConflictConstraint
 - Level 3: MEDIUM - EqualMatchUpSpacing, ClubGradeAdjacency, ClubVsClubAlignment
-- Level 4: LOW - EnsureBestTimeslotChoices, MaximiseClubsPerTimeslot, etc.
+- Level 4: LOW - EnsureBestTimeslotChoices, etc.
 
 Usage:
     # Instead of:
@@ -864,157 +864,8 @@ class EnsureBestTimeslotChoicesSoft(SoftConstraint):
                 data['penalties'][penalty_key]['penalties'].append(pv)
 
 
-class MaximiseClubsPerTimeslotBroadmeadowSoft(SoftConstraint):
-    """
-    Soft version of MaximiseClubsPerTimeslotBroadmeadow.
-    
-    Original: Hard minimum clubs per timeslot.
-    Soft version: Penalizes low club diversity instead of hard minimum.
-    """
-    
-    def __init__(self, slack_level: int = 1, penalty_weight: Optional[int] = None,
-                 min_clubs_reduction: int = 0):
-        """
-        Args:
-            min_clubs_reduction: Reduce minimum club requirement by this amount
-        """
-        super().__init__(slack_level, penalty_weight)
-        self.severity_level = 4
-        # Reduce minimum based on slack level
-        self.min_clubs_reduction = min_clubs_reduction + self.slack_level
-    
-    def apply(self, model, X, data):
-        self._init_penalties(data, 'MaximiseClubsPerTimeslotBroadmeadowSoft')
-        
-        games = data['games']
-        timeslots = data['timeslots']
-        locked_weeks = data.get('locked_weeks', set())
-        
-        game_dict = defaultdict(lambda: defaultdict(list))
-        
-        for t in timeslots:
-            for (t1, t2, grade) in games:
-                key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                
-                if key in X and t.field.location == 'Newcastle International Hockey Centre' and t.day in ['Saturday', 'Sunday']:
-                    club1 = get_club(t1, data['teams'])
-                    club2 = get_club(t2, data['teams'])
-                    
-                    game_dict[(t.week, t.day, t.day_slot)][club1].append(X[key])
-                    game_dict[(t.week, t.day, t.day_slot)][club2].append(X[key])
-        
-        for (week, day, timeslot), club_games in game_dict.items():
-            if week in locked_weeks:
-                continue
-            
-            club_presence_vars = {}
-            for club, game_vars in club_games.items():
-                club_var = model.NewBoolVar(f'club_{club}_week{week}_day_slot{timeslot}_soft')
-                model.Add(sum(game_vars) >= 1).OnlyEnforceIf(club_var)
-                model.Add(sum(game_vars) == 0).OnlyEnforceIf(club_var.Not())
-                club_presence_vars[club] = club_var
-            
-            total_teams_playing = model.NewIntVar(0, len([var for v in club_games.values() for var in v]), f'total_games_week{week}_day_slot{timeslot}_soft')
-            model.Add(total_teams_playing == sum([var for v in club_games.values() for var in v]))
-            
-            # Calculate soft minimum (reduced from original)
-            soft_minimum = model.NewIntVar(0, len(club_presence_vars), f'soft_minimum_week{week}_day_slot{timeslot}_soft')
-            soft_min_start = model.NewIntVar(0, len(club_presence_vars), f'soft_min_start_week{week}_day_slot{timeslot}_soft')
-            model.AddDivisionEquality(soft_min_start, total_teams_playing, 2)
-            
-            # Reduce minimum by slack
-            model.Add(soft_minimum == soft_min_start - self.min_clubs_reduction)
-            
-            num_clubs_var = model.NewIntVar(0, len(club_presence_vars), f'num_clubs_week{week}_day_slot{timeslot}_soft')
-            model.Add(num_clubs_var == sum(club_presence_vars.values()))
-            
-            timeslot_used_indicator = model.NewBoolVar(f'timeslot_used_week{week}_day_slot{timeslot}_soft')
-            model.Add(total_teams_playing >= 1).OnlyEnforceIf(timeslot_used_indicator)
-            model.Add(total_teams_playing == 0).OnlyEnforceIf(timeslot_used_indicator.Not())
-            
-            # Soft: penalize shortfall from minimum instead of hard constraint
-            shortfall = model.NewIntVar(0, len(club_presence_vars), f'min_shortfall_week{week}_day_slot{timeslot}_soft')
-            model.Add(shortfall >= soft_minimum - num_clubs_var).OnlyEnforceIf(timeslot_used_indicator)
-            model.Add(shortfall == 0).OnlyEnforceIf(timeslot_used_indicator.Not())
-            data['penalties']['MaximiseClubsPerTimeslotBroadmeadowSoft']['penalties'].append(shortfall)
-            
-            # Penalty for low diversity (same as original)
-            penalty_var = model.NewIntVar(0, len([var for v in club_games.values() for var in v]), f'penalty_week{week}_day_slot{timeslot}_soft')
-            model.Add(penalty_var >= total_teams_playing - num_clubs_var).OnlyEnforceIf(timeslot_used_indicator)
-            model.Add(penalty_var == 0).OnlyEnforceIf(timeslot_used_indicator.Not())
-            data['penalties']['MaximiseClubsPerTimeslotBroadmeadowSoft']['penalties'].append(penalty_var)
-
-
-class MinimiseClubsOnAFieldBroadmeadowSoft(SoftConstraint):
-    """
-    Soft version of MinimiseClubsOnAFieldBroadmeadow.
-    
-    Original: Hard limit of 5 clubs per field per day.
-    Soft version: Configurable limit with overflow penalty.
-    """
-    
-    def __init__(self, slack_level: int = 1, penalty_weight: Optional[int] = None,
-                 soft_limit: int = 5, hard_limit: Optional[int] = None):
-        """
-        Args:
-            soft_limit: Number of clubs before penalties apply
-            hard_limit: Absolute maximum (None = no hard limit)
-        """
-        super().__init__(slack_level, penalty_weight)
-        self.severity_level = 4
-        
-        # Adjust limits based on slack level
-        slack_adj = self.slack_level
-        self.soft_limit = soft_limit + slack_adj
-        self.hard_limit = hard_limit + slack_adj if hard_limit else None
-    
-    def apply(self, model, X, data):
-        self._init_penalties(data, 'MinimiseClubsOnAFieldBroadmeadowSoft')
-        
-        games = data['games']
-        timeslots = data['timeslots']
-        locked_weeks = data.get('locked_weeks', set())
-        
-        game_dict = defaultdict(lambda: defaultdict(list))
-        
-        for t in timeslots:
-            for (t1, t2, grade) in games:
-                key = (t1, t2, grade, t.day, t.day_slot, t.time, t.week, t.date, t.round_no, t.field.name, t.field.location)
-                
-                if key in X and t.field.location == 'Newcastle International Hockey Centre' and t.day in ['Saturday', 'Sunday']:
-                    club1 = get_club(t1, data['teams'])
-                    club2 = get_club(t2, data['teams'])
-                    
-                    game_dict[(t.week, t.date, t.field.name)][club1].append(X[key])
-                    game_dict[(t.week, t.date, t.field.name)][club2].append(X[key])
-        
-        for (week, day, field_name), club_games in game_dict.items():
-            if week in locked_weeks:
-                continue
-            
-            club_presence_vars = {}
-            for club, game_vars in club_games.items():
-                club_var = model.NewBoolVar(f'club_{club}_week{week}_day{day}_field{field_name}_soft')
-                model.AddBoolOr([v for v in game_vars]).OnlyEnforceIf(club_var)
-                model.AddBoolAnd([v.Not() for v in game_vars]).OnlyEnforceIf(club_var.Not())
-                club_presence_vars[club] = club_var
-            
-            num_clubs_var = model.NewIntVar(0, len(games), f'num_clubs_week{week}_day{day}_field{field_name}_soft')
-            model.Add(num_clubs_var == sum(club_presence_vars.values()))
-            
-            # Hard limit if specified
-            if self.hard_limit is not None:
-                model.Add(num_clubs_var <= self.hard_limit)
-            
-            # Soft: penalize exceeding soft_limit
-            overflow = model.NewIntVar(0, len(games), f'overflow_week{week}_day{day}_field{field_name}_soft')
-            model.Add(overflow >= num_clubs_var - self.soft_limit)
-            data['penalties']['MinimiseClubsOnAFieldBroadmeadowSoft']['penalties'].append(overflow)
-            
-            # Penalty for deviation from ideal (2 clubs)
-            penalty_var = model.NewIntVar(0, len(games), f'penalty_week{week}_day{day}_field{field_name}_soft')
-            model.AddAbsEquality(penalty_var, num_clubs_var - 2)
-            data['penalties']['MinimiseClubsOnAFieldBroadmeadowSoft']['penalties'].append(penalty_var)
+# spec-024: MaximiseClubsPerTimeslotBroadmeadowSoft and
+# MinimiseClubsOnAFieldBroadmeadowSoft deleted (constraints removed).
 
 
 class PreferredTimesConstraintSoft(SoftConstraint):
@@ -1136,10 +987,7 @@ def get_soft_constraint(constraint_name: str, slack_level: int = 1, **kwargs):
         # Level 4 - LOW
         'EnsureBestTimeslotChoices': EnsureBestTimeslotChoicesSoft,
         'EnsureBestTimeslotChoicesAI': EnsureBestTimeslotChoicesSoft,
-        'MaximiseClubsPerTimeslotBroadmeadow': MaximiseClubsPerTimeslotBroadmeadowSoft,
-        'MaximiseClubsPerTimeslotBroadmeadowAI': MaximiseClubsPerTimeslotBroadmeadowSoft,
-        'MinimiseClubsOnAFieldBroadmeadow': MinimiseClubsOnAFieldBroadmeadowSoft,
-        'MinimiseClubsOnAFieldBroadmeadowAI': MinimiseClubsOnAFieldBroadmeadowSoft,
+        # spec-024: Maximise/MinimiseClubs Soft entries removed (constraints deleted).
         'PreferredTimesConstraint': PreferredTimesConstraintSoft,
         'PreferredTimesConstraintAI': PreferredTimesConstraintSoft,
     }
@@ -1187,8 +1035,7 @@ def get_soft_stage_constraints(slack_level: int = 1):
             'description': 'Relaxed versions of LOW severity constraints',
             'constraints': [
                 EnsureBestTimeslotChoicesSoft(slack_level=slack_level),
-                MaximiseClubsPerTimeslotBroadmeadowSoft(slack_level=slack_level),
-                MinimiseClubsOnAFieldBroadmeadowSoft(slack_level=slack_level),
+                # spec-024: Maximise/MinimiseClubs Soft removed (constraints deleted).
                 PreferredTimesConstraintSoft(slack_level=slack_level),
             ],
         },

@@ -3,7 +3,7 @@
 Provides the stage-config validation/loading layer plus the dispatcher that
 `main_staged.py` and `main_simple` use to apply atoms via the
 `UnifiedConstraintEngine`. Atoms in the registry that don't go through the
-engine (e.g. `MaximiseClubsPerTimeslotBroadmeadow`) are instantiated as
+engine (e.g. `PreferredTimes`) are instantiated as
 solver classes via the registry's `solver_class_names`.
 
 Usage:

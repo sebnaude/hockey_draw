@@ -217,7 +217,7 @@ SEASON_CONFIG = {
         'spacing_base_slack': 0,
         # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
         # removed — the venue-sequencing rules that read them were deleted.
-        'max_clubs_per_field': 5,
+        # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
         'club_game_spread_max_gap': 1,
         # club_game_spread_max_overlap: REMOVED — now dynamic per club: T//2 - 1 where T = team count
         'club_vs_club_alignment_base_slack': 1,  # ClubVsClubAlignment: additional base slack on top of --slack flag

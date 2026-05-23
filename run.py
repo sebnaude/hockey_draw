@@ -459,8 +459,8 @@ def run_generate(args):
             # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
             # removed — those rules were deleted (--slack on them is a no-op).
             'ClubVsClubAlignment': slack_value,
-            'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
-            'MinimiseClubsOnAFieldBroadmeadow': slack_value,
+            # spec-024: MaximiseClubsPerTimeslotBroadmeadow / MinimiseClubsOnAFieldBroadmeadow
+            # slack keys removed — those constraints were deleted.
             'ClubGameSpread': slack_value,
             # spec-008 Part B: bye spacing has its own slack key. Mirror the
             # CLI's --slack N here so a one-shot loosen affects both matchup

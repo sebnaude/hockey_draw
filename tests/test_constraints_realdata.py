@@ -407,30 +407,8 @@ class TestClubFieldConcentration:
 # ============== Level 4: LOW ==============
 
 
-class TestMaximiseClubsPerTimeslotBroadmeadow:
-    """Prefer maximising club diversity in each Broadmeadow timeslot."""
-
-    def test_clean_pass(self, tester):
-        violations = tester._check_maximise_clubs_per_timeslot_broadmeadow()
-        assert len(violations) == 0
-
-
-class TestMinimiseClubsOnAFieldBroadmeadow:
-    """Prefer minimising the number of clubs assigned to a single field."""
-
-    def test_known_violations(self, tester):
-        violations = tester._check_minimise_clubs_on_a_field_broadmeadow()
-        assert len(violations) >= 10
-
-    def test_specific_violation_content(self, tester):
-        """Violations should mention field, week, and club count."""
-        violations = tester._check_minimise_clubs_on_a_field_broadmeadow()
-        for v in violations:
-            assert 'clubs' in v.message.lower()
-            assert 'max' in v.message.lower() or 'NIHC' in v.message
-
-
-# ============== Level 5: VERY LOW ==============
+# spec-024: TestMaximiseClubsPerTimeslotBroadmeadow and
+# TestMinimiseClubsOnAFieldBroadmeadow removed (constraints deleted).
 
 
 class TestVenueEarliestSlotFill:

@@ -81,11 +81,8 @@ CONSTRAINT_TO_SEVERITY = {
     'ClubGameSpread': 3,
     'ClubGameSpreadAI': 3,
 
-    # Level 4 - LOW (club density/optimization)
-    'MaximiseClubsPerTimeslotBroadmeadow': 4,
-    'MaximiseClubsPerTimeslotBroadmeadowAI': 4,
-    'MinimiseClubsOnAFieldBroadmeadow': 4,
-    'MinimiseClubsOnAFieldBroadmeadowAI': 4,
+    # spec-024: Level 4 `MaximiseClubsPerTimeslotBroadmeadow` /
+    # `MinimiseClubsOnAFieldBroadmeadow` (+ AI) entries removed -- constraints deleted.
     
     # Level 5 - VERY LOW (timeslot preferences)
     # spec-021: `EnsureBestTimeslotChoices`/`AI` entries removed — earliest-fill

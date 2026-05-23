@@ -1011,15 +1011,14 @@ GRADE_SCHEDULING_METHOD = {
 # Formula per constraint:
 #   EqualMatchUpSpacing:  min_gap = max(T//2+1, T-2 - spacing_base_slack - slack)
 #   ClubVsClubAlignment:  (no base limit config — slack reduces required coincidences)
-#   MaximiseClubsPerTimeslotBroadmeadow: min_clubs = floor(games/2) - slack
-#   MinimiseClubsOnAFieldBroadmeadow: max_clubs = max_clubs_per_field + slack
-#   ClubGameSpread: upper = max_gap + slack, lower = -min(max_overlap_base + slack, T//2 - 1) per club
+#   ClubGameSpread (spec-024): per-field contiguity, gap_cap = max(0, min(1, n-3)) + slack;
+#                              plus an off-primary-field soft penalty per (club, week, day)
 
 CONSTRAINT_DEFAULTS = {
     'spacing_base_slack': 2,               # EqualMatchUpSpacing: additional base slack (0 = start at ideal)
     # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs removed
     # (venue-sequencing rules deleted).
-    'max_clubs_per_field': 5,              # MinimiseClubsOnAFieldBroadmeadow: max clubs sharing a field per day
+    # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
     'club_game_spread_max_gap': 1,         # ClubGameSpread: max allowed gap (spread) per club per day (+ slack at runtime)
     'club_game_spread_max_overlap': 0,     # ClubGameSpread: max allowed double-ups (+ slack at runtime; 0 = no overlap)
     'club_vs_club_alignment_base_slack': 1, # ClubVsClubAlignment: with --slack 1, effective slack = 2, min_required = num_games - 2
@@ -1112,8 +1111,9 @@ PENALTY_WEIGHTS = {
     # spec-020: 'phl_preferences' weight removed — PreferredDates deleted; the
     # marquee-PHL-date behaviour is now a PREFERRED_GAMES entry using the
     # 'preferred_games' weight below.
-    'MaximiseClubsPerTimeslotBroadmeadow':  5_000,
-    'MinimiseClubsOnAFieldBroadmeadow':     5_000,
+    # spec-024: MaximiseClubsPerTimeslotBroadmeadow / MinimiseClubsOnAFieldBroadmeadow
+    # weights removed (constraints deleted). Club-spread pressure is now the
+    # ClubGameSpread weight (per-field holes + off-primary-field games).
     # Penalty per dummy slot used. Higher = solver avoids dummy slots more strongly.
     # Set to 0 to allow free use of dummy slots (no penalty).
     'dummy_slots':                      1_000_000,

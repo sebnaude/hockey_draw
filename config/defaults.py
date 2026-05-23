@@ -131,8 +131,7 @@ CONSTRAINT_DEFAULTS = {
     # count entries in the season config (see FORCED_GAMES_AS_COUNT_RULES.md).
     # spec-018: `maitland_max_consecutive_home` / `away_maitland_max_clubs`
     # removed — the venue-sequencing rules they tuned were deleted.
-    # Broadmeadow field counts
-    'max_clubs_per_field': 5,
+    # spec-024: `max_clubs_per_field` removed with MinimiseClubsOnAFieldBroadmeadow.
     # Club game spread
     'club_game_spread_max_gap': 2,
     'club_game_spread_max_overlap': 0,
@@ -285,7 +284,10 @@ DEFAULT_STAGES = [
             # critical_feasibility; the BestTimeslotWF soft penalty is deleted
             # (WF order owned by NIHCFillWFBeforeEF).
             'PreferredTimes',
-            'MaximiseClubsPerTimeslotBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadow',
+            # spec-024: `MaximiseClubsPerTimeslotBroadmeadow` /
+            # `MinimiseClubsOnAFieldBroadmeadow` deleted — the club-spread intent
+            # is now the field-aware `ClubGameSpread` (per-field contiguity +
+            # off-primary-field soft penalty) in the club_day stage.
             # spec-002: predictable alphabetical matchup tie-break.
             'SoftLexMatchupOrdering',
             # spec-016: NIHC field-fill ordering (WF→EF→SF) as a soft

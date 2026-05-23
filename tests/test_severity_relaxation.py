@@ -33,8 +33,7 @@ from constraints.archived.ai import (
     ClubGradeAdjacencyConstraintAI,
     ClubVsClubAlignmentAI,
     ClubGameSpreadAI,
-    MaximiseClubsPerTimeslotBroadmeadowAI,
-    MinimiseClubsOnAFieldBroadmeadowAI,
+    # spec-024: Maximise/MinimiseClubsBroadmeadowAI imports removed (constraints deleted).
     EnsureBestTimeslotChoicesAI,
     PreferredTimesConstraintAI,
     EqualMatchUpSpacingConstraintAI,
@@ -98,10 +97,9 @@ class TestGetSeverityLevel:
         level = get_severity_level(ClubGradeAdjacencyConstraintAI)
         assert level == 3
 
-    def test_returns_level4_for_low_constraint(self):
-        """Level 4 for MaximiseClubsPerTimeslotBroadmeadowAI."""
-        level = get_severity_level(MaximiseClubsPerTimeslotBroadmeadowAI)
-        assert level == 4
+    # spec-024: test_returns_level4_for_low_constraint removed -- the only two
+    # level-4 constraints (Maximise/MinimiseClubsBroadmeadow) were deleted, so no
+    # production constraint maps to level 4 anymore.
 
     def test_returns_level5_for_very_low_constraint(self):
         """Level 5 for EnsureBestTimeslotChoicesAI."""
@@ -154,17 +152,20 @@ class TestGroupConstraintsBySeverity:
 
         assert len(groups[1]) == 3
 
-    def test_all_five_levels_present(self):
-        """Test grouping with constraints from all 5 severity levels."""
+    def test_multiple_levels_present(self):
+        """Test grouping with constraints from the populated severity levels.
+
+        spec-024: level 4 has no production constraints anymore (Maximise/Minimise
+        deleted), so the populated levels are {1, 2, 3, 5}.
+        """
         constraints = [
             NoDoubleBookingTeamsConstraintAI,             # Level 1
             ClubDayConstraintAI,                          # Level 2
             ClubGradeAdjacencyConstraintAI,               # Level 3
-            MaximiseClubsPerTimeslotBroadmeadowAI,        # Level 4
             EnsureBestTimeslotChoicesAI,                   # Level 5
         ]
         groups = group_constraints_by_severity(constraints)
-        assert set(groups.keys()) == {1, 2, 3, 4, 5}
+        assert set(groups.keys()) == {1, 2, 3, 5}
 
 
 # ============== SeverityGroupState Tests ==============
@@ -254,36 +255,36 @@ class TestSeverityGroupResolverBasic:
         resolver = SeverityGroupResolver([
             ClubDayConstraintAI,               # Level 2
             ClubGradeAdjacencyConstraintAI,    # Level 3
-            MaximiseClubsPerTimeslotBroadmeadowAI,  # Level 4
+            EnsureBestTimeslotChoicesAI,       # Level 5 (spec-024: level 4 now empty)
         ], verbose=False)
 
         # Exclude level 3
         constraints = resolver.get_constraints_for_test(exclude_levels={3})
         assert ClubDayConstraintAI in constraints
         assert ClubGradeAdjacencyConstraintAI not in constraints
-        assert MaximiseClubsPerTimeslotBroadmeadowAI in constraints
+        assert EnsureBestTimeslotChoicesAI in constraints
 
     def test_get_constraints_for_test_excludes_multiple_levels(self):
         resolver = SeverityGroupResolver([
             NoDoubleBookingTeamsConstraintAI,        # Level 1
             ClubDayConstraintAI,                     # Level 2
             ClubGradeAdjacencyConstraintAI,          # Level 3
-            MaximiseClubsPerTimeslotBroadmeadowAI,   # Level 4
+            EnsureBestTimeslotChoicesAI,             # Level 5 (spec-024: level 4 now empty)
         ], verbose=False)
 
-        constraints = resolver.get_constraints_for_test(exclude_levels={3, 4})
+        constraints = resolver.get_constraints_for_test(exclude_levels={3, 5})
         assert len(constraints) == 2
         assert NoDoubleBookingTeamsConstraintAI in constraints
         assert ClubDayConstraintAI in constraints
 
     def test_levels_present_sorted(self):
         resolver = SeverityGroupResolver([
-            MaximiseClubsPerTimeslotBroadmeadowAI,   # Level 4
+            EnsureBestTimeslotChoicesAI,              # Level 5 (spec-024: level 4 now empty)
             NoDoubleBookingTeamsConstraintAI,         # Level 1
             ClubGradeAdjacencyConstraintAI,           # Level 3
         ], verbose=False)
 
-        assert resolver.levels_present == [1, 3, 4]
+        assert resolver.levels_present == [1, 3, 5]
 
     def test_get_state_summary(self):
         resolver = SeverityGroupResolver([
@@ -314,28 +315,32 @@ class TestSeverityGroupResolverFindProblem:
         assert result is None
 
     def test_find_problem_identifies_blocking_level(self):
-        """When removing a specific level makes it feasible, that level is the problem."""
+        """When removing a specific level makes it feasible, that level is the problem.
+
+        spec-024: level 4 is now empty, so the populated levels are {1, 2, 3, 5}.
+        The resolver peels [5, 4, 3, 2] skipping absent levels, so excluding 5 then
+        3 is the third test -- making level 3 the blocking group.
+        """
         resolver = SeverityGroupResolver([
             NoDoubleBookingTeamsConstraintAI,             # Level 1
             ClubDayConstraintAI,                          # Level 2
             ClubGradeAdjacencyConstraintAI,               # Level 3
-            MaximiseClubsPerTimeslotBroadmeadowAI,        # Level 4
             EnsureBestTimeslotChoicesAI,                   # Level 5
         ], verbose=False)
 
-        # Simulate: infeasible with all, feasible when level 4 excluded
+        # Simulate: infeasible with all, feasible only once level 3 is excluded.
         call_count = [0]
         def test_func(constraints, timeout):
             call_count[0] += 1
-            # First call (all constraints) -> infeasible
-            # Second call (excl level 5) -> infeasible
-            # Third call (excl level 5,4) -> feasible
+            # call 1 (all) -> infeasible
+            # call 2 (excl level 5) -> infeasible
+            # call 3 (excl levels 5,3) -> feasible
             if call_count[0] <= 2:
                 return 'INFEASIBLE', False
             return 'FEASIBLE', True
 
         result = resolver.find_problem_severity_group(test_func, timeout=1.0)
-        assert result == 4
+        assert result == 3
 
     def test_find_problem_returns_1_when_all_infeasible(self):
         """When even level 1 alone is infeasible, returns 1."""
@@ -446,14 +451,14 @@ class TestApplyConstraintsWithRelaxation:
         if isinstance(test_data.get('games'), dict):
             test_data['games'] = list(test_data['games'].keys())
 
-        # Apply with level 4 relaxed at slack=2
+        # Apply with level 3 relaxed at slack=2 (spec-024: level 4 now empty).
         total = apply_constraints_with_relaxation(
             model, X, test_data,
             constraints=[
                 NoDoubleBookingTeamsConstraintAI,
-                MaximiseClubsPerTimeslotBroadmeadowAI,
+                ClubGameSpreadAI,
             ],
-            relaxed_groups={4: 2},
+            relaxed_groups={3: 2},
         )
         # Should not crash; constraints applied
         assert total is None or total >= 0

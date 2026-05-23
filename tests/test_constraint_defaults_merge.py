@@ -14,7 +14,7 @@ def test_perennial_defaults_have_required_keys():
         'maitland_friday_games',
         # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
         # removed (venue-sequencing rules deleted).
-        'max_clubs_per_field',
+        # spec-024: max_clubs_per_field removed (MinimiseClubsOnAFieldBroadmeadow deleted).
         'club_game_spread_max_gap',
         'club_game_spread_max_overlap',
         'club_vs_club_alignment_base_slack',

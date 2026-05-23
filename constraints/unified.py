@@ -173,12 +173,15 @@ class UnifiedConstraintEngine:
         # along with the venue-sequencing rules (`NonDefaultHomeGrouping` /
         # `AwayAtNonDefaultGrouping`). Nothing consumes them anymore.
 
-        # --- Broadmeadow groupings ---
-        self.bm_slot_club = defaultdict(lambda: defaultdict(list))
-        self.bm_field_club = defaultdict(lambda: defaultdict(list))
+        # spec-024: bm_slot_club / bm_field_club removed -- they fed only the
+        # deleted Maximise/MinimiseClubsBroadmeadow rules (never read by the engine).
 
-        # --- Club game spread ---
+        # --- Club game spread (spec-024: per-field) ---
         self.by_club_week_day_slot = defaultdict(list)
+        # spec-024: per (club, week, day, field) -> {day_slot: [vars]} for the
+        # field-aware contiguity rule; by_club_week_day_slot is kept for the
+        # off-primary-field soft penalty's per-(club, week, day) totals.
+        self.by_club_week_day_field_slot = defaultdict(lambda: defaultdict(list))
 
         # --- PHL/2nd grade ---
         # spec-014: `phl_club_week_day` / `second_club_week_day` engine maps
@@ -273,22 +276,16 @@ class UnifiedConstraintEngine:
             # spec-018: venue groupings for the deleted MaxMaitlandHomeWeekends /
             # NonDefaultHomeGrouping / AwayAtNonDefaultGrouping rules removed.
 
-            # --- Broadmeadow slot/field club groupings ---
-            if location == BROADMEADOW and day in ['Saturday', 'Sunday']:
-                if t1_club:
-                    self.bm_slot_club[(week, day_slot)][t1_club].append(var)
-                if t2_club:
-                    self.bm_slot_club[(week, day_slot)][t2_club].append(var)
-                if t1_club:
-                    self.bm_field_club[(week, date_str, field_name)][t1_club].append(var)
-                if t2_club:
-                    self.bm_field_club[(week, date_str, field_name)][t2_club].append(var)
+            # spec-024: Broadmeadow slot/field club groupings removed -- they fed
+            # only the deleted Maximise/MinimiseClubsBroadmeadow rules.
 
-            # --- ClubGameSpread ---
+            # --- ClubGameSpread (spec-024: day-level + per-field) ---
             if t1_club:
                 self.by_club_week_day_slot[(t1_club, week, day, day_slot)].append(var)
+                self.by_club_week_day_field_slot[(t1_club, week, day, field_name)][day_slot].append(var)
             if t2_club and t2_club != t1_club:
                 self.by_club_week_day_slot[(t2_club, week, day, day_slot)].append(var)
+                self.by_club_week_day_field_slot[(t2_club, week, day, field_name)][day_slot].append(var)
 
             # --- PHL/2nd grade specific ---
             if grade == 'PHL':

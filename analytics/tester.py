@@ -84,9 +84,8 @@ CONSTRAINT_SEVERITY_LEVELS = {
     'ClubVsClubAlignment': 3,
     'ClubGameSpread': 3,
 
-    # Level 4 - LOW (club density/optimization)
-    'MaximiseClubsPerTimeslotBroadmeadow': 4,
-    'MinimiseClubsOnAFieldBroadmeadow': 4,
+    # spec-024: Level 4 MaximiseClubsPerTimeslotBroadmeadow /
+    # MinimiseClubsOnAFieldBroadmeadow entries removed (constraints deleted).
     
     # spec-021: HARD anchored earliest-slot fill (was soft EnsureBestTimeslotChoices).
     'VenueEarliestSlotFill': 2,
@@ -1185,9 +1184,8 @@ class DrawTester:
             # spec-021: cross-grade club no-concurrency (capacity-aware).
             ('ClubNoConcurrentSlot', self._check_club_no_concurrent_slot),
             ('ClubFieldConcentration', self._check_club_field_concentration),
-            # Level 4 - LOW
-            ('MaximiseClubsPerTimeslotBroadmeadow', self._check_maximise_clubs_per_timeslot_broadmeadow),
-            ('MinimiseClubsOnAFieldBroadmeadow', self._check_minimise_clubs_on_a_field_broadmeadow),
+            # spec-024: MaximiseClubsPerTimeslotBroadmeadow /
+            # MinimiseClubsOnAFieldBroadmeadow checks removed (constraints deleted).
             # Level 5 - VERY LOW
             ('VenueEarliestSlotFill', self._check_venue_earliest_slot_fill),
             ('PreferredTimes', self._check_preferred_times),
@@ -2225,108 +2223,8 @@ class DrawTester:
 
         return violations
 
-    def _check_maximise_clubs_per_timeslot_broadmeadow(self) -> List[Violation]:
-        """Check MaximiseClubsPerTimeslotBroadmeadow: at Broadmeadow (NIHC), each Sunday
-        timeslot should have games from diverse clubs.
-
-        Hard: min clubs >= floor(games_at_slot / 2) - slack (floored at 0)
-        Soft: reports when same-club games reduce diversity.
-        """
-        violations = []
-        NIHC = 'Newcastle International Hockey Centre'
-        slack = self.constraint_slack.get('MaximiseClubsPerTimeslotBroadmeadow', 0)
-
-        # Group games by (week, day, day_slot) at NIHC on Sat/Sun
-        slot_games = defaultdict(list)
-        for game in self.draw.games:
-            if game.field_location == NIHC and game.day in ['Saturday', 'Sunday']:
-                slot_games[(game.week, game.day, game.day_slot)].append(game)
-
-        for (week, day, day_slot), games in slot_games.items():
-            clubs_present = set()
-            total_club_appearances = 0
-            for game in games:
-                for team in [game.team1, game.team2]:
-                    club = self._team_to_club.get(team)
-                    if club:
-                        clubs_present.add(club)
-                        total_club_appearances += 1
-
-            num_clubs = len(clubs_present)
-            # total_club_appearances counts each game's two team clubs
-            # The solver uses sum of game vars per club (which double-counts same-club games)
-            num_games_approx = len(games)
-            hard_min = max(0, num_games_approx // 2 - slack)
-
-            if num_clubs < hard_min:
-                violations.append(Violation.create(
-                    constraint="MaximiseClubsPerTimeslotBroadmeadow",
-                    message=f"Week {week} ({day}), slot {day_slot} at NIHC: {num_clubs} clubs in {num_games_approx} games "
-                            f"(min {hard_min})",
-                    affected_games=[g.game_id for g in games],
-                    week=week
-                ))
-            elif num_games_approx > num_clubs:
-                # Soft: some club duplication
-                violations.append(Violation.create(
-                    constraint="MaximiseClubsPerTimeslotBroadmeadow",
-                    message=f"[soft] Week {week} ({day}), slot {day_slot} at NIHC: {num_clubs} clubs in "
-                            f"{num_games_approx} games (some club overlap)",
-                    affected_games=[g.game_id for g in games],
-                    week=week
-                ))
-
-        return violations
-
-    def _check_minimise_clubs_on_a_field_broadmeadow(self) -> List[Violation]:
-        """Check MinimiseClubsOnAFieldBroadmeadow: at Broadmeadow, minimize clubs
-        sharing a field on a given day.
-
-        Hard: max clubs per field per day = max_clubs_per_field + slack
-        Soft: deviation from ideal of 2 clubs per field.
-        """
-        violations = []
-        NIHC = 'Newcastle International Hockey Centre'
-        defaults = self.data.get('constraint_defaults', {})
-        base_limit = defaults.get('max_clubs_per_field', 5)
-        slack = self.constraint_slack.get('MinimiseClubsOnAFieldBroadmeadow', 0)
-        hard_limit = base_limit + slack
-
-        # Group by (week, date, field_name) at NIHC on Sat/Sun
-        field_day_clubs = defaultdict(set)
-        field_day_games = defaultdict(list)
-        for game in self.draw.games:
-            if game.field_location == NIHC and game.day in ['Saturday', 'Sunday']:
-                key = (game.week, game.date, game.field_name)
-                for team in [game.team1, game.team2]:
-                    club = self._team_to_club.get(team)
-                    if club:
-                        field_day_clubs[key].add(club)
-                field_day_games[key].append(game.game_id)
-
-        for key, clubs in field_day_clubs.items():
-            week, date, field_name = key
-            num_clubs = len(clubs)
-
-            if num_clubs > hard_limit:
-                violations.append(Violation.create(
-                    constraint="MinimiseClubsOnAFieldBroadmeadow",
-                    message=f"Week {week}, {date}, {field_name} at NIHC: {num_clubs} clubs "
-                            f"(max {hard_limit})",
-                    affected_games=field_day_games[key][:5],
-                    week=week
-                ))
-            elif num_clubs > 2:
-                # Soft: more than ideal of 2
-                violations.append(Violation.create(
-                    constraint="MinimiseClubsOnAFieldBroadmeadow",
-                    message=f"[soft] Week {week}, {date}, {field_name} at NIHC: {num_clubs} clubs "
-                            f"(ideal 2, limit {hard_limit})",
-                    affected_games=field_day_games[key][:5],
-                    week=week
-                ))
-
-        return violations
+    # spec-024: _check_maximise_clubs_per_timeslot_broadmeadow and
+    # _check_minimise_clubs_on_a_field_broadmeadow removed (constraints deleted).
 
     def _check_venue_earliest_slot_fill(self) -> List[Violation]:
         """Check VenueEarliestSlotFill (spec-021): games at a venue on a day pack

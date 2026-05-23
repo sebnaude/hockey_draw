@@ -371,22 +371,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=3,
         tester_only=True,
     ),
-    'MaximiseClubsPerTimeslotBroadmeadow': ConstraintInfo(
-        canonical_name='MaximiseClubsPerTimeslotBroadmeadow',
-        solver_class_names=['MaximiseClubsPerTimeslotBroadmeadow', 'MaximiseClubsPerTimeslotBroadmeadowAI'],
-        tester_check_methods=['_check_maximise_clubs_per_timeslot_broadmeadow'],
-        tester_violation_names=['MaximiseClubsPerTimeslotBroadmeadow'],
-        severity_level=4,
-        slack_key='MaximiseClubsPerTimeslotBroadmeadow',
-    ),
-    'MinimiseClubsOnAFieldBroadmeadow': ConstraintInfo(
-        canonical_name='MinimiseClubsOnAFieldBroadmeadow',
-        solver_class_names=['MinimiseClubsOnAFieldBroadmeadow', 'MinimiseClubsOnAFieldBroadmeadowAI'],
-        tester_check_methods=['_check_minimise_clubs_on_a_field_broadmeadow'],
-        tester_violation_names=['MinimiseClubsOnAFieldBroadmeadow'],
-        severity_level=4,
-        slack_key='MinimiseClubsOnAFieldBroadmeadow',
-    ),
+    # spec-024: `MaximiseClubsPerTimeslotBroadmeadow` and
+    # `MinimiseClubsOnAFieldBroadmeadow` deleted. Their "spread the clubs around"
+    # intent is now expressed club-side by the field-aware `ClubGameSpread`
+    # (per-field contiguity + off-primary-field soft penalty).
     # spec-021: replaces the old soft_only `EnsureBestTimeslotChoices` engine
     # rule with a HARD anchored monotone-fill atom (severity 2). Games at a
     # venue pack into the earliest timeslots — no gaps + earliest start, which

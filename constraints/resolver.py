@@ -189,8 +189,7 @@ class ConstraintSlackRegistry:
                 ClubGradeAdjacencyConstraintSoft,
                 ClubVsClubAlignmentSoft,
                 EnsureBestTimeslotChoicesSoft,
-                MaximiseClubsPerTimeslotBroadmeadowSoft,
-                MinimiseClubsOnAFieldBroadmeadowSoft,
+                # spec-024: Maximise/MinimiseClubs Soft removed (constraints deleted).
                 PreferredTimesConstraintSoft,
             )
             
@@ -202,8 +201,7 @@ class ConstraintSlackRegistry:
                 'ClubGradeAdjacency': ClubGradeAdjacencyConstraintSoft,
                 'ClubVsClubAlignment': ClubVsClubAlignmentSoft,
                 'EnsureBestTimeslotChoices': EnsureBestTimeslotChoicesSoft,
-                'MaximiseClubsPerTimeslotBroadmeadow': MaximiseClubsPerTimeslotBroadmeadowSoft,
-                'MinimiseClubsOnAFieldBroadmeadow': MinimiseClubsOnAFieldBroadmeadowSoft,
+                # spec-024: Maximise/MinimiseClubs Soft removed (constraints deleted).
                 'PreferredTimesConstraint': PreferredTimesConstraintSoft,
             }
             
@@ -475,10 +473,7 @@ CLASS_TO_REGISTRY = {
     'ClubVsClubAlignmentAI': 'ClubVsClubAlignment',
     'EnsureBestTimeslotChoices': 'EnsureBestTimeslotChoices',
     'EnsureBestTimeslotChoicesAI': 'EnsureBestTimeslotChoices',
-    'MaximiseClubsPerTimeslotBroadmeadow': 'MaximiseClubsPerTimeslotBroadmeadow',
-    'MaximiseClubsPerTimeslotBroadmeadowAI': 'MaximiseClubsPerTimeslotBroadmeadow',
-    'MinimiseClubsOnAFieldBroadmeadow': 'MinimiseClubsOnAFieldBroadmeadow',
-    'MinimiseClubsOnAFieldBroadmeadowAI': 'MinimiseClubsOnAFieldBroadmeadow',
+    # spec-024: Maximise/MinimiseClubs canonical-name entries removed (constraints deleted).
     'PreferredTimesConstraint': 'PreferredTimesConstraint',
     'PreferredTimesConstraintAI': 'PreferredTimesConstraint',
 }
