@@ -1,5 +1,8 @@
-<!-- status: in_progress -->
+<!-- status: done -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
+<!-- shipped: 2026-05-23 on branch spec-024, fast-forward-merged into final-form (b432e5b). Unit A + Unit B complete; full suite green (verified in chunks due to a session RAM ceiling). -->
+<!-- NOTE: re-applied on the merged final-form base after the prior spec-024 WIP was stranded by spec-021's merge. -->
+<!-- moved to done/ at completion. -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-021 (this re-scopes the ClubGameSpread hard+soft that spec-021 lands; building against the pre-spec-021 ClubGameSpread would re-introduce the heavy range/min/max IntVars spec-021 deletes). Shares constraints/registry.py, constraints/severity.py, constraints/unified.py, config/defaults.py, config/season_2026.py, analytics/tester.py with spec-021/022/023 — rebase + re-run validate_solver_stages before merge. spec-023's §1 group table lists the two removed constraints; whichever of {spec-023, spec-024} lands second drops/omits them (see Dependencies). -->
