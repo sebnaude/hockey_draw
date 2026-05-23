@@ -1,8 +1,8 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
-<!-- depends_on: spec-025 (LOCKED_PAIRINGS config + generate_X enforcement — regen writes pins into it; currently under_review, NOT yet landed). spec-023 is NOT a hard dependency: DoD 3 guards the resolve_groups(['regen']) call and falls back to full hard constraints + warning if spec-023 is unavailable. The regen soft-constraint group (spec-027) is selected by this mode but is NOT a blocker: without spec-027 the regen still runs, just with the normal hard constraints (which is the "may be infeasible" case spec-027 fixes). Builds on the already-shipped locked-weeks architecture (run.py:71-79, main_staged.py:1037-1059). Shares run.py + main_staged.py + analytics/storage.py with spec-021/022/023 — rebase before merge. CANNOT START until spec-025 is fully landed (data['locked_pairings'] not yet in production code). -->
-<!-- owner: session=none claimed=none -->
+<!-- depends_on: spec-025 (LOCKED_PAIRINGS config + generate_X enforcement — regen writes pins into it). LANDED on final-form 2026-05-23 (merge 7afc656); data['locked_pairings'] confirmed present in build_season_data. spec-023 is NOT a hard dependency: DoD 3 guards the resolve_groups(['regen']) call and falls back to full hard constraints + warning if spec-023 is unavailable. The regen soft-constraint group (spec-027) is selected by this mode but is NOT a blocker: without spec-027 the regen still runs, just with the normal hard constraints (which is the "may be infeasible" case spec-027 fixes). Builds on the already-shipped locked-weeks architecture (run.py:71-79, main_staged.py:1037-1059). Shares run.py + main_staged.py + analytics/storage.py with spec-023 (currently building) — rebase before merge. STARTABLE: spec-025 has landed. -->
+<!-- owner: session=opus-3d72814-20260523T100153Z claimed=2026-05-23T10:01:53Z -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — dependency audit) — fixes applied inline -->
 
 # spec-026 — Unified regeneration mode: freeze everything outside a scope, re-solve the rest
