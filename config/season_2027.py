@@ -117,6 +117,9 @@ PREFERENCE_NO_PLAY = {
 # never read by the constraint system.)
 PREFERRED_GAMES = []
 
+# spec-025: pin pairing to its weekend, free the time. Empty = no pins.
+LOCKED_PAIRINGS = []
+
 # ============== Special Games ==============
 # MUST BE EXPLICITLY SET - Do not inherit from previous year
 
@@ -167,6 +170,7 @@ SEASON_CONFIG = {
     # Preferences - reference the dicts above
     'preference_no_play': PREFERENCE_NO_PLAY,
     'preferred_games': PREFERRED_GAMES,  # spec-020 soft FORCED analogue
+    'locked_pairings': LOCKED_PAIRINGS,  # spec-025 pin pairing to weekend
 
     # Special games - reference the dict above
     'special_games': SPECIAL_GAMES,

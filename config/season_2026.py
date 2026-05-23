@@ -476,6 +476,13 @@ BLOCKED_GAMES = [
 # docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
 PREFERRED_GAMES = []
 
+# ============== Locked Pairings (spec-025) ==============
+# Dedicated "pin pairing to its weekend, free the time" config. Strict subset of
+# the FORCED_GAMES grammar: {teams:[t1,t2] (or team1/team2), grade, date, optional
+# description}. time/day_slot/field/day/week/round_no/count/constraint forbidden.
+# Empty list = no pins. See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
+LOCKED_PAIRINGS = []
+
 # ============== PHL SCHEDULE SUMMARY ==============
 #
 # FRIDAY NIGHTS AT GOSFORD (Central Coast):
@@ -1186,7 +1193,10 @@ SEASON_CONFIG = {
 
     # Preferred games — soft weighted FORCED analogue (spec-020)
     'preferred_games': PREFERRED_GAMES,
-    
+
+    # Locked pairings — pin pairing to its weekend, free the time (spec-025)
+    'locked_pairings': LOCKED_PAIRINGS,
+
     # Special games
     'special_games': SPECIAL_GAMES,
     
