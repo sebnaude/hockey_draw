@@ -1,8 +1,8 @@
 {
-  "_violations": ["ClubGameSpread"],
-  "_description": "Tigers club has 3 teams with 3 games stacked into a 1-slot range — large negative gap (-2) is below the dynamic lower limit. Triggers ClubGameSpread overlap violation.",
+  "_violations": ["ClubNoConcurrentSlot"],
+  "_description": "Tigers club has 3 teams with 3 games stacked into ONE timeslot at NIHC. spec-021: double-ups are now ClubNoConcurrentSlot's concern (cap=ceil(3/8)=1 at NIHC), not ClubGameSpread (which only checks holes/contiguity now).",
   "version": "1.0",
-  "description": "violation fixture: ClubGameSpread overlap",
+  "description": "violation fixture: ClubNoConcurrentSlot overlap",
   "num_weeks": 1,
   "num_games": 3,
   "games": [
