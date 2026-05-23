@@ -418,6 +418,7 @@ class DrawStorage(BaseModel):
         filename: str,
         weeks: Optional[List[int]] = None,
         sheet_title: Optional[str] = None,
+        weekend_notes: Optional[Dict[int, List[str]]] = None,
     ) -> None:
         """Export draw to a nicely formatted Excel schedule.
 
@@ -425,10 +426,20 @@ class DrawStorage(BaseModel):
         field sub-headers, borders, and bye listings.  Works directly from
         DrawStorage (no Roster / ``data`` dict needed).
 
+        When ``weekend_notes`` is supplied (a ``{week: [note_line, ...]}`` dict
+        as returned by ``analytics.notes.build_weekend_notes``), a Notes column
+        is written in column N.  Columns L and M are left blank as spacers.
+        When ``weekend_notes`` is ``None`` (the default) the output is identical
+        to the pre-notes behaviour in columns A–K and nothing is written to L–N.
+
         Args:
             filename: Output .xlsx path.
             weeks: Optional list of week numbers to include.  ``None`` = all.
             sheet_title: Worksheet title (default auto-generated).
+            weekend_notes: Optional mapping of week number → list of formatted
+                note strings (e.g. ``"Field: Masters SC weekend"``).  When
+                supplied, notes are stacked from the week's first game row
+                downward in column N.
         """
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -476,9 +487,13 @@ class DrawStorage(BaseModel):
         COL_WIDTHS = {
             'A': 8, 'B': 8, 'C': 14, 'D': 10, 'E': 8, 'F': 6,
             'G': 28, 'H': 28, 'I': 8, 'J': 8, 'K': 38,
+            'L': 3, 'M': 3, 'N': 60,
         }
         FIELD_ORDER = {'EF': 0, 'WF': 1, 'SF': 2}
         NUM_COLS = len(HEADERS)
+        # Notes column index: two blank spacer columns (L=NUM_COLS+1, M=NUM_COLS+2)
+        # then Notes in N=NUM_COLS+3.  Using the constant means it tracks HEADERS.
+        notes_col = NUM_COLS + 3  # = 14 when NUM_COLS=11
 
         # --- build workbook --------------------------------------------------
         wb = openpyxl.Workbook()
@@ -498,19 +513,35 @@ class DrawStorage(BaseModel):
                                   end_color=week_colour, fill_type='solid')
 
             # Week title row
+            title_row = row
             c = ws.cell(row=row, column=1, value=f'Week {week}')
             c.font = week_font
             for ci in range(1, NUM_COLS + 1):
                 ws.cell(row=row, column=ci).fill = week_bg
+            # When notes active: extend the week background colour to column N
+            # so the title band visually spans to the notes column.
+            if weekend_notes is not None:
+                ws.cell(row=title_row, column=notes_col).fill = week_bg
             row += 1
 
             # Column headers
+            header_row = row
             for ci, h in enumerate(HEADERS, 1):
                 c = ws.cell(row=row, column=ci, value=h)
                 c.font = header_font
                 c.fill = header_fill
                 c.border = thin_border
+            # Write Notes header in column N (separate from HEADERS so NUM_COLS
+            # is not changed and the week-title fill range A–K stays correct).
+            if weekend_notes is not None:
+                c = ws.cell(row=header_row, column=notes_col, value="Notes")
+                c.font = header_font
+                c.fill = header_fill
+                c.border = thin_border
             row += 1
+
+            # Track the first game data row within this week (for note stacking).
+            first_game_row: Optional[int] = None
 
             # Group by date → field
             by_date: Dict[str, list] = defaultdict(list)
@@ -545,6 +576,9 @@ class DrawStorage(BaseModel):
 
                     # Game rows
                     for g in field_games:
+                        # Capture the first game data row for note placement.
+                        if first_game_row is None:
+                            first_game_row = row
                         vals = [g.week, g.round_no, g.date, g.day, g.time,
                                 g.day_slot, g.team1, g.team2, g.grade,
                                 g.field_name, g.field_location]
@@ -553,6 +587,16 @@ class DrawStorage(BaseModel):
                             c.border = thin_border
                             c.fill = week_bg
                         row += 1
+
+            # Write stacked notes for this week in column N (A–K are never
+            # touched here; notes live in their own column).
+            if weekend_notes is not None and first_game_row is not None:
+                for i, note_text in enumerate(weekend_notes.get(week, [])):
+                    note_row = first_game_row + i
+                    c = ws.cell(row=note_row, column=notes_col, value=note_text)
+                    c.font = Font(italic=False)
+                    c.border = thin_border
+                    c.fill = week_bg
 
             # Byes
             playing: Dict[str, set] = defaultdict(set)

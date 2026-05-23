@@ -255,12 +255,13 @@ were removed in spec-018.)
 
 ### Analytics (`analytics/`)
 
-| Class | Description |
-|-------|-------------|
-| `DrawStorage` | Pliable JSON format for draws |
+| Class / Function | Description |
+|-----------------|-------------|
+| `DrawStorage` | Pliable JSON format for draws; `export_schedule_xlsx(weekend_notes=...)` accepts a per-weekend notes dict (spec-028) — columns A–K games, L/M spacers, N Notes |
 | `DrawAnalytics` | Generates cross-tabs and reports |
 | `DrawTester` | Tests game modifications |
 | `ViolationReport` | Constraint violation summary |
+| `build_weekend_notes()` (`analytics/notes.py`) | Merges hand-authored `data/{year}/notes.json` with opt-in `'note'` fields from `BLOCKED_GAMES`, `FORCED_GAMES`, and `PREFERRED_WEEKENDS` into `{week: [formatted lines]}` for the xlsx Notes column. See spec-028. |
 
 ---
 
