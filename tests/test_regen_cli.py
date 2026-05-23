@@ -37,7 +37,6 @@ Hand-computed oracle (spec-026 Unit B):
 
 import os
 import sys
-import argparse
 
 import pytest
 
@@ -153,6 +152,17 @@ class TestParseWeekSpec:
     def test_inverted_range_raises_value_error(self):
         with pytest.raises(ValueError):
             _parse_week_spec("22-10")
+
+    def test_empty_tokens_from_extra_commas_are_skipped(self):
+        # GIVEN a spec with empty tokens (double/trailing comma)
+        # THEN the empty tokens are skipped, real weeks parsed (oracle: {10,12})
+        assert _parse_week_spec("10,,12") == {10, 12}
+        assert _parse_week_spec("10,12,") == {10, 12}
+
+    def test_range_with_non_integer_bound_raises_value_error(self):
+        # GIVEN a range whose second bound is non-integer
+        with pytest.raises(ValueError):
+            _parse_week_spec("10-abc")
 
 
 # ---------------------------------------------------------------------------
@@ -400,38 +410,14 @@ class TestValidateRegenLockWeeksOverlap:
 # ---------------------------------------------------------------------------
 
 class TestCLIArgParsing:
-    """Verify the three new flags are wired into argparse correctly."""
+    """Verify the three new flags are registered on the generate subparser.
 
-    def _build_parser(self):
-        """Reconstruct the argparse parser from run.main()."""
-        # We invoke main() with --help-style argv; simpler to rebuild via
-        # the run module's parser directly.  Since run.main() builds the
-        # parser inline, we replicate only the generate subparser assertion
-        # by parsing a known-good argv.
-        return None  # Not needed; we parse via sys.argv below.
-
-    def _parse_generate(self, extra_args):
-        """Parse 'generate' subcommand with extra_args, return Namespace."""
-        old_argv = sys.argv
-        # We need the argparse.ArgumentParser from run.main — reconstruct it
-        # by temporarily calling parse_known_args on a cloned parser.
-        # Since the parser is built inside run.main(), we test indirectly
-        # by reading the Namespace from run.main() via SystemExit capture.
-        # Simpler: build a fresh parser exactly as run.main() does by
-        # importing run and calling its internal parser.  We do this by
-        # monkey-calling sys.argv trick with capsys NOT available here, so
-        # we instead test the parser via direct namespace construction.
-        # For a clean approach: parse via argparse directly.
-        try:
-            sys.argv = ['run.py', 'generate', '--year', '2026'] + extra_args
-            # Capture the parsed namespace by hooking into run internals.
-            # The cleanest approach: rebuild the parser exactly.
-            import argparse as _ap
-            # We can't easily call run.main() without triggering solver.
-            # Instead, assert the flags exist by checking run.py module attrs.
-            pass
-        finally:
-            sys.argv = old_argv
+    Real parsing of the flags into the run_generate handler (dest names +
+    value flow) is proven end-to-end by spec-026 Unit C's DoD #8 test, which
+    runs the actual `run.py generate --regen-from … --regen-grades …` command.
+    Here we assert the flags are registered by inspecting `generate --help`
+    output (argparse builds the full subparser to render help).
+    """
 
     def test_regen_from_flag_present_in_generate_help(self, capsys):
         # GIVEN the generate subcommand
@@ -502,69 +488,3 @@ class TestCLIArgParsing:
         assert 'usage' in captured.out.lower()
 
 
-# ---------------------------------------------------------------------------
-# Direct argparse namespace tests for the new flags
-# ---------------------------------------------------------------------------
-
-class TestRegenArgsNamespace:
-    """Build argparse Namespace manually to confirm attribute names match."""
-
-    def _make_ns(self, **kwargs):
-        """Build a Namespace with all required generate attrs plus overrides."""
-        defaults = dict(
-            year=2026,
-            resume=None,
-            simple=False,
-            run_id=None,
-            locked=None,
-            lock_weeks='',
-            repair_locked=False,
-            hint=None,
-            workers=None,
-            low_memory=False,
-            minimal_memory=False,
-            high_performance=False,
-            unified=False,
-            exclude=None,
-            stages=None,
-            staged=False,
-            relax=False,
-            relax_timeout=30.0,
-            fix_round_1=False,
-            slack=None,
-            stages_config=None,
-            stage_only=None,
-            skip_stage=[],
-            list_stages=False,
-            description='',
-            # New Unit B flags
-            regen_from=None,
-            regen_grades=None,
-            regen_weeks=None,
-        )
-        defaults.update(kwargs)
-        return argparse.Namespace(**defaults)
-
-    def test_regen_from_default_is_none(self):
-        ns = self._make_ns()
-        assert ns.regen_from is None
-
-    def test_regen_grades_default_is_none(self):
-        ns = self._make_ns()
-        assert ns.regen_grades is None
-
-    def test_regen_weeks_default_is_none(self):
-        ns = self._make_ns()
-        assert ns.regen_weeks is None
-
-    def test_regen_from_accepts_path_string(self):
-        ns = self._make_ns(regen_from='draws/2026/current.json')
-        assert ns.regen_from == 'draws/2026/current.json'
-
-    def test_regen_grades_accepts_list(self):
-        ns = self._make_ns(regen_grades=['5th', '6th'])
-        assert ns.regen_grades == ['5th', '6th']
-
-    def test_regen_weeks_accepts_string(self):
-        ns = self._make_ns(regen_weeks='10-22')
-        assert ns.regen_weeks == '10-22'
