@@ -977,6 +977,10 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         description: User-provided description for metadata.
         provenance: Dict with locked_source, hint_source paths etc.
         solver_stages: Optional override for the stage list (from `--stages-config` etc.).
+        regen_locked_pairings: spec-026 regen pins (one per frozen game) to merge
+            into data['locked_pairings'] after load_data(). None for a normal run.
+        regen_info: spec-026 regen metadata block (source_draw, regen_grades, etc.)
+            recorded in draw metadata. None for a normal run.
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.
@@ -1312,6 +1316,11 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
     routes through ``_main_simple_unified`` which uses
     ``UnifiedConstraintEngine`` (and the registry for non-engine atoms).
     ``use_unified`` is retained as a no-op flag for CLI back-compat.
+
+    Args (spec-026 regen, None for a normal run):
+        regen_locked_pairings: regen pins (one per frozen game) merged into
+            data['locked_pairings'] after load_data().
+        regen_info: regen metadata block recorded in draw metadata.
 
     Raises:
         ValueError: If year is not provided or no configuration exists for the year.

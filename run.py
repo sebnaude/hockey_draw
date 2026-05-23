@@ -554,6 +554,13 @@ def _compute_regen_state(args, locked_weeks):
         - regen_groups: resolved regen constraint group or None (DoD #3 guard).
     """
     if not getattr(args, 'regen_from', None):
+        # Warn if regen scope flags were given without --regen-from (the enabler)
+        # so the user isn't silently ignored.
+        if getattr(args, 'regen_grades', None) or getattr(args, 'regen_weeks', None):
+            print(
+                "WARNING: --regen-grades/--regen-weeks ignored because "
+                "--regen-from was not specified (it is what enables regen mode)."
+            )
         return None, None, None
 
     from analytics.storage import DrawStorage
@@ -805,6 +812,12 @@ def run_generate(args):
     # (the guard in _select_regen_group warns and returns None) and the main_*
     # functions have no `groups` kwarg yet — so there is nothing to forward.
     # This branch is the spec-023-landed integration seam (dark until then).
+    # TODO(spec-023): when the groups machinery lands, wire regen_groups through:
+    #   (1) add a `groups=None` kwarg to both main_staged and main_simple,
+    #   (2) replace the print below with forwarding regen_groups via that kwarg
+    #       at both call sites in run_generate, and
+    #   (3) have the constraint engine apply the resolved group (select the
+    #       regen soft/hard set per spec-027) instead of the full hard set.
     if regen_groups is not None:
         print(f"[*] Regen constraint group resolved: {regen_groups}")
 

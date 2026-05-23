@@ -484,6 +484,15 @@ class TestComputeRegenState:
         pins, info, groups = _compute_regen_state(_Args(regen_from=None), set())
         assert pins is None and info is None and groups is None
 
+    def test_regen_scope_flags_without_regen_from_warn_and_no_op(self, capsys):
+        # GIVEN --regen-grades but NO --regen-from (the enabler is missing).
+        args = _Args(regen_from=None, regen_grades=["6th"], regen_weeks=None)
+        # WHEN computing regen state.
+        pins, info, groups = _compute_regen_state(args, set())
+        # THEN it is a no-op AND warns the user their scope flag was ignored.
+        assert pins is None and info is None and groups is None
+        assert "--regen-grades/--regen-weeks ignored" in capsys.readouterr().out
+
     def test_regen_grades_6th_produces_expected_state(self, source_draw, tmp_path):
         # GIVEN a source draw on disk + --regen-grades 6th.
         src = tmp_path / "src.json"
