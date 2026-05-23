@@ -9,21 +9,21 @@ Keep it current: update an edge whenever a spec is created, completed, re-scoped
 **No cycles** — if you find one, two specs are really one unit; collapse or re-cut them.
 
 (Completed work in `docs/todo/done/` is omitted — those edges are satisfied. Done as of this
-writing: spec-001…021 and **spec-024** (field-spread, replaced the club-balance pair).)
+writing: spec-001…022 and **spec-024** (field-spread, replaced the club-balance pair).)
 
 ## DAG
 
 ```
 spec-021 (done) ──▶ spec-023 (ready, constraint-groups) ─┐
                                                           ├─▶ spec-027 (ready, regen-soft)
-spec-022 (ready, independent)                             │
+spec-022 (done, independent)                              │
 spec-025 (ready, independent) ─▶ spec-026 (ready) ────────┘
 spec-028 (ready, independent)
 ```
 
 Edges:
 
-- **spec-022** — unify helper-var pathway. Independent (`depends_on: none`). Ready now.
+- **spec-022** — unify helper-var pathway. Independent (`depends_on: none`). **Done** (2026-05-23).
 - **spec-023** — constraint-groups machinery (the redesign that *replaced* the superseded
   `spec-023-atom-hard-soft-phases`; now landed on `final-form`). Depends on spec-021 (`done`).
   Ready now.
@@ -39,7 +39,6 @@ Edges:
 
 ## Ready to start in parallel right now
 
-- **spec-022** — helper-var pathway cleanup.
 - **spec-023** — constraint-groups machinery (deps `done`).
 - **spec-025** — `LOCKED_PAIRINGS` config (no unmet deps).
 - **spec-028** — per-weekend notes export column (no unmet deps).
