@@ -101,11 +101,23 @@ class TestRoundTrip:
         data = build_season_data(cfg)
         assert data['locked_pairings'] == [pin]
 
-    def test_default_locked_pairings_empty(self):
-        """An unconfigured season exposes an empty locked_pairings list."""
+    def test_default_locked_pairings_unconfigured_is_empty(self):
+        """An UNCONFIGURED season config exposes an empty locked_pairings list.
+
+        (spec-025 Unit E populated season_2026's LOCKED_PAIRINGS with the 246
+        migrated pins, so 2026 is no longer empty — assert the injection default
+        on a config that supplies no pins instead.)"""
+        import config.season_2026 as s
+        cfg = dict(s.SEASON_CONFIG)
+        cfg['locked_pairings'] = []
+        data = build_season_data(cfg)
+        assert data['locked_pairings'] == []
+
+    def test_season_2026_has_migrated_pins(self):
+        """spec-025 Unit E: season_2026 carries the 246 migrated locked pins."""
         from config import load_season_data
         data = load_season_data(2026)
-        assert data['locked_pairings'] == []
+        assert len(data['locked_pairings']) == 246
 
 
 # ============== Forbidden-field FATAL (DoD 1, 6) ==============
