@@ -558,3 +558,128 @@ class TestOffDrawDateBucketingOracle:
 
         assert 12 in result, f"Expected week 12 from bucketing 2026-06-12, got keys: {list(result.keys())}"
         assert "Preferred: Norths 80th Anniversary" in result[12]
+
+
+# ---------------------------------------------------------------------------
+# Review-fix coverage: config-source verbatim string, missing-description skip,
+# off-window config drop, and the un-dateable Preferred path.
+# ---------------------------------------------------------------------------
+
+class TestConfigVerbatimStringNote:
+    """A blocked/forced entry with `'note': "<string>"` uses that text verbatim
+    (the `_derive_from_config` string branch — DoD #3, all three sources)."""
+
+    def test_blocked_entry_note_string_uses_verbatim_text(self, tmp_path):
+        # Given a blocked entry whose 'note' is an explicit string (not True)
+        draw = _make_draw(_make_game("2026-05-17", week=9))
+        blocked_games = [
+            {"date": "2026-05-17", "description": "ignored desc",
+             "note": "Verbatim blocked text"}
+        ]
+        data = _minimal_data(blocked_games=blocked_games)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then the verbatim string is used, NOT the description (oracle: week 9)
+        assert result[9] == ["Blocked: Verbatim blocked text"]
+
+    def test_forced_entry_note_string_uses_verbatim_text(self, tmp_path):
+        draw = _make_draw(_make_game("2026-05-17", week=9))
+        forced_games = [
+            {"date": "2026-05-17", "description": "ignored",
+             "note": "Verbatim forced text"}
+        ]
+        data = _minimal_data(forced_games=forced_games)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        assert result[9] == ["Forced: Verbatim forced text"]
+
+
+class TestNoteTrueWithoutDescriptionSkipped:
+    """`'note': True` with neither `description` nor `reason` is skipped (logged),
+    for blocked/forced and for preferred (DoD #3 fallback edge)."""
+
+    def test_blocked_note_true_no_description_or_reason_is_absent(self, tmp_path):
+        # Given a blocked entry opted-in but with nothing to fall back to
+        draw = _make_draw(_make_game("2026-05-17", week=9))
+        blocked_games = [{"date": "2026-05-17", "note": True}]
+        data = _minimal_data(blocked_games=blocked_games)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then nothing is produced (oracle: empty result, no week 9)
+        assert result == {}
+
+    def test_preferred_note_true_no_description_or_reason_is_absent(self, tmp_path):
+        draw = _make_draw(_make_game("2026-06-12", week=12))
+        preferred_weekends = [{"date": "2026-06-12", "note": True}]
+        data = _minimal_data(preferred_weekends=preferred_weekends)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        assert result == {}
+
+
+class TestOffWindowConfigEntryDropped:
+    """A blocked/preferred config entry whose date resolves outside the season
+    window is dropped (the `_derive_from_config` / `_derive_from_preferred`
+    off-window `continue`, distinct from the notes.json drop in Scenario 6)."""
+
+    def test_blocked_config_entry_off_window_absent(self, tmp_path):
+        # Given a draw whose only game is mid-season, and a blocked entry dated
+        # pre-season (2026-01-01 → 80 days before start → week -11, off-window).
+        draw = _make_draw(_make_game("2026-04-05", week=3))
+        blocked_games = [
+            {"date": "2026-01-01", "description": "Pre-season blocked", "note": True}
+        ]
+        data = _minimal_data(blocked_games=blocked_games)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then dropped, no crash (oracle: empty result)
+        assert result == {}
+
+    def test_preferred_config_entry_off_window_absent(self, tmp_path):
+        draw = _make_draw(_make_game("2026-04-05", week=3))
+        preferred_weekends = [
+            {"date": "2026-01-01", "description": "Pre-season preferred", "note": True}
+        ]
+        data = _minimal_data(preferred_weekends=preferred_weekends)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        assert result == {}
+
+
+class TestPreferredUndateableSkipped:
+    """A Preferred entry opted-in via 'note' but carrying neither 'date' nor
+    'dates' is un-dateable and produces no note (mirrors the blocked/forced
+    un-dateable path; L5 dark-path log)."""
+
+    def test_preferred_note_but_no_date_is_absent(self, tmp_path):
+        # Given a preferred entry with a note string but no date/dates key
+        draw = _make_draw(_make_game("2026-06-12", week=12))
+        preferred_weekends = [
+            {"description": "No-date preferred", "note": "Should not appear"}
+        ]
+        data = _minimal_data(preferred_weekends=preferred_weekends)
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then absent from every week (oracle: the formatted string appears nowhere)
+        assert all(
+            "Preferred: Should not appear" not in lines for lines in result.values()
+        )
+        assert result == {}

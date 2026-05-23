@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from datetime import date as _date
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
@@ -119,7 +120,6 @@ def build_weekend_notes(
 
     # --- group, dedup, sort ---
     # accumulate per-week; preserve insertion order within each sort bucket
-    from collections import defaultdict
     week_lines: Dict[int, List[tuple]] = defaultdict(list)
     for sort_key, category, text, week in raw:
         week_lines[week].append((sort_key, category, text))
@@ -361,6 +361,16 @@ def _derive_from_preferred(
             iso_dates.append(str(entry["date"]))
         if "dates" in entry and isinstance(entry["dates"], list):
             iso_dates.extend(str(d) for d in entry["dates"])
+
+        if not iso_dates:
+            # Opted-in but un-dateable (no 'date'/'dates') — mirror the
+            # blocked/forced un-dateable log so the path is never silent.
+            logger.info(
+                "Preferred entry has 'note' but no 'date'/'dates' (un-dateable) "
+                "— skipping: %s",
+                entry.get("description", entry),
+            )
+            continue
 
         for iso_date in iso_dates:
             week = _resolve_week(
