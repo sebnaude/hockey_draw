@@ -1,10 +1,11 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — dependency audit) — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-023 (constraint groups machinery — composable, deduped, flag-selected `--groups`; "a constraint is whole, split into two atoms if you must select sub-parts"). spec-026 (regen mode selects this group). spec-025 (pins, indirectly via spec-026). ALL THREE are unshipped on final-form as of 2026-05-23; this plan CANNOT START until all three are `done`. -->
 <!-- DEPENDENCY STATUS (status is `ready` — fully shaped + hardened — but CANNOT be claimed until all three deps are `done`; gated by `depends_on`, per the basic-skill "unsatisfied dependencies = cannot start" rule, exactly like spec-026): the earlier inline note "spec-023 constraint-groups redesign HAS now landed on final-form" was FALSE and has been removed. Verified against code 2026-05-23: (1) `ConstraintInfo` has no `groups` field; (2) `resolve_groups`, `DERIVED_GROUPS`, `--groups` CLI flag do NOT exist anywhere in the codebase; (3) `soft_only` still lives in `constraints/stages.py` at lines 272 and 277 and has not been deleted. spec-023, spec-025, and spec-026 are all `ready` (hardened) but NONE is `done`/landed yet. This plan must wait for all three to land. (Status convention reconciled with spec-026 in the 2026-05-23 cross-plan global review: dependency-gating is expressed via `depends_on` + the dependency tree's "ready to start now" list, NOT via the `blocked` status, which the basic skill reserves for unanswered open questions.) -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-20260524T093159Z claimed=2026-05-24T09:31:59Z -->
+<!-- CLAIM NOTE 2026-05-24: deps verified DONE before claiming — spec-023 in done/ (merged 083bf5a, `ConstraintInfo.groups` + resolver live in registry.py), spec-025 (7afc656), spec-026 (6f39b83). The stale 2026-05-23 header/Dependencies notes below that say "NOT LANDED / under_review" are SUPERSEDED by this verification; do not act on them. -->
 
 # spec-027 — Regeneration soft-constraint group: soft analogues of the hard rules, kept separate
 

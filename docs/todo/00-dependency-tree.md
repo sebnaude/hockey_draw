@@ -50,4 +50,5 @@ Edges:
 ## Ready to start in parallel right now
 
 - **spec-027** — regeneration soft-constraint group. Its three deps (spec-023, spec-025,
-  spec-026) are all `done` and landed on `final-form`. Unclaimed; ready to claim and build.
+  spec-026) are all `done` and landed on `final-form`. **CLAIMED 2026-05-24** (session
+  opus-20260524T093159Z); status `building`.
