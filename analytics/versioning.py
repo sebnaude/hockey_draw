@@ -712,8 +712,13 @@ class DrawVersionManager:
             # of canonical constraint names that selection resolved to. Both are
             # stashed in ``data`` by the simple/staged dispatch in main_staged.py
             # (``_groups_selected`` / ``_constraint_names``).
+            # The staged path leaves ``_constraint_names`` unset when no
+            # ``--groups`` is given (it runs the legacy DEFAULT_STAGES list
+            # unfiltered), so derive the applied set from ``groups_selected`` in
+            # that case — staged-no-groups applies the ``default`` group, which is
+            # the DEFAULT_STAGES union, so this records the truth rather than [].
             'groups_selected': list(data.get('_groups_selected', ['default'])),
-            'applied_constraint_set': list(data.get('_constraint_names', [])),
+            'applied_constraint_set': self._resolve_applied_constraint_set(data),
 
             # Input restrictions
             'forced_games': data.get('forced_games', []),
@@ -809,6 +814,24 @@ class DrawVersionManager:
         else:
             penalty = abs(matched - N)
         return matched, penalty
+
+    @staticmethod
+    def _resolve_applied_constraint_set(data):
+        """Return the canonical constraint names actually applied to the solve.
+
+        spec-023 DoD-9: ``_constraint_names`` is set by the dispatch when a
+        ``--groups`` selection (or the simple path's default) was resolved. The
+        staged path leaves it unset when no ``--groups`` is given, because it
+        runs the legacy DEFAULT_STAGES list unfiltered. In that case the applied
+        set is the union of the ``groups_selected`` groups (``['default']`` by
+        default), so resolve it from the registry rather than recording ``[]``.
+        """
+        explicit = data.get('_constraint_names')
+        if explicit:
+            return list(explicit)
+        from constraints.registry import resolve_groups
+        groups = data.get('_groups_selected', ['default'])
+        return list(resolve_groups(groups))
 
     @staticmethod
     def _serialize_for_json(obj):

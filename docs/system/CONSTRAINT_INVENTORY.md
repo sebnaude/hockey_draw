@@ -140,7 +140,7 @@ fine). The only home/away rules that remain are the spec-004 atoms
 | PreferredGames (spec-020) | 0 (new atom; replaces the deleted `PreferredDates` 1:1) | 1 — `PreferredGames` (generic soft FORCED analogue) | 0 |
 | **Total** | **18 solver + 3 tester-only** | **29 solver + 3 tester-only** (was 32 before spec-018 removed the 3 venue-sequencing atoms; spec-020 swaps `PreferredDates`→`PreferredGames`, net 0) | **+11** |
 
-Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **39** (was 43 before spec-018 deleted the 5 home/away-grouping registry entries: `NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`; spec-020 deleted `PreferredDates` and added `PreferredGames` — net 0; spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill` (net 0) and added `ClubNoConcurrentSlot`: 38 + 1 = 39).
+Registry entry count (`len(CONSTRAINT_REGISTRY)`) is now **37** (was 43 before spec-018 deleted the 5 home/away-grouping registry entries: `NonDefaultHomeGrouping`, `MaitlandHomeGrouping` alias, `AwayAtNonDefaultGrouping`, `AwayAtMaitlandGrouping` alias, `MaitlandAlternateHomeAway`; spec-020 deleted `PreferredDates` and added `PreferredGames` — net 0; spec-021 replaced `EnsureBestTimeslotChoices` with `VenueEarliestSlotFill` (net 0) and added `ClubNoConcurrentSlot`: 38 + 1 = 39; spec-024 then deleted `MaximiseClubsPerTimeslotBroadmeadow` and `MinimiseClubsOnAFieldBroadmeadow` (net −2): 39 − 2 = 37).
 
 ## 4. Per-atom engineering detail
 

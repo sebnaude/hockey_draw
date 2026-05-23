@@ -55,10 +55,13 @@ def test_metadata_records_groups_selected_and_applied_set(tmp_path):
 
 
 def test_metadata_defaults_to_default_group_when_unset(tmp_path):
-    """Given data with NO _groups_selected (legacy/no --groups run),
+    """Given data with NO _groups_selected/_constraint_names (a staged run with
+    no --groups: the legacy DEFAULT_STAGES path leaves them unset),
     When metadata is built,
-    Then groups_selected defaults to ['default'] and applied_constraint_set is
-    an empty list (no resolved set was stashed)."""
+    Then groups_selected defaults to ['default'] AND applied_constraint_set is
+    resolved from that group (the DEFAULT_STAGES union) rather than recording an
+    empty list — the staged-no-groups run really applies the full default group,
+    so the metadata must record the truth (spec-023 DoD-9, Mode-B review fix)."""
     data = {'year': 2026}
     vm = DrawVersionManager(str(tmp_path), year=2026)
     meta = vm._build_draw_metadata(
@@ -66,4 +69,6 @@ def test_metadata_defaults_to_default_group_when_unset(tmp_path):
         mode='staged', timestamp='2026-05-23T00:00:00',
     )
     assert meta['groups_selected'] == ['default']
-    assert meta['applied_constraint_set'] == []
+    # Hand oracle: with nothing stashed, the applied set is the 'default' group.
+    assert meta['applied_constraint_set'] == list(resolve_groups(['default']))
+    assert len(meta['applied_constraint_set']) == 28

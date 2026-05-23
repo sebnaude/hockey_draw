@@ -42,6 +42,16 @@ truth:
     `groups` set (i.e. every production constraint). This is the selection a run
     with no `--groups` flag uses — identical to today's full build.
 
+> **Groups and severity levels are orthogonal axes.** A constraint's
+> `severity_N` membership comes from its `ConstraintInfo.severity_level`, which is
+> independent of its explicit stage/`core`/`soft` group tags. So a constraint can
+> live in the `critical_feasibility` group yet have `severity_level == 2` (e.g.
+> `BalancedByeSpacing`, `ClubNoConcurrentSlot`, `VenueEarliestSlotFill`) — it
+> appears in `severity_2`, NOT `severity_1`. `--groups severity_1` therefore does
+> NOT select every `critical_feasibility` constraint; use `--groups
+> critical_feasibility` (or `core`) for that. Don't assume the stage group and the
+> severity group coincide.
+
 ### Resolver API
 
 ```python
