@@ -1195,10 +1195,29 @@ def _validate_entry_fields(entries, label, valid_dates, valid_locations, valid_f
                            valid_grades, valid_days, team_names_set, team_lookup, all_teams,
                            warnings, fatals):
     """Validate scope field values and date formats in FORCED_GAMES / BLOCKED_GAMES entries."""
-    is_forced = (label == 'FORCED_GAMES')
+    # spec-025: LOCKED_PAIRINGS shares FORCED's fatal-on-bad-scope semantics.
+    is_forced = label in ('FORCED_GAMES', 'LOCKED_PAIRINGS')
+
+    # spec-025: a LOCKED_PAIRINGS entry is "this pairing, this date, exactly one
+    # game, everything else free." Any field that would partially re-lock the
+    # time/slot/field/day/week is forbidden and is a FATAL.
+    _LOCKED_PAIRINGS_FORBIDDEN = (
+        'time', 'day_slot', 'field_name', 'field_location', 'day',
+        'week', 'round_no', 'count', 'constraint',
+    )
 
     for i, entry in enumerate(entries):
         desc = entry.get('description', entry.get('reason', f'entry #{i+1}'))
+
+        # spec-025: forbidden-field check for LOCKED_PAIRINGS entries.
+        if label == 'LOCKED_PAIRINGS':
+            present_forbidden = [f for f in _LOCKED_PAIRINGS_FORBIDDEN if f in entry]
+            if present_forbidden:
+                fatals.append(
+                    f"{label} '{desc}': forbidden field(s) {present_forbidden} present. "
+                    f"A LOCKED_PAIRINGS entry pins a pairing to its date with "
+                    f"time/slot/field free; only teams/grade/date/description are allowed."
+                )
 
         # Date format check: must be string, not datetime
         date_val = entry.get('date')
@@ -3306,6 +3325,8 @@ def validate_game_config(data: dict) -> None:
     blocked_games = data.get('blocked_games', [])
     # spec-020: soft preferred-games entries (validated like FORCED but warn-only).
     preferred_games = data.get('preferred_games', [])
+    # spec-025: locked-pairing pins (validated like FORCED, fatal-on-bad-scope).
+    locked_pairings = data.get('locked_pairings', [])
 
     # Filter out forced/blocked entries whose dates fall entirely in locked weeks.
     # Locked weeks are already solved — forced/blocked rules don't apply to them.
@@ -3325,16 +3346,23 @@ def validate_game_config(data: dict) -> None:
             return date_to_week.get(str(d), 0) not in locked_weeks
         forced_before = len(forced_games)
         blocked_before = len(blocked_games)
+        locked_pairings_before = len(locked_pairings)
         forced_games = [e for e in forced_games if _not_in_locked_week(e)]
         blocked_games = [e for e in blocked_games if _not_in_locked_week(e)]
+        # spec-025: a pin on a hard-locked past week is redundant (those weeks
+        # are already pinned to exact keys) and must be filtered out.
+        locked_pairings = [e for e in locked_pairings if _not_in_locked_week(e)]
         forced_skipped = forced_before - len(forced_games)
         blocked_skipped = blocked_before - len(blocked_games)
-        if forced_skipped or blocked_skipped:
+        locked_pairings_skipped = locked_pairings_before - len(locked_pairings)
+        if forced_skipped or blocked_skipped or locked_pairings_skipped:
             print(f"  Locked weeks {sorted(locked_weeks)}: skipped {forced_skipped} forced + "
-                  f"{blocked_skipped} blocked game entries from validation")
+                  f"{blocked_skipped} blocked + {locked_pairings_skipped} locked-pairing "
+                  f"entries from validation")
         # Store filtered lists so sub-functions (phases 5+) also use them
         data['forced_games'] = forced_games
         data['blocked_games'] = blocked_games
+        data['locked_pairings'] = locked_pairings
 
     # Check if ANY validation is needed (forced/blocked games OR other config mechanisms)
     club_days = data.get('club_days', {})
@@ -3343,6 +3371,7 @@ def validate_game_config(data: dict) -> None:
     home_field_map = data.get('home_field_map', {})
     phl_game_times = data.get('phl_game_times', {})
     has_config_to_validate = (forced_games or blocked_games or preferred_games
+                              or locked_pairings
                               or club_days
                               or constraint_defaults or grade_rounds_override
                               or home_field_map or phl_game_times)
@@ -3380,6 +3409,12 @@ def validate_game_config(data: dict) -> None:
     # feasibility phases below never see these entries, so a zero-candidate
     # preferred scope can never trigger the FORCED feasibility FATAL.
     _validate_entry_fields(preferred_games, 'PREFERRED_GAMES', valid_dates, valid_locations,
+                          valid_field_names, valid_grades, valid_days,
+                          team_names_set, team_lookup, teams, warnings, fatals)
+    # spec-025: validate LOCKED_PAIRINGS entries with the SAME validator but the
+    # fatal-on-bad-scope (is_forced) path PLUS the forbidden-field check. Run
+    # only on locked_pairings so FORCED/BLOCKED phases never process pins.
+    _validate_entry_fields(locked_pairings, 'LOCKED_PAIRINGS', valid_dates, valid_locations,
                           valid_field_names, valid_grades, valid_days,
                           team_names_set, team_lookup, teams, warnings, fatals)
 
@@ -4099,6 +4134,8 @@ def build_season_data(config: dict) -> dict:
         # spec-020: soft, weighted FORCED_GAMES analogue (penalty-on-deviation).
         'preferred_games': config.get('preferred_games', []),
         'forced_games': config.get('forced_games', []),
+        # spec-025: pin pairing to its weekend, free the time.
+        'locked_pairings': config.get('locked_pairings', []),
         'blocked_games': config.get('blocked_games', []),
         'penalty_weights': config.get('penalty_weights', {}),
         'constraint_defaults': _merge_constraint_defaults(config.get('constraint_defaults', {})),
