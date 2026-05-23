@@ -1,8 +1,8 @@
-<!-- status: under_review -->
+<!-- status: building -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none (locked-weeks already shipped on final-form: run.py:71-79, main_staged.py:1037-1059, utils.py:3586+. Reuses the FORCED scope-count machinery in utils.py without changing it. Shares utils.py + config/defaults.py + config/season_*.py with spec-021/022/023 — rebase + re-run validate before merge.) -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-572895d-20260523T091343Z claimed=2026-05-23T09:13:43Z -->
 
 # spec-025 — `LOCKED_PAIRINGS`: a dedicated "pin pairing to its weekend, free the time" config
 
@@ -68,20 +68,24 @@ pins.
 ## Definition of Done
 
 1. **New config list `LOCKED_PAIRINGS`** with an empty-list default as a top-level constant in
-   `config/defaults.py` (mirroring how `PREFERRED_WEEKENDS`/`PREFERRED_GAMES` defaults are
-   declared), readable as `data['locked_pairings']`. Entry grammar = a strict subset of the
-   FORCED grammar: `teams: [t1, t2]` (or `team1`/`team2`), `grade`, `date`, optional
-   `description`. **`time`, `day_slot`, `field_name`, `field_location`, `day`, `week`,
-   `round_no`, `count`, `constraint` are NOT permitted** — a LOCKED_PAIRINGS entry is, by
-   definition, "this pairing, this date, exactly one game, everything else free." Presence of
-   any forbidden scope field is a validation FATAL (it would partially re-lock the time and
-   defeat the config's purpose).
-2. **Injection:** `build_season_data` (`utils.py:4072-4102`) injects
+   `config/defaults.py` (mirroring how `PREFERRED_GAMES` is declared there — `PREFERRED_WEEKENDS`
+   is NOT in defaults.py and must NOT be used as the template; see review note L1), readable as
+   `data['locked_pairings']`. Entry grammar = a strict subset of the FORCED grammar:
+   `teams: [t1, t2]` (or `team1`/`team2`), `grade`, `date`, optional `description`.
+   **`time`, `day_slot`, `field_name`, `field_location`, `day`, `week`, `round_no`, `count`,
+   `constraint` are NOT permitted** — a LOCKED_PAIRINGS entry is, by definition, "this pairing,
+   this date, exactly one game, everything else free." Presence of any forbidden scope field is a
+   validation FATAL (it would partially re-lock the time and defeat the config's purpose).
+   (review note — Low/L1: `PREFERRED_WEEKENDS` verified absent from defaults.py 2026-05-23;
+   it lives only in season_2026.py. `PREFERRED_GAMES` at defaults.py:313 is the correct model.)
+2. **Injection:** `build_season_data` (`utils.py:4073-4106`) injects
    `'locked_pairings': config.get('locked_pairings', [])`. A test asserts
    `load_season_data(2026)['locked_pairings']` round-trips a configured entry.
    Also add `locked_pairings` to the season config dict key in each season file's
    `SEASON_CONFIG` dict (matching the `preferred_games` pattern already there).
-   (review fix — C11: exact return-dict line range is 4072-4102, not ~4073-4106)
+   (review fix — C11 corrected by second review pass 2026-05-23: return dict is at
+   lines 4073-4106 — `return {` opens at 4073 and `}` closes at 4106; the prior
+   "fix" inverted the correction and introduced a wrong range 4072-4102.)
 3. **Enforcement in `generate_X`:** a second scope-count pass parallel to FORCED:
    - Build rules via `_build_scope_count_rules(data.get('locked_pairings', []), teams,
      label='LOCKED_PAIRINGS', unique_per_entry=True)`.
@@ -132,10 +136,12 @@ pins.
 8. **Tester check:** `analytics/tester.py` gains a `_check_locked_pairings` check (registered in
    `constraints/registry.py` as a `tester_only` entry, like `ForcedGames`/`BlockedGames`) that
    flags any pinned pairing not present on its date in the finished draw.
-   `len(CONSTRAINT_REGISTRY)` goes from **38 → 39**; `test_registry_has_expected_entry_count`
-   at `tests/test_constraint_registry.py:88` must be updated from `== 38` to `== 39`.
-   (review fix — H4: hand-computed oracle: current count verified as 38 at
-   test_constraint_registry.py:88; new count after adding LockedPairings = 39)
+   `len(CONSTRAINT_REGISTRY)` goes from **37 → 38**; `test_registry_has_expected_entry_count`
+   at `tests/test_constraint_registry.py:94` must be updated from `== 37` to `== 38`.
+   (review fix — H4 corrected by second review pass 2026-05-23: prior fix said "38 at line 88;
+   new count 39" — BOTH values were wrong. Verified in constraints/registry.py: there are 37
+   canonical_name entries (spec-024 deleted 2 entries, net 37). The test assert is at line 94,
+   not line 88 (line 88 is inside the docstring). Correct oracle: 37 → 38.)
 9. Full suite green; `import utils, config.defaults, analytics.tester` smoke clean.
 
 ## Implementation units
@@ -179,12 +185,13 @@ pins.
 - Files: `analytics/storage.py` / `analytics/versioning.py` (`locked_pairing_outcomes`),
   `analytics/tester.py` (`_check_locked_pairings`; also add to the ordered check-list at
   line ~1190 alongside `ForcedGames`/`BlockedGames`), `constraints/registry.py` (`tester_only`
-  registry entry + count; update `test_constraint_registry.py:88` assert from 38 → 39).
+  registry entry + count; update `test_constraint_registry.py:94` assert from `== 37` to `== 38`).
 - Depends on Unit B.
 - Test: a generated draw records `locked_pairing_outcomes`; the tester flags a deliberately
   date-moved pinned pairing; `test_every_drawtester_check_in_registry` and the registry-count
-  test both pass with the new count of 39.
-  (review fix — H4: explicit oracle + tester registration site added)
+  test both pass with the new count of 38.
+  (review fix — H4 corrected by second review pass 2026-05-23: assert is at line 94 not 88;
+  pre-spec count is 37 not 38; post-spec count is 38 not 39.)
 
 ### Unit E — Migrate existing FORCED locked-pairing entries out of FORCED_GAMES
 - Files: `config/season_2026.py` (move the ~246 `"Locked wk…"` `{teams, grade, date}` FORCED
@@ -214,8 +221,10 @@ pins.
   `LOCKED_PAIRINGS` grammar and its forbidden fields.
 - `CLAUDE.md` — add `LOCKED_PAIRINGS` to the FORCED/BLOCKED table in §3 (Variable Filtering) with
   its "pin date, free time" semantics; note regen tooling (spec-026) writes to it.
-- `docs/todo/GOALS.md` — add the spec-025 row + a one-line spec summary.
-- `docs/todo/00-dependency-tree.md` — register spec-025 (no deps; unblocks spec-026).
+- `docs/todo/GOALS.md` — spec-025 row already present (verified 2026-05-23); update status to
+  `done` when complete. (review note — Low/L2: "add the row" was inaccurate; the row is there)
+- `docs/todo/00-dependency-tree.md` — spec-025 already registered (verified 2026-05-23); update
+  status marker when complete. (review note — Low/L2)
 
 ## Risks & blast radius
 
@@ -257,9 +266,25 @@ pins.
 - **Changing FORCED_GAMES semantics or the `soft_only`/groups machinery** — untouched here
   (spec-023's domain).
 
-<!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
-<!-- review summary: 1 Critical line-ref error fixed (C9: _validate_entry_fields wrong lines),
-     1 wrong season-entry range fixed (M5: 693-874→693-938, ~180→~246 entries),
-     3 High issues fixed (H2: is_forced extension, H3: 4-tuple return, H4: registry oracle 38→39),
-     3 Medium issues fixed (M1: store-back, M2: guard update, M4: guard test),
-     2 Low/notes added (M3: pre-solve feasibility gap, L3: unique_per_entry redundancy). -->
+<!-- reviewed: adversarial Sonnet review 2026-05-23 (SECOND PASS — prior stamp was applied without under_review cycle, invalidating it; this is the legitimate first review) — fixes applied inline -->
+<!-- review summary:
+     PRIOR-REVIEW FIXES (verified correct by this pass):
+       C9: _validate_entry_fields lines corrected (now 1194-1296, verified ✓)
+       M5: season_2026.py locked entries 693-938 / 246 entries (verified ✓)
+       H2: is_forced extension to LOCKED_PAIRINGS label (correct ✓)
+       H3: 4-tuple return from _build_scope_count_rules (verified ✓)
+       M1: store-back data['locked_pairings'] (correct ✓)
+       M2: has_config_to_validate guard update (correct ✓)
+       M4: guard-update test (correct ✓)
+       M3: pre-solve feasibility gap noted (correct ✓)
+       L3: unique_per_entry redundancy noted (correct ✓)
+     NEW FINDINGS AND FIXES IN THIS PASS:
+       C1 (Critical): "review fix C11" had inverted the correction — it claimed
+         4072-4102 but actual code has return dict at 4073-4106. Fixed to 4073-4106.
+       C2 (Critical): registry count oracle doubly wrong — prior fix said "38 at
+         line 88, new count 39." Actual: assert == 37 at LINE 94 (spec-024 deleted
+         2 entries). Post-spec count = 38, not 39. Fixed in DoD item 8 and Unit C.
+       L1 (Low): PREFERRED_WEEKENDS is NOT in defaults.py (only season_2026.py);
+         removed it from the analogy in DoD item 1; PREFERRED_GAMES is the correct model.
+       L2 (Low): GOALS.md and 00-dependency-tree.md already have spec-025 rows;
+         changed "add" to "update when done" in Doc registry. -->
