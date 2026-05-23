@@ -12,8 +12,10 @@ When the convenor regenerates part of a published draw (a roster change drops a 
 a few future weeks need re-timing), most pairings are already decided and the convenor wants
 them to **stay on their weekend (their playing day) but be free to move to a different time,
 slot, or field**. Today this is expressed by hand-adding a FORCED_GAMES entry per pairing —
-`{teams:[t1,t2], grade, date}` → `sum==1` (the season config carries ~180 such "Locked wk7:
-…" entries, `config/season_2026.py:693-874`). That **bloats FORCED_GAMES**: the convenor's
+`{teams:[t1,t2], grade, date}` → `sum==1` (the season config carries ~246 such "Locked wk7:
+…" entries, `config/season_2026.py:693-938`). That **bloats FORCED_GAMES**:
+(review fix — M5: actual count is ~246 per the in-file comment at line 692; line range ends at
+938 not 874 — verified in draw-specs worktree 2026-05-23) the convenor's
 deliberate count rules and marquee games (`{grade:'PHL', day:'Friday', count:3,
 constraint:'lesse'}`, `Norths vs Wests 80th-anniversary`) are buried under a wall of
 mechanical pins, and the regen tooling (spec-025) has no clean place to *write* pins without
@@ -57,9 +59,11 @@ pins.
 - **Config injection point.** `build_season_data` returns the `data` dict with config lists
   injected at `utils.py:4073-4106` (`'forced_games'`, `'blocked_games'`, `'preferred_games'`,
   `'preferred_weekends'` …). LOCKED_PAIRINGS is injected here as `'locked_pairings'`.
-- **Validation.** `_validate_entry_fields(entries, label, …)` (`utils.py:3194-3297`) validates
+- **Validation.** `_validate_entry_fields(entries, label, …)` (`utils.py:1194-1296`) validates
   scope fields/dates; `is_forced = (label == 'FORCED_GAMES')` decides fatal-vs-warn. Called from
   `validate_game_config` (`utils.py:3292-3464`).
+  (review fix — C9: `_validate_entry_fields` is at lines 1194-1296 in the draw-specs
+  worktree, not 3194-3297 as originally cited — verified 2026-05-23)
 
 ## Definition of Done
 
@@ -72,9 +76,12 @@ pins.
    definition, "this pairing, this date, exactly one game, everything else free." Presence of
    any forbidden scope field is a validation FATAL (it would partially re-lock the time and
    defeat the config's purpose).
-2. **Injection:** `build_season_data` (`utils.py:~4073-4106`) injects
+2. **Injection:** `build_season_data` (`utils.py:4072-4102`) injects
    `'locked_pairings': config.get('locked_pairings', [])`. A test asserts
    `load_season_data(2026)['locked_pairings']` round-trips a configured entry.
+   Also add `locked_pairings` to the season config dict key in each season file's
+   `SEASON_CONFIG` dict (matching the `preferred_games` pattern already there).
+   (review fix — C11: exact return-dict line range is 4072-4102, not ~4073-4106)
 3. **Enforcement in `generate_X`:** a second scope-count pass parallel to FORCED:
    - Build rules via `_build_scope_count_rules(data.get('locked_pairings', []), teams,
      label='LOCKED_PAIRINGS', unique_per_entry=True)`.
@@ -86,6 +93,13 @@ pins.
      scopes today).
    - Skip registration for `in_locked_week` vars (mirror `:3685-3737`).
    - Apply `model.Add(sum(vars) == 1)` per LOCKED_PAIRINGS scope.
+   - Note: `_build_scope_count_rules` returns a **4-tuple**
+     `(scope_groups, constraint_types, constraint_counts, constraint_weights)`. The
+     LOCKED_PAIRINGS apply loop only needs `scope_groups` (the other three are
+     unused — pins are always hard `== 1`). Assign all four to avoid a tuple-
+     unpack error: `lp_scope_groups, _lp_ctypes, _lp_counts, _lp_weights = ...`
+     (review fix — H3: return-tuple arity corrected; the FORCED back-compat
+     wrapper strips to 3-tuple but direct `_build_scope_count_rules` returns 4)
 4. **Empty-scope handling = FATAL with a LOCKED_PAIRINGS-labelled diagnostic** (a pin whose
    pairing has zero placeable vars on its date is a real config/feasibility error, exactly like
    FORCED). Reuse the FORCED diagnostic shape (`utils.py:3741-3795`) but labelled
@@ -96,18 +110,32 @@ pins.
    week 2 produces no constraint and no FATAL.
 6. **Validation:** `_validate_entry_fields` accepts label `'LOCKED_PAIRINGS'` and treats it like
    FORCED for fatal-vs-warn on bad dates/grades/team-resolution (`is_forced` path), PLUS the
-   new forbidden-field check (DoD 1). Wire a `validate_game_config` phase that calls it with the
-   `LOCKED_PAIRINGS` label and passes `data.get('locked_pairings', [])` so FORCED/BLOCKED phases
-   don't accidentally process pins. A pin with a `time`/`field`/`day_slot` key → FATAL listing
-   the forbidden field; a pin with an unknown team → FATAL (same as FORCED).
+   new forbidden-field check (DoD 1). The `is_forced` check at line 1198 must be extended from
+   `is_forced = (label == 'FORCED_GAMES')` to
+   `is_forced = label in ('FORCED_GAMES', 'LOCKED_PAIRINGS')`.
+   Wire a `validate_game_config` phase that calls it with the `LOCKED_PAIRINGS` label and
+   passes `data.get('locked_pairings', [])` so FORCED/BLOCKED phases don't accidentally process
+   pins. A pin with a `time`/`field`/`day_slot` key → FATAL listing the forbidden field; a pin
+   with an unknown team → FATAL (same as FORCED).
+   Also update the `has_config_to_validate` guard (line 3345) to include `locked_pairings`
+   in the OR-check, so validation runs when the only config is a LOCKED_PAIRINGS list.
+   Also add `locked_pairings = data.get('locked_pairings', [])` read at the top of
+   `validate_game_config` (alongside `forced_games` and `blocked_games` at lines 3305-3308)
+   and store the filtered list back: `data['locked_pairings'] = locked_pairings` after the
+   locked-week filter (mirror the store-back at lines 3336-3337).
+   (review fix — H2+M1+M2+M4: is_forced extension, store-back, guard, read — all
+   required but missing from original Unit A description)
 7. **Metadata:** draw metadata gains `locked_pairing_outcomes` (per pin: matched var count, the
    chosen game's resolved time/slot/field, `satisfied: true/false`) alongside the existing
    `forced_game_outcomes`, written by `save_solver_output` / the tester. A regenerated draw lets
    the convenor audit that every pinned pairing kept its date.
 8. **Tester check:** `analytics/tester.py` gains a `_check_locked_pairings` check (registered in
    `constraints/registry.py` as a `tester_only` entry, like `ForcedGames`/`BlockedGames`) that
-   flags any pinned pairing not present on its date in the finished draw. `len(CONSTRAINT_REGISTRY)`
-   +1; count test updated.
+   flags any pinned pairing not present on its date in the finished draw.
+   `len(CONSTRAINT_REGISTRY)` goes from **38 → 39**; `test_registry_has_expected_entry_count`
+   at `tests/test_constraint_registry.py:88` must be updated from `== 38` to `== 39`.
+   (review fix — H4: hand-computed oracle: current count verified as 38 at
+   test_constraint_registry.py:88; new count after adding LockedPairings = 39)
 9. Full suite green; `import utils, config.defaults, analytics.tester` smoke clean.
 
 ## Implementation units
@@ -127,7 +155,11 @@ pins.
 - Test (`tests/test_locked_pairings_config.py`, GWT, no mocks, hand oracle):
   `load_season_data(2026)['locked_pairings']` round-trips an entry; a pin with `time` → FATAL
   naming the forbidden field; a pin with an unknown team → FATAL; a pin dated in a locked week →
-  filtered out (no FATAL, no constraint).
+  filtered out (no FATAL, no constraint, and `data['locked_pairings']` is empty after filter).
+  Also test: `validate_game_config` with a non-empty `locked_pairings` (and empty
+  forced/blocked/club_days etc.) still enters the validation body — verifying the
+  `has_config_to_validate` guard was updated correctly.
+  (review fix — M4: test the guard update)
 
 ### Unit B — `generate_X` enforcement pass
 - Files: `utils.py::generate_X` (build LOCKED_PAIRINGS rules; register into
@@ -145,24 +177,30 @@ pins.
 
 ### Unit C — Metadata + tester check + registry
 - Files: `analytics/storage.py` / `analytics/versioning.py` (`locked_pairing_outcomes`),
-  `analytics/tester.py` (`_check_locked_pairings`), `constraints/registry.py` (`tester_only`
-  registry entry + count).
+  `analytics/tester.py` (`_check_locked_pairings`; also add to the ordered check-list at
+  line ~1190 alongside `ForcedGames`/`BlockedGames`), `constraints/registry.py` (`tester_only`
+  registry entry + count; update `test_constraint_registry.py:88` assert from 38 → 39).
 - Depends on Unit B.
 - Test: a generated draw records `locked_pairing_outcomes`; the tester flags a deliberately
   date-moved pinned pairing; `test_every_drawtester_check_in_registry` and the registry-count
-  test pass.
+  test both pass with the new count of 39.
+  (review fix — H4: explicit oracle + tester registration site added)
 
 ### Unit E — Migrate existing FORCED locked-pairing entries out of FORCED_GAMES
-- Files: `config/season_2026.py` (move the ~180 `"Locked wk…"` `{teams, grade, date}` FORCED
-  entries — `config/season_2026.py:693-874`, identify them by the absence of
+- Files: `config/season_2026.py` (move the ~246 `"Locked wk…"` `{teams, grade, date}` FORCED
+  entries — `config/season_2026.py:693-938`, identify them by the absence of
   `time`/`field`/`count`/`constraint` and the `Locked` description marker — into
+  (review fix — M5: ~246 entries, line range 693-938, not ~180 entries ending at 874)
   `LOCKED_PAIRINGS`; leave genuine count rules and marquee games in FORCED_GAMES).
 - Depends on Unit B (the new pass must exist before the entries are moved or they'd be silently
   unenforced).
 - Test (`tests/test_locked_pairings_migration_parity.py`): a full 2026 `generate_X` build AFTER
   the migration produces the **same** set of `sum==1` pinning constraints (same scopes, same
   matched var sets) as the pre-migration FORCED-only build — proving the move is behaviour-
-  preserving. Hand-verify the count of pinning constraints matches the number of moved entries.
+  preserving. Hand-verify the count of pinning constraints matches the number of moved entries
+  (~246, per the comment at `season_2026.py:692`). The parity test must compare both the
+  `forced_scope_vars` set (FORCED path, pre-migration) against the combined
+  `forced_scope_vars + locked_pairing_scope_vars` sets (post-migration).
 
 ## Doc registry
 
@@ -190,6 +228,20 @@ pins.
   are byte-identical to the FORCED-only baseline.
 - **Migration (Unit E) silently un-enforcing a pin** if an entry is moved but the new pass has a
   bug. Mitigated by the migration-parity test (Unit E) comparing constraint sets before/after.
+- **Pre-solve feasibility gap for LOCKED_PAIRINGS.** `validate_game_config` runs
+  `_check_forced_game_feasibility` (Phase 18) which simulates variable filtering to catch
+  FORCED empty-scopes *before* the solver starts. No equivalent check is added for
+  LOCKED_PAIRINGS by Unit A: the empty-scope FATAL fires at `generate_X` time (DoD item 4)
+  rather than at validation time. This means a broken pin configuration is not caught until
+  variable generation begins. Acceptable for now (same symptom, different timing), but
+  Unit B could optionally add a Phase 18-style pre-check for LOCKED_PAIRINGS in
+  `validate_game_config` to give earlier diagnostics. Not blocking.
+  (review note — M3: known gap, deliberately deferred to implementation discretion)
+- **`unique_per_entry=True` is redundant but harmless.** LOCKED_PAIRINGS entries always carry
+  `teams`, so `_build_scope_count_rules` already injects `_entry_idx` via the
+  `if raw_teams or has_team1_team2...` branch (utils.py:676). Passing `unique_per_entry=True`
+  is a no-op but makes the intent explicit.
+  (review note — Low/L3: redundancy is safe; keep for documentation clarity)
 
 ## Out of scope
 
@@ -204,3 +256,10 @@ pins.
   themselves. Pins stay hard.
 - **Changing FORCED_GAMES semantics or the `soft_only`/groups machinery** — untouched here
   (spec-023's domain).
+
+<!-- reviewed: adversarial Sonnet review 2026-05-23 — fixes applied inline -->
+<!-- review summary: 1 Critical line-ref error fixed (C9: _validate_entry_fields wrong lines),
+     1 wrong season-entry range fixed (M5: 693-874→693-938, ~180→~246 entries),
+     3 High issues fixed (H2: is_forced extension, H3: 4-tuple return, H4: registry oracle 38→39),
+     3 Medium issues fixed (M1: store-back, M2: guard update, M4: guard test),
+     2 Low/notes added (M3: pre-solve feasibility gap, L3: unique_per_entry redundancy). -->
