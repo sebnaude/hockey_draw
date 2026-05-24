@@ -873,9 +873,10 @@ PENALTY_WEIGHTS = {
     'ClubVsClubAlignment':                 50_000,
     'EqualMatchUpSpacing':                100_000,
     'ClubGameSpread':                     100_000,
-    'ClubFieldConcentration':              80_000,
     'PreferredTimesConstraint':           200_000,
-    'ClubVsClubAlignmentField':                 0,  # Superseded by ClubFieldConcentration
+    # ClubVsClubAlignmentField retained for legacy checkpoint compat; its former
+    # superseding tester diagnostic was removed in spec-031.
+    'ClubVsClubAlignmentField':                 0,
     'ClubGradeAdjacencyConstraint':        50_000,
     # spec-020: 'phl_preferences' weight removed — PreferredDates deleted; the
     # marquee-PHL-date behaviour is now a PREFERRED_GAMES entry using the

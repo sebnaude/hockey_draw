@@ -50,7 +50,6 @@ a constraint via two groups applies it once. Derived groups (`severity_1..5`,
 | ClubVsClubStackedCoLocation | club_alignment, core |
 | ClubGameSpread | club_day, core |
 | ClubNoConcurrentSlot | core, critical_feasibility |
-| ClubFieldConcentration | — (tester-only; no production group) |
 | VenueEarliestSlotFill | core, critical_feasibility |
 | PreferredTimes | soft, soft_optimisation |
 | SoftLexMatchupOrdering | soft, soft_optimisation |
@@ -131,7 +130,6 @@ fine). The only home/away rules that remain are the spec-004 atoms
 
 | Canonical name | Source | Actual behavior | Severity |
 |---|---|---|---|
-| ClubFieldConcentration | tester only | Reports clubs concentrated on a small number of fields (no solver enforcement) | 3 |
 | ForcedGames | enforced via `generate_X` (variable-elimination) | Verifies each FORCED entry's scope sum matches `count` and `constraint` (default sum==1) | 1 |
 | BlockedGames | enforced via `generate_X` (variable-elimination) | Verifies no game key matches a BLOCKED scope+team-matcher. **spec-001 exemption:** a BLOCKED entry whose source dict carries `'perennial': True` (e.g. every entry in `PERENNIAL_BLOCKED_GAMES` in `config/defaults.py`) is *overridable* — a variable matched by a perennial scope is kept iff any `FORCED_GAMES` entry also matches it. Vars matched by ANY non-perennial BLOCKED scope are always eliminated, even when FORCED matches. Implementation: `utils._build_blocked_game_rules_with_perennial` + `_matching_blocked_scope_keys` + the `matched_block_scopes`/`all_perennial` branch in `generate_X`. Validator `_check_forced_game_feasibility` applies the same rule when counting surviving vars for each FORCED entry. | 1 |
 | LockedPairings | `analytics/tester.py::_check_locked_pairings` (registered in `constraints/registry.py` as `tester_only`, spec-025) | Verifies each `LOCKED_PAIRINGS` entry is satisfied: the pinned pairing appears in the draw on its specified date. Analogous to `ForcedGames` but scoped to date-pin entries only (time/slot/field are free). Draw metadata gains a `locked_pairing_outcomes` section with per-pin matched-var count, resolved time/slot/field, and `satisfied: true/false`. | 1 |
@@ -215,7 +213,6 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | **Tester-only (no solver enforcement)** | | | | | | | |
 | `ForcedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
 | `BlockedGames` | `constraints/registry.py` | n/a | n/a | n/a | — | — | Diagnostic; enforced via variable-elimination |
-| `ClubFieldConcentration` | tester only | n/a | n/a | n/a | — | — | Reports clubs concentrated on few fields |
 
 **Forced-games handling glossary:**
 - `excluded` — atom skips variables that match a `FORCED_GAMES` scope (either via shared iterator or local `_get_matching_forced_scopes` check).

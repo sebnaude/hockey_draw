@@ -1159,7 +1159,7 @@ class DrawTester:
 
         When constraints_applied is set (from draw metadata or explicit param),
         only those constraints will be checked. Excluded constraints are skipped.
-        Tester-only diagnostics (e.g., ClubFieldConcentration) always run unless
+        Tester-only diagnostics (e.g., ForcedGames, LockedPairings) always run unless
         explicitly excluded.
         """
         violations = []
@@ -1200,7 +1200,6 @@ class DrawTester:
             ('ClubGameSpread', self._check_club_game_spread),
             # spec-021: cross-grade club no-concurrency (capacity-aware).
             ('ClubNoConcurrentSlot', self._check_club_no_concurrent_slot),
-            ('ClubFieldConcentration', self._check_club_field_concentration),
             # spec-024: MaximiseClubsPerTimeslotBroadmeadow /
             # MinimiseClubsOnAFieldBroadmeadow checks removed (constraints deleted).
             # Level 5 - VERY LOW
@@ -2212,58 +2211,6 @@ class DrawTester:
                     affected_clubs=[club],
                     metric_value=count - cap,
                 ))
-        return violations
-
-    def _check_club_field_concentration(self) -> List[Violation]:
-        """Check ClubFieldConcentration: clubs should play on the same field per day.
-
-        field_spread = num_games - max_games_on_any_single_field
-        Hard: field_spread <= max(0, num_games // 2 - 1) + slack
-        Soft: reports any field_spread > 0 as warnings.
-        """
-        violations = []
-        config_slack = self.constraint_slack.get('ClubGameSpread', 0)
-
-        # Group games by (club, week, day) -> {field_name: [game_ids]}
-        # Only Broadmeadow — away venues have 1 field so field concentration is irrelevant
-        club_day_fields = defaultdict(lambda: defaultdict(list))
-        for game in self.draw.games:
-            if game.field_location != 'Newcastle International Hockey Centre':
-                continue
-            for team in [game.team1, game.team2]:
-                club = self._team_to_club.get(team)
-                if club:
-                    club_day_fields[(club, game.week, game.day)][game.field_name].append(game.game_id)
-
-        for (club, week, day), field_games in club_day_fields.items():
-            num_games = sum(len(gids) for gids in field_games.values())
-            if num_games < 2:
-                continue
-
-            max_on_field = max(len(gids) for gids in field_games.values())
-            field_spread = num_games - max_on_field
-            hard_cap = max(0, num_games // 2 - 1) + config_slack
-
-            all_game_ids = [gid for gids in field_games.values() for gid in gids]
-
-            if field_spread > hard_cap:
-                violations.append(Violation.create(
-                    constraint="ClubFieldConcentration",
-                    message=f"Club '{club}' week {week} ({day}): field_spread={field_spread} exceeds "
-                            f"hard cap {hard_cap} ({num_games} games across {len(field_games)} fields)",
-                    affected_games=list(all_game_ids)[:5],
-                    week=week
-                ))
-            elif field_spread > 0:
-                field_summary = ', '.join(f'{f}:{len(g)}' for f, g in sorted(field_games.items()))
-                violations.append(Violation.create(
-                    constraint="ClubFieldConcentration",
-                    message=f"[soft] Club '{club}' week {week} ({day}): {field_spread} game(s) off main field "
-                            f"({field_summary})",
-                    affected_games=list(all_game_ids)[:5],
-                    week=week
-                ))
-
         return violations
 
     # spec-024: _check_maximise_clubs_per_timeslot_broadmeadow and
