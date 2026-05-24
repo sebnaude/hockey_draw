@@ -1,9 +1,9 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-aiupd-030 claimed=2026-05-24 -->
 
 # spec-030 — PHL/2nd cleanup: 2.5h cross-venue gap, drop the redundant concurrency atom, locked-week parity
 
