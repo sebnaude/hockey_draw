@@ -18,7 +18,15 @@ constraints in legacy that the atom path no longer adds.
 Baseline gap: 2 (Broadmeadow + Gosford Friday count blocks, now FORCED_GAMES).
 spec-010 additional gap: 5 (one per-team round-1 constraint in PHLRoundOnePlay).
 spec-015 additional gap: 3 (Gosford-Friday-rounds {2,4,5} present in fixture).
-Total expected gap (no locked weeks): 2 + 5 + 3 = 10.
+spec-030 additional gap: 100. `PHLAnd2ndConcurrencyAtBroadmeadow` was deleted
+  from `_PHL_HARD_ATOMS` (subsumed by `PHLAnd2ndAdjacency`, which is dispatched
+  separately and is NOT counted by `_phl_times_atoms_hard()`). Legacy
+  `_phl_times_hard()` still enforces the PHL+same-club-2nd same-Broadmeadow-slot
+  rule (item b): one `sum<=1` per (week, Sunday day_slot, club) bucket that has
+  both a PHL and a 2nd var at Broadmeadow. The fixture has 5 weeks × 4 Sunday
+  slots × 5 clubs (every club fields both grades, and build_model_X gives every
+  game a var at every slot) = 100 such buckets → 100 constraints.
+Total expected gap (no locked weeks): 2 + 5 + 3 + 100 = 110.
 
 Tests below verify the structural relationship and that core feasibility
 behaviour matches once the FORCED count rules are added back as config.
@@ -52,12 +60,17 @@ class TestPHLAtomsParityWithLegacy:
            round set {2,4,5,9,10}; the fixture has Friday-Gosford vars in
            weeks 2, 4 and 5 → 3 constraints.
 
+        5. PHLAnd2ndConcurrencyAtBroadmeadow: 1 constraint per (week, Sunday
+           slot, club-with-both-grades) Broadmeadow bucket — removed by
+           spec-030 (subsumed by PHLAnd2ndAdjacency, dispatched separately).
+           5 weeks × 4 Sunday slots × 5 clubs = 100 constraints.
+
         Hand-computed oracle:
           - Fixture has 5 PHL teams (Tigers, Wests, Norths, Maitland, Gosford).
           - Legacy adds 1 (Broadmeadow) + 1 (Gosford count) + 5 (round-1 per
-            team) + 3 (Gosford rounds 2/4/5) = 10 more constraints than the
-            current atom dispatch.
-          - Total expected gap: 10.
+            team) + 3 (Gosford rounds 2/4/5) + 100 (PHL+2nd same-slot, spec-030)
+            = 110 more constraints than the current atom dispatch.
+          - Total expected gap: 110.
         """
         engine_atoms = _engine(phl_data)
         atom_count = engine_atoms._phl_times_atoms_hard()
@@ -68,9 +81,10 @@ class TestPHLAtomsParityWithLegacy:
         legacy_count = engine_legacy._phl_times_hard()
 
         # Hand-computed: 2 (Friday-count blocks via FORCED) + 5 (PHLRoundOnePlay
-        # spec-010) + 3 (GosfordFridayRoundsForced spec-015, rounds {2,4,5}) = 10.
-        assert legacy_count - atom_count == 10, (
-            f"expected legacy = atom + 10; got atom={atom_count} legacy={legacy_count}"
+        # spec-010) + 3 (GosfordFridayRoundsForced spec-015, rounds {2,4,5})
+        # + 100 (PHLAnd2ndConcurrencyAtBroadmeadow spec-030, 5wk×4slot×5club) = 110.
+        assert legacy_count - atom_count == 110, (
+            f"expected legacy = atom + 110; got atom={atom_count} legacy={legacy_count}"
         )
 
     def test_atoms_solve_feasibly_on_clean_fixture(self, phl_data):
@@ -87,7 +101,9 @@ class TestPHLAtomsParityWithLegacy:
         Hand-computed gap = 2 (Broadmeadow + Gosford Friday count blocks) + 0
         (round-1 constraints are all in week 1, which is locked → dropped) + 3
         (Gosford-Friday rounds {2,4,5} are not in week 1, so still enforced by
-        legacy) = 5."""
+        legacy) + 80 (PHLAnd2ndConcurrencyAtBroadmeadow spec-030: 4 remaining
+        weeks {2,3,4,5} × 4 Sunday slots × 5 clubs = 80; week 1's 20 dropped)
+        = 85."""
         from tests.atoms.conftest import _build_phl_fixture
 
         phl_data['locked_weeks'] = {1}
@@ -99,7 +115,7 @@ class TestPHLAtomsParityWithLegacy:
         engine_b = _engine(legacy_data)
         legacy_count = engine_b._phl_times_hard()
 
-        assert legacy_count - atom_count == 5
+        assert legacy_count - atom_count == 85
 
     def test_atoms_full_pipeline_matches_legacy_status(self, phl_data):
         """End-to-end: atom dispatch and legacy `_phl_times_hard()` produce

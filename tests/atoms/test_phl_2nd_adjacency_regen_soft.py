@@ -4,7 +4,7 @@
 
 SOFT rule: per (club, week, day) where the club fields BOTH a PHL and a 2nd
 game, emit a penalty BoolVar = 1 exactly when the adjacency rule is BROKEN
-(neither same-venue-back-to-back nor cross-venue->=180-min holds). The model
+(neither same-venue-back-to-back nor cross-venue->=150-min holds). The model
 stays FEASIBLE for any X; the objective subtracts the penalties.
 
 Real CP-SAT models on the small `phl_data` fixture (tests/atoms/conftest.py).
@@ -70,7 +70,7 @@ class TestPHLAnd2ndAdjacencyRegenSoft:
 
         Oracle: SAME venue (both Broadmeadow), so rule (a) applies: needs same
         field AND adjacent day_slots. Same field (EF) but |1 - 3| = 2 != 1 ->
-        NOT adjacent -> breaks (a). Rule (b) (cross-venue >=180 min) does not
+        NOT adjacent -> breaks (a). Rule (b) (cross-venue >=150 min) does not
         apply because the venues are identical. Neither (a) nor (b) holds ->
         BROKEN -> penalty == 1.
 
