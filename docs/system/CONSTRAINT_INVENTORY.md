@@ -68,6 +68,20 @@ lookups but are **not selected by any group** — a `--groups default` run does 
 apply them. `severity_N` derived groups still cover every registry entry by
 `severity_level` regardless of `groups`.
 
+### Regeneration group (`regen`) — see `REGEN_CONSTRAINTS.md`
+
+The `regen` group is a DERIVED group used **only** by scoped draw regeneration
+(`--regen-from`, spec-026). It is defined as `core_hard ∪ regen_soft ∪ soft`
+and resolves to 32 constraints. It softens the non-physical rules (replacing them
+with 13 `regen_soft` penalty atoms, severity 5, `groups={'regen_soft'}`) so that
+a frozen-but-retimed draw does not go INFEASIBLE.
+
+The full reference — core-hard table, regen-soft atom table (bucket / weight /
+penalty unit), group definition, dispatch wiring, and engine-key design note — is
+in `docs/system/REGEN_CONSTRAINTS.md`. The per-atom engineering-detail rows for
+the 13 `regen_soft` atoms are in section 4 of this file (added alongside the
+spec-027 implementation).
+
 ## 1. Solver-applied constraints
 
 | Canonical name | Source | Actual behavior | Severity | Slack key | Atom target(s) |

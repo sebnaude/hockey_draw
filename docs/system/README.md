@@ -17,6 +17,7 @@
 | `HELPER_VARS.md` | `HelperVarRegistry` API — how atoms declare and share helper BoolVars/IntVars. |
 | `COUNT_ADJUSTERS.md` | FORCED/BLOCKED count adjuster formulas (Phase 4). |
 | `FORCED_GAMES_AS_COUNT_RULES.md` | Why per-venue Friday count atoms were retired in favour of `FORCED_GAMES`. |
+| `REGEN_CONSTRAINTS.md` | The `regen` constraint group (spec-027): core-hard set, 13 RegenSoft penalty atoms, group definition, dispatch wiring, and the engine-key design note for `EqualMatchUpSpacing`/`ClubGameSpread`. |
 
 ## The atom registry rule
 

@@ -246,6 +246,11 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 - Severity levels below are still real (`severity_N` groups resolve over
   `ConstraintInfo.severity_level`) and drive severity-staged solving; see
   `docs/system/STAGES.md` for the full group/dispatch reference.
+- The **`regen` group** (spec-027) exists for scoped draw regeneration only. It
+  softens all non-physical rules via 13 separate `regen_soft` penalty atoms
+  (severity 5) while keeping 12 `core_hard` physical constraints hard. It is
+  auto-selected by `--regen-from` and is never applied in a fresh season build.
+  Full reference: `docs/system/REGEN_CONSTRAINTS.md`.
 
 ### Severity Levels (used by --relax flag and severity-staged solving)
 

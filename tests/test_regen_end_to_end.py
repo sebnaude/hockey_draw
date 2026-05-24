@@ -510,24 +510,32 @@ class TestComputeRegenState:
             "frozen_pin_count": 4,
             "hard_locked_weeks": [],
         }
-        # spec-023 absent -> group guard returns None.
-        assert groups is None
+        # spec-027: the `regen` group is now available; it resolves to the
+        # deduped regen constraint set (no longer None).
+        from constraints.registry import resolve_groups
+        assert groups == resolve_groups(['regen'])
 
-    def test_group_guard_fires_warning_when_spec023_absent(self, source_draw, tmp_path, capsys):
-        # GIVEN spec-023 (constraints.groups.resolve_groups) is NOT importable.
+    def test_regen_group_resolves_without_warning(self, source_draw, tmp_path, capsys):
+        # spec-027: the regen group landed, so computing regen state resolves it
+        # and prints NO "not available" warning (that spec-026 guard is gone).
         src = tmp_path / "src.json"
         source_draw.save(str(src))
         args = _Args(regen_from=str(src), regen_grades=["6th"], regen_weeks=None)
-        # WHEN computing regen state.
-        _compute_regen_state(args, set())
-        # THEN the documented WARNING is printed.
+        _, _, groups = _compute_regen_state(args, set())
         out = capsys.readouterr().out
-        assert "WARNING: spec-027 regen group not available" in out
+        assert "not available" not in out
+        from constraints.registry import resolve_groups
+        assert groups == resolve_groups(['regen'])
 
-    def test_select_regen_group_returns_none_and_warns(self, capsys):
-        # Direct unit on the guard (spec-023 absent in this worktree).
-        assert _select_regen_group() is None
-        assert "WARNING: spec-027 regen group not available" in capsys.readouterr().out
+    def test_select_regen_group_returns_resolved_regen_set(self, capsys):
+        # spec-027: _select_regen_group resolves the `regen` group (no warning).
+        from constraints.registry import resolve_groups
+        result = _select_regen_group()
+        assert result == resolve_groups(['regen'])
+        # core-hard + regen-soft + soft all present; no warning printed.
+        assert 'PHLAnd2ndAdjacencyRegenSoft' in result
+        assert 'NoDoubleBookingTeams' in result
+        assert "not available" not in capsys.readouterr().out
 
     def test_lock_weeks_excluded_from_pins(self, source_draw, tmp_path):
         # GIVEN week 1 hard-locked + --regen-grades 6th.

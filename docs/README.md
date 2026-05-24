@@ -43,6 +43,7 @@ docs/
     HELPER_VARS.md                  HelperVarRegistry API
     COUNT_ADJUSTERS.md              FORCED/BLOCKED count adjuster formulas
     FORCED_GAMES_AS_COUNT_RULES.md  why per-venue Friday counts → FORCED
+    REGEN_CONSTRAINTS.md            regen group: core-hard set + 13 RegenSoft atoms (spec-027)
   reports/
     README.md
     {year}/                         per-season report bundles (snapshots)

@@ -269,3 +269,31 @@ For each unordered pair of clubs `(A, B)`, compute the per-grade meeting counts:
 **How to apply:** Demote `ClubGradeAdjacency` adjacent-grade hard block to soft (or delete the hard part entirely if separate). Add new `TeamPairNoConcurrency` soft atom reading from a new `TEAM_PAIR_NO_CONCURRENCY` config list.
 
 ---
+
+### spec-027 — Regeneration soft-constraint group
+
+**Status: DONE.** Full reference in `docs/system/REGEN_CONSTRAINTS.md`.
+
+**Target:** A `regen` constraint group, selectable via `--groups regen` and
+auto-selected by `--regen-from`, that softens every non-physical hard rule so a
+scoped regeneration run stays feasible when a frozen-but-retimed draw constrains
+the solver. The group definition: `core_hard ∪ regen_soft ∪ soft` (32 constraints
+total). Twelve `core_hard` constraints remain hard (genuine physical
+impossibilities). Thirteen new `regen_soft` atoms (penalty-only, severity 5,
+`groups={'regen_soft'}`) replace the hard rules that assumed the solver had full
+time-scheduling freedom.
+
+**Why:** Running the full `default` constraint set during regen often produces
+INFEASIBLE because pinned games (written as `LOCKED_PAIRINGS` by regen mode)
+pre-determine game dates while hard adjacency, spacing, and co-location rules
+assume solver freedom over all times. Trading infeasibility for soft penalties
+lets the solver find a best-effort valid draw instead of failing.
+
+**How to apply:** Automatically — pass `--regen-from <draw>` (and optionally
+`--regen-grades` / `--regen-weeks`) to `run.py generate`. The regen group is
+dispatched via `apply_constraint_set` with a single synthetic `'regen'` stage.
+The `--simple` flag is ignored for regen runs (the engine-only path cannot
+dispatch non-engine `regen_soft` atoms). For the 13 `regen_soft` penalty atoms
+and their penalty buckets / default weights, see `docs/system/REGEN_CONSTRAINTS.md`.
+
+---

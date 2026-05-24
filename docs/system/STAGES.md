@@ -187,19 +187,35 @@ legal because a solve applies the deduped union. `utils.py::validate_game_config
 still runs `_validate_stages` (Phase 22) when `data['solver_stages']` is present;
 errors become FATAL config errors.
 
-## Regeneration group (spec-026 → spec-027)
+## Regeneration group (`regen`) — spec-027
 
-A regeneration run (`--regen-from`, spec-026) selects a dedicated **`regen`
+A regeneration run (`--regen-from`, spec-026) automatically selects the **`regen`
 constraint group** via `run.py::_select_regen_group()` →
-`resolve_groups(['regen'])` (the groups machinery is spec-023; the `regen`
-group's soft atoms are spec-027). The regen group softens the hard rules that
-assume the solver controls game times (adjacency/spacing/co-location) so that
-frozen-but-retimed pins stay feasible — see `spec-027-regen-soft-constraint-group.md`.
+`resolve_groups(['regen'])`. The caller does not need to pass `--groups regen`
+explicitly.
 
-Until spec-023 and spec-027 land, `_select_regen_group()` returns `None`, prints
-`WARNING: spec-027 regen group not available …`, and the regen run falls back to
-the full hard constraint set (feasible only for small scopes such as
-`--regen-grades 6th`). A normal (non-regen) run never selects the `regen` group.
+`regen` is a DERIVED group (predicate in `DERIVED_GROUPS`): a constraint is in
+`regen` iff its `groups` set intersects `{'core_hard', 'regen_soft', 'soft'}`.
+This resolves to 32 constraints — 12 `core_hard` entries that stay hard
+(genuine physical constraints), 13 `regen_soft` penalty atoms that replace the
+hard rules that assumed full solver freedom (adjacency, spacing, club-day
+clustering, co-location, venue fill), and the 7 `soft` entries from the normal
+soft-optimisation stage.
+
+**Dispatch:** regen runs are always routed through `apply_constraint_set` with a
+single synthetic `'regen'` stage. The `--simple` engine-only path cannot dispatch
+non-engine `regen_soft` atoms, so `--simple` is ignored for regen runs.
+
+**Normal (non-regen) runs never select `regen`.** The `regen_soft` atoms carry
+only `{'regen_soft'}` as their groups tag — no `core`, `club_day`,
+`critical_feasibility`, or any other production tag. They are invisible to
+`default`, `all`, `production`, and every named stage group.
+
+The old `WARNING: spec-027 regen group not available …` fallback in `run.py` is
+gone; `_select_regen_group()` returns the resolved set directly.
+
+Full reference (core-hard table, regen-soft atom table, engine-key design note
+for `EqualMatchUpSpacing`/`ClubGameSpread`): `docs/system/REGEN_CONSTRAINTS.md`.
 
 ## Config validation phase
 

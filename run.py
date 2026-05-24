@@ -520,26 +520,21 @@ def _build_regen_pins(source_draw, frozen_ids):
 
 
 def _select_regen_group():
-    """Select the regen constraint group if spec-023/spec-027 have landed (DoD #3).
+    """Resolve the spec-027 `regen` constraint group (core-hard + regen-soft + soft).
 
-    Guarded: until ``constraints.groups.resolve_groups`` exists (spec-023) with a
-    ``'regen'`` group (spec-027), this returns ``None`` and prints the documented
-    WARNING. A normal (non-regen) run never calls this, so it is unaffected.
+    spec-027: the groups machinery (spec-023) and the `regen` group both landed,
+    so this now resolves and returns the deduped, canonically-ordered list of the
+    regen group's constraint names. A scoped regeneration applies this set instead
+    of the full hard constraint set — the non-physical rules are softened (their
+    `*RegenSoft` analogues emit penalties) so a frozen-but-retimed draw does not go
+    INFEASIBLE. A normal (non-regen) run never calls this.
 
     Returns:
-        The resolved group object from ``resolve_groups(['regen'])`` if available,
-        else ``None`` (caller falls back to the full hard constraint set).
+        list[str]: the resolved regen constraint canonical names (from
+        ``constraints.registry.resolve_groups(['regen'])``).
     """
-    try:
-        from constraints.groups import resolve_groups  # type: ignore
-        return resolve_groups(['regen'])
-    except (ImportError, KeyError, AttributeError):
-        print(
-            "WARNING: spec-027 regen group not available — using full hard "
-            "constraints; regen may be infeasible if frozen-but-retimed games "
-            "violate adjacency/spacing/co-location rules."
-        )
-        return None
+    from constraints.registry import resolve_groups
+    return resolve_groups(['regen'])
 
 
 def _compute_regen_state(args, locked_weeks):
@@ -842,6 +837,15 @@ def run_generate(args):
     # staged path (main_staged) and the simple/unified path (main_simple), so
     # --groups produces an identical selection in --simple and --staged.
     groups_arg = getattr(args, 'groups', None)
+    # spec-027: a scoped regeneration (--regen-from) applies the `regen` group
+    # (core-hard physical rules + regen-soft analogues + soft) unless the operator
+    # explicitly passed --groups. This softens the non-physical rules so a
+    # frozen-but-retimed draw does not go INFEASIBLE.
+    regen_active = bool(getattr(args, 'regen_from', None))
+    if regen_active and not groups_arg:
+        groups_arg = ['regen']
+        print("[*] Regeneration: defaulting to the 'regen' constraint group "
+              "(core-hard + regen-soft + soft).")
     group_names, constraint_names = _resolve_group_selection(groups_arg, exclude)
     # Asymmetry note (intentional, not a behaviour difference): the simple path
     # always receives the resolved `constraint_names` (default group when no
@@ -873,23 +877,29 @@ def run_generate(args):
     if hint_path:
         provenance['hint_source'] = hint_path
 
-    # ----- spec-026: Regeneration mode wiring -----
+    # ----- spec-026/spec-027: Regeneration mode wiring -----
     regen_locked_pairings, regen_info, regen_groups = _compute_regen_state(
         args, locked_weeks
     )
-    # DoD #3: pass the regen group through to the solver IF the spec-023 API
-    # produced one. Until spec-023/spec-027 land, regen_groups is always None
-    # (the guard in _select_regen_group warns and returns None) and the main_*
-    # functions have no `groups` kwarg yet — so there is nothing to forward.
-    # This branch is the spec-023-landed integration seam (dark until then).
-    # TODO(spec-023): when the groups machinery lands, wire regen_groups through:
-    #   (1) add a `groups=None` kwarg to both main_staged and main_simple,
-    #   (2) replace the print below with forwarding regen_groups via that kwarg
-    #       at both call sites in run_generate, and
-    #   (3) have the constraint engine apply the resolved group (select the
-    #       regen soft/hard set per spec-027) instead of the full hard set.
-    if regen_groups is not None:
-        print(f"[*] Regen constraint group resolved: {regen_groups}")
+    # spec-027: a regen run applies its constraint set (the resolved `regen` group,
+    # or whatever the operator selected via --groups) through the STAGED dispatcher
+    # `apply_constraint_set` — the only path that dispatches the non-engine
+    # `*RegenSoft` atoms. The engine-only `--simple` path cannot add them, so a
+    # regen run is routed staged with a single synthetic 'regen' stage = the
+    # resolved selection. We build that stage from `constraint_names` (the regen
+    # group resolved above); `regen_groups` is the same set, kept for metadata.
+    regen_stage_override = None
+    if regen_active:
+        regen_stage_override = [{
+            'name': 'regen',
+            'description': ('spec-027 regeneration constraint group — core-hard '
+                            'physical rules + regen-soft analogues + soft'),
+            'atoms': list(constraint_names),
+        }]
+        if args.simple or use_unified:
+            print("[*] Regeneration uses the staged constraint dispatcher (the "
+                  "simple engine path cannot apply the regen-soft atoms); "
+                  "the --simple flag is ignored for this run.")
 
     # Resolve --stages-config / --stage-only / --skip-stage. Used for
     # SOLVER_STAGES dispatch in main_staged.
@@ -903,7 +913,7 @@ def run_generate(args):
         season_config = {} if getattr(args, 'stages_config', None) else load_data(args.year)
         resolved_stages = _resolve_solver_stages(args, season_config)
 
-    if args.simple or use_unified:
+    if (args.simple or use_unified) and not regen_active:
         from main_staged import main_simple
         solution, data = main_simple(
             locked_keys=locked_keys,
@@ -926,6 +936,16 @@ def run_generate(args):
     else:
         stages = getattr(args, 'stages', None)
         severity_staged = getattr(args, 'staged', False)
+        # spec-027: a regen run applies its single synthetic 'regen' stage (the
+        # resolved regen group) via the staged dispatcher, never severity staging,
+        # and passes the regen set as constraint_names so the stage is unfiltered.
+        if regen_active:
+            staged_stages = regen_stage_override
+            severity_staged = False
+            staged_filter = list(constraint_names)
+        else:
+            staged_stages = resolved_stages
+            staged_filter = staged_constraint_filter
         solution, data = main_staged(
             run_id=final_run_id,
             resume_from=resume_from,
@@ -942,8 +962,8 @@ def run_generate(args):
             exclude_constraints=exclude,
             description=user_description,
             provenance=provenance,
-            solver_stages=resolved_stages,
-            constraint_names=staged_constraint_filter,
+            solver_stages=staged_stages,
+            constraint_names=staged_filter,
             groups_selected=group_names,
             regen_locked_pairings=regen_locked_pairings,
             regen_info=regen_info,

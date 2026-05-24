@@ -58,9 +58,13 @@ class ClubDayParticipationRegenSoft(Atom):
             club_team_names = club_team_lookup.get(club_name, [])
             game_keys = club_day_game_keys(X, club_team_names, date_str)
             if not game_keys:
-                raise ValueError(
-                    f'No games found for club {club_name} on {date_str}'
-                )
+                # SOFT-atom contract: never raise. The hard sibling raises here
+                # as a fresh-build fixture-sanity guard, but in a scoped
+                # regeneration the X dict may legitimately contain no candidate
+                # vars for a configured club-day (that grade/week is frozen or
+                # out of scope). Skip it as a zero-penalty no-op rather than
+                # aborting the solve. (Mode B review fix — spec-027.)
+                continue
             for team in club_team_names:
                 team_vars = [
                     X[key] for key in game_keys

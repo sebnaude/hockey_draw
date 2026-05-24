@@ -147,33 +147,36 @@ class TestViolationCounted:
         atom = BalancedByeSpacingRegenSoft()
         n_terms = atom.apply(model, X, data, _registry(model))
 
-        # Atom must emit a positive number of penalty terms (at minimum 3 from
-        # the target team; other teams may contribute more).
-        assert n_terms >= 3, (
-            f"Expected ≥ 3 penalty terms (3 from target team); got {n_terms}"
-        )
-
         # Penalty bucket must exist and hold the right weight.
         bucket = data.get('penalties', {}).get('regen_balanced_bye_spacing', {})
         assert bucket, "Penalty bucket must be created"
         assert bucket['weight'] == REGEN_BALANCED_BYE_SPACING_DEFAULT_WEIGHT
         assert len(bucket['penalties']) == n_terms
 
-        # Maximise penalty sum to confirm target team's 3 violations all fire.
-        # We don't enforce an upper bound because other unconstrained teams
-        # may also accumulate violations — but the minimum must be ≥ 3.
-        model.Maximize(sum(bucket['penalties']))
+        # EXACT per-team oracle (Mode B review fix): isolate the TARGET team's
+        # penalty vars by their label `bye_soft_pen_{team}_{grade}_r{r1}_r{r2}`.
+        # The atom emits one var per round-pair within S (a var is 1 only when
+        # BOTH rounds are byes). The target byes {1,2,3} with S=2, so EXACTLY the
+        # three pairs (1,2),(1,3),(2,3) have both-bye → resolve to 1; every other
+        # target var has at least one non-bye round → resolves to 0. So the
+        # target team's penalty vars SUM to exactly 3, regardless of how the rest
+        # of the schedule (other teams) is solved — a precise per-team oracle.
+        label_prefix = f'bye_soft_pen_{target}_{self.GRADE}_'
+        target_pen_vars = [
+            v for v in bucket['penalties'] if v.Name().startswith(label_prefix)
+        ]
+        assert target_pen_vars, "Target team must have bye penalty vars"
+
+        # Model stays FEASIBLE (soft atom) and the target's bye-pair vars sum to 3.
         status, solver = _solve(model)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE), (
             f"Model must stay FEASIBLE (soft atom); got "
             f"{cp_model.CpSolver().status_name(status)}"
         )
-        total_penalty = solver.ObjectiveValue()
-        # The three target-team pairs are all forced to 1 by the pin;
-        # the objective is at least 3.
-        assert total_penalty >= 3, (
-            f"Expected objective >= 3 (target team's 3 violations); "
-            f"got {total_penalty}"
+        target_total = sum(solver.Value(v) for v in target_pen_vars)
+        assert target_total == 3, (
+            f"Target team's byes at {{1,2,3}} → exactly 3 too-close bye pairs "
+            f"fire (==3); got {target_total}"
         )
 
     def test_no_hard_infeasibility(self):
