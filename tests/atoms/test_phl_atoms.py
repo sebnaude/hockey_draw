@@ -17,7 +17,7 @@ from __future__ import annotations
 from ortools.sat.python import cp_model
 
 from constraints.atoms import (
-    PHLAnd2ndConcurrencyAtBroadmeadow,
+    PHLAnd2ndAdjacency,
     PHLConcurrencyAtBroadmeadow,
 )
 from constraints.atoms.base import BROADMEADOW, GOSFORD, MAITLAND
@@ -69,37 +69,86 @@ class TestPHLConcurrencyAtBroadmeadow:
             status, _ = solve_with_timeout(model)
             assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
+    # spec-030 (DoD 6): locked-week skip. PHLConcurrencyAtBroadmeadow iterates
+    # via `iter_phl_keys`, which (default `include_locked=False`) drops
+    # locked-week vars before they reach the atom — so the atom already skips
+    # locked weeks (no inline guard is added; one would be dead code, since the
+    # locked-week keys never reach the grouping loop). These two tests pin that
+    # behaviour as a regression guard.
+    #
+    # Fixture: two DISTINCT PHL games sharing (week=3, Sunday, slot 1,
+    # Broadmeadow). The grouping key is (week, day, day_slot, location), so both
+    # land in one group of size 2.
+    @staticmethod
+    def _two_phl_same_broadmeadow_slot(model, week):
+        k1 = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '11:30',
+              week, '2026-04-05', week, 'EF', BROADMEADOW)
+        k2 = ('Gosford PHL', 'Norths PHL', 'PHL', 'Sunday', 1, '11:30',
+              week, '2026-04-05', week, 'EF', BROADMEADOW)
+        return {k1: model.NewBoolVar('p1'), k2: model.NewBoolVar('p2')}
+
+    def test_skips_locked_week(self):
+        # Given two same-(week,day,slot) Broadmeadow PHL games on a LOCKED week,
+        model = cp_model.CpModel()
+        X = self._two_phl_same_broadmeadow_slot(model, week=3)
+        # When apply runs with week 3 locked,
+        n = PHLConcurrencyAtBroadmeadow().apply(
+            model, X, {'locked_weeks': {3}}, _registry(model))
+        # Then 0 constraints are added (hand oracle: iter_phl_keys yields nothing
+        # on a locked week, so `groups` is empty).
+        assert n == 0
+        assert len(model.Proto().constraints) == 0
+
+    def test_applies_on_non_locked_week(self):
+        # Given the same fixture on a NON-locked week,
+        model = cp_model.CpModel()
+        X = self._two_phl_same_broadmeadow_slot(model, week=3)
+        # When apply runs with no locked weeks,
+        n = PHLConcurrencyAtBroadmeadow().apply(
+            model, X, {'locked_weeks': set()}, _registry(model))
+        # Then exactly 1 `sum <= 1` constraint is added (one group of size 2).
+        assert n == 1
+        assert len(model.Proto().constraints) == 1
+
 
 # ----------------------------------------------------------------------
-# PHLAnd2ndConcurrencyAtBroadmeadow
+# spec-030 (DoD 7): PHLAnd2ndAdjacency 2.5h cross-venue boundary. The deleted
+# PHLAnd2ndConcurrencyAtBroadmeadow's same-slot rule is subsumed here (same
+# venue is only allowed on the same field in adjacent slots), so we test the
+# surviving atom's cross-venue minute threshold (now 150 = 2.5 h, via the
+# `phl_2nd_cross_venue_min_minutes` fallback).
 # ----------------------------------------------------------------------
 
 
-class TestPHLAnd2ndConcurrencyAtBroadmeadow:
-    def test_solo_clean_feasible(self, phl_data):
-        model, X = build_model_X(phl_data)
-        PHLAnd2ndConcurrencyAtBroadmeadow().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+class TestPHLAnd2ndAdjacencyCrossVenueGap:
+    @staticmethod
+    def _cross_venue_pair(model, second_time):
+        """One club (Tigers) fields PHL 11:00 at Broadmeadow and 2nd at
+        `second_time` at Maitland. Opponents differ (Wests PHL, Norths 2nd) so
+        only the Tigers bucket has BOTH grades -> at most one evaluated pair."""
+        phl = ('Tigers PHL', 'Wests PHL', 'PHL', 'Sunday', 1, '11:00',
+               1, '2026-03-22', 1, 'EF', BROADMEADOW)
+        second = ('Norths 2nd', 'Tigers 2nd', '2nd', 'Sunday', 2, second_time,
+                  1, '2026-03-22', 1, 'Maitland Main Field', MAITLAND)
+        return {phl: model.NewBoolVar('phl'), second: model.NewBoolVar('2nd')}
 
-    def test_violation_same_club_phl_and_2nd_at_broadmeadow_slot(self, phl_data):
-        model, X = build_model_X(phl_data)
-        phl_key = next(
-            k for k in X
-            if k[2] == 'PHL' and k[10] == BROADMEADOW and k[3] == 'Sunday'
-            and ('Tigers PHL' in (k[0], k[1])) and k[6] == 1 and k[4] == 1
-        )
-        second_key = next(
-            k for k in X
-            if k[2] == '2nd' and k[10] == BROADMEADOW and k[3] == 'Sunday'
-            and ('Tigers 2nd' in (k[0], k[1]))
-            and k[6] == 1 and k[4] == 1
-        )
-        model.Add(X[phl_key] == 1)
-        model.Add(X[second_key] == 1)
-        PHLAnd2ndConcurrencyAtBroadmeadow().apply(model, X, phl_data, _registry(model))
-        status, _ = solve_with_timeout(model)
-        assert status == cp_model.INFEASIBLE
+    def test_exactly_150min_is_allowed(self, phl_data):
+        # Given PHL 11:00 (660) and 2nd 13:30 (810) on DIFFERENT venues,
+        # |660 - 810| = 150 >= 150 -> allowed.
+        model = cp_model.CpModel()
+        X = self._cross_venue_pair(model, '13:30')
+        n = PHLAnd2ndAdjacency().apply(model, X, phl_data, _registry(model))
+        assert n == 0
+        assert len(model.Proto().constraints) == 0
+
+    def test_140min_is_forbidden(self, phl_data):
+        # Given PHL 11:00 (660) and 2nd 13:20 (800) on DIFFERENT venues,
+        # |660 - 800| = 140 < 150 -> forbidden (one `p + q <= 1`).
+        model = cp_model.CpModel()
+        X = self._cross_venue_pair(model, '13:20')
+        n = PHLAnd2ndAdjacency().apply(model, X, phl_data, _registry(model))
+        assert n == 1
+        assert len(model.Proto().constraints) == 1
 
 
 # ----------------------------------------------------------------------

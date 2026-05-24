@@ -370,14 +370,14 @@ class TestDiagnoseCommand:
         """`_diagnose_group_atoms` groups atomized cluster atoms together."""
         groups = run._diagnose_group_atoms([
             'PHLConcurrencyAtBroadmeadow',
-            'PHLAnd2ndConcurrencyAtBroadmeadow',
             'NoDoubleBookingTeams',
             'MaximiseClubsPerTimeslotBroadmeadow',
         ])
-        # PHL atoms collapse to PHLAndSecondGradeTimes.
+        # PHL atoms collapse to PHLAndSecondGradeTimes (spec-030:
+        # PHLAnd2ndConcurrencyAtBroadmeadow deleted, so the cluster is just one).
         assert 'PHLAndSecondGradeTimes' in groups
         assert set(groups['PHLAndSecondGradeTimes']) == {
-            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
+            'PHLConcurrencyAtBroadmeadow',
         }
         # NoDoubleBookingTeams is its own engine key.
         assert 'NoDoubleBookingTeams' in groups

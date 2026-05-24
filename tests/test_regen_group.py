@@ -34,7 +34,6 @@ ORACLE_CORE_HARD = {
     'EqualGamesAndBalanceMatchUps',
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'PHLConcurrencyAtBroadmeadow',
-    'PHLAnd2ndConcurrencyAtBroadmeadow',
     'SameGradeSameClubNoConcurrency',
     'ClubNoConcurrentSlot',
     'TeamConflict',
@@ -98,7 +97,7 @@ def test_core_hard_membership_equals_hand_oracle():
     When resolve_group('core_hard') is called,
     Then it equals exactly the hand-listed 12-member core-hard set."""
     assert resolve_group('core_hard') == ORACLE_CORE_HARD
-    assert len(ORACLE_CORE_HARD) == 12
+    assert len(ORACLE_CORE_HARD) == 11  # spec-030: was 12 before deleting PHLAnd2ndConcurrencyAtBroadmeadow
 
 
 def test_regen_includes_every_core_hard_regen_soft_and_soft_member():

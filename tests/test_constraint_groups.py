@@ -25,11 +25,12 @@ from constraints.registry import (
 # Hand-computed oracle for resolve_groups(['core', 'soft']).
 #
 # `core` (21 members) and `soft` (7 members) are DISJOINT, so the union is
-# exactly 28 names. Listed below in CONSTRAINT_REGISTRY insertion order (the
+# exactly 27 names. Listed below in CONSTRAINT_REGISTRY insertion order (the
 # canonical apply order) — derived by hand from the reconciled §1 tags:
+#   (spec-030: PHLAnd2ndConcurrencyAtBroadmeadow deleted -> 28 down to 27.)
 #   critical_feasibility (core): NoDoubleBookingTeams, NoDoubleBookingFields,
 #       EqualGamesAndBalanceMatchUps, PHLAnd2ndAdjacency,
-#       PHLConcurrencyAtBroadmeadow, PHLAnd2ndConcurrencyAtBroadmeadow,
+#       PHLConcurrencyAtBroadmeadow,
 #       EqualMatchUpSpacing, BalancedByeSpacing, SameGradeSameClubNoConcurrency,
 #       ClubNoConcurrentSlot, VenueEarliestSlotFill
 #   home_away_balance (core): AwayClubHomeWeekendsCount,
@@ -51,7 +52,6 @@ ORACLE_CORE_PLUS_SOFT: List[str] = [
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'PHLAnd2ndAdjacency',
     'PHLConcurrencyAtBroadmeadow',
-    'PHLAnd2ndConcurrencyAtBroadmeadow',
     'EqualMatchUpSpacing',
     'BalancedByeSpacing',
     'ClubDayParticipation',
@@ -84,7 +84,7 @@ def test_resolve_groups_core_soft_equals_hand_oracle():
     assert result == ORACLE_CORE_PLUS_SOFT
     # No duplicates.
     assert len(result) == len(set(result))
-    assert len(result) == 28
+    assert len(result) == 27  # spec-030: was 28 before deleting PHLAnd2ndConcurrencyAtBroadmeadow
 
 
 def test_overlapping_groups_yield_one_copy_each():

@@ -136,7 +136,6 @@ BASELINE_SEVERITY_STAGES = [
         'NoDoubleBookingFields',
         'NoDoubleBookingTeams',
         'PHLAnd2ndAdjacency',
-        'PHLAnd2ndConcurrencyAtBroadmeadow',
         'PHLConcurrencyAtBroadmeadow',
         'SameGradeSameClubNoConcurrency',
     ]),

@@ -98,8 +98,8 @@ class TestRegistryCompleteness:
         ClubVsClubStackedCoLocation, EqualMatchUpSpacing, BalancedByeSpacing,
         the 5 ClubDay sub-atoms (Participation/IntraClubMatchup/OpponentMatchup/
         SameField/ContiguousSlots), ClubGameSpread, VenueEarliestSlotFill:
-        38 + 13 = 51."""
-        assert len(CONSTRAINT_REGISTRY) == 51
+        38 + 13 = 51. spec-030 DELETED PHLAnd2ndConcurrencyAtBroadmeadow: 50."""
+        assert len(CONSTRAINT_REGISTRY) == 50
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
