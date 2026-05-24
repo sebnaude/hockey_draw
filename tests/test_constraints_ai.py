@@ -614,9 +614,6 @@ class TestClubGameSpreadAI:
         # 4 games in 3 slots: gap=-1 >= -1 (max_overlap=1) → FEASIBLE
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
-    # spec-031: Field concentration tests removed (ClubFieldConcentration deleted;
-    # these tested constraints.archived.ai.ClubGameSpreadAI's internal penalty dict).
-
     # ---------- Slack ----------
 
     def test_slack_relaxes_hard_limit(self):

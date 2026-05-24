@@ -1200,7 +1200,6 @@ class DrawTester:
             ('ClubGameSpread', self._check_club_game_spread),
             # spec-021: cross-grade club no-concurrency (capacity-aware).
             ('ClubNoConcurrentSlot', self._check_club_no_concurrent_slot),
-            # spec-031: ClubFieldConcentration removed (convenor: not a problem).
             # spec-024: MaximiseClubsPerTimeslotBroadmeadow /
             # MinimiseClubsOnAFieldBroadmeadow checks removed (constraints deleted).
             # Level 5 - VERY LOW
@@ -2213,9 +2212,6 @@ class DrawTester:
                     metric_value=count - cap,
                 ))
         return violations
-
-    # spec-031: _check_club_field_concentration removed (convenor: not a problem;
-    # intent superseded by ClubGameSpread).
 
     # spec-024: _check_maximise_clubs_per_timeslot_broadmeadow and
     # _check_minimise_clubs_on_a_field_broadmeadow removed (constraints deleted).

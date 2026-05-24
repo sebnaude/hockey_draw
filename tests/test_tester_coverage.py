@@ -878,8 +878,6 @@ class TestCheckClubGameSpread:
         assert len(tiger_v) == 0
 
 
-# spec-031: TestCheckClubFieldConcentration removed (_check_club_field_concentration deleted).
-
 # ============== _check_maximise_clubs_per_timeslot_broadmeadow ==============
 
 # spec-024: TestCheckMaximiseClubsPerTimeslotBroadmeadow and

@@ -401,8 +401,6 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         # spec-027: physical slot-concurrency — stays HARD in regen (core_hard).
         groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
-    # spec-031: ClubFieldConcentration entry removed (convenor: not a problem;
-    # intent superseded by ClubGameSpread).
     # spec-024: `MaximiseClubsPerTimeslotBroadmeadow` and
     # `MinimiseClubsOnAFieldBroadmeadow` deleted. Their "spread the clubs around"
     # intent is now expressed club-side by the field-aware `ClubGameSpread`

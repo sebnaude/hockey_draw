@@ -30,7 +30,6 @@ Constraints that trivially fail with partial data (6 of 22 weeks) — tested sep
   - ClubDay: 12 (club days fall outside the 6-week window)
   - ClubVsClubAlignment: 28 (insufficient rounds for coincidence)
   - PHLSecondGradeTimes: 1 (Gosford Friday count can't match with partial data)
-  - (spec-031: ClubFieldConcentration removed — diagnostic deleted)
 """
 
 import pytest
@@ -395,8 +394,6 @@ class TestClubGameSpread:
         for v in violations:
             assert any(club in v.message for club in known_clubs), f"No club name in: {v.message}"
 
-
-# spec-031: TestClubFieldConcentration removed (_check_club_field_concentration deleted).
 
 # ============== Level 4: LOW ==============
 

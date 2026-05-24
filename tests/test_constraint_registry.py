@@ -99,7 +99,7 @@ class TestRegistryCompleteness:
         the 5 ClubDay sub-atoms (Participation/IntraClubMatchup/OpponentMatchup/
         SameField/ContiguousSlots), ClubGameSpread, VenueEarliestSlotFill:
         38 + 13 = 51. spec-030 DELETED PHLAnd2ndConcurrencyAtBroadmeadow: 50.
-        spec-031 DELETED ClubFieldConcentration: 49."""
+        spec-031 DELETED 1 tester-only diagnostic: 49."""
         assert len(CONSTRAINT_REGISTRY) == 49
 
     def test_all_entries_have_required_fields(self):
@@ -245,7 +245,7 @@ class TestTesterOnlyConstraints:
 
     def test_get_tester_only_returns_expected(self):
         tester_only = get_tester_only_constraints()
-        # spec-031: ClubFieldConcentration removed; ForcedGames is a remaining tester-only
+        # spec-031 removed one tester-only diagnostic; ForcedGames is a remaining one
         assert 'ForcedGames' in tester_only
 
     def test_non_tester_only_have_solver_names(self):
