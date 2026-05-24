@@ -71,4 +71,4 @@ def test_metadata_defaults_to_default_group_when_unset(tmp_path):
     assert meta['groups_selected'] == ['default']
     # Hand oracle: with nothing stashed, the applied set is the 'default' group.
     assert meta['applied_constraint_set'] == list(resolve_groups(['default']))
-    assert len(meta['applied_constraint_set']) == 28
+    assert len(meta['applied_constraint_set']) == 27  # spec-030: was 28 (deleted PHLAnd2ndConcurrencyAtBroadmeadow)

@@ -432,7 +432,7 @@ class TestPreferredTimes:
 
 class TestPHLSecondGradeAdjacency:
     """spec-014: same-club PHL/2nd must be back-to-back on one field at a
-    single venue, OR (across venues) start >= 180-min apart."""
+    single venue, OR (across venues) start >= 150-min apart (spec-030: 180->150)."""
 
     @staticmethod
     def _expected_violation_count(tester):
@@ -440,7 +440,7 @@ class TestPHLSecondGradeAdjacency:
         oracle the tester method is checked against (no shared code path)."""
         from collections import defaultdict
         cross_min = tester.data.get('constraint_defaults', {}).get(
-            'phl_2nd_cross_venue_min_minutes', 180)
+            'phl_2nd_cross_venue_min_minutes', 150)
 
         def mins(t):
             h, m = t.split(':')
