@@ -1,11 +1,11 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-030 -->
 <!-- note: spec-029 (which edited the same analytics/tester.py) is now done (ccc3d07); that contention is resolved. Original depends_on listed spec-029 too. -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-aiupd-031 claimed=2026-05-24 -->
 
 # spec-031 — Remove the `ClubFieldConcentration` diagnostic
 
