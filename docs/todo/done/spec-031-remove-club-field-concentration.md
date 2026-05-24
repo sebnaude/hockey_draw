@@ -1,4 +1,5 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- done: 2026-05-24 — merged into final-form (merge commit on final-form); Mode B verified clean (182 tests green, registry 50→49, ClubFieldConcentration fully removed across all 9 sites). -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-030 -->
