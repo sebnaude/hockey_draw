@@ -518,6 +518,134 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         # purpose. Stays HARD (core_hard). Enforced at generate_X time.
         groups=frozenset({'core_hard'}),
     ),
+    # ==================================================================
+    # spec-027: regeneration soft-analogue atoms (`regen_soft`).
+    # Each is the SOFT analogue of a production HARD constraint: it emits a
+    # penalty into data['penalties'][bucket] instead of a hard clause, so a
+    # scoped regeneration honours the rule when it can and reports a tracked
+    # penalty when it can't. Selected ONLY by the `regen` group; a fresh build
+    # never applies them (they carry no `core`/`soft` tag). Pure-soft:
+    # severity 5, has_soft_component=True, no tester check (objective-only,
+    # exempt from the tester-method requirement — see test_constraint_registry
+    # ::test_all_entries_have_required_fields). Dispatched as non-engine atoms.
+    # ==================================================================
+    'PHLAnd2ndAdjacencyRegenSoft': ConstraintInfo(
+        canonical_name='PHLAnd2ndAdjacencyRegenSoft',
+        solver_class_names=['PHLAnd2ndAdjacencyRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'AwayClubHomeWeekendsCountRegenSoft': ConstraintInfo(
+        canonical_name='AwayClubHomeWeekendsCountRegenSoft',
+        solver_class_names=['AwayClubHomeWeekendsCountRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubVsClubStackedWeekendsRegenSoft': ConstraintInfo(
+        canonical_name='ClubVsClubStackedWeekendsRegenSoft',
+        solver_class_names=['ClubVsClubStackedWeekendsRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubVsClubStackedCoLocationRegenSoft': ConstraintInfo(
+        canonical_name='ClubVsClubStackedCoLocationRegenSoft',
+        solver_class_names=['ClubVsClubStackedCoLocationRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'EqualMatchUpSpacingRegenSoft': ConstraintInfo(
+        canonical_name='EqualMatchUpSpacingRegenSoft',
+        solver_class_names=['EqualMatchUpSpacingRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'BalancedByeSpacingRegenSoft': ConstraintInfo(
+        canonical_name='BalancedByeSpacingRegenSoft',
+        solver_class_names=['BalancedByeSpacingRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubDayParticipationRegenSoft': ConstraintInfo(
+        canonical_name='ClubDayParticipationRegenSoft',
+        solver_class_names=['ClubDayParticipationRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubDayIntraClubMatchupRegenSoft': ConstraintInfo(
+        canonical_name='ClubDayIntraClubMatchupRegenSoft',
+        solver_class_names=['ClubDayIntraClubMatchupRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubDayOpponentMatchupRegenSoft': ConstraintInfo(
+        canonical_name='ClubDayOpponentMatchupRegenSoft',
+        solver_class_names=['ClubDayOpponentMatchupRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubDaySameFieldRegenSoft': ConstraintInfo(
+        canonical_name='ClubDaySameFieldRegenSoft',
+        solver_class_names=['ClubDaySameFieldRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubDayContiguousSlotsRegenSoft': ConstraintInfo(
+        canonical_name='ClubDayContiguousSlotsRegenSoft',
+        solver_class_names=['ClubDayContiguousSlotsRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'ClubGameSpreadRegenSoft': ConstraintInfo(
+        canonical_name='ClubGameSpreadRegenSoft',
+        solver_class_names=['ClubGameSpreadRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
+    'VenueEarliestSlotFillRegenSoft': ConstraintInfo(
+        canonical_name='VenueEarliestSlotFillRegenSoft',
+        solver_class_names=['VenueEarliestSlotFillRegenSoft'],
+        tester_check_methods=[],
+        tester_violation_names=[],
+        severity_level=5,
+        has_soft_component=True,
+        groups=frozenset({'regen_soft'}),
+    ),
 }
 
 

@@ -235,6 +235,13 @@ def severity_solver_stages() -> List[Dict[str, Any]]:
             return False
         if name in atomized_groups:
             return False
+        # spec-027: severity staging is a FRESH-BUILD selection. The regen-only
+        # soft-analogue atoms (`regen_soft`, all severity 5) must NEVER appear in
+        # a normal --staged solve — they apply only in scoped regeneration via
+        # the `regen` group. Drop them here so severity_5 stays the fresh-build
+        # soft set.
+        if 'regen_soft' in info.groups:
+            return False
         return True
 
     stages: List[Dict[str, Any]] = []

@@ -74,6 +74,24 @@ ORACLE_SOFT_MEMBERS = {
     'PreferredGames',
 }
 
+# The 13 spec-027 regen soft-analogue atoms (Unit B). The `regen` group selects
+# these IN PLACE OF the hard atoms in ORACLE_SOFTENED_HARD_ATOMS.
+ORACLE_REGEN_SOFT = {
+    'PHLAnd2ndAdjacencyRegenSoft',
+    'AwayClubHomeWeekendsCountRegenSoft',
+    'ClubVsClubStackedWeekendsRegenSoft',
+    'ClubVsClubStackedCoLocationRegenSoft',
+    'EqualMatchUpSpacingRegenSoft',
+    'BalancedByeSpacingRegenSoft',
+    'ClubDayParticipationRegenSoft',
+    'ClubDayIntraClubMatchupRegenSoft',
+    'ClubDayOpponentMatchupRegenSoft',
+    'ClubDaySameFieldRegenSoft',
+    'ClubDayContiguousSlotsRegenSoft',
+    'ClubGameSpreadRegenSoft',
+    'VenueEarliestSlotFillRegenSoft',
+}
+
 
 def test_core_hard_membership_equals_hand_oracle():
     """Given the registry tagged per spec-027 DoD-1,
@@ -83,15 +101,26 @@ def test_core_hard_membership_equals_hand_oracle():
     assert len(ORACLE_CORE_HARD) == 12
 
 
-def test_regen_includes_every_core_hard_and_soft_member():
-    """Given the regen derived group,
+def test_regen_includes_every_core_hard_regen_soft_and_soft_member():
+    """Given the regen derived group (DoD-5),
     When resolved,
-    Then every core_hard member and every soft member is present."""
+    Then every core_hard member, every regen_soft member, and every soft member
+    is present."""
     regen = set(resolve_groups(['regen']))
     missing_hard = ORACLE_CORE_HARD - regen
+    missing_regen_soft = ORACLE_REGEN_SOFT - regen
     missing_soft = ORACLE_SOFT_MEMBERS - regen
     assert not missing_hard, f"core_hard members missing from regen: {missing_hard}"
+    assert not missing_regen_soft, f"regen_soft members missing: {missing_regen_soft}"
     assert not missing_soft, f"soft members missing from regen: {missing_soft}"
+
+
+def test_regen_soft_group_has_exactly_13_members():
+    """Given the regen_soft tag,
+    When resolved,
+    Then it is exactly the 13 spec-027 soft-analogue atoms (DoD-10 count)."""
+    assert resolve_group('regen_soft') == ORACLE_REGEN_SOFT
+    assert len(ORACLE_REGEN_SOFT) == 13
 
 
 def test_regen_excludes_softened_hard_atoms():
@@ -106,14 +135,15 @@ def test_regen_excludes_softened_hard_atoms():
     )
 
 
-def test_regen_in_unit_a_is_core_hard_plus_soft():
-    """Given Unit A (no regen_soft atoms exist yet),
+def test_regen_equals_core_hard_plus_regen_soft_plus_soft():
+    """Given the full registry (Unit A tags + Unit B atoms),
     When resolve_groups(['regen']) is called,
-    Then it equals exactly core_hard ∪ soft (the regen_soft dimension is empty
-    until Unit B lands its atoms)."""
-    # This pins the Unit-A state precisely. Unit B's atom tests assert the
-    # post-Unit-B state (core_hard ∪ regen_soft ∪ soft).
-    assert set(resolve_groups(['regen'])) == ORACLE_CORE_HARD | ORACLE_SOFT_MEMBERS
+    Then it equals EXACTLY core_hard ∪ regen_soft ∪ soft — no more, no less. In
+    particular it contains none of the softened hard atoms (those are replaced by
+    their RegenSoft analogue) and nothing outside the three tagged dimensions."""
+    assert set(resolve_groups(['regen'])) == (
+        ORACLE_CORE_HARD | ORACLE_REGEN_SOFT | ORACLE_SOFT_MEMBERS
+    )
 
 
 def test_regen_output_is_registry_insertion_order():

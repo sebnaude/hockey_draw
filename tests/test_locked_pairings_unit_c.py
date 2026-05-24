@@ -212,9 +212,10 @@ def test_registry_has_locked_pairings_entry():
     assert info.solver_class_names == []
 
 
-def test_registry_count_is_38():
-    """spec-025 adds LockedPairings: 37 -> 38."""
-    assert len(CONSTRAINT_REGISTRY) == 38
+def test_registry_count_is_51():
+    """spec-025 adds LockedPairings: 37 -> 38.
+    spec-027 adds 13 regeneration soft-analogue (`*RegenSoft`) atoms: 38 -> 51."""
+    assert len(CONSTRAINT_REGISTRY) == 51
 
 
 def test_check_method_is_registered():

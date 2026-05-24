@@ -92,8 +92,14 @@ class TestRegistryCompleteness:
         `MinimiseClubsOnAFieldBroadmeadow` (their club-spread intent is now the
         field-aware `ClubGameSpread`): 39 - 2 = 37.
         spec-025 ADDED `LockedPairings` (tester_only date-pin check, sister to
-        `ForcedGames`/`BlockedGames`): 37 + 1 = 38."""
-        assert len(CONSTRAINT_REGISTRY) == 38
+        `ForcedGames`/`BlockedGames`): 37 + 1 = 38.
+        spec-027 ADDED 13 regeneration soft-analogue atoms (`*RegenSoft`):
+        PHLAnd2ndAdjacency, AwayClubHomeWeekendsCount, ClubVsClubStackedWeekends,
+        ClubVsClubStackedCoLocation, EqualMatchUpSpacing, BalancedByeSpacing,
+        the 5 ClubDay sub-atoms (Participation/IntraClubMatchup/OpponentMatchup/
+        SameField/ContiguousSlots), ClubGameSpread, VenueEarliestSlotFill:
+        38 + 13 = 51."""
+        assert len(CONSTRAINT_REGISTRY) == 51
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
