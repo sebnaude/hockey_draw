@@ -1,9 +1,12 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
+<!-- verified: adversarial Mode B 2026-05-24 — SAFE TO MERGE; DoD-4 deviation (locked-week skip already provided by iter_phl_keys default) and parity 100/80 derivation both confirmed; 2 findings (regen doc counts, tester fallback) fixed inline -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
-<!-- owner: session=opus-aiupd-030 claimed=2026-05-24 -->
+<!-- owner: session=opus-aiupd-030 claimed=2026-05-24 completed=2026-05-24 -->
+<!-- impl-note: DoD-4 implemented as a test-only regression guard, NOT an inline guard — PHLConcurrencyAtBroadmeadow already skips locked weeks via iter_phl_keys(include_locked=False); an inline guard would be unreachable dead code. -->
+<!-- merged: final-form @ 91f6947 (ff) -->.
 
 # spec-030 — PHL/2nd cleanup: 2.5h cross-venue gap, drop the redundant concurrency atom, locked-week parity
 
