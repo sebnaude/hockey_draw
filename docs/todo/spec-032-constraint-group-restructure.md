@@ -1,8 +1,8 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-031 -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-spec032-20260524 claimed=2026-05-24T00:00:00Z -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 
 # spec-032 — Constraint group restructure: `symmetry_breakers` (always-on) + `core` minus spacing + lonesome `spacing`
@@ -60,6 +60,7 @@ Two units, sequenced A→B. They share **no code file** (Unit A edits `constrain
     - Add `ORACLE_SYMMETRY_BREAKERS = {'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF', 'SoftLexMatchupOrdering'}`.
     - `test_regen_includes_every_core_hard_regen_soft_and_soft_member` (line 104): update to also assert `ORACLE_SYMMETRY_BREAKERS ⊆ regen`.
     - Add test asserting `ORACLE_SOFT_MEMBERS ⊆ regen` (they still have `soft` and are still in regen via the unchanged `soft` branch of the widened predicate).
+    - `test_regen_equals_core_hard_plus_regen_soft_plus_soft` (line 138) — the EXACT-equality test: `resolve_groups(['regen']) == ORACLE_CORE_HARD | ORACLE_REGEN_SOFT | ORACLE_SOFT_MEMBERS`. After this retag the LHS GAINS the 3 symmetry atoms (regen predicate widened to include `symmetry_breakers`) while the RHS LOSES them (removed from `ORACLE_SOFT_MEMBERS`), so the two sides diverge by exactly those 3 atoms and the test FAILS. Add `ORACLE_SYMMETRY_BREAKERS` to the RHS union so it reads `ORACLE_CORE_HARD | ORACLE_REGEN_SOFT | ORACLE_SOFT_MEMBERS | ORACLE_SYMMETRY_BREAKERS`. (review fix — global cross-plan review 2026-05-24: the ⊆ membership tests above were covered, but this `==` test was missed; flagged for completeness so Unit A's per-unit suite stays green.)
     - `ORACLE_SOFTENED_HARD_ATOMS` (line 50) still contains `EqualMatchUpSpacing` — confirm this is still correct: `EqualMatchUpSpacing` was in `{core}` (not `core_hard`/`regen_soft`/`soft`), so the regen predicate still excludes it. Correct — no change needed to this constant.
   - `tests/test_constraint_registry.py` — if it enumerates known group names, add `spacing` + `symmetry_breakers`; count stays 49.
   - `docs/system/CONSTRAINT_INVENTORY.md` — (review fix — M2): update group-tag columns for the four retagged atoms. Tag-summary table (line 35): `EqualMatchUpSpacing` row changes from `core, critical_feasibility` to `spacing`. Line 38: `ClubDayParticipation` stays `club_day, core`. Lines 47–48: `NIHCFillWFBeforeEF` and `NIHCFillEFBeforeSF` change from `soft, soft_optimisation` to `symmetry_breakers`. Line 57: `SoftLexMatchupOrdering` changes from `soft, soft_optimisation` to `symmetry_breakers`. Per-atom spec rows (lines 208–213): update the group columns for the four retagged atoms. Clarify `ClubDayParticipation` at line 176 per DoD 8.
