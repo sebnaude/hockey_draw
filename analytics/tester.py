@@ -1621,7 +1621,7 @@ class DrawTester:
         """
         violations = []
         cross_venue_min = self.data.get('constraint_defaults', {}).get(
-            'phl_2nd_cross_venue_min_minutes', 180
+            'phl_2nd_cross_venue_min_minutes', 150
         )
 
         def _minutes(t):

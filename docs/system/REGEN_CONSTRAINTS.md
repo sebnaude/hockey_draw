@@ -31,7 +31,7 @@ instead of failing.
 
 ## Core-hard set — constraints that stay HARD in regen
 
-These 12 entries express genuine physical impossibilities or structural invariants.
+These 11 entries express genuine physical impossibilities or structural invariants.
 Softening them would produce an invalid draw. They are tagged `core_hard` in
 `constraints/registry.py` and are always included by the `regen` group.
 
@@ -104,9 +104,9 @@ regen = core_hard ∪ regen_soft ∪ soft
 `regen` iff its `ConstraintInfo.groups` set intersects
 `{'core_hard', 'regen_soft', 'soft'}`.
 
-This resolves to **32 constraints** currently:
+This resolves to **31 constraints** currently:
 
-- 12 `core_hard` entries (the physical-impossibility set above — stay hard).
+- 11 `core_hard` entries (the physical-impossibility set above — stay hard; spec-030 deleted `PHLAnd2ndConcurrencyAtBroadmeadow`, 12→11).
 - 13 `regen_soft` entries (the new penalty atoms — replace the softened hard rules).
 - 7 `soft` entries (the normal soft-optimisation atoms — unchanged, always run in
   any sensible solve).
