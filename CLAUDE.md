@@ -277,7 +277,7 @@ Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `Dra
 
 **Home/away weekend sequencing — REMOVED (spec-018)**: the former `NonDefaultHomeGrouping` (consecutive-home-weekend cap), `AwayAtMaitlandGrouping` (away-clubs-per-weekend cap) and `MaitlandAlternateHomeAway` (H-A-H-A soft penalty) are all deleted. Back-to-back home weekends and long away runs are both fine now. Only the home/away *balance* (`AwayClubPerOpponentAndAggregateHomeBalance`) and per-club home-weekend *totals* (`AwayClubHomeWeekendsCount`) from spec-004 remain.
 
-**PHLAnd2ndAdjacency** (spec-014, atom): per (club, week, day) where the club fields BOTH a PHL and a 2nd game — **same venue** ⇒ same field + adjacent day_slots (back-to-back); **different venue** ⇒ start times ≥ `phl_2nd_cross_venue_min_minutes` (180, real minutes) apart. Replaces the legacy ±180-min forbid window, which never *forced* adjacency.
+**PHLAnd2ndAdjacency** (spec-014, atom): per (club, week, day) where the club fields BOTH a PHL and a 2nd game — **same venue** ⇒ same field + adjacent day_slots (back-to-back); **different venue** ⇒ start times ≥ `phl_2nd_cross_venue_min_minutes` (150, real minutes; spec-030: 180→150) apart. Replaces the legacy ±180-min forbid window, which never *forced* adjacency.
 
 ### Atomized constraints (final-form)
 
@@ -396,7 +396,7 @@ The tester runs these checks (matching solver constraint behavior):
 - `BalancedMatchups` — pair meetings within base/base+1
 - `FiftyFiftyHomeAway` — per-pair home/away balance for Maitland/Gosford
 - `ClubGradeAdjacency` — adjacent grades same club not same timeslot
-- `PHLAnd2ndAdjacency` — same-club PHL/2nd back-to-back at one venue, or ≥180-min start gap across venues (spec-014)
+- `PHLAnd2ndAdjacency` — same-club PHL/2nd back-to-back at one venue, or ≥150-min start gap across venues (spec-014; spec-030: 180→150)
 
 **Important**: The tester uses `game.date` (not `game.week`) for field/slot comparisons because a week can have both Friday and Sunday games on different dates.
 

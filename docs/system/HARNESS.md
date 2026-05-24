@@ -150,7 +150,7 @@ The engine dispatches via atoms, not the legacy combined classes:
 
 | Stage | Method | Atom dispatch |
 |---|---|---|
-| 1 hard | `_phl_times_atoms_hard` | `PHL_HARD_ATOMS` (PHLConcurrencyAtBroadmeadow, PHLAnd2ndConcurrencyAtBroadmeadow — **PHLRoundOnePlay removed by spec-010; GosfordFridayRoundsForced removed by spec-015**, now FORCED_GAMES count entries) |
+| 1 hard | `_phl_times_atoms_hard` | `PHL_HARD_ATOMS` (PHLConcurrencyAtBroadmeadow — **PHLAnd2ndConcurrencyAtBroadmeadow removed by spec-030 (subsumed by PHLAnd2ndAdjacency); PHLRoundOnePlay removed by spec-010; GosfordFridayRoundsForced removed by spec-015**, now FORCED_GAMES count entries) |
 | 1 hard | `_club_day_atoms_hard` | `CLUB_DAY_HARD_ATOMS` (5 atoms) |
 | 1 hard | `_club_vs_club_atoms_hard` | `CLUB_VS_CLUB_HARD_ATOMS` (Coincidence, FieldLimit, PHLAnd2ndBackToBackSameField) |
 | 2 soft | `_phl_times_atoms_soft` | `PHL_SOFT_ATOMS` (PreferredDates) |

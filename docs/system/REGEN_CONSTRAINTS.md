@@ -42,13 +42,19 @@ Softening them would produce an invalid draw. They are tagged `core_hard` in
 | `EqualGamesAndBalanceMatchUps` | Every team must play its required number of games with correct opponent balance. The draw is invalid otherwise. |
 | `AwayClubPerOpponentAndAggregateHomeBalance` | Per-pair and per-team aggregate home/away balance must hold across the full season; regen of a scope does not change the season totals requirement. |
 | `PHLConcurrencyAtBroadmeadow` | Two PHL games cannot share the same timeslot at Broadmeadow — a hard field constraint. |
-| `PHLAnd2ndConcurrencyAtBroadmeadow` | A PHL game and the same club's 2nd-grade game cannot share the same timeslot at Broadmeadow. |
 | `SameGradeSameClubNoConcurrency` | Two teams from the same club in the same grade cannot play at the same time (a parent can only be in one place). |
 | `ClubNoConcurrentSlot` | A club's games per timeslot/venue are capped by field capacity — a physical bound. |
 | `TeamConflict` | Named team-pair conflicts must never be concurrent (person-in-two-places issue). |
 | `ForcedGames` | FORCED_GAMES entries are enforced at `generate_X` time (variable elimination). Cannot be softened by a constraint group. |
 | `BlockedGames` | BLOCKED_GAMES entries are enforced at `generate_X` time (variable elimination). Cannot be softened. |
 | `LockedPairings` | LOCKED_PAIRINGS pins are enforced at `generate_X` time. Cannot be softened — these are the freeze pins written by the regen mode itself (spec-025/026). |
+
+> **spec-030:** `PHLAnd2ndConcurrencyAtBroadmeadow` was deleted (its same-club PHL/2nd
+> same-Broadmeadow-slot rule is a strict subset of `PHLAnd2ndAdjacency`'s same-venue
+> branch). In regen, that same-slot case is now governed by the **soft**
+> `PHLAnd2ndAdjacencyRegenSoft` analogue (below), whose same-venue branch penalises any
+> non-adjacent pairing — including same-slot — so the case still incurs a penalty rather
+> than a hard clause.
 
 ---
 
@@ -64,7 +70,7 @@ They are NOT in `DEFAULT_STAGES` and a fresh season build (no `--regen-from` fla
 
 | Hard rule replaced | RegenSoft atom | Penalty bucket | Default weight | What 1 penalty unit measures |
 |---|---|---|---|---|
-| `PHLAnd2ndAdjacency` | `PHLAnd2ndAdjacencyRegenSoft` | `regen_phl_2nd_adjacency` | 100 000 | Per PHL/2nd same-club weekend that breaks the same-venue back-to-back or the ≥180-min cross-venue rule |
+| `PHLAnd2ndAdjacency` | `PHLAnd2ndAdjacencyRegenSoft` | `regen_phl_2nd_adjacency` | 100 000 | Per PHL/2nd same-club weekend that breaks the same-venue back-to-back or the ≥150-min cross-venue rule |
 | `AwayClubHomeWeekendsCount` | `AwayClubHomeWeekendsCountRegenSoft` | `regen_away_club_home_weekends_count` | 90 000 | Per weekend the home-weekend count deviates from the target for an away-based club |
 | `ClubVsClubStackedWeekends` | `ClubVsClubStackedWeekendsRegenSoft` | `regen_clubvsclub_stacked_weekends` | 80 000 | Per budget-deviation weekend + per missing stacked-weekend coincidence across grades |
 | `ClubVsClubStackedCoLocation` | `ClubVsClubStackedCoLocationRegenSoft` | `regen_clubvsclub_stacked_colocation` | 70 000 | Per extra field beyond one + per internal slot gap on a stacked pair-Sunday |

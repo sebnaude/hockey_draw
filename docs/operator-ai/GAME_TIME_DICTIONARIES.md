@@ -175,9 +175,10 @@ PHL_GAME_TIMES['Newcastle International Hockey Centre']['EF']['Sunday'].append(t
 > - **Different venue** ⇒ start times compared in **real minutes-since-midnight**,
 >   not `day_slot` indices (different fields run different clocks). The minimum
 >   cross-venue gap is `CONSTRAINT_DEFAULTS['phl_2nd_cross_venue_min_minutes']`
->   (default 180 = 3 h). This is a separate config key from the same-venue rule —
->   the two "180"s in the legacy code were a single magic number; they are now
->   conceptually distinct (slot adjacency vs a 3-hour travel gap).
+>   (default 150 = 2.5 h; spec-030 reduced this from 180/3 h). This is a separate
+>   config key from the same-venue rule — the two "180"s in the legacy code were a
+>   single magic number; they are now conceptually distinct (slot adjacency vs a
+>   2.5-hour travel gap).
 
 ### Removing a Timeslot
 

@@ -67,9 +67,9 @@ These fundamental rules ensure the draw is valid and playable.
 
 **Description:** When a club fields BOTH its PHL and its 2nd-grade team on the same day, the two games are kept watchable together:
 - **Same venue:** they must be **back-to-back** — on the **same field** in **adjacent timeslots** (no gap).
-- **Different venues:** their **start times must be at least 3 hours apart** (so there's time to finish one game, travel, and warm up for the other).
+- **Different venues:** their **start times must be at least 2.5 hours apart** (so there's time to finish one game, travel, and warm up for the other).
 
-**Enforcement:** Hard constraint. The same-venue rule is about slot adjacency on one field; the cross-venue rule is a real **3-hour start-to-start gap** (configurable via `phl_2nd_cross_venue_min_minutes`, default 180). If a club fields only one of the two grades that day, nothing is enforced.
+**Enforcement:** Hard constraint. The same-venue rule is about slot adjacency on one field; the cross-venue rule is a real **2.5-hour start-to-start gap** (configurable via `phl_2nd_cross_venue_min_minutes`, default 150). If a club fields only one of the two grades that day, nothing is enforced.
 
 **Rationale:** Spectators and officials can see both a club's PHL and 2nd game with no gap when co-located, or with enough time to travel between grounds when not. (The old rule only *forbade* certain spacings and never actually forced the back-to-back layout the convenor wants.)
 

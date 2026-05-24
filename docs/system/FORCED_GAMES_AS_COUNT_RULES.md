@@ -187,7 +187,7 @@ Update the following so the convention is clear to future AI sessions:
 
 - **`CLAUDE.md`** — add a section "Per-venue / per-day game counts use FORCED_GAMES, not constraints." Briefly: "If you find yourself adding a hardcoded count constraint, stop. Add a FORCED entry to season config instead. The constraint mechanism is reserved for *structural* rules (no-double-booking, adjacency, balance) — not for *count budgets*, which the FORCED dictionary handles natively."
 - **`docs/CONSTRAINT_INVENTORY.md`** — drop the deleted atoms from the table; note that `BroadmeadowFridayCount` etc. are now expressed as FORCED entries.
-- **`docs/ATOMIZATION_PLAN.md`** — mark Phase 3a as DONE (with the count-atom retraction noted), update the cluster's atom count from 8 down to 4 (`PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow`, `PHLRoundOnePlay`, `PreferredDates`).
+- **`docs/ATOMIZATION_PLAN.md`** — mark Phase 3a as DONE (with the count-atom retraction noted), update the cluster's atom count from 8 down to 4 (`PHLConcurrencyAtBroadmeadow`, `PHLAnd2ndConcurrencyAtBroadmeadow` (later deleted spec-030 — subsumed by `PHLAnd2ndAdjacency`), `PHLRoundOnePlay`, `PreferredDates`).
 - **`docs/ATOMIZATION_HANDOFF.md`** — append a "Phase 3a retraction + FORCED migration" entry to the commit table.
 - **`config/season_2026.py`** — add a comment header on the new FORCED entries explaining the pattern (so editors don't try to re-introduce the atoms).
 - **`docs/PERENNIAL_RULES.md`** (if it exists, otherwise create) — describe the perennial Friday-count rule as a season-level FORCED entry pattern, not a constraint.
