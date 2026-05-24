@@ -1,4 +1,5 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- completed: 2026-05-24 — commit ccc3d07; Mode B verified (9/9 DoD, 90 tests, 93% notes.py coverage, all 6 club_days callsites patched). -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
