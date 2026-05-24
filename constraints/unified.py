@@ -714,6 +714,8 @@ class UnifiedConstraintEngine:
             return 0
 
         for club_name, desired_date in club_days.items():
+            # spec-029: normalize the dict form (optional 'note') to a datetime.
+            desired_date, _ = normalize_club_day(desired_date)
             date_str = desired_date.date().strftime('%Y-%m-%d')
             closest_week = get_nearest_week_by_date(date_str, self.timeslots)
             if closest_week in self.locked_weeks:

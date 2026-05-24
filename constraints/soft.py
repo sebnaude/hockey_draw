@@ -35,7 +35,7 @@ from itertools import combinations
 
 from utils import (
     get_club, get_duplicated_graded_teams, get_teams_from_club,
-    get_club_from_clubname, get_nearest_week_by_date,
+    get_club_from_clubname, get_nearest_week_by_date, normalize_club_day,
     normalize_preference_no_play as _normalize_preference_no_play,
 )
 
@@ -140,7 +140,7 @@ class ClubDayConstraintSoft(SoftConstraint):
             if club_name.lower() not in [c.name.lower() for c in clubs]:
                 raise ValueError(f'Invalid team name {club_name} in ClubDay Dictionary')
             
-            desired_date = club_days[club_name]
+            desired_date, _ = normalize_club_day(club_days[club_name])
             closest_week = get_nearest_week_by_date(desired_date.strftime("%Y-%m-%d"), data['timeslots'])
             
             if closest_week in locked_weeks:

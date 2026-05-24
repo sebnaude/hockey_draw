@@ -1930,9 +1930,11 @@ class DrawTester:
         if not club_days:
             return violations
 
-        from utils import get_teams_from_club
+        from utils import get_teams_from_club, normalize_club_day
 
         for club_name, desired_date in club_days.items():
+            # spec-029: normalize the dict form (optional 'note') before formatting.
+            desired_date, _ = normalize_club_day(desired_date)
             date_str = desired_date.strftime('%Y-%m-%d') if hasattr(desired_date, 'strftime') else str(desired_date)
 
             # Get all club teams

@@ -67,6 +67,7 @@ def _minimal_data(
     blocked_games=None,
     forced_games=None,
     preferred_weekends=None,
+    club_days=None,
 ) -> dict:
     """Minimal data dict sufficient for build_weekend_notes()."""
     return {
@@ -74,6 +75,7 @@ def _minimal_data(
         "blocked_games": blocked_games or [],
         "forced_games": forced_games or [],
         "preferred_weekends": preferred_weekends or [],
+        "club_days": club_days or {},
     }
 
 
@@ -683,3 +685,235 @@ class TestPreferredUndateableSkipped:
             "Preferred: Should not appear" not in lines for lines in result.values()
         )
         assert result == {}
+
+
+# ===========================================================================
+# spec-029 — Club Day notes derived from data['club_days']
+# ===========================================================================
+
+from datetime import datetime  # noqa: E402  (test-local; spec-029 club-day scenarios)
+
+
+class TestClubDay_DictWithNoteStringSurfaces:
+    """
+    Given club_days = {'Crusaders': {'date': datetime(2026,6,14), 'note':
+    'Crusaders Club Day'}} and a draw with a game on 2026-06-14 at week=13,
+    when build_weekend_notes() runs, then result[13] contains
+    "Club Day: Crusaders Club Day".
+
+    Oracle: the synthetic game maps 2026-06-14 → week 13 directly in the draw
+    map, so the note resolves to week 13.
+    """
+
+    def test_given_dict_note_string_when_built_then_club_day_line_in_game_week(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-06-14", week=13))
+        data = _minimal_data(
+            club_days={"Crusaders": {"date": datetime(2026, 6, 14), "note": "Crusaders Club Day"}}
+        )
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then
+        assert "Club Day: Crusaders Club Day" in result[13]
+
+
+class TestClubDay_DictWithoutNoteIsSilent:
+    """
+    Given club_days = {'University': {'date': datetime(2026,7,26)}} (dict, NO
+    'note') and a draw with a game on that date, when built, then no
+    "Club Day:" line appears in any week (opt-in proven).
+
+    Oracle: the opt-in rule skips any value lacking a truthy 'note'.
+    """
+
+    def test_given_dict_without_note_when_built_then_no_club_day_line(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-07-26", week=19))
+        data = _minimal_data(
+            club_days={"University": {"date": datetime(2026, 7, 26)}}
+        )
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then no Club Day line anywhere
+        assert all(
+            not line.startswith("Club Day:")
+            for lines in result.values()
+            for line in lines
+        )
+
+
+class TestClubDay_BareDatetimeSilent_NoteTrueFallsBack:
+    """
+    Given (a) a bare-datetime club day and (b) a dict club day with 'note':
+    True, when built, then the bare-datetime entry yields no note and the
+    'note': True entry yields "Club Day: Norths Club Day".
+
+    Oracle: bare datetimes are not opted in (skipped); 'note': True falls back
+    to f"{club} Club Day" → "Norths Club Day".
+    """
+
+    def test_given_bare_datetime_when_built_then_no_note(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-06-14", week=13))
+        data = _minimal_data(club_days={"Crusaders": datetime(2026, 6, 14)})
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then no Club Day line (bare datetime is not opted in)
+        assert result == {}
+
+    def test_given_note_true_when_built_then_fallback_text(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-07-26", week=19))
+        data = _minimal_data(club_days={"Norths": {"date": datetime(2026, 7, 26), "note": True}})
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then fallback text "<club> Club Day"
+        assert "Club Day: Norths Club Day" in result[19]
+
+
+class TestClubDay_OffDrawDateBuckets:
+    """
+    Given a club day on 2026-06-14 with NO game scheduled on that date (the
+    draw's only game is on a different date), when built, then the club day
+    resolves to week 13 via 7-day bucketing from start_date 2026-03-22.
+
+    Oracle: (2026-06-14 − 2026-03-22).days = 84; 84 // 7 + 1 = 13.
+    """
+
+    def test_given_off_draw_club_day_when_built_then_resolves_via_bucket(self, tmp_path):
+        # Given — draw game is on a DIFFERENT date so 2026-06-14 is not in the map
+        draw = _make_draw(_make_game("2026-03-22", week=1))
+        data = _minimal_data(
+            club_days={"Crusaders": {"date": datetime(2026, 6, 14), "note": "Crusaders Club Day"}}
+        )
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then bucketed to week 13
+        assert "Club Day: Crusaders Club Day" in result[13]
+
+
+class TestClubDay_OutOfSeasonDropped:
+    """
+    Given a club day dated 2026-01-01 (before the season), when built, then it
+    is dropped (present in no week) and does not raise.
+
+    Oracle: (2026-01-01 − 2026-03-22).days = -80; -80 // 7 + 1 = -11; week < 1
+    → dropped by _resolve_week's bounds check.
+    """
+
+    def test_given_pre_season_club_day_when_built_then_dropped(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-03-22", week=1))
+        data = _minimal_data(
+            club_days={"Crusaders": {"date": datetime(2026, 1, 1), "note": "Too early"}}
+        )
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When — must not raise
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then absent everywhere
+        assert all(
+            "Club Day: Too early" not in lines for lines in result.values()
+        )
+
+
+class TestClubDay_UnparseableDateDropped:
+    """
+    Given a club day opted in ('note' set) but whose date is neither a
+    datetime/date nor an ISO string (here an int), when built, then it is
+    dropped (no note, no crash) — the unparseable-date dark path.
+
+    Oracle: _club_day_iso(12345) → not str, no strftime → None → skip+log.
+    """
+
+    def test_given_unparseable_date_when_built_then_dropped(self, tmp_path):
+        # Given
+        draw = _make_draw(_make_game("2026-03-22", week=1))
+        data = _minimal_data(club_days={"Bogus": {"date": 12345, "note": "nope"}})
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When — must not raise
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then absent everywhere
+        assert all(
+            "Club Day: nope" not in lines for lines in result.values()
+        )
+
+
+class TestClubDay_RealConfigEndToEnd:
+    """
+    Given the real load_season_data(2026) and a draw with games on 2026-06-14
+    (week 13) and 2026-07-26 (week 19), when built, then result[13] contains
+    "Club Day: Crusaders Club Day" and result[19] contains
+    "Club Day: University Club Day".
+
+    Oracle: real CLUB_DAYS note text + game-based week resolution. Distinct
+    game_ids required (the synthetic games declare the weeks the draw-map uses).
+    """
+
+    def test_given_real_2026_config_when_built_then_both_club_days_appear(self, tmp_path):
+        # Given
+        from config import load_season_data
+        data = load_season_data(2026)
+        draw = _make_draw(
+            _make_game("2026-06-14", week=13, game_id="G00001"),
+            _make_game("2026-07-26", week=19, game_id="G00002"),
+        )
+        notes_path = _write_notes_json(str(tmp_path), {})
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then both real club-day notes appear in their game weeks
+        assert "Club Day: Crusaders Club Day" in result[13]
+        assert "Club Day: University Club Day" in result[19]
+
+
+class TestClubDay_CategoryOrdering:
+    """
+    Given a week with a Request note, a Preferred note, and a Club Day note,
+    when built, then the output order is Request, then Club Day, then Preferred.
+
+    Oracle: _CATEGORY_ORDER → Request=1 < Club Day=2 < Preferred=3.
+    """
+
+    def test_given_request_clubday_preferred_when_built_then_order_is_request_clubday_preferred(self, tmp_path):
+        # Given — all three on the same week 13 (game maps 2026-06-14 → 13)
+        draw = _make_draw(_make_game("2026-06-14", week=13))
+        preferred_weekends = [
+            {"date": "2026-06-14", "note": "Pref note", "mode": "avoid"}
+        ]
+        data = _minimal_data(
+            preferred_weekends=preferred_weekends,
+            club_days={"Crusaders": {"date": datetime(2026, 6, 14), "note": "Crusaders Club Day"}},
+        )
+        notes_content = {"2026-06-14": [{"category": "Request", "text": "Req note"}]}
+        notes_path = _write_notes_json(str(tmp_path), notes_content)
+
+        # When
+        result = build_weekend_notes(draw, data, notes_path=notes_path)
+
+        # Then ordering Request < Club Day < Preferred
+        lines = result[13]
+        assert lines == [
+            "Request: Req note",
+            "Club Day: Crusaders Club Day",
+            "Preferred: Pref note",
+        ]

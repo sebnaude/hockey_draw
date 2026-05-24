@@ -8,12 +8,18 @@ the cross-spec view so independent work runs in parallel rather than accidentall
 Keep it current: update an edge whenever a spec is created, completed, re-scoped, or unblocked.
 **No cycles** — if you find one, two specs are really one unit; collapse or re-cut them.
 
-## No live specs
+## Live specs
 
-As of **2026-05-24**, every spec in this folder is **`done`** and archived in `docs/todo/done/`.
-There is no outstanding engineering work tracked here and nothing is startable, blocked, or
-in-flight. When a new spec is authored, add its node + edges below and list it under "Ready to
-start in parallel right now".
+- **spec-029** — club-day weekends in the published-draw Notes column. `depends_on: none`
+  (extends spec-028, which is `done`). Single unit. Status: `ready` (adversarial
+  Mode A review complete 2026-05-24; critical blast-radius fixes applied to plan).
+
+```
+spec-029  ──depends_on──▶  (none; spec-028 already done)
+```
+
+When spec-029 lands, mark it done, move it to `docs/todo/done/`, and return this folder to
+"no live specs".
 
 Most recently completed:
 
@@ -32,4 +38,4 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- *(none — all specs complete)*
+- **spec-029** (once `/adversarial` Mode A stamps it `ready`).

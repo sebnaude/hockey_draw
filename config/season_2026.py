@@ -176,9 +176,13 @@ FIELD_UNAVAILABILITIES = {
 
 # ============== Club Days (Special Events) ==============
 
+# Dict-form entries (spec-029): the optional 'note' is surfaced on the matching
+# weekend in the published-draw Notes column (category "Club Day"). 'note' is
+# read ONLY by analytics/notes.py — it is inert to the solver and constraints
+# (normalize_club_day ignores it). Edit the 'note' text to change what prints.
 CLUB_DAYS = {
-    'Crusaders': datetime(2026, 6, 14),  # All 4 teams back-to-back on same field
-    'University': datetime(2026, 7, 26),  # University of Newcastle Hockey Club day
+    'Crusaders':  {'date': datetime(2026, 6, 14), 'note': 'Crusaders Club Day'},   # All 4 teams back-to-back on same field
+    'University': {'date': datetime(2026, 7, 26), 'note': 'University Club Day'},   # University of Newcastle Hockey Club day
     # 'Souths_Norths_Derby': datetime(2026, 5, 10),  # Red & Blue Derby Day - May 10 confirmed
 }
 

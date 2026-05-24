@@ -25,14 +25,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Stable category ordering for output lines within a week.
+# "Club Day" (spec-029) slots between Request and Preferred; the existing
+# categories keep their relative order — only their absolute ints shift down.
 _CATEGORY_ORDER: Dict[str, int] = {
     "Field":     0,
     "Request":   1,
-    "Preferred": 2,
-    "Blocked":   3,
-    "Forced":    4,
+    "Club Day":  2,
+    "Preferred": 3,
+    "Blocked":   4,
+    "Forced":    5,
 }
-_DEFAULT_CATEGORY_ORDER = 5  # unknown categories go last
+_DEFAULT_CATEGORY_ORDER = 6  # unknown categories go last
 
 
 # ---------------------------------------------------------------------------
@@ -46,20 +49,23 @@ def build_weekend_notes(
 ) -> Dict[int, List[str]]:
     """Return {week_number: [formatted note lines]} for the export Notes column.
 
-    Sources, merged then deduped per week (see spec-028):
+    Sources, merged then deduped per week (see spec-028, spec-029):
       - hand-authored notes_path JSON (default ``data/{year}/notes.json``)
       - opt-in ``'note'`` entries in ``data['blocked_games']``,
         ``['forced_games']``, and ``['preferred_weekends']``
+      - opt-in ``'note'`` entries in ``data['club_days']`` (spec-029): a club
+        day whose value is a dict carrying a truthy ``'note'`` → ``Club Day:``.
 
     Each output line is ``"Category: text"``.  Order within a week is stable:
-    Field, Request, Preferred, Blocked, Forced; ties broken by insertion order.
-    Duplicates (exact formatted string) are removed.
+    Field, Request, Club Day, Preferred, Blocked, Forced; ties broken by
+    insertion order.  Duplicates (exact formatted string) are removed.
 
     Args:
         draw:        A ``DrawStorage`` instance — used to build the date→week map.
         data:        The season data dict returned by ``load_season_data(year)``.
                      Must contain ``'year'``, ``'blocked_games'``,
-                     ``'forced_games'``, and ``'preferred_weekends'`` keys.
+                     ``'forced_games'``, ``'preferred_weekends'``, and
+                     ``'club_days'`` keys.
         notes_path:  Path to the hand-authored JSON file.  Defaults to
                      ``data/{year}/notes.json``.  A missing file is treated as
                      ``{}``; malformed JSON raises a clear ``ValueError``.
@@ -113,6 +119,13 @@ def build_weekend_notes(
     ))
     raw.extend(_derive_from_preferred(
         data.get("preferred_weekends", []),
+        date_to_week,
+        start_date,
+        end_date,
+    ))
+    # 3. Auto-derived from club_days (spec-029). NOTE: a dict, not a list.
+    raw.extend(_derive_from_club_days(
+        data.get("club_days", {}),
         date_to_week,
         start_date,
         end_date,
@@ -387,9 +400,79 @@ def _derive_from_preferred(
     return raw
 
 
+def _derive_from_club_days(
+    club_days: dict,
+    date_to_week: Dict[str, int],
+    start_date: _date,
+    end_date: _date,
+) -> List[tuple]:
+    """Yield (sort_key, category, text, week) tuples from CLUB_DAYS entries.
+
+    ``club_days`` is a ``{club_name: value}`` **dict** (unlike the
+    blocked/forced/preferred sources, which are lists).
+
+    Opt-in rule (mirrors the other auto-derived sources): a club day is
+    surfaced **iff** its value is a dict carrying a truthy ``'note'`` key.  A
+    bare ``datetime``/``str`` value, or a dict without ``'note'``, is never
+    surfaced — so seasons whose ``CLUB_DAYS`` are still bare datetimes stay
+    silent.
+      - ``'note': <str>`` → that string is the note text.
+      - ``'note': True``  → falls back to ``"<ClubName> Club Day"``.
+    """
+    from utils import normalize_club_day
+
+    category = "Club Day"
+    sort_key = _category_sort(category)
+    raw: List[tuple] = []
+
+    for club_name, value in club_days.items():
+        # Opt-in: only dict values carrying a truthy 'note' surface.
+        if not isinstance(value, dict):
+            continue
+        note_val = value.get("note")
+        if not note_val:
+            continue
+
+        text = note_val if isinstance(note_val, str) else f"{club_name} Club Day"
+
+        # Resolve the club-day date via the canonical parser, then to ISO.
+        date_val = normalize_club_day(value)[0]
+        iso = _club_day_iso(date_val)
+        if iso is None:
+            logger.info(
+                "Club Day for %s has an unparseable date (%r) — skipping note",
+                club_name, date_val,
+            )
+            continue
+
+        week = _resolve_week(
+            iso, date_to_week, start_date, end_date,
+            source=f"Club Day:{club_name}",
+        )
+        if week is None:
+            continue
+
+        raw.append((sort_key, category, text, week))
+
+    return raw
+
+
 # ---------------------------------------------------------------------------
 # Tiny utilities
 # ---------------------------------------------------------------------------
+
+def _club_day_iso(date_val) -> Optional[str]:
+    """Normalise a CLUB_DAYS date value to an ISO ``'YYYY-MM-DD'`` string.
+
+    Handles ``datetime``/``date`` (via ``strftime``) and an already-ISO ``str``.
+    Returns ``None`` for anything unparseable (caller logs + skips).
+    """
+    if isinstance(date_val, str):
+        return date_val if _is_iso_date(date_val) else None
+    if hasattr(date_val, "strftime"):  # datetime or date
+        return date_val.strftime("%Y-%m-%d")
+    return None
+
 
 def _category_sort(category: str) -> int:
     return _CATEGORY_ORDER.get(category, _DEFAULT_CATEGORY_ORDER)

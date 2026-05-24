@@ -515,7 +515,9 @@ draw.export_schedule_xlsx('output_with_notes.xlsx', weekend_notes=notes)
 
 Features: alternating week background colours, blue field sub-headers, column headers, borders, bye listings per week. Grouped by week → date → field (EF/WF/SF at NIHC first, then away venues).
 
-When `weekend_notes` is supplied, column N shows per-weekend notes stacked from the first game row. Notes are sourced from `data/{year}/notes.json` (hand-authored) and opt-in `'note'` fields on `BLOCKED_GAMES`, `FORCED_GAMES`, and `PREFERRED_WEEKENDS` entries. Omit the param (or pass `None`) for a notes-free export identical to the pre-spec-028 output.
+When `weekend_notes` is supplied, column N shows per-weekend notes stacked from the first game row. Notes are sourced from `data/{year}/notes.json` (hand-authored) and opt-in `'note'` fields on `BLOCKED_GAMES`, `FORCED_GAMES`, `PREFERRED_WEEKENDS`, and `CLUB_DAYS` entries. Categories print in the order: Field, Request, Club Day, Preferred, Blocked, Forced. Omit the param (or pass `None`) for a notes-free export identical to the pre-spec-028 output.
+
+**Club-day notes (spec-029):** a `CLUB_DAYS` entry surfaces a `Club Day:` note **iff** its value is the dict form carrying a truthy `'note'`, e.g. `'Crusaders': {'date': datetime(2026,6,14), 'note': 'Crusaders Club Day'}`. The `'note'` text is what prints on that weekend; `'note': True` falls back to `"<Club> Club Day"`. The `'note'` key is read only by `build_weekend_notes` — it is inert to the solver (`normalize_club_day` ignores it). Bare-`datetime` `CLUB_DAYS` values (other seasons) stay silent.
 
 ### export_draw_to_revformat()
 Exports CSV for the Revo hockey management system with full club name mapping, grade mapping, and bye entries. Supports `week_limit` parameter.

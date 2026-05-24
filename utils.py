@@ -1834,6 +1834,9 @@ def _check_club_days_availability(data, warnings, fatals):
         slots_by_date_field[date_str][field_key] += 1
 
     for club_name, club_date in club_days.items():
+        # Normalize (handles the dict form with optional 'note'/'opponent')
+        # before formatting — a raw dict would str() to garbage and never match.
+        club_date, _ = normalize_club_day(club_date)
         # Convert datetime to string format matching timeslot dates
         if hasattr(club_date, 'strftime'):
             date_str = club_date.strftime('%Y-%m-%d')
@@ -1929,6 +1932,8 @@ def _check_club_days_vs_blocked(data, warnings, fatals):
         timeslots_by_date[date_str].append(ts)
 
     for club_name, club_date in club_days.items():
+        # Normalize the dict form (spec-029) before formatting.
+        club_date, _ = normalize_club_day(club_date)
         if hasattr(club_date, 'strftime'):
             date_str = club_date.strftime('%Y-%m-%d')
         else:

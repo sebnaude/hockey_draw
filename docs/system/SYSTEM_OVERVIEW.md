@@ -261,7 +261,7 @@ were removed in spec-018.)
 | `DrawAnalytics` | Generates cross-tabs and reports |
 | `DrawTester` | Tests game modifications |
 | `ViolationReport` | Constraint violation summary |
-| `build_weekend_notes()` (`analytics/notes.py`) | Merges hand-authored `data/{year}/notes.json` with opt-in `'note'` fields from `BLOCKED_GAMES`, `FORCED_GAMES`, and `PREFERRED_WEEKENDS` into `{week: [formatted lines]}` for the xlsx Notes column. See spec-028. |
+| `build_weekend_notes()` (`analytics/notes.py`) | Merges hand-authored `data/{year}/notes.json` with opt-in `'note'` fields from `BLOCKED_GAMES`, `FORCED_GAMES`, `PREFERRED_WEEKENDS`, and `CLUB_DAYS` (dict form, category `Club Day`) into `{week: [formatted lines]}` for the xlsx Notes column. See spec-028, spec-029. |
 
 ---
 

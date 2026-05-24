@@ -23,6 +23,8 @@ from datetime import datetime, timedelta
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from utils import normalize_club_day  # noqa: E402  (after sys.path setup)
+
 
 class PreSeasonReport:
     """
@@ -160,6 +162,8 @@ class PreSeasonReport:
         # Club Days
         club_days = self.config.get('club_days', {})
         for club, date in club_days.items():
+            # spec-029: unwrap the dict form (optional 'note') to the date value.
+            date, _ = normalize_club_day(date)
             if isinstance(date, datetime):
                 result['club_days'].append({
                     'club': club,
@@ -278,6 +282,8 @@ class PreSeasonReport:
         # Club Days
         club_days = self.config.get('club_days', {})
         for club, date in club_days.items():
+            # spec-029: unwrap the dict form (optional 'note') to the date value.
+            date, _ = normalize_club_day(date)
             if isinstance(date, datetime):
                 events.append({
                     'name': f'{club} Club Day',
