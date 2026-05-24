@@ -11,7 +11,10 @@ Atoms are instantiated and dispatched by `UnifiedConstraintEngine`. Their
 """
 from constraints.atoms.base import Atom
 from constraints.atoms.phl_concurrency import PHLConcurrencyAtBroadmeadow
-from constraints.atoms.phl_2nd_concurrency import PHLAnd2ndConcurrencyAtBroadmeadow
+# spec-030: PHLAnd2ndConcurrencyAtBroadmeadow deleted — its same-club PHL/2nd
+# same-Broadmeadow-slot rule is a strict subset of PHLAnd2ndAdjacency's
+# same-venue branch (which only allows same-field adjacent slots), so the
+# same-slot case was already forbidden. Redundant in a fresh build.
 # spec-015: GosfordFridayRoundsForced deleted — its per-round sum==1 rule is
 # expressed generically via FORCED_GAMES count entries (scope + count +
 # constraint type). See docs/system/FORCED_GAMES_AS_COUNT_RULES.md.
@@ -105,7 +108,6 @@ from constraints.atoms import _adjusters  # noqa: F401
 # deleted the atom file entirely (convenor uses FORCED_GAMES for round-1 play).
 PHL_TIMES_ATOMS = [
     PHLConcurrencyAtBroadmeadow,
-    PHLAnd2ndConcurrencyAtBroadmeadow,
 ]
 
 
@@ -154,7 +156,6 @@ REGEN_SOFT_ATOMS = [
 __all__ = [
     'Atom',
     'PHLConcurrencyAtBroadmeadow',
-    'PHLAnd2ndConcurrencyAtBroadmeadow',
     'PHL_TIMES_ATOMS',
     'ClubDayParticipation',
     'ClubDayIntraClubMatchup',

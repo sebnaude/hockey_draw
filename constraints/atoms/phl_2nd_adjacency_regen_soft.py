@@ -9,7 +9,7 @@ PHL and a 2nd-grade game:
 - **Same venue**  -> the two games must be on the **same field** in **adjacent
   day_slots** (back-to-back, no gap);
 - **Different venue** -> the two **start times** must differ by at least
-  ``phl_2nd_cross_venue_min_minutes`` (default 180 = 3 h).
+  ``phl_2nd_cross_venue_min_minutes`` (default 150 = 2.5 h).
 
 Any other arrangement is forbidden by the hard atom via ``p + q <= 1`` for
 each violating cross-grade pair.
@@ -70,7 +70,7 @@ class PHLAnd2ndAdjacencyRegenSoft(Atom):
         team_club = get_team_club_map(data)
         locked_weeks = set(data.get('locked_weeks', set()))
         cross_venue_min = data.get('constraint_defaults', {}).get(
-            'phl_2nd_cross_venue_min_minutes', 180
+            'phl_2nd_cross_venue_min_minutes', 150
         )
 
         # (club, week, day) -> {'PHL': [(field, slot, loc, minutes, var)],

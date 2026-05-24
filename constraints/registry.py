@@ -145,15 +145,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         atom_group='PHLAndSecondGradeTimes',
         groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
     ),
-    'PHLAnd2ndConcurrencyAtBroadmeadow': ConstraintInfo(
-        canonical_name='PHLAnd2ndConcurrencyAtBroadmeadow',
-        solver_class_names=['PHLAnd2ndConcurrencyAtBroadmeadow'],
-        tester_check_methods=['_check_phl_second_grade_times'],
-        tester_violation_names=['PHLAndSecondGradeTimes'],
-        severity_level=1,
-        atom_group='PHLAndSecondGradeTimes',
-        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
-    ),
+    # spec-030: PHLAnd2ndConcurrencyAtBroadmeadow entry removed — the atom was a
+    # strict subset of PHLAnd2ndAdjacency (same-club same-Broadmeadow-slot is
+    # already forbidden by the same-venue adjacency rule). Registry count 51→50.
     # spec-015: GosfordFridayRoundsForced entry removed. The per-round
     # `sum == 1` rule is expressed generically via FORCED_GAMES count entries
     # (scope + count + constraint type) in the season config — see

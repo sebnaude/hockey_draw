@@ -7,7 +7,7 @@ where the club fields BOTH a PHL game and a 2nd-grade game:
 - **Same venue** -> the two games must be on the **same field** in **adjacent
   day_slots** (back-to-back, no gap).
 - **Different venue** -> the two **start times** must differ by at least
-  ``phl_2nd_cross_venue_min_minutes`` (default 180 = 3 h). Rationale
+  ``phl_2nd_cross_venue_min_minutes`` (default 150 = 2.5 h). Rationale
   (start-to-start, since that is all the schedule controls): game 1 length +
   warm-down + travel between grounds + warm-up before game 2.
 
@@ -54,7 +54,7 @@ class PHLAnd2ndAdjacency(Atom):
         team_club = get_team_club_map(data)
         locked_weeks = set(data.get('locked_weeks', set()))
         cross_venue_min = data.get('constraint_defaults', {}).get(
-            'phl_2nd_cross_venue_min_minutes', 180
+            'phl_2nd_cross_venue_min_minutes', 150
         )
 
         # (club, week, day) -> {'PHL': [(field, slot, loc, minutes, var)],

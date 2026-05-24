@@ -26,7 +26,6 @@ from constraints.helper_vars import HelperVarRegistry, SharedVariablePool
 from constraints.registry import run_count_adjusters
 from constraints.atoms import (
     PHLConcurrencyAtBroadmeadow,
-    PHLAnd2ndConcurrencyAtBroadmeadow,
     ClubDayParticipation,
     ClubDayIntraClubMatchup,
     ClubDayOpponentMatchup,
@@ -477,9 +476,10 @@ class UnifiedConstraintEngine:
     # for parity reference; import retained so parity tests still work.
     # spec-015: GosfordFridayRoundsForced removed — Gosford Friday rounds are
     # now FORCED_GAMES count entries in the season config, not a code atom.
+    # spec-030: PHLAnd2ndConcurrencyAtBroadmeadow removed (subsumed by
+    # PHLAnd2ndAdjacency's same-venue branch).
     _PHL_HARD_ATOMS = (
         PHLConcurrencyAtBroadmeadow,
-        PHLAnd2ndConcurrencyAtBroadmeadow,
     )
     # spec-020: `_PHL_SOFT_ATOMS` / `_phl_times_atoms_soft` removed — the only
     # member was PreferredDates, now deleted. The generic `PreferredGames`

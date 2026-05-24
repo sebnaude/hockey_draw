@@ -140,8 +140,8 @@ CONSTRAINT_DEFAULTS = {
     # spec-014: PHL/2nd same-club adjacency. The same-venue rule is a
     # slot-adjacency rule (no minute threshold); the cross-venue rule requires
     # this minimum start-time gap in REAL minutes (game length + warm-down +
-    # travel + warm-up, measured start-to-start). 180 = 3 h.
-    'phl_2nd_cross_venue_min_minutes': 180,
+    # travel + warm-up, measured start-to-start). 150 = 2.5 h.
+    'phl_2nd_cross_venue_min_minutes': 150,
     # Worst timeslot. spec-021: the production earliest-slot rule
     # (VenueEarliestSlotFill) avoids 7 pm structurally and does NOT read this.
     # Kept as a backward-compat default for the legacy soft/resolver path
@@ -174,9 +174,9 @@ DEFAULT_STAGES = [
         'atoms': [
             'NoDoubleBookingTeams', 'NoDoubleBookingFields',
             'EqualGamesAndBalanceMatchUps',
-            'PHLConcurrencyAtBroadmeadow', 'PHLAnd2ndConcurrencyAtBroadmeadow',
+            'PHLConcurrencyAtBroadmeadow',
             # spec-014: PHL/2nd same-club adjacency — same-venue games must be
-            # back-to-back on one field; cross-venue games >= 180-min start gap.
+            # back-to-back on one field; cross-venue games >= 150-min start gap.
             # Non-engine atom (dispatched via the stages.py fallback). NOTE:
             # under locked-week runs this can over-constrain Gosford PHL (zero
             # margin) — exclude it via --exclude PHLAnd2ndAdjacency for locked
