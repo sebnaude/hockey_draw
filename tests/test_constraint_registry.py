@@ -98,8 +98,9 @@ class TestRegistryCompleteness:
         ClubVsClubStackedCoLocation, EqualMatchUpSpacing, BalancedByeSpacing,
         the 5 ClubDay sub-atoms (Participation/IntraClubMatchup/OpponentMatchup/
         SameField/ContiguousSlots), ClubGameSpread, VenueEarliestSlotFill:
-        38 + 13 = 51. spec-030 DELETED PHLAnd2ndConcurrencyAtBroadmeadow: 50."""
-        assert len(CONSTRAINT_REGISTRY) == 50
+        38 + 13 = 51. spec-030 DELETED PHLAnd2ndConcurrencyAtBroadmeadow: 50.
+        spec-031 DELETED ClubFieldConcentration: 49."""
+        assert len(CONSTRAINT_REGISTRY) == 49
 
     def test_all_entries_have_required_fields(self):
         """Every ConstraintInfo must have canonical_name and at least one tester method.
@@ -242,14 +243,10 @@ class TestSlackKeys:
 class TestTesterOnlyConstraints:
     """Test tester-only diagnostic constraints."""
 
-    def test_club_field_concentration_is_tester_only(self):
-        info = CONSTRAINT_REGISTRY['ClubFieldConcentration']
-        assert info.tester_only is True
-        assert info.solver_class_names == []
-
     def test_get_tester_only_returns_expected(self):
         tester_only = get_tester_only_constraints()
-        assert 'ClubFieldConcentration' in tester_only
+        # spec-031: ClubFieldConcentration removed; ForcedGames is a remaining tester-only
+        assert 'ForcedGames' in tester_only
 
     def test_non_tester_only_have_solver_names(self):
         # spec-018: the Phase-6 Maitland-named alias entries

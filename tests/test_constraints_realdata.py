@@ -29,8 +29,8 @@ Constraints that trivially fail with partial data (6 of 22 weeks) — tested sep
   - BalancedMatchups: 58 (not enough meetings)
   - ClubDay: 12 (club days fall outside the 6-week window)
   - ClubVsClubAlignment: 28 (insufficient rounds for coincidence)
-  - ClubFieldConcentration: 37 (diagnostic, not a solver constraint)
   - PHLSecondGradeTimes: 1 (Gosford Friday count can't match with partial data)
+  - (spec-031: ClubFieldConcentration removed — diagnostic deleted)
 """
 
 import pytest
@@ -396,13 +396,7 @@ class TestClubGameSpread:
             assert any(club in v.message for club in known_clubs), f"No club name in: {v.message}"
 
 
-class TestClubFieldConcentration:
-    """Diagnostic check — clubs shouldn't be too spread across fields."""
-
-    def test_known_violations(self, tester):
-        violations = tester._check_club_field_concentration()
-        assert len(violations) >= 20
-
+# spec-031: TestClubFieldConcentration removed (_check_club_field_concentration deleted).
 
 # ============== Level 4: LOW ==============
 

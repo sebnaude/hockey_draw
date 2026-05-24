@@ -878,44 +878,7 @@ class TestCheckClubGameSpread:
         assert len(tiger_v) == 0
 
 
-# ============== _check_club_field_concentration ==============
-
-class TestCheckClubFieldConcentration:
-    def test_violation_too_many_fields(self):
-        """Club with games spread across too many fields."""
-        data = make_data()
-        # 4 games, 3 on different fields: EF(1), WF(1), SF(1), EF(1)
-        # max_on_field=2 (EF), field_spread=4-2=2, hard_cap=max(0, 4//2-1)+0=1
-        games = [
-            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
-                      day_slot=1, field_name='EF'),
-            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
-                      day_slot=2, field_name='WF'),
-            make_game('G3', 'Tigers 3rd', 'Wests 3rd', '3rd', 1, 1, '2025-04-01',
-                      day_slot=3, field_name='SF'),
-            make_game('G4', 'Tigers 4th', 'Wests 4th', '4th', 1, 1, '2025-04-01',
-                      day_slot=4, field_name='EF'),
-        ]
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_club_field_concentration()
-        hard_v = [v for v in violations if 'exceeds' in v.message and 'Tigers' in v.message]
-        assert len(hard_v) >= 1
-
-    def test_soft_warning_minor_spread(self):
-        """Club with 2 games on 2 fields: field_spread=1, hard_cap=max(0,2//2-1)+0=0 -> hard violation actually."""
-        data = make_data()
-        games = [
-            make_game('G1', 'Tigers PHL', 'Wests PHL', 'PHL', 1, 1, '2025-04-01',
-                      day_slot=1, field_name='EF'),
-            make_game('G2', 'Tigers 2nd', 'Wests 2nd', '2nd', 1, 1, '2025-04-01',
-                      day_slot=2, field_name='WF'),
-        ]
-        tester = DrawTester(make_draw(games), data)
-        violations = tester._check_club_field_concentration()
-        # field_spread=1, hard_cap=0, so 1>0 is a hard violation
-        tiger_v = [v for v in violations if 'Tigers' in v.message]
-        assert len(tiger_v) >= 1
-
+# spec-031: TestCheckClubFieldConcentration removed (_check_club_field_concentration deleted).
 
 # ============== _check_maximise_clubs_per_timeslot_broadmeadow ==============
 
