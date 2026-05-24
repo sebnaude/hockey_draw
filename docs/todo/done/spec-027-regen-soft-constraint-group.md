@@ -1,4 +1,16 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- completed: 2026-05-24 (merged c851f25 → final-form). All 10 DoD met. 13 RegenSoft
+     atoms + `regen` group + staged-dispatch wiring + DoD-7 witness; Mode B reviewed
+     (2 findings fixed: club-day participation soft no-raise, exact bye oracle). Implementation
+     deviations recorded inline: (1) EqualMatchUpSpacing/ClubGameSpread are engine keys with no
+     soft-only path, so they got NEW standalone RegenSoft atoms (13 total, not 11); (2) the
+     simple engine path can't dispatch non-engine RegenSoft atoms, so regen routes through the
+     STAGED dispatcher (apply_constraint_set) with a synthetic single 'regen' stage and ignores
+     --simple; (3) severity_solver_stages() now excludes regen_soft so fresh --staged builds
+     never apply them. Full suite green in batches (whole-process run segfaults pre-existing on
+     final-form too — cumulative ortools/Windows issue, not a spec-027 regression). DoD-10 full
+     2026 regen feasibility is the convenor's hours-long run; post-merge smoke confirmed the
+     integrated path selects the regen group, freezes/pins, and builds without error. -->
 <!-- reviewed: adversarial Sonnet review 2026-05-23 (re-review — dependency audit) — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
