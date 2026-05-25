@@ -486,23 +486,29 @@ The `--slack` flag loosens specific constraints (different from `--relax` which 
 - `PreferredTimesConstraint` - penalty for no-play dates
 - `EnsureBestTimeslotChoices` - prefer certain slots
 
-### Constraint Stages
+### Solve modes & constraint stages
 
-**Default Mode (`stage1_required` → `stage2_soft`):**
+Three solve modes (selected on `run.py generate`). `--groups` (selection) and `--slack` are orthogonal and work identically in every mode; regeneration (`--regen-from`) ignores the mode flags and always uses the staged dispatcher.
+
+**Default — single full solve (no mode flag):** the complete modern constraint set is applied at once and solved in a single `solver.Solve`. This is the default and replaces the former `--simple` path (which silently omitted constraints).
+
+**`--staged` — DEFAULT_STAGES incremental staged solve:** applies and solves stage-by-stage, carrying the prior solution as a hint.
 
 | Stage | Constraints |
 |-------|-------------|
-| stage1_required | All core + structural constraints |
-| stage2_soft | Optimization preferences |
+| critical_feasibility | Double-booking, equal games, matchup spacing, PHL/2nd adjacency + concurrency, bye spacing, venue earliest-slot fill, club no-concurrent-slot |
+| home_away_balance | Away-club home-weekend counts + per-opponent/aggregate home balance |
+| club_alignment | ClubVsClub stacked weekends + co-location |
+| club_day | Club-day participation/matchups/same-field/contiguity, club game spread |
+| soft_optimisation | Preferred games/times, lex matchup ordering, NIHC fill order, team-pair non-concurrency, team conflict, preferred away weekends |
 
-**Severity Mode (`--staged`):**
+**`--severity` — severity-grouped staged solve:** stages built from the registry severity levels.
 
 | Stage | Level | Constraints |
 |-------|-------|-------------|
 | severity_1 | CRITICAL | Double-booking, equal games, matchup spacing, adjacency, home/away balance |
-| severity_2 | HIGH | Club days, team conflicts, Maitland away grouping |
+| severity_2 | HIGH | Club days, team conflicts, away grouping |
 | severity_3 | MEDIUM | Grade adjacency, club alignment, club game spread |
-| severity_4 | LOW | Club density at Broadmeadow |
 | severity_5 | VERY LOW | Timeslot preferences |
 
 Stage timing: config-driven via `max_time_per_stage` in `SEASON_CONFIG` (default: 2 days per stage).
