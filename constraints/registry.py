@@ -414,19 +414,26 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         groups=frozenset({'core', 'club_day'}),
     ),
     # spec-021: extracted from ClubGameSpread's lower no-double-up bound (which
-    # is concurrency, not contiguity). HARD, capacity-aware via no_field_slots.
+    # is concurrency, not contiguity).
+    # spec-033 Unit E: soft + slack — hard ceiling of 1 overlap per slot (+slack),
+    # soft penalty pushing overlaps -> 0 (stagger a club's games across slots).
     'ClubNoConcurrentSlot': ConstraintInfo(
         canonical_name='ClubNoConcurrentSlot',
         solver_class_names=['ClubNoConcurrentSlot'],
         tester_check_methods=['_check_club_no_concurrent_slot'],
         tester_violation_names=['ClubNoConcurrentSlot'],
         severity_level=2,
+        # spec-033 Unit E: own slack key (hard cap loosens by --slack) + soft
+        # component (penalty pushes overlaps toward 0).
+        slack_key='ClubNoConcurrentSlot',
+        has_soft_component=True,
         # spec-023: §1 lists this as {core} minimum; reconciled against
         # DEFAULT_STAGES — ClubNoConcurrentSlot is wired into critical_feasibility
         # (NOT club_day, which the spec's illustrative example guessed), so it
         # carries the critical_feasibility legacy-stage group tag.
-        # spec-027: physical slot-concurrency — stays HARD in regen (core_hard).
-        groups=frozenset({'core', 'critical_feasibility', 'core_hard'}),
+        # spec-033 Unit E: 'core_hard' DROPPED — overlaps are now soft (regen
+        # treats it soft; it has no regen_soft analogue, so it LEAVES regen).
+        groups=frozenset({'core', 'critical_feasibility'}),
     ),
     # spec-024: `MaximiseClubsPerTimeslotBroadmeadow` and
     # `MinimiseClubsOnAFieldBroadmeadow` deleted. Their "spread the clubs around"

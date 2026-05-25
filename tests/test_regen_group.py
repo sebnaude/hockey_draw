@@ -26,12 +26,16 @@ from constraints.registry import (
 # Hand-computed oracle for the `core_hard` set (spec-027 DoD-1).
 # spec-033 Unit C: TeamConflict was REMOVED from core_hard — it is now a
 # soft-only preference (see ORACLE_SOFT_MEMBERS), so it no longer reaches regen
-# via the `core_hard` branch but via the `soft` branch instead. That drops the
-# hand-listed core_hard set from 11 (post-spec-030) to 10 members:
-#   7 grouped-core physical/feasibility atoms that stay hard in regen, plus the
+# via the `core_hard` branch but via the `soft` branch instead.
+# spec-033 Unit E: ClubNoConcurrentSlot was REMOVED from core_hard — it is now
+# soft + slack (hard <=1 overlap +slack, push->0) carrying {core,
+# critical_feasibility}. Unlike TeamConflict it gains NO soft/regen_soft tag, so
+# it LEAVES regen entirely (no regen analogue). That drops the hand-listed
+# core_hard set from 11 (post-spec-030) to 10 (post-Unit-C) to 9 members:
+#   6 grouped-core physical/feasibility atoms that stay hard in regen, plus the
 #   3 freeze pins (ForcedGames, BlockedGames, LockedPairings), all enforced at
 #   generate_X. (Verified against the live registry: resolve_group('core_hard')
-#   == this set, count 10.)
+#   == this set, count 9.)
 # ---------------------------------------------------------------------------
 ORACLE_CORE_HARD = {
     'NoDoubleBookingTeams',
@@ -40,7 +44,6 @@ ORACLE_CORE_HARD = {
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'PHLConcurrencyAtBroadmeadow',
     'SameGradeSameClubNoConcurrency',
-    'ClubNoConcurrentSlot',
     'ForcedGames',
     'BlockedGames',
     'LockedPairings',
@@ -118,7 +121,9 @@ def test_core_hard_membership_equals_hand_oracle():
     assert resolve_group('core_hard') == ORACLE_CORE_HARD
     # spec-030: 12 -> 11 (deleted PHLAnd2ndConcurrencyAtBroadmeadow).
     # spec-033 Unit C: 11 -> 10 (TeamConflict softened out of core_hard).
-    assert len(ORACLE_CORE_HARD) == 10
+    # spec-033 Unit E: 10 -> 9 (ClubNoConcurrentSlot softened out of core_hard;
+    # it gains no regen analogue, so it leaves regen entirely).
+    assert len(ORACLE_CORE_HARD) == 9
 
 
 def test_regen_includes_every_core_hard_regen_soft_and_soft_member():

@@ -238,6 +238,9 @@ class TestSlackKeys:
             # spec-008 Part B: separate slack for byes spacing — convenor
             # can loosen one without touching matchup spacing.
             'BalancedByeSpacing',
+            # spec-033 Unit E: ClubNoConcurrentSlot is now soft + slack — its
+            # slack raises the per-slot overlap ceiling (1 + slack).
+            'ClubNoConcurrentSlot',
         }
         for info in CONSTRAINT_REGISTRY.values():
             if info.slack_key:

@@ -2205,18 +2205,19 @@ class DrawTester:
         return violations
 
     def _check_club_no_concurrent_slot(self) -> List[Violation]:
-        """Check ClubNoConcurrentSlot (spec-021): a club's games per (timeslot,
-        venue) stay within a capacity-aware cap.
+        """Check ClubNoConcurrentSlot (spec-033 Unit E): a club's games per
+        (club, week, day, location, slot) stay within a hard ceiling of
+        `1 + slack` overlaps, with any overage reported as SOFT pressure.
 
-        cap = max(1, ceil(club_team_count / no_field_slots[location])).
-        Allows forced double-ups when a club has more games at a venue than the
-        venue has timeslots; flags any slot exceeding the cap.
+        The cap aggregates across a location's fields, so two club games in the
+        same slot at NIHC on different fields (EF/WF/SF) count as one overlap.
+        slack-aware via the `ClubNoConcurrentSlot` slack key. Overage beyond the
+        cap is reported via metric_value (soft_pressure), consistent with the
+        other soft checks — not flagged as a hard failure.
         """
         violations = []
-        no_field_slots = self.data.get('no_field_slots', {})
-        club_team_count = defaultdict(set)
-        for t in self.data.get('teams', []):
-            club_team_count[t.club.name].add(t.name)
+        config_slack = self.constraint_slack.get('ClubNoConcurrentSlot', 0)
+        cap = 1 + config_slack
 
         # (club, week, day_slot, location) -> set of game_ids.
         groups = defaultdict(set)
@@ -2231,14 +2232,11 @@ class DrawTester:
 
         for (club, week, slot, location), gids in groups.items():
             count = len(gids)
-            slots = no_field_slots.get(location, 0)
-            n_teams = len(club_team_count.get(club, ()))
-            cap = max(1, -(-n_teams // slots)) if slots > 0 else 1  # ceil(n/slots)
             if count > cap:
                 violations.append(Violation.create(
                     constraint="ClubNoConcurrentSlot",
-                    message=f"Club '{club}' week {week} slot {slot} at {location}: "
-                            f"{count} concurrent games exceeds cap {cap}",
+                    message=f"[soft] Club '{club}' week {week} slot {slot} at {location}: "
+                            f"{count} concurrent games exceeds cap {cap} (1 + slack {config_slack})",
                     affected_games=list(gids)[:5],
                     week=week,
                     affected_clubs=[club],

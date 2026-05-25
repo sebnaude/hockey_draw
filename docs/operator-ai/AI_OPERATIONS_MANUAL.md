@@ -462,6 +462,7 @@ The `--slack` flag loosens specific constraints (different from `--relax` which 
 - `EqualMatchUpSpacingConstraint`: widens spacing window
 - `ClubGameSpread`: loosens limits
 <!-- spec-033 Unit A: ClubVsClubAlignment removed — alignment is a fixed hard rule with no slack. -->
+- `ClubNoConcurrentSlot`: raises the per-slot overlap ceiling (1 + slack) — the release valve when a venue has fewer distinct slots than a club's games (spec-033 Unit E)
 - `BalancedByeSpacing`: loosens bye-spacing floor
 
 ### Key Constraint Details
