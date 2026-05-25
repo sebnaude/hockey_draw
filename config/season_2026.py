@@ -793,6 +793,7 @@ CONSTRAINT_DEFAULTS = {
     # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
     'club_game_spread_max_gap': 1,         # ClubGameSpread: max allowed gap (spread) per club per day (+ slack at runtime)
     'club_game_spread_max_overlap': 0,     # ClubGameSpread: max allowed double-ups (+ slack at runtime; 0 = no overlap)
+    'club_game_spread_max_fields': 2,      # spec-033 Unit D: HARD cap on distinct fields a club uses per (club,week,day) (+ --slack ClubGameSpread). Field-concentration half of ClubGameSpread; pairs with the off-primary soft (push field count -> 1).
     # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment is a fixed hard rule with no slack.
     'gosford_friday_games': 8,             # PHLAndSecondGradeTimes: exact number of Friday PHL games at Gosford (AGM decision)
     'maitland_friday_games': 2,            # PHLAndSecondGradeTimes: exact number of Friday PHL games at Maitland (Gosford vs Maitland only)

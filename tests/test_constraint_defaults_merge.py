@@ -17,6 +17,10 @@ def test_perennial_defaults_have_required_keys():
         # spec-024: max_clubs_per_field removed (MinimiseClubsOnAFieldBroadmeadow deleted).
         'club_game_spread_max_gap',
         'club_game_spread_max_overlap',
+        # spec-033 Unit D: hard field-concentration cap for ClubGameSpread.
+        'club_game_spread_max_fields',
+        # spec-033 Unit B: base slack below the raw ideal bye gap.
+        'bye_spacing_base_slack',
         # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment
         # is a fixed hard rule with no slack.
         'phl_2nd_cross_venue_min_minutes',

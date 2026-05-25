@@ -2169,14 +2169,30 @@ class DrawTester:
                     week=week
                 ))
 
-        # (2) off-primary-field soft observation per (club, week, day)
+        # (2) field-concentration HARD cap + off-primary soft per (club, week, day)
+        # spec-033 Unit D: hard <= club_game_spread_max_fields (+slack) distinct
+        # fields, slack-aware via the same ClubGameSpread slack key as (1).
+        max_fields = self.data.get('constraint_defaults', {}).get(
+            'club_game_spread_max_fields', 2)
+        field_cap = max_fields + config_slack
         for (club, week, day), fields in cwd_fields.items():
             if len(fields) < 2:
                 continue
             counts = {f: len(g) for f, g in fields.items()}
+            all_game_ids = {gid for g in fields.values() for gid in g}
+            # Hard distinct-field cap.
+            if len(fields) > field_cap:
+                violations.append(Violation.create(
+                    constraint="ClubGameSpread",
+                    message=f"Club '{club}' week {week} ({day}): uses {len(fields)} distinct "
+                            f"fields ({sorted(fields)}) exceeds cap {field_cap}",
+                    affected_games=list(all_game_ids)[:5],
+                    week=week,
+                    affected_clubs=[club],
+                    metric_value=len(fields) - field_cap,
+                ))
             off_primary = sum(counts.values()) - max(counts.values())
             if off_primary > 0:
-                all_game_ids = {gid for g in fields.values() for gid in g}
                 violations.append(Violation.create(
                     constraint="ClubGameSpread",
                     message=f"[soft] Club '{club}' week {week} ({day}): {off_primary} game(s) off the "

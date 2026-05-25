@@ -228,6 +228,7 @@ SEASON_CONFIG = {
         # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
         'club_game_spread_max_gap': 1,
         # club_game_spread_max_overlap: REMOVED — now dynamic per club: T//2 - 1 where T = team count
+        'club_game_spread_max_fields': 2,  # spec-033 Unit D: HARD cap on distinct fields per (club,week,day) (+ --slack ClubGameSpread); pairs with off-primary soft (push -> 1).
         # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment is a fixed hard rule with no slack.
     },
 }
