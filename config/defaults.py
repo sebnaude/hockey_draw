@@ -304,6 +304,13 @@ DEFAULT_STAGES = [
             'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF',
             # spec-007: convenor-supplied per-team-pair no-concurrency soft.
             'TeamPairNoConcurrency',
+            # spec-033 Unit C: TeamConflict became a SOFT preference (no hard
+            # component) and joined the `default` group via `soft`. It must also
+            # appear in this stage's atom list so the staged default build
+            # dispatches it (engine soft key) and so the selection-parity holds
+            # (`resolve_group('default')` == DEFAULT_STAGES atom union). Empty
+            # `data['team_conflicts']` ⇒ zero penalty vars (no-op for 2026).
+            'TeamConflict',
             # spec-006: preferred / avoided away-ground weekends (e.g. NRL clash dates).
             'PreferredWeekendsAwayGround',
             # spec-018: `MaitlandAlternateHomeAway` (spec-012) removed — its
