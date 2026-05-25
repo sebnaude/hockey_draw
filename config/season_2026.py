@@ -777,8 +777,9 @@ GRADE_SCHEDULING_METHOD = {
 # The --slack N flag loosens from these values. All are configurable per season.
 #
 # Formula per constraint:
-#   EqualMatchUpSpacing:  min_gap = max(T//2+1, T-2 - spacing_base_slack - slack)
-#   ClubVsClubAlignment:  (no base limit config — slack reduces required coincidences)
+#   EqualMatchUpSpacing (spec-008): S = max(0, ideal_gap(T) - spacing_base_slack - slack),
+#                                   where ideal_gap(T) = _legacy_min_gap(T) - 1.
+#                                   Repeat meetings forbidden when gap = r2 - r1 <= S.
 #   ClubGameSpread (spec-024): per-field contiguity, gap_cap = max(0, min(1, n-3)) + slack;
 #                              plus an off-primary-field soft penalty per (club, week, day)
 
@@ -789,7 +790,7 @@ CONSTRAINT_DEFAULTS = {
     # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
     'club_game_spread_max_gap': 1,         # ClubGameSpread: max allowed gap (spread) per club per day (+ slack at runtime)
     'club_game_spread_max_overlap': 0,     # ClubGameSpread: max allowed double-ups (+ slack at runtime; 0 = no overlap)
-    'club_vs_club_alignment_base_slack': 1, # ClubVsClubAlignment: with --slack 1, effective slack = 2, min_required = num_games - 2
+    # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment is a fixed hard rule with no slack.
     'gosford_friday_games': 8,             # PHLAndSecondGradeTimes: exact number of Friday PHL games at Gosford (AGM decision)
     'maitland_friday_games': 2,            # PHLAndSecondGradeTimes: exact number of Friday PHL games at Maitland (Gosford vs Maitland only)
     'max_friday_broadmeadow': 3,           # PHLAndSecondGradeTimes: max Friday PHL games at NIHC (Broadmeadow)

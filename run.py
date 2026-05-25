@@ -115,7 +115,7 @@ Examples:
     gen_parser.add_argument('--slack', type=int, default=None, metavar='N',
                             help='Relax constraints by adding N to their limits. '
                                  'Applies to all slack-aware constraints: '
-                                 'EqualMatchUpSpacing, ClubVsClubAlignment, ClubGameSpread, etc.')
+                                 'EqualMatchUpSpacing, ClubGameSpread, BalancedByeSpacing, etc.')
     gen_parser.add_argument('--stages-config', type=str, metavar='FILE',
                             help='Path to a JSON file with a custom SOLVER_STAGES list. '
                                  'Replaces the in-config solver_stages.')
@@ -833,7 +833,8 @@ def run_generate(args):
             'EqualMatchUpSpacingConstraint': slack_value,
             # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
             # removed — those rules were deleted (--slack on them is a no-op).
-            'ClubVsClubAlignment': slack_value,
+            # spec-033 Unit A: ClubVsClubAlignment slack key removed — alignment
+            # is now a fixed hard rule with no slack.
             # spec-024: MaximiseClubsPerTimeslotBroadmeadow / MinimiseClubsOnAFieldBroadmeadow
             # slack keys removed — those constraints were deleted.
             'ClubGameSpread': slack_value,

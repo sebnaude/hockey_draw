@@ -215,18 +215,23 @@ class TestSlackKeys:
         # removed along with their rules.
         assert get_slack_key('EqualMatchUpSpacing') == 'EqualMatchUpSpacingConstraint'
         assert get_slack_key('ClubGameSpread') == 'ClubGameSpread'
-        assert get_slack_key('ClubVsClubAlignment') == 'ClubVsClubAlignment'
+        # spec-033 Unit A: ClubVsClubAlignment slack key removed — alignment is
+        # now a fixed hard rule with no slack.
 
     def test_no_slack_returns_none(self):
         assert get_slack_key('NoDoubleBookingTeams') is None
         assert get_slack_key('PHLAnd2ndAdjacency') is None
+        # spec-033 Unit A: ClubVsClubAlignment + its two stacked atoms are slack-free.
+        assert get_slack_key('ClubVsClubAlignment') is None
+        assert get_slack_key('ClubVsClubStackedWeekends') is None
+        assert get_slack_key('ClubVsClubStackedCoLocation') is None
 
     def test_all_slack_keys_exist_in_known_dicts(self):
         """All slack keys in the registry should be recognizable slack dict keys."""
         known_slack_keys = {
             'EqualMatchUpSpacingConstraint',
             # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping removed.
-            'ClubVsClubAlignment',
+            # spec-033 Unit A: ClubVsClubAlignment slack key removed (fixed hard rule).
             'MaximiseClubsPerTimeslotBroadmeadow',
             'MinimiseClubsOnAFieldBroadmeadow',
             'ClubGameSpread',

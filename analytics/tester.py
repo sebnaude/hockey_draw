@@ -2007,7 +2007,9 @@ class DrawTester:
         Skips PHL and 2nd grade (solver only applies to 3rd-6th).
         """
         violations = []
-        config_slack = self.constraint_slack.get('ClubVsClubAlignment', 0)
+        # spec-033 Unit A: ClubVsClubAlignment is a fixed hard rule with no slack.
+        # The tester enforces the full coincidence requirement (min_required =
+        # num_games) — it no longer reads constraint_slack['ClubVsClubAlignment'].
 
         # Build games by (club_pair, grade, round_no)
         games_by_pair_grade_round = defaultdict(list)
@@ -2062,7 +2064,7 @@ class DrawTester:
                         continue
 
                     coincident = rounds_g1 & rounds_g2
-                    min_required = max(0, num_games - config_slack)
+                    min_required = num_games  # spec-033 Unit A: no slack
 
                     if len(coincident) < min_required:
                         violations.append(Violation.create(

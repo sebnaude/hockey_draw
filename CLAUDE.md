@@ -278,7 +278,6 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 
 The `--slack` CLI flag loosens specific constraints. Applied to:
 - `EqualMatchUpSpacingConstraint`: reduces min_gap toward floor. Formula: `min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - slack)`. Config: `spacing_base_slack` in `CONSTRAINT_DEFAULTS` (default 0)
-- `ClubVsClubAlignment`: loosens alignment requirement
 - `ClubGameSpread`: increases spread limit (upper) AND allows more double-ups (lower). Formula: `gap >= -(max_overlap + slack)` and `gap <= max_gap + slack`
 
 Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `DrawTester`.
@@ -383,7 +382,6 @@ data = load_season_data(2026)
 # IMPORTANT: Set constraint_slack to match the solver run's --slack value
 data['constraint_slack'] = {
     'EqualMatchUpSpacingConstraint': 3,
-    'ClubVsClubAlignment': 3,
     'ClubGameSpread': 3,
 }
 

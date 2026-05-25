@@ -627,7 +627,9 @@ class UnifiedConstraintEngine:
             for g in self.grades
         }
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        config_slack = self.slack.get('ClubVsClubAlignment', 0)
+        # spec-033 Unit A: ClubVsClubAlignment is a fixed hard rule with no slack.
+        # (This is a dead parity-reference path — the engine key has no `groups=`
+        # so it is never dispatched — but kept slack-free for parity correctness.)
 
         processed = []
         prev_num = 0
@@ -675,7 +677,7 @@ class UnifiedConstraintEngine:
                                 n += 1
 
                     if coincide_vars:
-                        min_req = max(0, num_games - config_slack)
+                        min_req = num_games  # spec-033 Unit A: no slack
                         self.model.Add(sum(coincide_vars) >= min_req)
                         n += 1
         return n
@@ -843,7 +845,8 @@ class UnifiedConstraintEngine:
             for g in self.grades
         }
         ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        config_slack = self.slack.get('ClubVsClubAlignment', 0)
+        # spec-033 Unit A: no slack — deficit penalty is against the full
+        # num_games target (dead parity path; kept slack-free for correctness).
         fidx = 0
 
         processed = []
