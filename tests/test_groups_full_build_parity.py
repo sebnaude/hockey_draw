@@ -18,9 +18,11 @@ ORACLE (hand-computed, zero delta expected)
 The expected delta between (a) and (b) is **ZERO**. Why (spec §Why + DoD 8):
 
   * `resolve_group('default')` == the deduped union of all DEFAULT_STAGES atoms.
-    Verified independently: both are the SAME 28 canonical atoms / 8 engine
+    Verified independently: both are the SAME 27 canonical atoms / 8 engine
     keys (see `test_default_group_equals_default_stages_union` below). So the
-    filter in (b) drops nothing — every stage's atoms survive.
+    filter in (b) drops nothing — every stage's atoms survive. (Was 28 before
+    spec-030 deleted PHLAnd2ndConcurrencyAtBroadmeadow; spec-032's retag is
+    membership-preserving, so the count stays 27.)
   * Removing `soft_only` is behaviour-neutral: spec-021 (done) moved
     `ClubGameSpread` to the non-`soft_only` `club_day` stage, so its HARD part
     already runs in both builds; and the only other constraints in
