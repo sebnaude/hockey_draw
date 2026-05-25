@@ -1120,6 +1120,44 @@ class UnifiedConstraintEngine:
 
             self._cgs_hole_vars[(club, week, day, field)] = hole_vars
             self._cgs_keys.append((club, week, day, field))
+
+        # spec-033 Unit D: field-concentration HARD cap — the second of
+        # ClubGameSpread's two interlocked structures. The contiguity hole-cap
+        # above bounds holes WITHIN a field; this bounds the number of distinct
+        # fields a club may spread across in one (club, week, day). Together with
+        # the off-primary soft (which pushes the field count -> 1, see
+        # _club_game_spread_soft) it forms: contiguity (<=1 hole/field, push->0
+        # holes) + field concentration (<=max_fields, push->1 field).
+        defaults = self.data.get('constraint_defaults', {})
+        max_fields = defaults.get('club_game_spread_max_fields', 2)
+
+        # Re-key the per-(club,week,day,field) grouping that is ALREADY iterated
+        # above into per-(club,week,day) -> {field: [all game vars on that field]}.
+        cwd_field_vars = defaultdict(dict)  # (club,week,day) -> {field: [vars]}
+        for (club, week, day, field), slots_dict in self.by_club_week_day_field_slot.items():
+            flat = [v for vs in slots_dict.values() for v in vs]
+            if flat:
+                cwd_field_vars[(club, week, day)][field] = flat
+
+        for (club, week, day), fields in cwd_field_vars.items():
+            if len(fields) <= max_fields + config_slack:
+                # Fewer candidate fields than the cap allows -> cap can never
+                # bite, skip to avoid pointless vars/constraints.
+                continue
+            field_used = []
+            for field, vlist in fields.items():
+                fu = self.model.NewBoolVar(
+                    f'u_cgs_fieldused_{club}_w{week}_{day}_{field}')
+                # Channel: if ANY game var on field f is 1, field_used[f] is
+                # forced to 1. Each constraint field_used >= v alone forces the
+                # var up whenever its v is set. Because scheduling a game on f
+                # requires that f's field_used be 1, the sum-cap below bounds how
+                # many distinct fields can carry a game -> the cap bites.
+                for v in vlist:
+                    self.model.Add(fu >= v)
+                field_used.append(fu)
+            self.model.Add(sum(field_used) <= max_fields + config_slack)
+            n += 1
         return n
 
     def _club_game_spread_soft(self):
@@ -1132,6 +1170,13 @@ class UnifiedConstraintEngine:
            NOT on its most-used field that day = ``total_games - max_field_count``.
            Zero iff all the club's games that day sit on a single field. This
            discourages splitting a club's day across multiple fields.
+
+        spec-033 Unit D: this off-primary term is the SOFT half of ClubGameSpread's
+        field-concentration structure — it pushes the distinct-field count -> 1.
+        The matching HARD half lives in ``_club_game_spread_hard`` as a per-(club,
+        week, day) ``sum(field_used) <= club_game_spread_max_fields + slack`` cap
+        (default 2). Together: hard ceiling of <=2 fields + soft push toward 1.
+        (Mirrors the contiguity structure: hard <=1 hole/field + soft push to 0.)
         """
         n = 0
         weight = self._get_penalty_weight('ClubGameSpread', 5000)

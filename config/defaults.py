@@ -139,6 +139,10 @@ CONSTRAINT_DEFAULTS = {
     # Club game spread
     'club_game_spread_max_gap': 2,
     'club_game_spread_max_overlap': 0,
+    # spec-033 Unit D: hard cap on distinct fields a club may use per (club, week,
+    # day) = field-concentration ceiling (+ --slack ClubGameSpread). Pairs with the
+    # off-primary soft (push field count -> 1) as the second half of ClubGameSpread.
+    'club_game_spread_max_fields': 2,
     # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment is
     # a fixed hard rule with no slack.
     # spec-014: PHL/2nd same-club adjacency. The same-venue rule is a
