@@ -399,11 +399,11 @@ The following files have been cleaned up from the original notebook-based approa
 | File | Status | Notes |
 |------|--------|-------|
 | `main_notebook_translation.py` | REMOVED | Original 3787-line monolith |
-| `main.py` | REMOVED | Simple solve functionality merged into `main_staged.py --simple` |
+| `main.py` | REMOVED | Single-solve functionality merged into `main_staged.py` (the no-flag default single full solve) |
 | `generate_x.py` | REMOVED | Stub, not actually used |
 
 **Current active files:**
-- `main_staged.py` - Staged solver with `--simple` mode for single-solve
+- `main_staged.py` - Solve orchestration: single full solve (no-flag default), `--staged` (DEFAULT_STAGES incremental), and `--severity` (severity-grouped staged)
 - `constraints/original.py` - Original constraint implementations (READ-ONLY)
 - `constraints/ai.py` - AI-enhanced constraint implementations
 - `constraints/soft.py` - Soft constraint variants with slack/penalties

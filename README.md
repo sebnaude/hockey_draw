@@ -12,14 +12,17 @@ python run.py generate --year 2025
 ## Usage
 
 ```bash
-# Generate new draw (staged solving - 2 stages)
+# Generate new draw (default: single full solve - all constraints at once)
 python run.py generate --year 2025
 
 # Generate with automatic constraint relaxation (if infeasible)
 python run.py generate --year 2025 --relax
 
-# Generate with simple mode (all constraints at once)
-python run.py generate --year 2025 --simple
+# Generate with DEFAULT_STAGES incremental staged solving
+python run.py generate --year 2025 --staged
+
+# Generate with severity-grouped staged solving (5 stages by severity level)
+python run.py generate --year 2025 --severity
 
 # Run only stage 1 (required constraints)
 python run.py generate --year 2025 --stages stage1_required

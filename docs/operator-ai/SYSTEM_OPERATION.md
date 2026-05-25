@@ -37,11 +37,14 @@ Every command requires `--year`:
 ### Generate a Draw
 
 ```powershell
-# Standard staged solving (recommended)
+# Single full solve - all constraints at once (DEFAULT, no mode flag)
 .\.venv\Scripts\python.exe run.py generate --year 2026
 
-# Simple mode (all constraints at once)
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple
+# DEFAULT_STAGES incremental staged solving
+.\.venv\Scripts\python.exe run.py generate --year 2026 --staged
+
+# Severity-grouped staged solving (5 stages by severity level)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --severity
 
 # With automatic constraint relaxation
 .\.venv\Scripts\python.exe run.py generate --year 2026 --relax
@@ -113,12 +116,13 @@ slot/field freed), so their pairings and weekends stay put while the freed scope
 is re-decided.
 
 ```powershell
+# Regen IGNORES the solve-mode flags and always uses the staged dispatcher.
 # Regenerate 5th + 6th grade after a roster move (all other grades pinned)
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+.\.venv\Scripts\python.exe run.py generate --year 2026 `
     --regen-from draws/2026/current.json --regen-grades 5th 6th
 
 # Re-time weeks 10-22 (pairings/weekends kept, time-on-day re-solved)
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+.\.venv\Scripts\python.exe run.py generate --year 2026 `
     --regen-from draws/2026/current.json --regen-weeks 10-22
 ```
 

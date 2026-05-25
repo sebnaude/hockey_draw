@@ -12,7 +12,7 @@ Usage:
     # Add --relax flag to any generate command
     python run.py generate --year 2025 --relax
     python run.py generate --year 2025 --stages stage1_required --relax
-    python run.py generate --year 2025 --simple --relax
+    python run.py generate --year 2025 --staged --relax
 
 The resolver:
 1. Tries solving with all constraints

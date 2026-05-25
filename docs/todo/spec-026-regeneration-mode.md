@@ -166,7 +166,7 @@ swap.
    should differ from source in time or pairing to confirm the solver ran freely).
    (review fix — added the "at least one 6th game differs" positive assertion so the test is
    not vacuously green if regen silently replicates the source draw.)
-8. Full suite green; `run.py generate --regen-from … --regen-grades 6th --year 2026 --simple`
+8. Full suite green; `run.py generate --regen-from … --regen-grades 6th --year 2026`
    runs to a feasible solution on the 2026 config (post-merge verification per /basic step 9).
 
 ## Implementation units

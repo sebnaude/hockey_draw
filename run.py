@@ -678,8 +678,8 @@ def _resolve_group_selection(groups_arg, exclude, no_symmetry_breakers=False):
     so they are dropped even from the `default` group (which contains them).
 
     Exits with an error if a requested group name is unknown. This single
-    resolution is shared by both dispatch paths so --groups selects identically
-    in --simple and --staged.
+    resolution is shared by every dispatch path so --groups selects identically
+    across the no-flag single solve, --staged, and --severity.
     """
     from constraints.registry import resolve_group, resolve_groups, list_group_names
     group_names = list(groups_arg) if groups_arg else ['default']
@@ -863,9 +863,9 @@ def run_generate(args):
     # spec-023: resolve --groups into a deduped, canonically-ordered list of
     # WHOLE constraint canonical names, minus --exclude. No --groups => the
     # 'default' group (every production constraint), which equals today's full
-    # DEFAULT_STAGES selection. This single resolution is shared by BOTH the
-    # staged path (main_staged) and the simple/unified path (main_simple), so
-    # --groups produces an identical selection in --simple and --staged.
+    # DEFAULT_STAGES selection. This single resolution is shared by every solve
+    # path (no-flag single solve, --staged, and --severity), so --groups
+    # produces an identical selection across all three modes.
     groups_arg = getattr(args, 'groups', None)
     # spec-027: a scoped regeneration (--regen-from) applies the `regen` group
     # (core-hard physical rules + regen-soft analogues + soft) unless the operator

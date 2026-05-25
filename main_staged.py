@@ -997,8 +997,9 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
         constraint_names: spec-023 — resolved deduped union of selected --groups
             (canonical names), minus --exclude. When set, each stage's atoms are
             restricted to this set (and emptied stages dropped) so --groups
-            selects an identical constraint set in --staged as in --simple. When
-            None, the legacy full stage selection runs unchanged.
+            selects an identical constraint set across the no-flag single solve,
+            --staged, and --severity. When None, the full stage selection runs
+            unchanged.
         groups_selected: spec-023 — the list of group names the operator
             requested (for metadata; defaults to ['default']).
         regen_locked_pairings: spec-026 regen pins (one per frozen game) to merge
@@ -1184,7 +1185,7 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
                 stages_override = [s for s in stages_override if s['name'] in names]
             # spec-023: restrict each stage's atoms to the resolved --groups set
             # (drop emptied stages) so --groups selects identically here and in
-            # --simple. None => legacy full selection unchanged.
+            # the no-flag single solve. None => full selection unchanged.
             if constraint_names is not None:
                 keep_set = set(constraint_names)
                 filtered = []
@@ -1598,7 +1599,7 @@ if __name__ == "__main__":
     print("Please use run.py as the entry point instead.")
     print("\nExamples:")
     print("  python run.py generate --year 2025")
-    print("  python run.py generate --year 2026 --simple")
+    print("  python run.py generate --year 2026")
     print("  python run.py generate --year 2025 --resume run_13 stage1_required")
     print("  python run.py test draws/schedule.json --year 2025")
     print("  python run.py --help")

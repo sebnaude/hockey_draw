@@ -230,7 +230,8 @@ and the union free-scope rule.
 
 ```powershell
 # Roster move: regenerate 5th + 6th, pin everything else to its date
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple `
+# (regen ignores the solve-mode flags and always uses the staged dispatcher)
+.\.venv\Scripts\python.exe run.py generate --year 2026 `
     --regen-from draws/2026/current.json --regen-grades 5th 6th
 ```
 

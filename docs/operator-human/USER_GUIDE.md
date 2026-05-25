@@ -245,7 +245,7 @@ See `docs/ai/CONFIGURATION_REFERENCE.md` for full field reference.
 
 ```
 ├── run.py                      # 🚀 Main CLI entry point
-├── main_staged.py              # Staged solving with checkpoints (+ --simple mode)
+├── main_staged.py              # Solve orchestration: single full solve (default), --staged, --severity
 ├── models.py                   # Pydantic data models
 ├── utils.py                    # Utility functions
 │
@@ -300,11 +300,14 @@ See `docs/ai/CONFIGURATION_REFERENCE.md` for full field reference.
 ```powershell
 cd refactored
 
-# Generate a new draw (staged solving: stage1_required → stage2_soft)
+# Generate a new draw (DEFAULT: single full solve - all constraints at once)
 python run.py generate --year 2025
 
-# Generate with simple mode (all constraints at once)
-python run.py generate --year 2025 --simple
+# DEFAULT_STAGES incremental staged solving (one stage at a time, hints carried)
+python run.py generate --year 2025 --staged
+
+# Severity-grouped staged solving (5 stages by severity level)
+python run.py generate --year 2025 --severity
 
 # Run only stage 1 (required constraints)
 python run.py generate --year 2025 --stages stage1_required
@@ -312,8 +315,8 @@ python run.py generate --year 2025 --stages stage1_required
 # Generate with AI constraints (opt-in alternative constraint set)
 python run.py generate --year 2025 --ai
 
-# Generate with AI constraints in simple mode, excluding problematic constraints
-python run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices --workers 14
+# Generate with AI constraints (default single solve), excluding problematic constraints
+python run.py generate --year 2025 --ai --exclude EnsureBestTimeslotChoices --workers 14
 
 # Resume from a checkpoint
 python run.py generate --year 2025 --resume run_1 stage1_required
@@ -345,14 +348,15 @@ When the season draw is already published and you need to change only part of
 it — without re-rolling everything — use **regeneration mode**. You freeze
 everything outside a chosen scope (the rest keeps its exact pairings and
 weekends) and the solver re-decides only the scope you name. The scope is set
-by **grade**, by **week**, or both.
+by **grade**, by **week**, or both. Regeneration ignores the solve-mode flags
+(`--staged`/`--severity`) and always uses the staged dispatcher.
 
 **Recipe A — a team changed grade (e.g. 5th → 6th):** regenerate the affected
 grades. Every other grade stays exactly as published (it may only shift the
 time-on-the-day, never the date or the opponent).
 
 ```powershell
-python run.py generate --year 2026 --simple `
+python run.py generate --year 2026 `
     --regen-from draws/2026/current.json --regen-grades 5th 6th
 ```
 
@@ -361,7 +365,7 @@ regenerate those weeks. Pairings and weekends stay; only the time/field can
 move.
 
 ```powershell
-python run.py generate --year 2026 --simple `
+python run.py generate --year 2026 `
     --regen-from draws/2026/current.json --regen-weeks 10-22
 ```
 

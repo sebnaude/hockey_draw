@@ -14,8 +14,9 @@ A precise list of every capability implemented in the Hockey Draw Scheduling Sys
 | Capability | Location | Description |
 |------------|----------|-------------|
 | Generate complete draw | `main_staged.py` | Create full season schedule using CP-SAT solver |
-| Staged solving (4 stages) | `main_staged.py` | Solve in stages: Required → Strong → Medium → Soft |
-| Simple (non-staged) solving | `main_staged.py --simple` | Single-pass solve with all constraints |
+| Single full solve (DEFAULT) | `run.py generate` (no mode flag) | Single-pass solve applying the complete constraint set at once |
+| DEFAULT_STAGES staged solving | `run.py generate --staged` | Solve one stage at a time, carrying the prior solution as a hint |
+| Severity-grouped staged solving | `run.py generate --severity` | Solve in 5 stages by severity level (CRITICAL → VERY LOW) |
 | Resume from checkpoint | `main_staged.py` | Continue solving from saved stage checkpoint |
 | Solution callback saves | `SaveStateCallback` | Auto-save best solution during solve |
 

@@ -139,8 +139,9 @@ deduped union of the regen set (same as above) without requiring `--regen-from`.
 
 **Dispatch path:** a regen run is always routed through the STAGED constraint
 dispatcher (`apply_constraint_set`) with a single synthetic `'regen'` stage
-equal to the resolved regen set. The `--simple` engine-only path cannot dispatch
-the non-engine `RegenSoft` atoms, so **`--simple` is ignored for regen runs**.
+equal to the resolved regen set. **Regen ignores the solve-mode flags
+(`--staged`/`--severity`) and always uses the staged dispatcher**, because the
+non-engine `RegenSoft` atoms can only be applied through that path.
 
 **Normal (non-regen) runs:** the `regen` group is never selected by `default`,
 `all`, `production`, `core`, `soft`, or any legacy stage name — a fresh season

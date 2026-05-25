@@ -298,8 +298,9 @@ lets the solver find a best-effort valid draw instead of failing.
 **How to apply:** Automatically — pass `--regen-from <draw>` (and optionally
 `--regen-grades` / `--regen-weeks`) to `run.py generate`. The regen group is
 dispatched via `apply_constraint_set` with a single synthetic `'regen'` stage.
-The `--simple` flag is ignored for regen runs (the engine-only path cannot
-dispatch non-engine `regen_soft` atoms). For the 13 `regen_soft` penalty atoms
+Regen ignores the solve-mode flags (`--staged`/`--severity`) and always uses
+the staged dispatcher, because the non-engine `regen_soft` atoms can only be
+applied through that path. For the 13 `regen_soft` penalty atoms
 and their penalty buckets / default weights, see `docs/system/REGEN_CONSTRAINTS.md`.
 
 ---

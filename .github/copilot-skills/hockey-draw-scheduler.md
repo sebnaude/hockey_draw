@@ -29,11 +29,14 @@ cd c:\Users\c3205\Documents\Code\python\draw
 # Generate with AI constraints (opt-in alternative constraint set)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --ai
 
-# Generate with simple (non-staged) mode
-.\.venv\Scripts\python.exe run.py generate --year 2025 --simple
+# Generate with DEFAULT_STAGES incremental staged mode
+.\.venv\Scripts\python.exe run.py generate --year 2025 --staged
 
-# Generate with AI constraints, simple mode, exclude problematic constraints
-.\.venv\Scripts\python.exe run.py generate --year 2025 --simple --ai --exclude EnsureBestTimeslotChoices
+# Generate with severity-grouped staged mode (5 stages by severity level)
+.\.venv\Scripts\python.exe run.py generate --year 2025 --severity
+
+# Default (no mode flag) is a single full solve; exclude problematic constraints
+.\.venv\Scripts\python.exe run.py generate --year 2025 --ai --exclude EnsureBestTimeslotChoices
 
 # Generate with low memory usage (4 workers)
 .\.venv\Scripts\python.exe run.py generate --year 2025 --low-memory
@@ -71,7 +74,7 @@ When starting a solver run:
 | File | Purpose |
 |------|---------|
 | `run.py` | CLI entry point - use this to run the system |
-| `main_staged.py` | Staged solving main logic (also has `--simple` mode) |
+| `main_staged.py` | Solve orchestration: single full solve (default), `--staged` incremental, and `--severity` staged modes |
 | `config/season_{year}.py` | Season-specific configuration (dates, fields, times) |
 | `config/season_template.py` | Template for adding new seasons |
 | `constraints/original.py` | All constraint implementations (READ-ONLY — never edit) |
@@ -179,7 +182,7 @@ The `--relax` flag provides automatic infeasibility resolution during generation
 .\.venv\Scripts\python.exe run.py generate --year 2026 --relax
 
 # Works with other flags
-.\.venv\Scripts\python.exe run.py generate --year 2026 --relax --simple
+.\.venv\Scripts\python.exe run.py generate --year 2026 --relax --staged
 .\.venv\Scripts\python.exe run.py generate --year 2026 --relax --ai
 ```
 

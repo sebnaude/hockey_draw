@@ -169,7 +169,7 @@ and calls `apply_constraint_set`, so the staged solver
 # Select by group (varargs). Deduped union, minus --exclude.
 run.py generate --year 2026 --groups core soft
 run.py generate --year 2026 --groups core --exclude ClubGameSpread
-run.py generate --year 2026 --simple --groups core   # simple path honours it too
+run.py generate --year 2026 --staged --groups core   # honoured identically in every mode
 
 # No --groups -> the `default` group (every production constraint), identical
 # selection to the legacy full DEFAULT_STAGES union.
@@ -230,8 +230,9 @@ clustering, co-location, venue fill), and the 7 `soft` entries from the normal
 soft-optimisation stage.
 
 **Dispatch:** regen runs are always routed through `apply_constraint_set` with a
-single synthetic `'regen'` stage. The `--simple` engine-only path cannot dispatch
-non-engine `regen_soft` atoms, so `--simple` is ignored for regen runs.
+single synthetic `'regen'` stage. Regen ignores the solve-mode flags
+(`--staged`/`--severity`) and always uses the staged dispatcher, because the
+non-engine `regen_soft` atoms can only be applied through that path.
 
 **Normal (non-regen) runs never select `regen`.** The `regen_soft` atoms carry
 only `{'regen_soft'}` as their groups tag — no `core`, `club_day`,

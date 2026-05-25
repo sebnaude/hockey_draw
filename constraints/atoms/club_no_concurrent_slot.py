@@ -34,8 +34,9 @@ cap — the ceiling is a flat `1 + slack`, not capacity-aware.
 
 Complements `SameGradeSameClubNoConcurrency` (which covers same-grade clashes)
 by covering the cross-grade club case. Non-engine atom (dispatched via the
-stages.py legacy-class fallback / staged path; NOT dispatched by `--simple`,
-which runs only the engine phases — same as `BalancedByeSpacing`).
+stages.py legacy-class fallback / staged path). The no-flag single solve
+dispatches it via that same staged path (it is part of the full constraint
+set) — same as `BalancedByeSpacing`).
 """
 from collections import defaultdict
 

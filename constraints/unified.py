@@ -599,9 +599,9 @@ class UnifiedConstraintEngine:
 
     # spec-036 Unit B: the legacy in-engine ClubVsClub alignment methods
     # `_club_alignment_hard` / `_club_alignment_soft` were DELETED. They were a
-    # `--simple`-only (`apply_phase_*`) parity-reference path; after spec-036
-    # Unit A rerouted the single-solve path through the stage dispatcher, no
-    # solve path dispatched them (the `ClubVsClubAlignment` engine key has no
+    # legacy single-solve engine (`apply_phase_*`) parity-reference path; after
+    # spec-036 Unit A rerouted the single-solve path through the stage dispatcher,
+    # no solve path dispatched them (the `ClubVsClubAlignment` engine key has no
     # `groups=`). Club-vs-club alignment is fully covered in every solve path by
     # the spec-005 `ClubVsClubStackedWeekends` / `ClubVsClubStackedCoLocation`
     # atoms (dispatched outside the engine). The `ClubVsClubAlignment` registry

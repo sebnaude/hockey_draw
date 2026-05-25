@@ -436,10 +436,16 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 
 ```powershell
 # Generate (ALWAYS background, ALWAYS --year)
-# Default uses config-driven SOLVER_STAGES (Phase 7b). Each stage applies its
-# atoms via the UnifiedConstraintEngine + registry, then solves with hints
-# carried over.
-.\.venv\Scripts\python.exe run.py generate --year 2026
+# THREE solve modes (spec-036). --groups and --slack are ORTHOGONAL and work
+# identically in all three:
+#   no mode flag  -> single full solve (DEFAULT): the complete modern constraint
+#                    set is applied in ONE solve. (This replaces the old --simple.)
+#   --staged      -> DEFAULT_STAGES incremental staged solve: applies + solves
+#                    one stage at a time, carrying the prior solution as a HINT.
+#   --severity    -> severity-grouped staged solve: 5 stages by severity level.
+.\.venv\Scripts\python.exe run.py generate --year 2026                # single full solve (default)
+.\.venv\Scripts\python.exe run.py generate --year 2026 --staged       # DEFAULT_STAGES incremental
+.\.venv\Scripts\python.exe run.py generate --year 2026 --severity     # severity-staged
 
 # List the resolved SOLVER_STAGES for a season and exit (no solve).
 .\.venv\Scripts\python.exe run.py generate --year 2026 --list-stages
@@ -453,7 +459,8 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 
 # Select constraints by group (spec-023): deduped union of the named groups,
 # minus --exclude. No --groups == the `default` group (every production
-# constraint). Works on both --simple and --staged. --list-groups to enumerate.
+# constraint). Works identically in all three modes (no-flag / --staged /
+# --severity). --list-groups to enumerate.
 .\.venv\Scripts\python.exe run.py generate --year 2026 --groups core soft
 .\.venv\Scripts\python.exe run.py generate --year 2026 --groups core --exclude ClubGameSpread
 
@@ -462,7 +469,7 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 .\.venv\Scripts\python.exe run.py generate --year 2026 --no-symmetry-breakers
 
 # Generate with slack (loosens constraints)
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 3
 
 # Lock weeks from prior draw, re-solve rest
 .\.venv\Scripts\python.exe run.py generate --year 2026 --locked draws/2026/current.json --lock-weeks 1,2,3
@@ -471,11 +478,12 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 # Frozen games are PINNED to their date (time/slot/field freed); the freed scope is re-decided.
 # A game is FREE iff its grade is in --regen-grades OR its week is in --regen-weeks (union rule).
 # Regen is a solver run -> bumps MAJOR version. --regen-weeks must not overlap --lock-weeks (FATAL).
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --regen-from draws/2026/current.json --regen-grades 5th 6th
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --regen-from draws/2026/current.json --regen-weeks 10-22
+# Regen IGNORES the solve-mode flags and always uses the staged dispatcher (to apply RegenSoft atoms).
+.\.venv\Scripts\python.exe run.py generate --year 2026 --regen-from draws/2026/current.json --regen-grades 5th 6th
+.\.venv\Scripts\python.exe run.py generate --year 2026 --regen-from draws/2026/current.json --regen-weeks 10-22
 
 # Full command with exclusions, hints, and slack
-.\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3 --locked draws/2026/current.json --lock-weeks 1 --workers 20 --hint checkpoints/run_XX/simple_solve_intermediate_N/solution.pkl --exclude ConstraintName1 ConstraintName2
+.\.venv\Scripts\python.exe run.py generate --year 2026 --slack 3 --locked draws/2026/current.json --lock-weeks 1 --workers 20 --hint checkpoints/run_XX/simple_solve_intermediate_N/solution.pkl --exclude ConstraintName1 ConstraintName2
 
 # Test a draw for violations
 .\.venv\Scripts\python.exe run.py test current --year 2026
