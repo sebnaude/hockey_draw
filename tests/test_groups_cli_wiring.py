@@ -208,58 +208,69 @@ def test_unknown_group_name_exits():
 
 # ============== --staged unchanged ==============
 
-# Baseline captured from the pre-Unit-C registry-walk implementation. Hand
-# oracle: every non-tester, non-atomized-combined name grouped by severity.
+# Baseline for severity_solver_stages(). spec-036 (Unit A) changed the WITHIN-LEVEL
+# ordering from alphabetical to canonical_index (registry-insertion / global apply)
+# order — the membership of every level is UNCHANGED, only the order is corrected so
+# helper-var producers precede consumers (e.g. ClubVsClubStackedWeekends before
+# ClubVsClubStackedCoLocation; alphabetical put the consumer first and crashed
+# --severity). Hand oracle: every non-tester, non-atomized-combined, non-regen_soft
+# name grouped by severity, each level ordered by ascending canonical_index.
 BASELINE_SEVERITY_STAGES = [
     ('severity_1', [
+        'NoDoubleBookingTeams',
+        'NoDoubleBookingFields',
+        'EqualGamesAndBalanceMatchUps',
+        'FiftyFiftyHomeandAway',
         'AwayClubHomeWeekendsCount',
         'AwayClubPerOpponentAndAggregateHomeBalance',
-        'EqualGamesAndBalanceMatchUps',
-        'EqualMatchUpSpacing',
-        'FiftyFiftyHomeandAway',
-        'NoDoubleBookingFields',
-        'NoDoubleBookingTeams',
         'PHLAnd2ndAdjacency',
         'PHLConcurrencyAtBroadmeadow',
+        'EqualMatchUpSpacing',
         'SameGradeSameClubNoConcurrency',
     ]),
     ('severity_2', [
         'BalancedByeSpacing',
-        'ClubDayContiguousSlots',
+        'ClubDayParticipation',
         'ClubDayIntraClubMatchup',
         'ClubDayOpponentMatchup',
-        'ClubDayParticipation',
         'ClubDaySameField',
-        'ClubNoConcurrentSlot',
+        'ClubDayContiguousSlots',
         'TeamConflict',
+        'ClubNoConcurrentSlot',
         'VenueEarliestSlotFill',
     ]),
     ('severity_3', [
-        'ClubGameSpread',
-        'ClubVsClubAlignment',
-        'ClubVsClubStackedCoLocation',
-        'ClubVsClubStackedWeekends',
         'TeamPairNoConcurrency',
+        'ClubVsClubAlignment',
+        'ClubVsClubStackedWeekends',
+        'ClubVsClubStackedCoLocation',
+        'ClubGameSpread',
     ]),
     ('severity_5', [
-        'NIHCFillEFBeforeSF',
         'NIHCFillWFBeforeEF',
-        'PreferredGames',
+        'NIHCFillEFBeforeSF',
         'PreferredTimes',
-        'PreferredWeekendsAwayGround',
         'SoftLexMatchupOrdering',
+        'PreferredWeekendsAwayGround',
+        'PreferredGames',
     ]),
 ]
 
 
 def test_severity_solver_stages_unchanged_from_baseline():
-    """Given the spec-023 reimplementation in terms of resolve_group('severity_N'),
-    When severity_solver_stages() runs,
-    Then it is byte-for-byte identical to the captured baseline (so --staged
-    still produces the same severity-ordered selections)."""
+    """Given severity_solver_stages() (spec-036: members ordered by canonical_index),
+    When it runs,
+    Then it matches the captured baseline AND every level is sorted strictly
+    ascending by canonical_index (so producers precede consumers and --severity
+    dispatches in the same global apply order as DEFAULT_STAGES)."""
+    from constraints.registry import canonical_index
     stages = severity_solver_stages()
     got = [(s['name'], s['atoms']) for s in stages]
     assert got == BASELINE_SEVERITY_STAGES
+    # Independent oracle: each level ascending by canonical_index.
+    for s in stages:
+        idxs = [canonical_index(a) for a in s['atoms']]
+        assert idxs == sorted(idxs), f"{s['name']} not in canonical order: {s['atoms']}"
 
 
 def test_severity_stages_are_ordered_and_non_overlapping():
