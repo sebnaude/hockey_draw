@@ -166,7 +166,13 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['EqualMatchUpSpacing'],
         severity_level=1,
         slack_key='EqualMatchUpSpacingConstraint',
-        groups=frozenset({'core', 'critical_feasibility'}),
+        # spec-032: peeled out of {core, critical_feasibility} into a lonesome
+        # `spacing` group so the convenor can select/drop it independently of
+        # core. severity_level=1 and slack_key are unchanged, so it stays in the
+        # derived `severity_1` group and `--slack EqualMatchUpSpacingConstraint`
+        # still resolves. Reaches `default` via the widened _is_fresh_build.
+        # NOT in `regen` (its RegenSoft analogue covers the regen path).
+        groups=frozenset({'spacing'}),
     ),
     # spec-008 Part B: byes are first-class. A team's bye rounds are spread
     # across the season using the same `_spacing.ideal_bye_gap` math as
@@ -311,7 +317,11 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
-        groups=frozenset({'soft', 'soft_optimisation'}),
+        # spec-032: retagged out of {soft, soft_optimisation} into the dedicated
+        # always-on `symmetry_breakers` group. Still reaches `default` (widened
+        # _is_fresh_build) and `regen` (widened regen predicate); the CLI applies
+        # it in every solve via run.py unless --no-symmetry-breakers.
+        groups=frozenset({'symmetry_breakers'}),
     ),
     'NIHCFillEFBeforeSF': ConstraintInfo(
         canonical_name='NIHCFillEFBeforeSF',
@@ -322,7 +332,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         has_soft_component=True,
         atom_group='NIHCFieldFillOrder',
         required_helpers=['nihc_field_used'],
-        groups=frozenset({'soft', 'soft_optimisation'}),
+        # spec-032: retagged into the always-on `symmetry_breakers` group (see
+        # NIHCFillWFBeforeEF above).
+        groups=frozenset({'symmetry_breakers'}),
     ),
     'ClubVsClubAlignment': ConstraintInfo(
         canonical_name='ClubVsClubAlignment',
@@ -437,7 +449,9 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=[],
         severity_level=5,
         has_soft_component=True,
-        groups=frozenset({'soft', 'soft_optimisation'}),
+        # spec-032: retagged into the always-on `symmetry_breakers` group (see
+        # NIHCFillWFBeforeEF above). Lexicographical matchup tie-breaker.
+        groups=frozenset({'symmetry_breakers'}),
     ),
     # spec-006: soft penalty for preferred / avoided weekends at away grounds
     # (e.g. NRL-Knights home games at Maitland Park). Pure soft: never blocks
@@ -846,23 +860,40 @@ def validate_required_helpers() -> List[str]:
 # by severity level.
 #
 # `default`/`all`/`production` select the normal FRESH-SEASON-BUILD set: every
-# constraint carrying `core` or `soft`. (spec-027 changed this from the old
-# `bool(info.groups)` — behaviour-identical for every constraint that existed
-# before spec-027, since each carried `core` or `soft` — so that two new kinds
-# of group tag are EXCLUDED from fresh builds: (a) the `core_hard`-only freeze
-# pins + TeamConflict, which were never in DEFAULT_STAGES, and (b) the spec-027
-# `regen_soft` atoms, which must NEVER apply in a fresh build — only in regen.)
+# constraint carrying `core`, `soft`, `spacing` or `symmetry_breakers`. (spec-027
+# changed this from the old `bool(info.groups)` to `{core, soft}` so the
+# `core_hard`-only freeze pins + TeamConflict and the `regen_soft` atoms are
+# EXCLUDED from fresh builds. spec-032 then widened it to also include `spacing`
+# and `symmetry_breakers`: EqualMatchUpSpacing moved core->spacing and the three
+# symmetry breakers moved soft->symmetry_breakers, so without those two extra
+# names they would have silently dropped out of the fresh-build set. The widening
+# is membership-preserving — the same 27 atoms are selected as before the retag.)
+#
+# `symmetry_breakers` (spec-032) is the always-on tie-breaker bundle
+# (NIHCFillWFBeforeEF, NIHCFillEFBeforeSF, SoftLexMatchupOrdering). It is an
+# explicit tag, not a derived group, but the CLI layer (run.py) unions it into
+# EVERY solve regardless of --groups unless --no-symmetry-breakers is passed.
+# `spacing` (spec-032) is the lonesome EqualMatchUpSpacing group.
 #
 # `regen` (spec-027) is the regeneration constraint set: the kept-hard physical
 # atoms (`core_hard`), the soft-analogue atoms (`regen_soft`), and the always-soft
-# atoms (`soft`). It deliberately does NOT select the normal hard atoms of the
-# softened constraints — they carry only `{core, ...}`, never `core_hard`/
-# `regen_soft`/`soft`, so this predicate excludes them automatically (this is how
-# regen "softens" e.g. PHLAnd2ndAdjacency, the ClubDay atoms, ClubVsClubStacked*,
-# BalancedByeSpacing, VenueEarliestSlotFill, and the engine EqualMatchUpSpacing /
-# ClubGameSpread keys — by selecting their RegenSoft analogue instead of them).
+# atoms (`soft`), plus the `symmetry_breakers` bundle (spec-032 widened the regen
+# predicate to keep the three tie-breakers in regen after they left `soft`).
+# It deliberately does NOT select the normal hard atoms of the softened
+# constraints — they carry only `{core, ...}` or `{spacing}`, never `core_hard`/
+# `regen_soft`/`soft`/`symmetry_breakers`, so this predicate excludes them
+# automatically (this is how regen "softens" e.g. PHLAnd2ndAdjacency, the ClubDay
+# atoms, ClubVsClubStacked*, BalancedByeSpacing, VenueEarliestSlotFill, and the
+# engine EqualMatchUpSpacing / ClubGameSpread keys — by selecting their RegenSoft
+# analogue instead of them; EqualMatchUpSpacing's `spacing` tag is not in regen).
 def _is_fresh_build(info: 'ConstraintInfo') -> bool:
-    return bool(info.groups & {'core', 'soft'})
+    # spec-032: widened from {core, soft} to also include `spacing` and
+    # `symmetry_breakers`. EqualMatchUpSpacing was peeled from `core` into the
+    # lonesome `spacing` group, and the three symmetry breakers from `soft` into
+    # `symmetry_breakers`; without this widening all four would silently drop out
+    # of default/all/production. The result set is byte-identical to before the
+    # retag (same 27 fresh-build atoms) — the tags moved, the membership did not.
+    return bool(info.groups & {'core', 'soft', 'spacing', 'symmetry_breakers'})
 
 
 DERIVED_GROUPS: Dict[str, Callable[[ConstraintInfo], bool]] = {
@@ -873,7 +904,11 @@ DERIVED_GROUPS: Dict[str, Callable[[ConstraintInfo], bool]] = {
     'default': _is_fresh_build,
     'all': _is_fresh_build,
     'production': _is_fresh_build,
-    'regen': (lambda info: bool(info.groups & {'core_hard', 'regen_soft', 'soft'})),
+    # spec-032: regen predicate widened to include `symmetry_breakers` so the
+    # three tie-breakers (which left `soft`) still reach the regen set. Without
+    # this they would silently drop from regen output. EqualMatchUpSpacing's new
+    # `spacing` tag is deliberately NOT here — its RegenSoft analogue covers regen.
+    'regen': (lambda info: bool(info.groups & {'core_hard', 'regen_soft', 'soft', 'symmetry_breakers'})),
 }
 
 

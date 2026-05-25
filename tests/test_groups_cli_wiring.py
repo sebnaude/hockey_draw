@@ -224,28 +224,32 @@ ENGINE_KEY_ORACLE = {
     # FiftyFiftyHomeandAway / ClubVsClubAlignment / TeamConflict are ABSENT (no
     # production-group atom maps to them — see spec §1) and the soft
     # PreferredTimesConstraint is absent (core is hard-only).
+    # spec-032: EqualMatchUpSpacing peeled core->{spacing}, so its engine key is
+    # no longer in `core` (it stays in `default` and `severity_1` below).
     'core': {
         'ClubDay',
         'ClubGameSpread',
         'EqualGamesAndBalanceMatchUps',
-        'EqualMatchUpSpacing',
         'NoDoubleBookingFields',
         'NoDoubleBookingTeams',
         'PHLAndSecondGradeTimes',
     },
     # core + soft adds the soft engine key PreferredTimesConstraint.
+    # spec-032: EqualMatchUpSpacing absent (now in `spacing`, not core); the three
+    # symmetry breakers carry no engine key, so leaving `soft` does not change this.
     ('core', 'soft'): {
         'ClubDay',
         'ClubGameSpread',
         'EqualGamesAndBalanceMatchUps',
-        'EqualMatchUpSpacing',
         'NoDoubleBookingFields',
         'NoDoubleBookingTeams',
         'PHLAndSecondGradeTimes',
         'PreferredTimesConstraint',
     },
-    # default = full production set = core + soft engine keys (the obsolete trio
-    # is still excluded BY DESIGN).
+    # default = full production set = core + soft + spacing + symmetry_breakers
+    # engine keys (the obsolete trio is still excluded BY DESIGN). spec-032:
+    # EqualMatchUpSpacing's engine key returns here via the `spacing` tag + the
+    # widened _is_fresh_build predicate, so `default` is unchanged.
     'default': {
         'ClubDay',
         'ClubGameSpread',

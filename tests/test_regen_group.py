@@ -63,14 +63,25 @@ ORACLE_SOFTENED_HARD_ATOMS = {
 }
 
 # The always-soft group: stays soft in regen exactly as in a normal build.
+# spec-032: the three symmetry breakers (NIHCFill*, SoftLexMatchupOrdering) left
+# `soft` for the new `symmetry_breakers` group, so they are no longer here. They
+# STILL reach regen — via the widened regen predicate's `symmetry_breakers`
+# branch — see ORACLE_SYMMETRY_BREAKERS below.
 ORACLE_SOFT_MEMBERS = {
     'TeamPairNoConcurrency',
-    'NIHCFillWFBeforeEF',
-    'NIHCFillEFBeforeSF',
     'PreferredTimes',
-    'SoftLexMatchupOrdering',
     'PreferredWeekendsAwayGround',
     'PreferredGames',
+}
+
+# spec-032: the always-on tie-breaker bundle. Tagged {symmetry_breakers} only,
+# but the regen predicate was widened to include `symmetry_breakers`, so all
+# three remain in the regen set (the convenor's regen output keeps the
+# tie-breakers unless --no-symmetry-breakers).
+ORACLE_SYMMETRY_BREAKERS = {
+    'NIHCFillWFBeforeEF',
+    'NIHCFillEFBeforeSF',
+    'SoftLexMatchupOrdering',
 }
 
 # The 13 spec-027 regen soft-analogue atoms (Unit B). The `regen` group selects
@@ -103,15 +114,17 @@ def test_core_hard_membership_equals_hand_oracle():
 def test_regen_includes_every_core_hard_regen_soft_and_soft_member():
     """Given the regen derived group (DoD-5),
     When resolved,
-    Then every core_hard member, every regen_soft member, and every soft member
-    is present."""
+    Then every core_hard member, every regen_soft member, every soft member, and
+    (spec-032) every symmetry-breaker is present."""
     regen = set(resolve_groups(['regen']))
     missing_hard = ORACLE_CORE_HARD - regen
     missing_regen_soft = ORACLE_REGEN_SOFT - regen
     missing_soft = ORACLE_SOFT_MEMBERS - regen
+    missing_symmetry = ORACLE_SYMMETRY_BREAKERS - regen
     assert not missing_hard, f"core_hard members missing from regen: {missing_hard}"
     assert not missing_regen_soft, f"regen_soft members missing: {missing_regen_soft}"
     assert not missing_soft, f"soft members missing from regen: {missing_soft}"
+    assert not missing_symmetry, f"symmetry breakers missing from regen: {missing_symmetry}"
 
 
 def test_regen_soft_group_has_exactly_13_members():
@@ -142,6 +155,7 @@ def test_regen_equals_core_hard_plus_regen_soft_plus_soft():
     their RegenSoft analogue) and nothing outside the three tagged dimensions."""
     assert set(resolve_groups(['regen'])) == (
         ORACLE_CORE_HARD | ORACLE_REGEN_SOFT | ORACLE_SOFT_MEMBERS
+        | ORACLE_SYMMETRY_BREAKERS  # spec-032: widened regen predicate keeps them
     )
 
 
@@ -165,8 +179,13 @@ def test_default_group_excludes_core_hard_only_and_regen_soft():
     # TeamConflict + the three pins are core_hard-only → never in a fresh build.
     for name in ('TeamConflict', 'ForcedGames', 'BlockedGames', 'LockedPairings'):
         assert name not in default, f"{name} must not be in the fresh-build default group"
-    # default is still exactly core ∪ soft.
-    assert default == resolve_group('core') | resolve_group('soft')
+    # default is still exactly the fresh-build set. spec-032 widened
+    # _is_fresh_build to {core, soft, spacing, symmetry_breakers}, so the union
+    # must include all four dimensions (membership unchanged — still 27 atoms).
+    assert default == (
+        resolve_group('core') | resolve_group('soft')
+        | resolve_group('spacing') | resolve_group('symmetry_breakers')
+    )
 
 
 def test_regen_is_a_listed_group_name():

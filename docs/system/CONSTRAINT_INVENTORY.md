@@ -16,9 +16,17 @@ Each constraint's `ConstraintInfo.groups` frozenset in `constraints/registry.py`
 is the **single source of truth for which groups select it**. A solve applies the
 deduped union of the selected `--groups` (see `docs/system/STAGES.md`); selecting
 a constraint via two groups applies it once. Derived groups (`severity_1..5`,
-`default`/`all`/`production`) are computed from `severity_level` / a non-empty
-`groups` set and are never stored. The table below is generated from the registry
-— **read the registry, not this table, when in doubt**.
+`default`/`all`/`production`, `regen`) are computed from `ConstraintInfo` and
+never stored: `severity_N` keys on `severity_level`; `default`/`all`/`production`
+select the fresh-build set via `_is_fresh_build` = `groups & {core, soft, spacing,
+symmetry_breakers}` (spec-032 widened this from `{core, soft}` when it peeled
+`EqualMatchUpSpacing` into `spacing` and the three symmetry breakers into
+`symmetry_breakers`); `regen` selects `groups & {core_hard, regen_soft, soft,
+symmetry_breakers}`. The two **explicit** spec-032 groups are `spacing` (the lone
+`EqualMatchUpSpacing`) and `symmetry_breakers` (the three always-on tie-breakers,
+unioned into every solve by the CLI unless `--no-symmetry-breakers`). The table
+below is generated from the registry — **read the registry, not this table, when
+in doubt**.
 
 | Canonical name | groups |
 |---|---|
@@ -31,7 +39,7 @@ a constraint via two groups applies it once. Derived groups (`severity_1..5`,
 | PHLAnd2ndAdjacency | core, critical_feasibility |
 | PHLAndSecondGradeTimes | — (obsolete; no production group) |
 | PHLConcurrencyAtBroadmeadow | core, critical_feasibility |
-| EqualMatchUpSpacing | core, critical_feasibility |
+| EqualMatchUpSpacing | spacing |
 | BalancedByeSpacing | core, critical_feasibility |
 | ClubDay | — (obsolete legacy combined; no production group) |
 | ClubDayParticipation | club_day, core |
@@ -43,8 +51,8 @@ a constraint via two groups applies it once. Derived groups (`severity_1..5`,
 | ClubGradeAdjacency | — (obsolete; no production group) |
 | SameGradeSameClubNoConcurrency | core, critical_feasibility |
 | TeamPairNoConcurrency | soft, soft_optimisation |
-| NIHCFillWFBeforeEF | soft, soft_optimisation |
-| NIHCFillEFBeforeSF | soft, soft_optimisation |
+| NIHCFillWFBeforeEF | symmetry_breakers |
+| NIHCFillEFBeforeSF | symmetry_breakers |
 | ClubVsClubAlignment | — (obsolete; no production group) |
 | ClubVsClubStackedWeekends | club_alignment, core |
 | ClubVsClubStackedCoLocation | club_alignment, core |
@@ -52,7 +60,7 @@ a constraint via two groups applies it once. Derived groups (`severity_1..5`,
 | ClubNoConcurrentSlot | core, critical_feasibility |
 | VenueEarliestSlotFill | core, critical_feasibility |
 | PreferredTimes | soft, soft_optimisation |
-| SoftLexMatchupOrdering | soft, soft_optimisation |
+| SoftLexMatchupOrdering | symmetry_breakers |
 | PreferredWeekendsAwayGround | soft, soft_optimisation |
 | PreferredGames | soft, soft_optimisation |
 | ForcedGames | — (tester-only; no production group) |
@@ -93,7 +101,7 @@ spec-027 implementation).
 | ~~MaitlandHomeGrouping / NonDefaultHomeGrouping~~ | _removed (spec-018)_ | **REMOVED (spec-018).** Was a hard sliding-window ban on consecutive home weekends for away-based clubs (+ per-week home/away imbalance soft penalty), plus the folded `MaxMaitlandHomeWeekends` per-venue weekend cap. The convenor no longer wants any sequencing of home/away weekends — back-to-back home weekends are fine. Registry entry, engine method, adjuster, severity entry, tester check, slack key (`MaitlandHomeGrouping`), and config keys (`maitland_max_consecutive_home`) all deleted. | — | — | — |
 | PHLAndSecondGradeAdjacency | original.py:PHLAndSecondGradeAdjacency | Per (club, 2nd-team, week, day): for each PHL game (time, location), sum of PHL var + 2nd-grade vars within ±180 min that satisfy "same loc when within window OR different loc when outside window" ≤ 1 | 1 | — | **REWRITTEN as `PHLAnd2ndAdjacency` atom (spec-014).** New rule *forces* back-to-back same-field at one venue, or ≥150-min real-minute start gap across venues (spec-030: 180→150) — the legacy ±180 forbid window never forced adjacency. Legacy class kept in `constraints/archived/` for parity. |
 | PHLAndSecondGradeTimes | original.py:PHLAndSecondGradeTimes (lines 214-372 — multi-idea, contains user-flagged HACK) | (a) PHL no-concurrent at Broadmeadow per (week, day_slot, location); (b) PHL+same-club 2nd no-concurrent per (week, day, location, day_slot, club, 2nd-team); (c) ≤max_friday_broadmeadow PHL Fridays at NIHC (HACK: minus locked); (d) sum Friday Gosford PHL == gosford_friday_games (HACK: minus locked); (e) sum Friday Maitland PHL == maitland_friday_games (HACK: minus locked); (f) Gosford Friday rounds {2,4,5,9,10} sum == 1 each; (g) PHL each team plays in round 1 (skipped if locked); (h) PHL preferred-dates penalty | 1 | — | (Phase 3a partially shipped @ `1956608`, post-retraction reduces to 4 atoms.) **Atoms:** PHLConcurrencyAtBroadmeadow + PHLAnd2ndConcurrencyAtBroadmeadow (deleted spec-030 — subsumed by PHLAnd2ndAdjacency) + PHLRoundOnePlay + PreferredDates. **Expressed as FORCED_GAMES entries instead** (see `docs/FORCED_GAMES_AS_COUNT_RULES.md`): items (c)/(d)/(e) (per-venue Friday counts) and (f) (Gosford rounds — already covered by per-round FORCED entries in season_2026.py). The HACK locked-week count adjustments disappear because each FORCED entry is per-season and the count is the season target, not a runtime computation. |
-| EqualMatchUpSpacing | original.py:EqualMatchUpSpacingConstraint | HARD: for pair p with rounds (r1, r2), forbid `gap <= S` ⇒ sum(p_r1) + sum(p_r2) ≤ 1 (spec-008 Part A: "S free rounds between meetings", off-by-one fix). `S = effective_spacing(T, base_slack, config_slack)` from `constraints/atoms/_spacing.py`; default `S = ideal_gap(T) = legacy_min_gap(T) - 1` so the physical schedule at default slack is unchanged. Slack subtracts from S; each FORCED meeting tightens via the Phase-4 adjuster (negative net slack). SOFT: sliding window of size `space=T-2`, penalize sum-1 when >1. HACK: when locked_weeks set, only applies to PHL/2nd. **spec-017: this atom now lives in `critical_feasibility` (was only in the soft_only `soft_optimisation` stage, so the HARD part never applied in production); both HARD and SOFT parts now apply — `--slack EqualMatchUpSpacingConstraint N` still loosens S.** | 1 | EqualMatchUpSpacingConstraint | EqualMatchUpSpacing (Phase 4 adds adjuster for FORCED meetings → reduces effective rounds; spec-008 shifts gap semantics to "rounds between meetings"; spec-017 promotes to hard-in-production) |
+| EqualMatchUpSpacing | original.py:EqualMatchUpSpacingConstraint | HARD: for pair p with rounds (r1, r2), forbid `gap <= S` ⇒ sum(p_r1) + sum(p_r2) ≤ 1 (spec-008 Part A: "S free rounds between meetings", off-by-one fix). `S = effective_spacing(T, base_slack, config_slack)` from `constraints/atoms/_spacing.py`; default `S = ideal_gap(T) = legacy_min_gap(T) - 1` so the physical schedule at default slack is unchanged. Slack subtracts from S; each FORCED meeting tightens via the Phase-4 adjuster (negative net slack). SOFT: sliding window of size `space=T-2`, penalize sum-1 when >1. HACK: when locked_weeks set, only applies to PHL/2nd. **spec-017: both HARD and SOFT parts apply in production (was previously soft_only, so the HARD part never applied) — `--slack EqualMatchUpSpacingConstraint N` still loosens S. spec-032: peeled out of `core`/`critical_feasibility` into its own lonesome `spacing` group so the convenor can select/drop it independently of core; severity_level=1 and slack_key unchanged, so it stays in `severity_1` and reaches `default` via the widened `_is_fresh_build`.** | 1 | EqualMatchUpSpacingConstraint | EqualMatchUpSpacing (Phase 4 adds adjuster for FORCED meetings → reduces effective rounds; spec-008 shifts gap semantics to "rounds between meetings"; spec-017 promotes to hard-in-production; spec-032 -> lonesome `spacing` group) |
 | BalancedByeSpacing | constraints/atoms/balanced_bye_spacing.py (spec-008 Part B) | HARD: for each team in each grade with `byes_per_team >= 2`, per-round bye-indicator BoolVar `B_t_r := 1 - sum(team_vars_r)`. Forbid `B_t_r1 + B_t_r2 <= 1` for every pair of rounds with `r2 - r1 <= S`, where `S = max(0, ideal_bye_gap(R, byes) - base_slack - config_slack)` and `ideal_bye_gap(R, b) = max(0, R//b - 1)`. Skips (locked, locked) pairs. Own slack key `BalancedByeSpacing` and own base-slack `CONSTRAINT_DEFAULTS['bye_spacing_base_slack']` so convenor can loosen byes independently of matchup spacing. | 2 | BalancedByeSpacing | BalancedByeSpacing (atom, new) |
 | ClubDay | original.py:ClubDayConstraint (lines 632-750 — multi-idea) | For each entry in CLUB_DAYS (parsed via `normalize_club_day` → date + optional opponent): (a) every team in club plays on that date; (b) if opponent set, force ≥min(host_grade_count, opp_grade_count) cross-club games per grade; (c) if no opponent / opponent missing grade, force intra-club derbies = #host_grade // 2; (d) all club games on same field; (e) timeslots are contiguous via "if middle slot empty, prior + following ≤ 1" | 2 | — | **Phase 3b ✅** atoms shipped: ClubDayParticipation + ClubDayIntraClubMatchup + ClubDayOpponentMatchup + ClubDaySameField + ClubDayContiguousSlots |
 | ~~AwayAtMaitlandGrouping / AwayAtNonDefaultGrouping~~ | _removed (spec-018)_ | **REMOVED (spec-018).** Was a hard cap on how many away clubs visit a non-default venue in one weekend (+ soft penalty). The convenor no longer wants any clustering cap on away-club variety per weekend. Registry entry, engine method, adjuster (`away_at_maitland_grouping_adjuster`), severity entry, tester check, slack key (`AwayAtMaitlandGrouping`), and config key (`away_maitland_max_clubs`) all deleted. | — | — | — |
@@ -170,7 +178,7 @@ Engineering-level table for every registered atom + non-atomised legacy constrai
 | `PHLRoundOnePlay` | `constraints/atoms/phl_round_one_play.py` | n/a | yes | yes | — | — | **OBSOLETE (spec-010).** Removed from `critical_feasibility` stage and `_PHL_HARD_ATOMS`; `solver_class_names` emptied in registry. File kept on disk as parity reference. Convenor uses `FORCED_GAMES` entries to express deliberate round-1 placement when needed. |
 | `PreferredDates` | _deleted (spec-020)_ | n/a | n/a | n/a | — | — | **DELETED (spec-020).** The narrow PHL-only `\|sum − 1\|`-on-a-date soft constraint is now expressed as a `PREFERRED_GAMES` config entry handled by the generic `PreferredGames` soft atom (below). `PHL_PREFERENCES` / `phl_preferences` and `PENALTY_WEIGHTS['phl_preferences']` removed. |
 | **Atomised (Phase 3) — ClubDay cluster** | | | | | | | |
-| `ClubDayParticipation` | `constraints/atoms/club_day_participation.py` | excluded | yes | yes | — | — | Skips locked-week club days via `parse_club_day_entries` |
+| `ClubDayParticipation` | `constraints/atoms/club_day_participation.py` | excluded | yes | yes | — | — | Every team in the club plays ≥1 game on the club-day date (matches the atom docstring). Skips locked-week club days via `parse_club_day_entries` |
 | `ClubDayIntraClubMatchup` | `constraints/atoms/club_day_intra_club_matchup.py` | excluded | yes | yes | — | — | Derby logic when opponent undefined / empty for grade |
 | `ClubDayOpponentMatchup` | `constraints/atoms/club_day_opponent_matchup.py` | excluded | yes | yes | — | — | Cross-club matchups per grade when opponent set |
 | `ClubDaySameField` | `constraints/atoms/club_day_same_field.py` | excluded | yes | yes | `club_day_field_used` | `club_day_field_used` | Channels field indicators via registry |
