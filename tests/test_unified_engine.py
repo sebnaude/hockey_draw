@@ -258,11 +258,11 @@ class TestBuildGroupings:
         # But grade_team_vars SHOULD still include locked weeks (for equal games)
         assert len(engine.grade_team_vars['3rd']) > 0
 
-    def test_club_alignment_groupings_for_lower_grades(self, mini_engine):
-        """by_grade_clubpair_round populated for 3rd/4th (non-PHL/2nd)."""
-        mini_engine.build_groupings()
-        # Both 3rd and 4th are lower grades, should have entries
-        assert len(mini_engine.by_grade_clubpair_round) > 0
+    # spec-036 Unit B: test_club_alignment_groupings_for_lower_grades removed —
+    # the `by_grade_clubpair_round` / `by_sunday_clubpair_round_field` groupings
+    # were deleted along with the legacy `_club_alignment_*` engine methods.
+    # Club-vs-club alignment is now the spec-005 stacked atoms (which build their
+    # own groupings from X); see tests/atoms/ for their coverage.
 
     # spec-021: test_slot_vars_by_location_populated removed — the
     # slot_vars_by_location grouping was deleted with the _best_timeslot_choices_*
@@ -558,17 +558,11 @@ class TestSharedIndicators:
         ind2 = mini_engine.pool.get_or_create_presence('pres_key', [test_var], 'label2')
         assert ind1 is ind2
 
-    def test_coincidence_indicators_stored(self, mini_unified_data):
-        """Coincidence indicators from _club_alignment_hard are stored in pool._cache."""
-        model, X = create_model_and_vars(
-            mini_unified_data['games'], mini_unified_data['timeslots'],
-        )
-        engine = UnifiedConstraintEngine(model, X, mini_unified_data)
-        engine.build_groupings()
-        engine._club_alignment_hard()
-        # Check that at least one coincidence indicator was stored
-        coin_keys = [k for k in engine.pool._cache if isinstance(k, tuple) and k[0] == 'coin']
-        assert len(coin_keys) > 0, "No coincidence indicators stored in _shared_indicators"
+    # spec-036 Unit B: test_coincidence_indicators_stored removed — it exercised
+    # the deleted `_club_alignment_hard` engine method (which created the
+    # ('coin', ...) shared indicators). That alignment path is superseded by the
+    # spec-005 stacked atoms; the shared-indicator pool is still covered by the
+    # other tests in this class.
 
 
 # ============== TestConstraintCoverage ==============
@@ -589,9 +583,11 @@ class TestConstraintCoverage:
             # spec-007: 'ClubGradeAdjacencyConstraint' bucket removed.
             # spec-018: 'MaitlandHomeGrouping' / 'AwayAtMaitlandGrouping' buckets
             # removed (venue-sequencing soft penalties deleted).
+            # spec-036 Unit B: 'ClubVsClubAlignment' / 'ClubVsClubAlignmentField'
+            # buckets removed — they were registered by the deleted
+            # `_club_alignment_soft` engine method (superseded by the spec-005
+            # stacked atoms, which do not register engine penalty buckets here).
             'ClubGameSpread',
-            'ClubVsClubAlignment',
-            'ClubVsClubAlignmentField',
         ]
         for key in expected_penalty_keys:
             assert key in penalties, f"Missing penalty key after apply_all: {key}"
@@ -645,7 +641,9 @@ class TestConstraintCoverage:
             # the `PHLAnd2ndAdjacency` atom (dispatched outside the engine).
             '_phl_times_hard',
             '_matchup_spacing_hard',
-            '_club_alignment_hard',
+            # spec-036 Unit B: '_club_alignment_hard' removed — deleted from the
+            # engine (superseded by the spec-005 stacked atoms). See
+            # test_legacy_alignment_methods_removed below for the negative assert.
             '_club_day_scheduling',
             '_club_game_spread_hard',
             # spec-021: `_best_timeslot_choices_hard` removed — earliest-fill is
@@ -657,7 +655,8 @@ class TestConstraintCoverage:
             '_matchup_spacing_soft',
             # spec-033 Unit C: TeamConflict soft penalty (moved from stage-1 hard).
             '_team_conflict_soft',
-            '_club_alignment_soft',
+            # spec-036 Unit B: '_club_alignment_soft' removed — deleted from the
+            # engine (superseded by the spec-005 stacked atoms).
             # spec-018: `_maitland_grouping_soft` / `_away_maitland_soft`
             # removed — venue-sequencing soft penalties deleted.
             # spec-020: `_phl_times_soft` removed — PreferredDates deleted.
@@ -989,14 +988,12 @@ class TestStageCorrectness:
     """Verify hard stage has no penalties, soft stage populates penalties."""
 
     def test_hard_stage_no_penalties(self, mini_unified_data):
-        """Stage 1 does not populate data['penalties'] except for atoms whose
-        single idea spans both hard and soft components.
+        """Stage 1 does not populate data['penalties'].
 
-        After Phase 3c, `ClubVsClubFieldLimit` (HARD ≤2 fields + SOFT field
-        excess) and `PHLAnd2ndBackToBackSameField` (HARD back-to-back + SOFT
-        coincidence deficit) legitimately register their penalty buckets in
-        stage 1 because the atom is the unit, not the stage. Every other
-        constraint should still be clean.
+        spec-036 Unit B: the legacy `_club_alignment_*` engine methods (which
+        previously registered the only stage-1 penalty buckets,
+        `ClubVsClubAlignment` / `ClubVsClubAlignmentField`) were deleted. The
+        engine's hard stage now registers no penalty buckets at all.
         """
         model, X = create_model_and_vars(
             mini_unified_data['games'], mini_unified_data['timeslots'],
@@ -1007,9 +1004,7 @@ class TestStageCorrectness:
         engine.build_groupings()
         engine.apply_stage_1_hard()
 
-        allowed_in_stage_1 = {
-            'ClubVsClubAlignment', 'ClubVsClubAlignmentField',
-        }
+        allowed_in_stage_1 = set()
         unexpected = set(data['penalties']) - allowed_in_stage_1
         assert not unexpected, \
             f"unexpected penalty entries from hard stage: {sorted(unexpected)}"
