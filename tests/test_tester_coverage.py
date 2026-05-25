@@ -1167,3 +1167,59 @@ class TestConstraintSlack:
 
     # spec-018: test_maitland_away_slack removed — the AwayAtMaitlandGrouping
     # rule and its `_check_maitland_away_clubs_limit` tester method were deleted.
+
+
+# ============== _check_team_conflict (spec-033 Unit C: soft reporting) ==============
+
+class TestCheckTeamConflictSoft:
+    """spec-033 Unit C: TeamConflict is now a SOFT preference (no hard CP-SAT
+    component). The substance of DoD 6/21 is that the tester reports a concurrent
+    clash as *soft pressure* — the Violation carries a ``metric_value`` and rolls
+    into the ``soft_pressure`` breakdown (like NIHCFill / PreferredGames), rather
+    than as a bare hard violation. The severity *level* is read from the registry
+    and retained at 2 per DoD 2 ("severity_level may stay 2"). 2026 declares no
+    team_conflicts, so this guards the latent data-driven path against regressing
+    back to a hard rule."""
+
+    def test_same_slot_conflict_reported_as_soft_pressure(self):
+        # Given: Tigers and Wests are a declared conflict pair, and both play in
+        # week 1, day_slot 1 (Tigers in G1, Wests in G2 — same week+slot).
+        games = [
+            make_game('G1', 'Tigers PHL', 'Norths PHL', 'PHL', 1, 1, '2025-03-23',
+                      day_slot=1),
+            make_game('G2', 'Wests PHL', 'Maitland PHL', 'PHL', 1, 1, '2025-03-23',
+                      day_slot=1),
+        ]
+        data = make_data(team_conflicts=[('Tigers PHL', 'Wests PHL')])
+        tester = DrawTester(make_draw(games), data)
+
+        # When: we run the team-conflict check.
+        violations = tester._check_team_conflict()
+
+        # Then (hand oracle): exactly ONE overlap → one Violation carrying
+        # metric_value=1.0 (the soft-pressure signal), so the breakdown rolls it
+        # into soft_pressure rather than treating it as a bare hard violation.
+        assert len(violations) == 1
+        v = violations[0]
+        assert v.metric_value == 1.0  # soft-pressure signal present
+
+        report = ViolationReport(draw_description='conflict', total_games=2,
+                                 violations=violations)
+        # It appears in the soft_pressure rollup under its own bucket, with the
+        # hand-computed total penalty of 1.0 (one tolerated clash).
+        assert 'TeamConflict' in report.breakdown.soft_pressure
+        assert report.breakdown.soft_pressure['TeamConflict']['total_penalty'] == 1.0
+        assert report.breakdown.soft_pressure['TeamConflict']['over_limit'] == 1
+
+    def test_different_slots_no_conflict(self):
+        # Given: same declared pair, but Wests plays a DIFFERENT slot (slot 2).
+        games = [
+            make_game('G1', 'Tigers PHL', 'Norths PHL', 'PHL', 1, 1, '2025-03-23',
+                      day_slot=1),
+            make_game('G2', 'Wests PHL', 'Maitland PHL', 'PHL', 1, 1, '2025-03-23',
+                      day_slot=2),
+        ]
+        data = make_data(team_conflicts=[('Tigers PHL', 'Wests PHL')])
+        tester = DrawTester(make_draw(games), data)
+        # When/Then: no shared (week, slot) → zero violations.
+        assert len(tester._check_team_conflict()) == 0

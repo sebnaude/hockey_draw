@@ -77,6 +77,12 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # Level 2 - HIGH (structural, club-specific)
     'ClubDayConstraint': 2,
     # spec-018: `AwayAtMaitlandGrouping` removed — away-clubs-per-week cap deleted.
+    # spec-033 Unit C: TeamConflict is now a SOFT preference (no hard CP-SAT
+    # component). Its tester check sets metric_value so each clash rolls into the
+    # soft_pressure breakdown (not a feasibility failure). Its severity *level*
+    # is read from the registry (severity_level=2, retained per DoD 2); this
+    # fallback entry only mirrors that for tester-only resolution and is unused
+    # for this registry-backed name.
     'TeamConflict': 2,
 
     # Level 3 - MEDIUM (spacing, alignment, game spread)
