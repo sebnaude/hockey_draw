@@ -277,7 +277,7 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 | Level | Name | Constraints | Relaxable? |
 |-------|------|------------|------------|
 | 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalanceMatchUps, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAnd2ndAdjacency, PHLAndSecondGradeTimes | Never |
-| 2 | HIGH | ClubDay, TeamConflict | With --relax |
+| 2 | HIGH | ClubDay, TeamConflict (spec-033 Unit C: TeamConflict is now SOFT-ONLY — a penalty preference, not a feasibility blocker; a declared conflict pair sharing a slot is tolerated/penalised, never infeasible. The severity-2 entry is retained for name resolution only.) | With --relax |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | With --relax |
 | 4 | LOW | _(empty since spec-024 deleted Maximise/MinimiseClubsBroadmeadow)_ | Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | Yes |

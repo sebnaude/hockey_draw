@@ -636,7 +636,8 @@ class TestConstraintCoverage:
             '_no_double_booking_fields',
             '_equal_games_balanced_matchups',
             '_fifty_fifty_home_away',
-            '_team_conflict',
+            # spec-033 Unit C: `_team_conflict` (hard) was REMOVED from stage 1 —
+            # TeamConflict is now the soft `_team_conflict_soft` in stage 2 below.
             # spec-018: `_max_venue_weekends` (MaxMaitlandHomeWeekends),
             # `_maitland_grouping_hard` and `_away_maitland_hard` removed —
             # venue-sequencing rules deleted.
@@ -654,6 +655,8 @@ class TestConstraintCoverage:
         # Stage 2 methods (soft penalties + optimization)
         stage_2_methods = [
             '_matchup_spacing_soft',
+            # spec-033 Unit C: TeamConflict soft penalty (moved from stage-1 hard).
+            '_team_conflict_soft',
             '_club_alignment_soft',
             # spec-018: `_maitland_grouping_soft` / `_away_maitland_soft`
             # removed — venue-sequencing soft penalties deleted.

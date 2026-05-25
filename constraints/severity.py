@@ -70,6 +70,11 @@ CONSTRAINT_TO_SEVERITY = {
     'ClubDayConstraint': 2,
     'ClubDayConstraintAI': 2,
     # spec-018: `AwayAtMaitlandGrouping` (+ AI) removed — rule deleted.
+    # spec-033 Unit C: TeamConflict is NO LONGER a hard feasibility rule — it is
+    # now a soft-only preference (a named team pair sharing a (week, day_slot)
+    # incurs a penalty but never blocks feasibility). These entries are kept
+    # mapped for severity-name resolution only; the constraint cannot be relaxed
+    # away because it is already soft.
     'TeamConflictConstraint': 2,
     'TeamConflictConstraintAI': 2,
 

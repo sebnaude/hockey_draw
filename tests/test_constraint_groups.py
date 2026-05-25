@@ -47,7 +47,8 @@ from constraints.registry import (
 #   club_day (core): ClubDayParticipation, ClubDayIntraClubMatchup,
 #       ClubDayOpponentMatchup, ClubDaySameField, ClubDayContiguousSlots,
 #       ClubGameSpread
-#   soft_optimisation (soft): TeamPairNoConcurrency, PreferredTimes,
+#   soft_optimisation (soft): TeamConflict (spec-033 Unit C — softened from
+#       core_hard), TeamPairNoConcurrency, PreferredTimes,
 #       PreferredWeekendsAwayGround, PreferredGames
 # Then sorted into registry insertion order:
 # ---------------------------------------------------------------------------
@@ -64,6 +65,10 @@ ORACLE_CORE_PLUS_SOFT: List[str] = [
     'ClubDayOpponentMatchup',
     'ClubDaySameField',
     'ClubDayContiguousSlots',
+    # spec-033 Unit C: TeamConflict softened core_hard -> {soft,soft_optimisation};
+    # its registry insertion index (between ClubDayContiguousSlots and
+    # SameGradeSameClubNoConcurrency) places it here in core+soft order.
+    'TeamConflict',
     'SameGradeSameClubNoConcurrency',
     'TeamPairNoConcurrency',
     'ClubVsClubStackedWeekends',
@@ -86,10 +91,11 @@ def test_resolve_groups_core_soft_equals_hand_oracle():
     assert result == ORACLE_CORE_PLUS_SOFT
     # No duplicates.
     assert len(result) == len(set(result))
-    # 18 core + 4 soft = 22 (spec-032 peeled EqualMatchUpSpacing -> {spacing}
+    # 18 core + 5 soft = 23 (spec-032 peeled EqualMatchUpSpacing -> {spacing}
     # and three symmetry breakers -> {symmetry_breakers}: 27->23; spec-033
-    # Unit B peeled BalancedByeSpacing -> {bye_spacing}: 23->22).
-    assert len(result) == 22
+    # Unit B peeled BalancedByeSpacing -> {bye_spacing}: 23->22; spec-033 Unit C
+    # softened TeamConflict core_hard -> {soft}, ADDING it to `soft`: 22->23).
+    assert len(result) == 23
 
 
 # ---------------------------------------------------------------------------
@@ -231,14 +237,17 @@ def test_default_group_is_every_production_constraint():
     = exactly core ∪ soft ∪ spacing ∪ symmetry_breakers ∪ bye_spacing.
 
     spec-027 changed default/all/production from `bool(info.groups)` to
-    `core ∪ soft`, keeping the `core_hard`-only freeze pins + TeamConflict and the
-    `regen_soft` atoms OUT of a fresh build. spec-032 then widened the predicate
-    to also include `spacing` and `symmetry_breakers`, because EqualMatchUpSpacing
-    moved core->spacing and the three symmetry breakers moved soft->symmetry_breakers.
-    spec-033 Unit B widened it again to include `bye_spacing`, because
-    BalancedByeSpacing moved core->bye_spacing — without each widening they would
-    silently drop from a fresh build. The membership is unchanged from before any
-    retag (still 27 atoms); only the tag routing moved."""
+    `core ∪ soft`, keeping the `core_hard`-only freeze pins (+ then-core_hard-only
+    TeamConflict) and the `regen_soft` atoms OUT of a fresh build. spec-032 then
+    widened the predicate to also include `spacing` and `symmetry_breakers`, because
+    EqualMatchUpSpacing moved core->spacing and the three symmetry breakers moved
+    soft->symmetry_breakers. spec-033 Unit B widened it again to include
+    `bye_spacing`, because BalancedByeSpacing moved core->bye_spacing — without each
+    widening they would silently drop from a fresh build. Those retags were
+    membership-preserving (27 atoms). spec-033 Unit C then SOFTENED TeamConflict
+    (core_hard-only -> {soft,soft_optimisation}), which ADDS it to the fresh build
+    via the `soft` branch — so production grows 27 -> 28 (intended: declared
+    conflict pairs should be discouraged in a fresh draw, not ignored)."""
     production = {
         name for name, info in CONSTRAINT_REGISTRY.items()
         if {'core', 'soft', 'spacing', 'symmetry_breakers', 'bye_spacing'} & info.groups
@@ -252,8 +261,9 @@ def test_default_group_is_every_production_constraint():
         | resolve_group('spacing') | resolve_group('symmetry_breakers')
         | resolve_group('bye_spacing')
     )
-    # spec-032/033: the retags are membership-preserving — still 27 fresh-build atoms.
-    assert len(production) == 27
+    # spec-033 Unit C added TeamConflict (softened core_hard -> soft) to the
+    # fresh build: 27 -> 28 production atoms.
+    assert len(production) == 28
 
 
 def test_list_group_names_includes_explicit_and_derived():
