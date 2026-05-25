@@ -51,7 +51,9 @@ ALL_KEYS = REQUIRED_KEYS | OPTIONAL_KEYS
 
 ENGINE_HARD_KEYS: Set[str] = {
     'NoDoubleBookingTeams', 'NoDoubleBookingFields', 'EqualGamesAndBalanceMatchUps',
-    'FiftyFiftyHomeandAway', 'TeamConflict',
+    'FiftyFiftyHomeandAway',
+    # spec-033 Unit C: `TeamConflict` moved to ENGINE_SOFT_KEYS — it is now a
+    # soft penalty (no hard component), dispatched via `apply_stage_2_soft()`.
     # spec-014: PHL/2nd adjacency is no longer an engine key — it's the
     # `PHLAnd2ndAdjacency` atom dispatched via the non-engine fallback.
     'PHLAndSecondGradeTimes',
@@ -70,6 +72,9 @@ ENGINE_HARD_KEYS: Set[str] = {
 
 ENGINE_SOFT_KEYS: Set[str] = {
     'EqualMatchUpSpacing', 'ClubVsClubAlignment',
+    # spec-033 Unit C: `TeamConflict` is now a soft penalty (moved from
+    # ENGINE_HARD_KEYS). Dispatched via `apply_stage_2_soft()` -> `_team_conflict_soft`.
+    'TeamConflict',
     # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft keys
     # deleted alongside their hard keys.
     'PHLAndSecondGradeTimes',

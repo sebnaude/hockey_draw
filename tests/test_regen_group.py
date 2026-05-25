@@ -23,10 +23,15 @@ from constraints.registry import (
 
 
 # ---------------------------------------------------------------------------
-# Hand-computed oracle for the `core_hard` set (spec-027 DoD-1). 12 members:
-#   8 grouped-core physical/feasibility atoms that stay hard in regen, plus
-#   TeamConflict (data-driven hard pair rule) and the 3 freeze pins
-#   (ForcedGames, BlockedGames, LockedPairings), all enforced at generate_X.
+# Hand-computed oracle for the `core_hard` set (spec-027 DoD-1).
+# spec-033 Unit C: TeamConflict was REMOVED from core_hard — it is now a
+# soft-only preference (see ORACLE_SOFT_MEMBERS), so it no longer reaches regen
+# via the `core_hard` branch but via the `soft` branch instead. That drops the
+# hand-listed core_hard set from 11 (post-spec-030) to 10 members:
+#   7 grouped-core physical/feasibility atoms that stay hard in regen, plus the
+#   3 freeze pins (ForcedGames, BlockedGames, LockedPairings), all enforced at
+#   generate_X. (Verified against the live registry: resolve_group('core_hard')
+#   == this set, count 10.)
 # ---------------------------------------------------------------------------
 ORACLE_CORE_HARD = {
     'NoDoubleBookingTeams',
@@ -36,7 +41,6 @@ ORACLE_CORE_HARD = {
     'PHLConcurrencyAtBroadmeadow',
     'SameGradeSameClubNoConcurrency',
     'ClubNoConcurrentSlot',
-    'TeamConflict',
     'ForcedGames',
     'BlockedGames',
     'LockedPairings',
@@ -72,6 +76,10 @@ ORACLE_SOFT_MEMBERS = {
     'PreferredTimes',
     'PreferredWeekendsAwayGround',
     'PreferredGames',
+    # spec-033 Unit C: TeamConflict moved here from core_hard. It now carries
+    # {'soft','soft_optimisation'} (soft-only preference, no hard component) and
+    # so reaches regen via the `soft` branch instead of `core_hard`.
+    'TeamConflict',
 }
 
 # spec-032: the always-on tie-breaker bundle. Tagged {symmetry_breakers} only,
@@ -108,7 +116,9 @@ def test_core_hard_membership_equals_hand_oracle():
     When resolve_group('core_hard') is called,
     Then it equals exactly the hand-listed 12-member core-hard set."""
     assert resolve_group('core_hard') == ORACLE_CORE_HARD
-    assert len(ORACLE_CORE_HARD) == 11  # spec-030: was 12 before deleting PHLAnd2ndConcurrencyAtBroadmeadow
+    # spec-030: 12 -> 11 (deleted PHLAnd2ndConcurrencyAtBroadmeadow).
+    # spec-033 Unit C: 11 -> 10 (TeamConflict softened out of core_hard).
+    assert len(ORACLE_CORE_HARD) == 10
 
 
 def test_regen_includes_every_core_hard_regen_soft_and_soft_member():
@@ -173,17 +183,27 @@ def test_regen_output_is_registry_insertion_order():
 def test_default_group_excludes_core_hard_only_and_regen_soft():
     """Given the fresh-build default group,
     When resolved,
-    Then the core_hard-ONLY freeze pins + TeamConflict are absent (they carry no
-    `core`/`soft` tag), preserving fresh-season behaviour."""
+    Then the core_hard-ONLY freeze pins are absent (they carry no `core`/`soft`
+    tag), preserving fresh-season behaviour.
+
+    spec-033 Unit C: TeamConflict was REMOVED from this exclusion list. It is no
+    longer core_hard-only — it is now a soft-only preference carrying
+    {'soft','soft_optimisation'}, so it IS pulled into the fresh-build default
+    group via the `soft` branch (intended: declared conflict pairs should be
+    discouraged in a fresh draw, not ignored). The three freeze pins remain
+    core_hard-only and stay excluded."""
     default = set(resolve_groups(['default']))
-    # TeamConflict + the three pins are core_hard-only → never in a fresh build.
-    for name in ('TeamConflict', 'ForcedGames', 'BlockedGames', 'LockedPairings'):
+    # The three pins are core_hard-only → never in a fresh build.
+    for name in ('ForcedGames', 'BlockedGames', 'LockedPairings'):
         assert name not in default, f"{name} must not be in the fresh-build default group"
+    # spec-033 Unit C: TeamConflict (now soft) IS in the fresh-build default group.
+    assert 'TeamConflict' in default, "TeamConflict (now soft) must be in the fresh-build default group"
     # default is still exactly the fresh-build set. spec-032 widened
     # _is_fresh_build to {core, soft, spacing, symmetry_breakers}; spec-033
     # Unit B appended `bye_spacing` (BalancedByeSpacing peeled core->bye_spacing),
-    # so the union must include all five dimensions (membership unchanged — still
-    # 27 atoms; the tag moved, not the count).
+    # so the union must include all five dimensions. spec-033 Unit C softened
+    # TeamConflict (core_hard-only -> {soft,soft_optimisation}), which ADDS it to
+    # the default set (27 -> 28 atoms — a new member, not just a moved tag).
     assert default == (
         resolve_group('core') | resolve_group('soft')
         | resolve_group('spacing') | resolve_group('symmetry_breakers')

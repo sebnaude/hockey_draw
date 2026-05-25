@@ -451,7 +451,7 @@ FIELD_UNAVAILABILITIES = {
 | Level | Name | Constraints | Can Relax? |
 |-------|------|------------|------------|
 | 1 | CRITICAL | NoDoubleBooking (Teams/Fields), EqualGamesAndBalance, EqualMatchUpSpacing, FiftyFiftyHomeandAway, PHLAndSecondGradeAdjacency, PHLAndSecondGradeTimes | ❌ Never |
-| 2 | HIGH | ClubDay, TeamConflict | ⚠️ With `--relax` |
+| 2 | HIGH | ClubDay, TeamConflict (spec-033 Unit C: TeamConflict is now SOFT-ONLY — a penalty preference, no hard feasibility component; the severity entry is retained for naming only) | ⚠️ With `--relax` |
 | 3 | MEDIUM | ClubGradeAdjacency, ClubVsClubAlignment, ClubGameSpread | ⚠️ With `--relax` |
 | 4 | LOW | _(empty since spec-024)_ | ✅ Yes |
 | 5 | VERY LOW | EnsureBestTimeslotChoices, PreferredTimesConstraint | ✅ Yes |

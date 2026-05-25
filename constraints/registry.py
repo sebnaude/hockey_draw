@@ -260,13 +260,16 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_team_conflict'],
         tester_violation_names=['TeamConflict'],
         severity_level=2,
-        # spec-027: a named team pair shares players — two games in one week is a
-        # genuine impossibility, so it stays HARD in regen. Tagged core_hard ONLY
-        # (no `core`): TeamConflict is data-driven and was never in DEFAULT_STAGES,
-        # so it is deliberately absent from the fresh-build `default` group; adding
-        # only `core_hard` pulls it into the `regen` group without changing any
-        # fresh-season behaviour.
-        groups=frozenset({'core_hard'}),
+        # spec-033 Unit C: TeamConflict is no longer a hard feasibility rule.
+        # The convenor wants a named team pair sharing a (week, day_slot) to be a
+        # PREFERENCE to avoid, not a feasibility blocker — a soft penalty per
+        # concurrent appearance with NO hard component. Tagged
+        # {'soft','soft_optimisation'} (mirrors TeamPairNoConcurrency / NIHCFill* /
+        # PreferredTimes); `has_soft_component=True`. It stays in `regen` via the
+        # `soft` branch of resolve_group. severity_level kept at 2 but it no longer
+        # blocks feasibility.
+        has_soft_component=True,
+        groups=frozenset({'soft', 'soft_optimisation'}),
     ),
     # OBSOLETE (spec-007): the legacy `ClubGradeAdjacencyConstraint` did two
     # things — (1) a hard same-grade-same-club no-concurrency rule and (2) a

@@ -880,6 +880,11 @@ PENALTY_WEIGHTS = {
     # spec-033 Unit B: normal-mode bye-spacing soft push, parity with the
     # other spacing soft weights. One unit = one closer-than-ideal bye pair.
     'BalancedByeSpacing':                 100_000,
+    # spec-033 Unit C: TeamConflict is now soft-only (no hard component). High
+    # weight — these are real player clashes (a named pair shares players), above
+    # bye/spacing. Do not auto-tune. One unit = one concurrent (week, day_slot)
+    # appearance of a declared conflict pair.
+    'TeamConflict':                       200_000,
     'PreferredTimesConstraint':           200_000,
     # ClubVsClubAlignmentField retained for legacy checkpoint compat; its former
     # superseding tester diagnostic was removed in spec-031.

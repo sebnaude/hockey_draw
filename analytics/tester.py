@@ -77,6 +77,12 @@ CONSTRAINT_SEVERITY_LEVELS = {
     # Level 2 - HIGH (structural, club-specific)
     'ClubDayConstraint': 2,
     # spec-018: `AwayAtMaitlandGrouping` removed — away-clubs-per-week cap deleted.
+    # spec-033 Unit C: TeamConflict is now a SOFT preference (no hard CP-SAT
+    # component). Its tester check sets metric_value so each clash rolls into the
+    # soft_pressure breakdown (not a feasibility failure). Its severity *level*
+    # is read from the registry (severity_level=2, retained per DoD 2); this
+    # fallback entry only mirrors that for tester-only resolution and is unused
+    # for this registry-backed name.
     'TeamConflict': 2,
 
     # Level 3 - MEDIUM (spacing, alignment, game spread)
@@ -1911,11 +1917,20 @@ class DrawTester:
             slots1 = {(w, s): gid for w, s, gid in team_slots.get(team1, [])}
             for w, s, gid2 in team_slots.get(team2, []):
                 if (w, s) in slots1:
+                    # spec-033 Unit C: TeamConflict is now a SOFT preference, not a
+                    # hard feasibility rule. Setting `metric_value` rolls each
+                    # concurrent appearance into the `soft_pressure` breakdown
+                    # (informational) rather than counting it as a hard failure, so
+                    # a draw with a tolerated clash is not flagged as a hard fail.
                     violations.append(Violation.create(
                         constraint="TeamConflict",
-                        message=f"Conflicting teams '{team1}' and '{team2}' both play in week {w}, slot {s}",
+                        message=(
+                            f"Conflicting teams '{team1}' and '{team2}' both play in "
+                            f"week {w}, slot {s} (soft — preferred to avoid)"
+                        ),
                         affected_games=[slots1[(w, s)], gid2],
-                        week=w
+                        week=w,
+                        metric_value=1.0,
                     ))
 
         return violations

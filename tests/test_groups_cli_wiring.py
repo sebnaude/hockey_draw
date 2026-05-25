@@ -166,8 +166,9 @@ def test_no_symmetry_breakers_drops_them_from_default_group():
     assert SYMMETRY_ATOMS <= set(default_with)  # default carries them by default
     _, default_without = run._resolve_group_selection(None, [], no_symmetry_breakers=True)
     assert not (SYMMETRY_ATOMS & set(default_without))
-    # Hand oracle: default (27) minus the 3 tie-breakers = 24.
-    assert len(default_without) == 24
+    # Hand oracle: default (28, after spec-033 Unit C added soft TeamConflict)
+    # minus the 3 tie-breakers = 25.
+    assert len(default_without) == 25
     assert set(default_without) == resolve_group('default') - SYMMETRY_ATOMS
 
 
@@ -288,9 +289,13 @@ def test_simple_path_skip_constraints_for_core():
     skip = _simple_skip_for(core_names)
     # core is hard-feasibility; it does NOT include the soft PreferredTimes.
     assert 'PreferredTimesConstraint' in skip
-    # Obsolete engine keys never tagged into a production group are also skipped.
-    for obsolete in ('FiftyFiftyHomeandAway', 'ClubVsClubAlignment', 'TeamConflict'):
-        assert obsolete in skip
+    # Engine keys not in the `core` group are skipped under a --groups core
+    # selection. FiftyFiftyHomeandAway / ClubVsClubAlignment are obsolete (no
+    # production-group atom maps to them); TeamConflict is now a SOFT atom
+    # (spec-033 Unit C) so it is not in `core` (it is in `soft`) and is likewise
+    # skipped for a core-only solve.
+    for skipped in ('FiftyFiftyHomeandAway', 'ClubVsClubAlignment', 'TeamConflict'):
+        assert skipped in skip
     # The engine keys actually applied = core's engine keys.
     applied = ALL_ENGINE_KEYS - skip
     assert applied == collect_engine_keys(core_names)[0]
@@ -317,7 +322,9 @@ ENGINE_KEY_ORACLE = {
         'NoDoubleBookingTeams',
         'PHLAndSecondGradeTimes',
     },
-    # core + soft adds the soft engine key PreferredTimesConstraint.
+    # core + soft adds the soft engine keys PreferredTimesConstraint and (spec-033
+    # Unit C) TeamConflict — the latter softened core_hard -> {soft} and moved to
+    # ENGINE_SOFT_KEYS, so it now resolves to an applied engine key via `soft`.
     # spec-032: EqualMatchUpSpacing absent (now in `spacing`, not core); the three
     # symmetry breakers carry no engine key, so leaving `soft` does not change this.
     ('core', 'soft'): {
@@ -328,11 +335,14 @@ ENGINE_KEY_ORACLE = {
         'NoDoubleBookingTeams',
         'PHLAndSecondGradeTimes',
         'PreferredTimesConstraint',
+        'TeamConflict',
     },
     # default = full production set = core + soft + spacing + symmetry_breakers
-    # engine keys (the obsolete trio is still excluded BY DESIGN). spec-032:
-    # EqualMatchUpSpacing's engine key returns here via the `spacing` tag + the
-    # widened _is_fresh_build predicate, so `default` is unchanged.
+    # engine keys. spec-032: EqualMatchUpSpacing's engine key returns here via the
+    # `spacing` tag + the widened _is_fresh_build predicate. spec-033 Unit C: the
+    # obsolete pair (FiftyFiftyHomeandAway, ClubVsClubAlignment) is still excluded
+    # BY DESIGN, but TeamConflict is NO LONGER obsolete — softened into `soft`, it
+    # is now an applied default engine key.
     'default': {
         'ClubDay',
         'ClubGameSpread',
@@ -342,6 +352,7 @@ ENGINE_KEY_ORACLE = {
         'NoDoubleBookingTeams',
         'PHLAndSecondGradeTimes',
         'PreferredTimesConstraint',
+        'TeamConflict',
     },
     # severity_1 = the CRITICAL severity stage. Unlike the production groups it
     # legitimately DOES carry the obsolete engine key FiftyFiftyHomeandAway
@@ -416,33 +427,34 @@ def test_simple_applied_engine_keys_match_hand_oracle():
         assert simple_applied == staged_applied, groups
 
 
-def test_default_simple_selection_excludes_obsolete_trio_by_design():
+def test_default_simple_selection_excludes_obsolete_pair_by_design():
     """Given NO --groups (default selection),
     When the production simple path derives skip_constraints
     (ALL_ENGINE_KEYS - collect_engine_keys(default-group names)),
-    Then it skips EXACTLY {FiftyFiftyHomeandAway, ClubVsClubAlignment,
-    TeamConflict}.
+    Then it skips EXACTLY {FiftyFiftyHomeandAway, ClubVsClubAlignment}.
 
     This pins the intended default-`--simple` behaviour at the SELECTION level.
-    The three skipped engine keys are obsolete legacy entries that map to NO
+    The two skipped engine keys are obsolete legacy entries that map to NO
     production-group atom: per spec-023 §1 they "get no production group" because
     they are superseded by atoms AwayClubHomeWeekendsCount /
     AwayClubPerOpponentAndAggregateHomeBalance (replacing FiftyFiftyHomeandAway)
     and ClubVsClubStackedWeekends / ClubVsClubStackedCoLocation (replacing
-    ClubVsClubAlignment), with TeamConflict carried separately. Per the convenor's
-    RESOLVED Option B, default `--simple` selects the `default` group (production
-    constraints). The resulting ~-2,453-hard-constraint delta versus the old
-    no-skip simple path is therefore INTENTIONAL, not a regression.
+    ClubVsClubAlignment).
 
-    (The real-data cross-mode parity baseline — actual hard-constraint counts —
-    is Unit D's DoD-8 deliverable; this test stays at the selection level, which
-    is what Unit C controls.)"""
+    spec-033 Unit C: TeamConflict USED to be the third skipped engine key (it was
+    core_hard-only, not in any fresh-build group). It is now a SOFT atom in `soft`
+    and was moved to ENGINE_SOFT_KEYS, so it maps to an applied default engine key
+    and is NO LONGER skipped — the obsolete TRIO is now an obsolete PAIR.
+
+    Per the convenor's RESOLVED Option B, default `--simple` selects the `default`
+    group (production constraints)."""
     group_names, default_names = run._resolve_group_selection(None, [])
     assert group_names == ['default']  # no --groups => default group
     selected_engine_keys, _ = collect_engine_keys(default_names)
     skip = ALL_ENGINE_KEYS - selected_engine_keys
-    # Hand-computed oracle: exactly the obsolete trio, nothing else.
-    assert skip == {'FiftyFiftyHomeandAway', 'ClubVsClubAlignment', 'TeamConflict'}
+    # Hand-computed oracle: exactly the obsolete pair, nothing else. spec-033
+    # Unit C removed TeamConflict from this skip set (softened into `default`).
+    assert skip == {'FiftyFiftyHomeandAway', 'ClubVsClubAlignment'}
 
 
 def test_staged_none_equals_default_group_filter():
@@ -498,8 +510,10 @@ def test_simple_engine_respects_skip_on_real_data():
 
     full = _hard_count(set())          # legacy: all engine keys
     core_only = _hard_count(core_skip)  # core selection
-    # Core skips FiftyFiftyHomeandAway / ClubVsClubAlignment / TeamConflict (and
-    # PreferredTimes is soft, not in stage-1), so the hard count must drop.
+    # Core skips FiftyFiftyHomeandAway / ClubVsClubAlignment (and PreferredTimes
+    # is soft, not in stage-1), so the hard count must drop. (spec-033 Unit C:
+    # TeamConflict is no longer dispatched in stage-1 at all — it is a stage-2
+    # soft penalty now — so it does not affect this stage-1 hard count either way.)
     assert core_only < full, (core_only, full)
     assert core_only > 0
 

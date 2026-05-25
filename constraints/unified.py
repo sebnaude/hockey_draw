@@ -358,8 +358,9 @@ class UnifiedConstraintEngine:
             c += self._equal_games_balanced_matchups()
         if 'FiftyFiftyHomeandAway' not in _skip:
             c += self._fifty_fifty_home_away()
-        if 'TeamConflict' not in _skip:
-            c += self._team_conflict()
+        # spec-033 Unit C: `TeamConflict` is no longer a hard feasibility rule.
+        # Its soft analogue (`_team_conflict_soft`) is dispatched in
+        # `apply_stage_2_soft()`. No hard `<= 1` constraint is added here.
         # spec-018: `MaxMaitlandHomeWeekends` (`_max_venue_weekends`) deleted —
         # superseded by the spec-004 `AwayClubHomeWeekendsCount` atom.
         # spec-014: PHL/2nd adjacency is now the `PHLAnd2ndAdjacency` atom,
@@ -437,24 +438,10 @@ class UnifiedConstraintEngine:
             n += 2
         return n
 
-    def _team_conflict(self):
-        conflicts = self.data.get('team_conflicts', [])
-        if not conflicts:
-            return 0
-        n = 0
-        # Regroup by (week, day_slot)
-        slot_teams = defaultdict(lambda: defaultdict(list))
-        for (week, day_slot, team), vars_list in self.by_week_day_slot_team.items():
-            slot_teams[(week, day_slot)][team].extend(vars_list)
-
-        for team1, team2 in conflicts:
-            for slot, team_vars in slot_teams.items():
-                v1 = team_vars.get(team1, [])
-                v2 = team_vars.get(team2, [])
-                if v1 and v2:
-                    self.model.Add(sum(v1) + sum(v2) <= 1)
-                    n += 1
-        return n
+    # spec-033 Unit C: the hard `_team_conflict` (which forbade two named
+    # conflicting teams from sharing a `(week, day_slot)` via
+    # `Add(sum(v1) + sum(v2) <= 1)`) has been REMOVED. TeamConflict is now a
+    # soft preference — see `_team_conflict_soft` in apply_stage_2_soft below.
 
     # spec-018: `_max_venue_weekends` (the `MaxMaitlandHomeWeekends` rule)
     # deleted — superseded by the spec-004 `AwayClubHomeWeekendsCount` atom.
@@ -766,6 +753,9 @@ class UnifiedConstraintEngine:
         _skip = self.skip_constraints
         if 'EqualMatchUpSpacing' not in _skip:
             c += self._matchup_spacing_soft()
+        # spec-033 Unit C: TeamConflict soft penalty (no hard component).
+        if 'TeamConflict' not in _skip:
+            c += self._team_conflict_soft()
         # ClubGradeAdjacency soft REMOVED ENTIRELY (spec-007). The convenor-
         # facing adjacent-grade penalty was over-restrictive in practice.
         # If a specific team-pair conflict matters, declare it via
@@ -823,6 +813,44 @@ class UnifiedConstraintEngine:
                 self.model.Add(pen >= sum(window_vars) - 1)
                 self.data['penalties']['EqualMatchUpSpacing']['penalties'].append(pen)
                 n += 1
+        return n
+
+    def _team_conflict_soft(self):
+        """spec-033 Unit C: soft penalty for conflicting team pairs sharing a slot.
+
+        For each declared `(team1, team2)` conflict pair and each `(week, day_slot)`
+        where BOTH teams could appear, add a penalty BoolVar `p` forced to 1 only
+        when both teams actually play that slot:
+
+            p >= sum(v1) + sum(v2) - 1
+
+        (When at most one of the two plays the slot, `sum(v1)+sum(v2) <= 1`, so the
+        lower bound is <= 0 and `p` is free to be 0; when both play,
+        `sum(v1)+sum(v2) == 2`, forcing `p >= 1`.) No hard constraint is added, so
+        a tolerated clash never blocks feasibility. Empty `team_conflicts` ⇒ the
+        bucket is created with zero penalty vars.
+        """
+        weight = self._get_penalty_weight('TeamConflict', 200000)
+        self.data['penalties']['TeamConflict'] = {'weight': weight, 'penalties': []}
+        conflicts = self.data.get('team_conflicts', [])
+        if not conflicts:
+            return 0
+        n = 0
+        # Regroup by (week, day_slot) -> {team: [vars]}
+        slot_teams = defaultdict(lambda: defaultdict(list))
+        for (week, day_slot, team), vars_list in self.by_week_day_slot_team.items():
+            slot_teams[(week, day_slot)][team].extend(vars_list)
+
+        for team1, team2 in conflicts:
+            for slot, team_vars in slot_teams.items():
+                v1 = team_vars.get(team1, [])
+                v2 = team_vars.get(team2, [])
+                if v1 and v2:
+                    p = self.model.NewBoolVar(
+                        f"u_tconf_{team1}_{team2}_w{slot[0]}_s{slot[1]}")
+                    self.model.Add(p >= sum(v1) + sum(v2) - 1)
+                    self.data['penalties']['TeamConflict']['penalties'].append(p)
+                    n += 1
         return n
 
     # _grade_adjacency_soft REMOVED ENTIRELY (spec-007). The convenor-facing
