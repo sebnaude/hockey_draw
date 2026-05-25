@@ -679,14 +679,15 @@ class TestSlackBuilding:
         slack_value = 3
         # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
         # removed (rules deleted).
+        # spec-033 Unit A: ClubVsClubAlignment slack key removed (alignment is now
+        # a fixed hard rule with no slack).
         constraint_slack = {
             'EqualMatchUpSpacingConstraint': slack_value,
-            'ClubVsClubAlignment': slack_value,
             'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
             'MinimiseClubsOnAFieldBroadmeadow': slack_value,
             'ClubGameSpread': slack_value,
         }
-        assert len(constraint_slack) == 5
+        assert len(constraint_slack) == 4
         for name, val in constraint_slack.items():
             assert val == 3
 
@@ -695,9 +696,9 @@ class TestSlackBuilding:
         slack_value = 0
         # spec-018: AwayAtMaitlandGrouping / MaitlandHomeGrouping slack keys
         # removed (rules deleted).
+        # spec-033 Unit A: ClubVsClubAlignment slack key removed (fixed hard rule).
         constraint_slack = {
             'EqualMatchUpSpacingConstraint': slack_value,
-            'ClubVsClubAlignment': slack_value,
             'MaximiseClubsPerTimeslotBroadmeadow': slack_value,
             'MinimiseClubsOnAFieldBroadmeadow': slack_value,
             'ClubGameSpread': slack_value,
