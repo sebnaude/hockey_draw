@@ -875,7 +875,11 @@ PREFERRED_WEEKENDS = [
 PENALTY_WEIGHTS = {
     # spec-018: MaitlandHomeGrouping / AwayAtMaitlandGrouping penalty weights
     # removed — venue-sequencing soft penalties deleted.
-    'ClubVsClubAlignment':                 50_000,
+    # spec-036 Unit B: 'ClubVsClubAlignment' weight removed — its only live reader
+    # was the deleted `_club_alignment_soft` engine method (which used a
+    # `_get_penalty_weight(..., 100000)` default). Archived parity classes read it
+    # via `weights.get(..., default)`, so they still import. Alignment is now the
+    # spec-005 stacked-atom cluster.
     'EqualMatchUpSpacing':                100_000,
     'ClubGameSpread':                     100_000,
     # spec-033 Unit B: normal-mode bye-spacing soft push, parity with the
@@ -891,9 +895,13 @@ PENALTY_WEIGHTS = {
     # unit = one game beyond the first in a (club, week, day, location, slot).
     'ClubNoConcurrentSlot':               200_000,
     'PreferredTimesConstraint':           200_000,
-    # ClubVsClubAlignmentField retained for legacy checkpoint compat; its former
-    # superseding tester diagnostic was removed in spec-031.
-    'ClubVsClubAlignmentField':                 0,
+    # spec-036 Unit B: 'ClubVsClubAlignmentField' weight removed. The "legacy
+    # checkpoint compat" note was obsolete — nothing reads this key by bare
+    # subscript: checkpoint metadata serialises the whole `penalty_weights` dict
+    # (iteration, no KeyError on an absent key) and old serialised checkpoints
+    # are inert data. The only live reader was the deleted `_club_alignment_soft`
+    # (default 50000 via `_get_penalty_weight`); archived parity classes use
+    # `weights.get(..., 50000)` and still import.
     'ClubGradeAdjacencyConstraint':        50_000,
     # spec-020: 'phl_preferences' weight removed — PreferredDates deleted; the
     # marquee-PHL-date behaviour is now a PREFERRED_GAMES entry using the

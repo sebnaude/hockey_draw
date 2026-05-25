@@ -162,9 +162,11 @@ class UnifiedConstraintEngine:
         # `SameGradeSameClubNoConcurrency` atom (hard, dispatched outside the
         # engine) and `TeamPairNoConcurrency` (soft). No groupings needed.
 
-        # --- Club vs Club alignment ---
-        self.by_grade_clubpair_round = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        self.by_sunday_clubpair_round_field = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        # spec-036 Unit B: `by_grade_clubpair_round` / `by_sunday_clubpair_round_field`
+        # removed — they fed only the legacy `_club_alignment_hard/_soft` engine
+        # methods (deleted). Club-vs-club alignment is now the spec-005
+        # `ClubVsClubStackedWeekends` / `ClubVsClubStackedCoLocation` atoms,
+        # dispatched outside the engine; they build their own groupings from X.
 
         # --- Venue groupings ---
         # spec-018: the `non_default_*` per-club home/away-week maps (and their
@@ -265,12 +267,9 @@ class UnifiedConstraintEngine:
             # outside the engine) and `TeamPairNoConcurrency` (soft atom).
             # No groupings need to be built here.
 
-            # --- ClubVsClubAlignment (3rd-6th only) ---
-            if grade not in ['PHL', '2nd'] and t1_club and t2_club:
-                club_pair = tuple(sorted((t1_club, t2_club)))
-                self.by_grade_clubpair_round[grade][club_pair][round_no].append(var)
-                if day == 'Sunday':
-                    self.by_sunday_clubpair_round_field[club_pair][round_no][field_name].append(var)
+            # spec-036 Unit B: the ClubVsClubAlignment grouping build (3rd-6th
+            # club-pair/round + Sunday field) is removed along with the legacy
+            # `_club_alignment_*` engine methods. The stacked atoms scan X directly.
 
             # spec-018: venue groupings for the deleted MaxMaitlandHomeWeekends /
             # NonDefaultHomeGrouping / AwayAtNonDefaultGrouping rules removed.
@@ -373,8 +372,11 @@ class UnifiedConstraintEngine:
         # ClubGradeAdjacency REMOVED (spec-007): the legacy hard rule is now
         # the `SameGradeSameClubNoConcurrency` atom dispatched via the
         # non-engine fallback in `constraints/stages.py`. Nothing to do here.
-        if 'ClubVsClubAlignment' not in _skip:
-            c += self._club_alignment_hard()
+        # spec-036 Unit B: the legacy `_club_alignment_hard` dispatch is removed.
+        # Club-vs-club alignment is enforced by the spec-005
+        # `ClubVsClubStackedWeekends` / `ClubVsClubStackedCoLocation` atoms,
+        # dispatched outside the engine; the `ClubVsClubAlignment` engine key has
+        # no `groups=` so it was never reached by any group selection anyway.
         # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` hard
         # dispatch removed — venue-sequencing rules deleted.
         if 'ClubDay' not in _skip:
@@ -595,79 +597,15 @@ class UnifiedConstraintEngine:
     # `constraints/archived/original.py` and is no longer invoked by the
     # engine.
 
-    # ----------------------------------------------------------------
-    # ClubVsClub — legacy in-engine implementation. The Phase-3c atoms that
-    # used to wrap these methods (Coincidence / FieldLimit / DeficitPenalty /
-    # PHLAnd2ndBackToBackSameField) were deleted (spec-005); production now
-    # uses the `ClubVsClubStackedAlignment` cluster dispatched outside the
-    # engine. These methods remain as the parity-reference behaviour for the
-    # `ClubVsClubAlignment` engine key.
-    # ----------------------------------------------------------------
-
-    def _club_alignment_hard(self):
-        """Hard: min coincidences + max 2 fields when coinciding."""
-        n = 0
-        per_team_games = {
-            g.name: (self.num_rounds['max'] // (g.num_teams - 1)) if g.num_teams > 1 and g.num_teams % 2 == 0
-                    else (self.num_rounds['max'] // g.num_teams) if g.num_teams > 0
-                    else 0
-            for g in self.grades
-        }
-        ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        # spec-033 Unit A: ClubVsClubAlignment is a fixed hard rule with no slack.
-        # (This is a dead parity-reference path — the engine key has no `groups=`
-        # so it is never dispatched — but kept slack-free for parity correctness.)
-
-        processed = []
-        prev_num = 0
-        for grade, num_games in ordered_grades:
-            if grade in ['PHL', '2nd']:
-                continue
-            processed.append(grade)
-            if num_games <= prev_num:
-                continue
-            prev_num = num_games
-
-            for other_grade in [g for g, _ in ordered_grades if g not in processed]:
-                for club_pair, rounds in self.by_grade_clubpair_round[grade].items():
-                    other_rounds = self.by_grade_clubpair_round[other_grade].get(club_pair, {})
-                    coincide_vars = []
-                    for round_no, vars_list in rounds.items():
-                        if round_no not in other_rounds:
-                            continue
-                        ind1 = self.pool.get_or_create_bool(
-                            ('align_g1', grade, club_pair, round_no), vars_list,
-                            f"u_g1_{grade}_{club_pair}_{round_no}")
-                        ind2 = self.pool.get_or_create_bool(
-                            ('align_g2', other_grade, club_pair, round_no), other_rounds[round_no],
-                            f"u_g2_{other_grade}_{club_pair}_{round_no}")
-                        coincide = self.model.NewBoolVar(f"u_coin_{club_pair}_{round_no}")
-                        self.model.Add(coincide <= ind1)
-                        self.model.Add(coincide <= ind2)
-                        self.model.Add(coincide >= ind1 + ind2 - 1)
-                        self.pool.register(('coin', grade, other_grade, club_pair, round_no), coincide)
-                        coincide_vars.append(coincide)
-
-                        # Max 2 fields when coinciding
-                        field_round = self.by_sunday_clubpair_round_field[club_pair].get(round_no, {})
-                        if field_round:
-                            fi_list = []
-                            for fn, gvars in field_round.items():
-                                fi = self.pool.get_or_create_bool(
-                                    ('align_fld', club_pair, round_no, fn), gvars,
-                                    f"u_fld_{club_pair}_{round_no}_{fn}")
-                                fi_list.append(fi)
-                            if fi_list:
-                                nf = self.model.NewIntVar(0, len(fi_list), f"u_nflds_{club_pair}_{round_no}")
-                                self.model.Add(nf == sum(fi_list))
-                                self.model.Add(nf <= 2).OnlyEnforceIf(coincide)
-                                n += 1
-
-                    if coincide_vars:
-                        min_req = num_games  # spec-033 Unit A: no slack
-                        self.model.Add(sum(coincide_vars) >= min_req)
-                        n += 1
-        return n
+    # spec-036 Unit B: the legacy in-engine ClubVsClub alignment methods
+    # `_club_alignment_hard` / `_club_alignment_soft` were DELETED. They were a
+    # `--simple`-only (`apply_phase_*`) parity-reference path; after spec-036
+    # Unit A rerouted the single-solve path through the stage dispatcher, no
+    # solve path dispatched them (the `ClubVsClubAlignment` engine key has no
+    # `groups=`). Club-vs-club alignment is fully covered in every solve path by
+    # the spec-005 `ClubVsClubStackedWeekends` / `ClubVsClubStackedCoLocation`
+    # atoms (dispatched outside the engine). The `ClubVsClubAlignment` registry
+    # entry + tester check (`_check_club_vs_club_alignment`) are retained.
 
     # spec-018: `_maitland_grouping_hard` (NonDefaultHomeGrouping) and
     # `_away_maitland_hard` (AwayAtNonDefaultGrouping) deleted — the convenor
@@ -761,8 +699,8 @@ class UnifiedConstraintEngine:
         # If a specific team-pair conflict matters, declare it via
         # `TEAM_PAIR_NO_CONCURRENCY` (handled by the `TeamPairNoConcurrency`
         # atom outside the engine).
-        if 'ClubVsClubAlignment' not in _skip:
-            c += self._club_alignment_soft()
+        # spec-036 Unit B: the legacy `_club_alignment_soft` dispatch is removed
+        # (superseded by the spec-005 stacked atoms dispatched outside the engine).
         # spec-018: `MaitlandHomeGrouping` / `AwayAtMaitlandGrouping` soft
         # dispatch removed — venue-sequencing rules deleted.
         # spec-020: PHL/2nd soft dispatch removed — its only member
@@ -858,93 +796,12 @@ class UnifiedConstraintEngine:
     # longer enforced anywhere. For per-team-pair conflicts, use the
     # `TeamPairNoConcurrency` atom + `TEAM_PAIR_NO_CONCURRENCY` config.
 
-    def _club_alignment_soft(self):
-        """Soft penalties for coincidence deficit and field excess."""
-        n = 0
-        coincide_weight = self._get_penalty_weight('ClubVsClubAlignment', 100000)
-        field_weight = self._get_penalty_weight('ClubVsClubAlignmentField', 50000)
-        self.data['penalties']['ClubVsClubAlignment'] = {'weight': coincide_weight, 'penalties': []}
-        self.data['penalties']['ClubVsClubAlignmentField'] = {'weight': field_weight, 'penalties': []}
-
-        per_team_games = {
-            g.name: (self.num_rounds['max'] // (g.num_teams - 1)) if g.num_teams > 1 and g.num_teams % 2 == 0
-                    else (self.num_rounds['max'] // g.num_teams) if g.num_teams > 0
-                    else 0
-            for g in self.grades
-        }
-        ordered_grades = sorted(per_team_games.items(), key=lambda x: x[1])
-        # spec-033 Unit A: no slack — deficit penalty is against the full
-        # num_games target (dead parity path; kept slack-free for correctness).
-        fidx = 0
-
-        processed = []
-        prev_num = 0
-        for grade, num_games in ordered_grades:
-            if grade in ['PHL', '2nd']:
-                continue
-            processed.append(grade)
-            if num_games <= prev_num:
-                continue
-            prev_num = num_games
-
-            for other_grade in [g for g, _ in ordered_grades if g not in processed]:
-                for club_pair, rounds in self.by_grade_clubpair_round[grade].items():
-                    other_rounds = self.by_grade_clubpair_round[other_grade].get(club_pair, {})
-                    coincide_vars = []
-                    for round_no, vars_list in rounds.items():
-                        if round_no not in other_rounds:
-                            continue
-                        # Reuse indicators from Phase A if available
-                        ind1_key = f"u_g1_{grade}_{club_pair}_{round_no}"
-                        ind2_key = f"u_g2_{other_grade}_{club_pair}_{round_no}"
-                        coin_key = f"u_coin_{club_pair}_{round_no}"
-
-                        # These were created in Phase A, look them up
-                        coincide = self.pool.get(('coin', grade, other_grade, club_pair, round_no))
-                        if coincide is None:
-                            # Create if Phase A wasn't run (fallback via pool)
-                            ind1 = self.pool.get_or_create_bool(
-                                ('align_g1', grade, club_pair, round_no), vars_list, ind1_key)
-                            ind2 = self.pool.get_or_create_bool(
-                                ('align_g2', other_grade, club_pair, round_no),
-                                other_rounds[round_no], ind2_key)
-                            coincide = self.model.NewBoolVar(coin_key)
-                            self.model.Add(coincide <= ind1)
-                            self.model.Add(coincide <= ind2)
-                            self.model.Add(coincide >= ind1 + ind2 - 1)
-                            self.pool.register(('coin', grade, other_grade, club_pair, round_no), coincide)
-
-                        coincide_vars.append(coincide)
-
-                        # Field excess penalty
-                        field_round = self.by_sunday_clubpair_round_field[club_pair].get(round_no, {})
-                        if field_round:
-                            fi_list = []
-                            for fn, gvars in field_round.items():
-                                fi = self.model.NewBoolVar(f"u_sfld_{club_pair}_{round_no}_{fn}_{fidx}")
-                                self.model.AddMaxEquality(fi, gvars)
-                                fi_list.append(fi)
-                            if fi_list:
-                                nf = self.model.NewIntVar(0, len(fi_list),
-                                    f"u_sfexcess_{club_pair}_{round_no}_{fidx}")
-                                self.model.Add(nf == sum(fi_list))
-                                fex = self.model.NewIntVar(0, len(fi_list),
-                                    f"u_fex_{club_pair}_{round_no}_{fidx}")
-                                self.model.Add(fex >= nf - 1).OnlyEnforceIf(coincide)
-                                self.model.Add(fex == 0).OnlyEnforceIf(coincide.Not())
-                                self.data['penalties']['ClubVsClubAlignmentField']['penalties'].append(fex)
-                                fidx += 1
-
-                    if coincide_vars:
-                        actual = self.model.NewIntVar(0, len(coincide_vars),
-                            f"u_actual_coin_{club_pair}_{grade}_{other_grade}")
-                        self.model.Add(actual == sum(coincide_vars))
-                        deficit = self.model.NewIntVar(0, num_games,
-                            f"u_coin_def_{club_pair}_{grade}_{other_grade}")
-                        self.model.Add(deficit >= num_games - actual)
-                        self.data['penalties']['ClubVsClubAlignment']['penalties'].append(deficit)
-                        n += 1
-        return n
+    # spec-036 Unit B: `_club_alignment_soft` was DELETED here (see the matching
+    # note where `_club_alignment_hard` lived). It registered the
+    # `ClubVsClubAlignment` / `ClubVsClubAlignmentField` penalty buckets via
+    # `_get_penalty_weight(..., default)`; both weights were removed from
+    # `PENALTY_WEIGHTS` (no remaining live reader). Soft alignment is now the
+    # spec-005 stacked-atom cluster dispatched outside the engine.
 
     # spec-018: `_maitland_grouping_soft` (NonDefaultHomeGrouping soft
     # imbalance penalty) and `_away_maitland_soft` (AwayAtNonDefaultGrouping

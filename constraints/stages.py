@@ -57,7 +57,11 @@ ENGINE_HARD_KEYS: Set[str] = {
     # spec-014: PHL/2nd adjacency is no longer an engine key — it's the
     # `PHLAnd2ndAdjacency` atom dispatched via the non-engine fallback.
     'PHLAndSecondGradeTimes',
-    'EqualMatchUpSpacing', 'ClubVsClubAlignment',
+    # spec-036 Unit B: 'ClubVsClubAlignment' removed from the engine HARD key set
+    # — the legacy `_club_alignment_hard` engine method was deleted (superseded by
+    # the spec-005 stacked atoms dispatched outside the engine). The REGISTRY
+    # entry stays as the tester/name anchor.
+    'EqualMatchUpSpacing',
     # spec-018: `MaxMaitlandHomeWeekends` / `MaitlandHomeGrouping` /
     # `AwayAtMaitlandGrouping` engine keys deleted (venue-sequencing rules
     # removed). Per-club home-weekend counts are the spec-004
@@ -71,7 +75,10 @@ ENGINE_HARD_KEYS: Set[str] = {
 }
 
 ENGINE_SOFT_KEYS: Set[str] = {
-    'EqualMatchUpSpacing', 'ClubVsClubAlignment',
+    # spec-036 Unit B: 'ClubVsClubAlignment' removed from the engine SOFT key set
+    # — the legacy `_club_alignment_soft` engine method was deleted (superseded by
+    # the spec-005 stacked atoms). The REGISTRY entry stays (tester/name anchor).
+    'EqualMatchUpSpacing',
     # spec-033 Unit C: `TeamConflict` is now a soft penalty (moved from
     # ENGINE_HARD_KEYS). Dispatched via `apply_stage_2_soft()` -> `_team_conflict_soft`.
     'TeamConflict',
