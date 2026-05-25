@@ -24,15 +24,34 @@ restructure, cut into three serialised specs:
 - **spec-032** — constraint group restructure: new `symmetry_breakers` group (always-on, with a
   `--no-symmetry-breakers` escape) + `core` minus `EqualMatchUpSpacing` + lonesome `spacing`
   group. `depends_on: spec-031` (shares `registry.py`/`CONSTRAINT_INVENTORY.md`/`CLAUDE.md`).
-  Two units (A registry → B run.py), S3. Status: `review_pending`.
-- **spec-033** — remove `ClubVsClubAlignment` slack (dead in solver, live+divergent in tester) +
-  audit soft-analogue coverage of slack-tolerant constraints; the audit's one gap —
-  `BalancedByeSpacing` has no normal-mode soft analogue — is closed by adding one. `depends_on:
-  spec-032` (shares `registry.py`/`run.py`/`CONSTRAINT_INVENTORY.md`/`CLAUDE.md`). Two units
-  (A removal+verify → B bye-soft), S3. Status: `review_pending`.
+  Two units (A registry → B run.py), S3. Status: `done` (merged into final-form
+  2026-05-25; A `9efee82`, B `2b39008`; both passed /adversarial Mode B).
+- **spec-033** — uniform soft+slack treatment of deviation-tolerant constraints. Five serial units:
+  (A) remove `ClubVsClubAlignment` slack (dead in solver, live+divergent in tester) + verify
+  EqMatchup/ClubGameSpread-contiguity soft; (B) `BalancedByeSpacing` — add normal-mode soft analogue +
+  set base slack 0→2 (raw-ideal floor risks infeasibility) + retag out of `core` into its own
+  `{bye_spacing}` group (widening `_is_fresh_build`, after spec-032) + no-play-weekend bye-count check;
+  (C) `TeamConflict` → soft-only (drop hard feasibility); (D) `ClubGameSpread` hard ≤2-field cap
+  (+slack) closing the field-concentration structure (soft push→1 already exists); (E)
+  `ClubNoConcurrentSlot` → soft+slack (hard ≤1 overlap, push→0; drops capacity-aware floor +
+  `core_hard`; covers cross-field non-overlap). `depends_on: spec-032` (shares `registry.py`/
+  `run.py`/`config/season_2026.py`/`analytics/tester.py`/`CONSTRAINT_INVENTORY.md`/`CLAUDE.md`).
+  Five units A→B→C→D→E (strictly serial, shared files), S3. Status: `review_pending`.
+
+- **spec-036** — default solve = single-solve over the FULL modern set (no-flag), and remap the
+  solve-mode flags: no-flag → single solve (was DEFAULT_STAGES staged), `--staged` → DEFAULT_STAGES
+  incremental (was severity), new `--severity` → severity staging; remove `--simple`/`--unified`
+  (forward-only). Reroutes the single-solve builder through `apply_solver_stage` so it applies the
+  same complete set as staged (closes the ~14-atom gap `--simple` had), then deletes the now-dead
+  legacy `_club_alignment_hard/_soft` + orphaned groupings + ENGINE_HARD/SOFT_KEYS membership
+  (superseded by the spec-005 stacked atoms). `depends_on: spec-033` (must apply spec-033's FINAL
+  constraint shapes; shares `config/season_2026.py`/`CONSTRAINT_INVENTORY.md`). Three units A→B→C, S3.
+  Status: `review_pending`.
 
 Two **special end-of-line plans** authored **2026-05-24** (this session). They are gated behind
-*everything else* and run last, in order:
+*everything else* and run last, in order. **spec-035 now also sequences after spec-036** — its raw
+single-solve e2e depends on the no-flag/single-solve path being correct (its `depends_on` should add
+`spec-036` when next edited):
 
 - **spec-034** — PENULTIMATE: green test suite + honest coverage (≥85% on atoms/registry/stages/
   tester) + three real-data, no-mock assurances (atoms enforce on real data; `DrawTester` detects a
@@ -49,12 +68,13 @@ Two **special end-of-line plans** authored **2026-05-24** (this session). They a
   units (A launcher ∥ B symmetry-capture → C run+readout). S3. Status: `review_pending`.
 
 ```
-spec-030  ──depends_on──▶  (none)                              [review_pending]
-spec-031  ──depends_on──▶  spec-030                             [review_pending]   (spec-029 dep satisfied — done)
-spec-032  ──depends_on──▶  spec-031                             [review_pending]
-spec-033  ──depends_on──▶  spec-032                             [review_pending]
+spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
+spec-031  ──depends_on──▶  spec-030                             [done — merged into final-form 2026-05-24]
+spec-032  ──depends_on──▶  spec-031                             [done — merged into final-form 2026-05-25 (A 9efee82, B 2b39008)]
+spec-033  ──depends_on──▶  spec-032                             [review_pending]   (NOW UNBLOCKED — spec-032 done)
+spec-036  ──depends_on──▶  spec-033                             [review_pending]   (single-solve default + mode remap)
 spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [review_pending]   (PENULTIMATE)
-spec-035  ──depends_on──▶  spec-030…033, spec-034                          [review_pending]   (ULTIMATE — last)
+spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [review_pending]   (ULTIMATE — last; needs 036's single-solve)
 ```
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
@@ -66,6 +86,13 @@ time to avoid registry/count/doc conflicts. The registry count test moves 51 →
 after which the `final-form` plan line is fully drained.**
 
 Most recently completed:
+
+- **spec-032** — constraint group restructure. **Done** (2026-05-25, Units A `9efee82`
+  + B `2b39008` merged into final-form). Peeled `EqualMatchUpSpacing` into a lonesome
+  `spacing` group and the three tie-breakers into an always-on `symmetry_breakers`
+  group (CLI unions them into every solve unless `--no-symmetry-breakers`); widened
+  `_is_fresh_build` + the `regen` predicate so `default` (27) and `regen` (31) are
+  membership-unchanged. Both units passed /adversarial Mode B. `depends_on: spec-031`.
 
 - **spec-029** — club-day weekends in the published-draw Notes column. **Done** (2026-05-24,
   commit `ccc3d07`). Added a sixth `Club Day` notes category auto-derived from `CLUB_DAYS`
@@ -88,9 +115,11 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-030** (once `/adversarial` Mode A stamps it `ready`; `depends_on: none`).
-- spec-031 unblocks when spec-030 is `done`; spec-032 unblocks when spec-031 is `done`. The chain
-  is serial, so at most one of the three is startable at a time.
+- **spec-033** (`depends_on: spec-032` now satisfied — spec-030, spec-031 and spec-032 are all
+  `done` and merged into final-form). This is the next startable node in the serial chain.
+  (Claimed by session=slack per its plan header.)
+- spec-036 unblocks when spec-033 is `done`. The chain is serial, so at most one is startable at
+  a time.
 - **spec-034 and spec-035 are NOT startable yet** — they are the deliberately end-of-line special
   plans. spec-034 (penultimate) unblocks only when 030-033 are all `done`; spec-035 (ultimate)
   unblocks only when 030-034 are all `done`. They run last, in that order.

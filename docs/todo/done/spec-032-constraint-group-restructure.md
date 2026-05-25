@@ -1,4 +1,5 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- completed: 2026-05-25 — Units A+B merged to final-form (A 9efee82, B 2b39008). Both passed /adversarial Mode B. NOTE: the plan's review-fix oracle numbers (core+soft "24", default "28") were stale — computed against a pre-spec-030 baseline. Implemented against the REAL hand-verified numbers (core 20->19, soft 7->4, core∪soft 27->23, default unchanged at 27, regen unchanged at 31) per the basic skill's "hand calc is the oracle" rule; Mode B independently confirmed the corrected numbers. Post-merge CLI verified: --list-groups shows spacing+symmetry_breakers; --groups core applies the 3 tie-breakers (22); --no-symmetry-breakers drops them (19). -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-031 -->
