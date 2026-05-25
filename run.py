@@ -62,8 +62,6 @@ Examples:
                             help='Season year (e.g., 2025, 2026). Required.')
     gen_parser.add_argument('--resume', nargs='*', metavar=('RUN_ID', 'STAGE'),
                             help='Resume from checkpoint')
-    gen_parser.add_argument('--simple', action='store_true',
-                            help='Use simple single-solve instead of staged')
     gen_parser.add_argument('--run-id', type=str,
                             help='Specify run ID for checkpoints')
     gen_parser.add_argument('--description', type=str, default='',
@@ -89,9 +87,6 @@ Examples:
                             help='Use minimal-memory solver configuration (2 workers, no probing) - very slow but stable')
     gen_parser.add_argument('--high-performance', action='store_true',
                             help='Use high-performance config (all cores, full linearization)')
-    gen_parser.add_argument('--unified', action='store_true',
-                            help='[Deprecated; no-op] retained for back-compat. '
-                                 'Phase 7c: --simple always uses the unified engine.')
     gen_parser.add_argument('--exclude', nargs='+', metavar='CONSTRAINT',
                             help='Exclude specific atoms from the solve by canonical name '
                                  '(e.g. ClubGameSpread, EnsureBestTimeslotChoices).')
@@ -99,10 +94,15 @@ Examples:
                             help='Run only specific SOLVER_STAGES entries by name '
                                  '(e.g. --stages critical_feasibility soft_optimisation).')
     gen_parser.add_argument('--staged', action='store_true',
-                            help='Use severity-based staging instead of default. '
-                                 'Runs 5 stages by severity level: '
-                                 'Level 1 (CRITICAL) -> Level 2 (HIGH) -> Level 3 (MEDIUM) -> Level 4 (LOW) -> Level 5 (VERY LOW). '
-                                 'Each stage uses the prior solution as a HINT.')
+                            help='DEFAULT_STAGES incremental staged solve. Applies the '
+                                 'full constraint set one stage at a time, solving after '
+                                 'each stage and carrying the prior solution as a HINT. '
+                                 '(Default with no mode flag is a single full solve.)')
+    gen_parser.add_argument('--severity', action='store_true',
+                            help='Severity-grouped staged solve. Runs 5 stages by severity '
+                                 'level: Level 1 (CRITICAL) -> Level 2 (HIGH) -> Level 3 (MEDIUM) '
+                                 '-> Level 4 (LOW) -> Level 5 (VERY LOW). Each stage uses the '
+                                 'prior solution as a HINT.')
     gen_parser.add_argument('--relax', action='store_true',
                             help='Enable severity-based constraint relaxation. If infeasible, '
                                  'automatically identifies problem severity group and relaxes slack variables.')
@@ -850,11 +850,13 @@ def run_generate(args):
         }
         print(f"\n[*] Constraint slack override: +{slack_value}")
     
-    use_unified = getattr(args, 'unified', False)
-
-    # --unified is now a no-op (Phase 7c: --simple always uses the engine).
-    if use_unified and getattr(args, 'staged', False):
-        print("WARNING: --unified and --staged are incompatible. Using --unified.")
+    # spec-036: solve-mode dispatch. No mode flag => single full solve (default);
+    # --staged => DEFAULT_STAGES incremental staged solve; --severity => severity-
+    # grouped staged solve. --simple/--unified were removed (forward-only).
+    use_staged = getattr(args, 'staged', False)
+    severity_staged_flag = getattr(args, 'severity', False)
+    if use_staged and severity_staged_flag:
+        print("WARNING: --staged and --severity are mutually exclusive. Using --severity.")
 
     exclude = args.exclude or []
 
@@ -924,7 +926,7 @@ def run_generate(args):
     # spec-027: a regen run applies its constraint set (the resolved `regen` group,
     # or whatever the operator selected via --groups) through the STAGED dispatcher
     # `apply_constraint_set` — the only path that dispatches the non-engine
-    # `*RegenSoft` atoms. The engine-only `--simple` path cannot add them, so a
+    # `*RegenSoft` atoms. The single-solve path cannot add them, so a
     # regen run is routed staged with a single synthetic 'regen' stage = the
     # resolved selection. We build that stage from `constraint_names` (the regen
     # group resolved above); `regen_groups` is the same set, kept for metadata.
@@ -936,10 +938,13 @@ def run_generate(args):
                             'physical rules + regen-soft analogues + soft'),
             'atoms': list(constraint_names),
         }]
-        if args.simple or use_unified:
+        # spec-036: regen always dispatches via the staged constraint dispatcher
+        # (the only path that applies the non-engine *RegenSoft atoms), regardless
+        # of any mode flag. Inform the operator that mode flags are ignored here.
+        if use_staged or severity_staged_flag:
             print("[*] Regeneration uses the staged constraint dispatcher (the "
-                  "simple engine path cannot apply the regen-soft atoms); "
-                  "the --simple flag is ignored for this run.")
+                  "single-solve path cannot apply the regen-soft atoms); the "
+                  "--staged/--severity mode flag is ignored for this run.")
 
     # Resolve --stages-config / --stage-only / --skip-stage. Used for
     # SOLVER_STAGES dispatch in main_staged.
@@ -953,7 +958,9 @@ def run_generate(args):
         season_config = {} if getattr(args, 'stages_config', None) else load_data(args.year)
         resolved_stages = _resolve_solver_stages(args, season_config)
 
-    if (args.simple or use_unified) and not regen_active:
+    # spec-036 dispatch: no mode flag + no regen => single full solve (DEFAULT).
+    # Regen always goes staged; --staged/--severity also go staged.
+    if not regen_active and not use_staged and not severity_staged_flag:
         from main_staged import main_simple
         solution, data = main_simple(
             locked_keys=locked_keys,
@@ -975,7 +982,9 @@ def run_generate(args):
         )
     else:
         stages = getattr(args, 'stages', None)
-        severity_staged = getattr(args, 'staged', False)
+        # spec-036: --severity drives severity-grouped staging; --staged (or no
+        # flag, when reached via regen) drives DEFAULT_STAGES incremental.
+        severity_staged = severity_staged_flag
         # spec-027: a regen run applies its single synthetic 'regen' stage (the
         # resolved regen group) via the staged dispatcher, never severity staging,
         # and passes the regen set as constraint_names so the stage is unfiltered.

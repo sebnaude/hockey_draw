@@ -1237,43 +1237,81 @@ def main_staged(run_id: str = None, resume_from: str = None, locked_keys: set = 
 def _main_simple_unified(model, X, data, solver_config, resource_monitor,
                          checkpoint_manager, run_dir, logger,
                          constraint_names: list = None):
-    """Run unified 3-phase constraint engine in simple mode.
+    """Run a SINGLE full solve applying the entire selected constraint set.
 
-    spec-023 (Unit C): when ``constraint_names`` (the resolved deduped union of
-    selected --groups, minus --exclude) is provided, we translate it into the
-    engine's existing ``skip_constraints`` exclusion mechanism — the engine
-    keys NOT covered by the selection are skipped, so ``apply_phase_a/b/c()``
-    apply only the selected WHOLE constraints' engine portions. This is the same
-    selection the staged path applies, so --groups is identical in --simple and
-    --staged. When None, no engine key is skipped (legacy full selection).
+    spec-036 (Unit A): this is now the no-flag default path. Instead of the old
+    ``engine.apply_phase_a/b/c()`` (which silently omitted ~15 production atoms),
+    we resolve the DEFAULT_STAGES list exactly as the staged dispatcher does and
+    loop ``apply_solver_stage`` over EVERY stage in apply-only mode (no per-stage
+    solve). This means the applied constraint set is IDENTICAL to the staged path
+    for the same ``--groups`` selection. After all stages are applied we build the
+    objective ONCE and run a SINGLE ``solver.Solve``.
+
+    ``constraint_names`` (the resolved deduped union of selected --groups, minus
+    --exclude) restricts each stage's atom list to the selection — exactly the
+    ``keep_constraints`` filter used by ``run_staged_solve``. When ``None`` (no
+    --groups passed), no inclusion filtering is done and the full DEFAULT_STAGES
+    set is applied (a no-op filter, since DEFAULT_STAGES ⊆ the default group).
+    --exclude is already subtracted from ``constraint_names`` upstream in run.py,
+    so this single filter honours both --groups and --exclude.
     """
     from constraints.unified import UnifiedConstraintEngine
-    from constraints.stages import collect_engine_keys, ALL_ENGINE_KEYS
 
-    skip_constraints = set()
+    # Resolve the stage list the same way the staged path does (DEFAULT_STAGES,
+    # or a per-season `solver_stages` override).
+    stages = data.get('solver_stages') or load_solver_stages({})
+
+    # spec-036/spec-023: restrict every stage's atoms to the resolved --groups
+    # set (= --groups minus --exclude, computed upstream). Stages that end up
+    # empty are removed. When constraint_names is None, no filtering is done.
     if constraint_names is not None:
-        selected_engine_keys, _ = collect_engine_keys(list(constraint_names))
-        # Skip every engine key the selection does NOT cover (reuse the engine's
-        # existing skip_constraints exclusion mechanism — no new lever invented).
-        skip_constraints = ALL_ENGINE_KEYS - selected_engine_keys
-        print(f"\n[spec-023] --groups selection: applying {len(selected_engine_keys)} "
-              f"engine key(s); skipping {sorted(skip_constraints)}")
+        keep_set = set(constraint_names)
+        filtered = []
+        for s in stages:
+            kept = [a for a in s.get('atoms', []) if a in keep_set]
+            if kept:
+                filtered.append({**s, 'atoms': kept})
+        stages = filtered
+        logger.info(f"[spec-036] single-solve --groups selection: "
+                    f"{len(keep_set)} atom(s) kept across {len(stages)} stage(s)")
+        print(f"\n[spec-036] --groups selection: applying {len(keep_set)} atom(s) "
+              f"across {len(stages)} stage(s)")
 
-    engine = UnifiedConstraintEngine(model, X, data, skip_constraints=skip_constraints)
+    # Build the engine with NO skip — filtering now happens on the stage atom
+    # lists (apply_solver_stage dispatches engine vs non-engine internally).
+    engine = UnifiedConstraintEngine(model, X, data, skip_constraints=set())
     engine.build_groupings()
 
-    print("\nApplying unified constraints (Phase A + B + C)...")
-    a = engine.apply_phase_a()
-    print(f"  Phase A (hard inter-week): {a} constraints")
-    b = engine.apply_phase_b()
-    print(f"  Phase B (soft inter-week): {b} constraints")
-    c = engine.apply_phase_c()
-    print(f"  Phase C (intra-day): {c} constraints")
-    print(f"  Total: {a + b + c} engine constraints ({len(model.Proto().constraints)} model constraints)")
+    data['constraints_applied'] = []
+    applied_engine_keys: set = set()
+    applied_atoms: set = set()
 
-    data['constraints_applied'] = [
-        {'name': 'UnifiedConstraintEngine', 'stage': 'unified_all'}
-    ]
+    print("\nApplying full constraint set (single solve, all stages applied at once)...")
+    logger.info(f"[spec-036] single-solve: applying {len(stages)} stage(s): "
+                f"{[s['name'] for s in stages]}")
+    for stage in stages:
+        stage_name = stage['name']
+        added, atoms_this_stage = apply_solver_stage(
+            stage,
+            model=model,
+            X=X,
+            data=data,
+            engine=engine,
+            applied_engine_keys=applied_engine_keys,
+            applied_atoms=applied_atoms,
+        )
+        for atom in atoms_this_stage:
+            data['constraints_applied'].append({
+                'name': atom,
+                'stage': stage_name,
+            })
+        print(f"  Stage '{stage_name}': atoms {atoms_this_stage} "
+              f"({added} constraints)")
+        logger.info(f"[spec-036] stage '{stage_name}' applied atoms "
+                    f"{atoms_this_stage} ({added} constraints)")
+
+    print(f"  Total atoms applied: {len(applied_atoms)} "
+          f"({len(model.Proto().constraints)} model constraints)")
 
     # Build objective with normalized penalties
     penalties_dict = data.get('penalties', {})
@@ -1371,19 +1409,22 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
                 constraint_names: list = None, groups_selected: list = None,
                 regen_locked_pairings: list = None,
                 regen_info: dict = None):
-    """Simple (non-staged) main entry point — single solve via the unified engine.
+    """Single-solve main entry point (spec-036 no-flag DEFAULT).
 
-    Phase 7c: the legacy iterate-classes path is gone. ``--simple`` always
-    routes through ``_main_simple_unified`` which uses
-    ``UnifiedConstraintEngine`` (and the registry for non-engine atoms).
-    ``use_unified`` is retained as a no-op flag for CLI back-compat.
+    spec-036 (Unit A): this is the no-mode-flag default path. It routes through
+    ``_main_simple_unified`` which now resolves the full DEFAULT_STAGES list and
+    loops ``apply_solver_stage`` over EVERY stage (apply-only, no per-stage solve),
+    then builds the objective once and runs a SINGLE ``solver.Solve``. The applied
+    constraint set is therefore IDENTICAL to the staged path's for the same
+    ``--groups`` selection (previously the engine-phase path silently omitted ~15
+    production atoms). ``use_unified`` is retained as a no-op param for call-site
+    back-compat (the CLI flag itself was removed in Unit A).
 
-    spec-023 (Unit C): ``constraint_names`` is the resolved deduped union of
-    selected --groups (canonical names), minus --exclude. It is propagated to
-    ``_main_simple_unified`` and applied as a ``UnifiedConstraintEngine.skip_constraints``
-    filter so the ``apply_phase_a/b/c()`` calls apply only the selected WHOLE
-    constraints' engine keys — making --groups select identically in --simple
-    as in --staged. When None, the legacy full engine selection runs unchanged.
+    spec-023: ``constraint_names`` is the resolved deduped union of selected
+    --groups (canonical names), minus --exclude. It is propagated to
+    ``_main_simple_unified`` where each resolved stage's atom list is filtered to
+    this set — making --groups select identically in single-solve as in the
+    staged path. When None, the full DEFAULT_STAGES set is applied unchanged.
     ``groups_selected`` is recorded in metadata.
 
     Args (spec-026 regen, None for a normal run):
@@ -1537,11 +1578,10 @@ def main_simple(locked_keys=None, locked_weeks=None, solver_config=None,
         num_constraints = symmetry_constraint.apply(model, X, data)
         print(f"  Added {num_constraints} symmetry breaking constraints")
 
-    # Phase 7c: --simple now always routes through the unified engine.
-    # The legacy single-solve path (which iterated STAGES / STAGES_AI to
-    # apply legacy classes one-by-one) was removed alongside the legacy
-    # files. `--unified` is now redundant but kept as a no-op for
-    # backwards-compatible CLI invocations.
+    # spec-036: the single-solve path now applies the FULL DEFAULT_STAGES set in
+    # one shot (loop apply_solver_stage over every stage, build objective once,
+    # solve once) — identical applied set to the staged path. See
+    # _main_simple_unified for the stage-resolution + filter + apply loop.
     return _main_simple_unified(model, X, data, solver_config, resource_monitor,
                                  checkpoint_manager, run_dir, logger,
                                  constraint_names=constraint_names)
