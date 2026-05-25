@@ -1,9 +1,9 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- reviewed: adversarial Sonnet review 2026-05-25 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-033 -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-5989004-20260525T083142Z claimed=2026-05-25T08:31:42Z -->
 <!-- note 2026-05-25: prior 'session=slack' owner stamp cleared — orphaned claim, no worktree/branch/claim-commit existed. -->
 
 # spec-036 — Default = single-solve full modern set; remap solve-mode flags; delete legacy alignment path
