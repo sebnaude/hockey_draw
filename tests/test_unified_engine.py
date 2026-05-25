@@ -868,8 +868,9 @@ class TestHardConstraintEnforcement:
 
     def test_club_no_concurrent_slot_prevents_double_ups(self, mini_unified_data):
         """spec-021: double-up prevention moved from ClubGameSpread to the
-        ClubNoConcurrentSlot atom. With no `no_field_slots` configured the cap
-        falls to 1, so no club may have two games in one timeslot."""
+        ClubNoConcurrentSlot atom. spec-033 Unit E: the cap is now a fixed
+        `1 + slack` per (club, week, day, location, slot); with slack unset it is
+        1, so no club may have two games in one timeslot."""
         from constraints.atoms import ClubNoConcurrentSlot
         from constraints.helper_vars import HelperVarRegistry
 
@@ -889,7 +890,7 @@ class TestHardConstraintEnforcement:
         status, solver = solve_with_timeout(model, timeout_seconds=5.0)
         assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL)
 
-        # cap = max(1, ceil(team_count/slots)); slots unset -> cap 1 everywhere.
+        # spec-033 Unit E: cap = 1 + slack = 1 (slack unset) -> no double-ups.
         club_slot = defaultdict(int)
         for key, var in X.items():
             if len(key) >= 11 and solver.Value(var) == 1:

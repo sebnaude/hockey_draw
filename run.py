@@ -838,6 +838,11 @@ def run_generate(args):
             # spec-024: MaximiseClubsPerTimeslotBroadmeadow / MinimiseClubsOnAFieldBroadmeadow
             # slack keys removed — those constraints were deleted.
             'ClubGameSpread': slack_value,
+            # spec-033 Unit E: ClubNoConcurrentSlot is now soft + slack — the
+            # hard ceiling is 1 overlap per (club, location, slot); --slack
+            # raises it to 1 + N (the release valve when a venue has fewer
+            # distinct slots than a club's games).
+            'ClubNoConcurrentSlot': slack_value,
             # spec-008 Part B: bye spacing has its own slack key. Mirror the
             # CLI's --slack N here so a one-shot loosen affects both matchup
             # and bye spacing in step.

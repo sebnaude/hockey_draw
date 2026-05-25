@@ -287,6 +287,7 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 The `--slack` CLI flag loosens specific constraints. Applied to:
 - `EqualMatchUpSpacingConstraint`: reduces min_gap toward floor. Formula: `min_gap = max(min(T//2, T-2), T-2 - spacing_base_slack - slack)`. Config: `spacing_base_slack` in `CONSTRAINT_DEFAULTS` (default 0)
 - `ClubGameSpread`: increases spread limit (upper) AND allows more double-ups (lower). Formula: `gap >= -(max_overlap + slack)` and `gap <= max_gap + slack`
+- `ClubNoConcurrentSlot`: raises the per-slot overlap ceiling. Hard cap `sum(slot_vars) <= 1 + slack` per (club, week, day, location, slot); soft penalty pushes overlaps → 0. slack is the release valve when a venue has fewer distinct slots than a club's games (spec-033 Unit E).
 
 Slack is stored in checkpoint metadata (`constraint_slack` key) and used by `DrawTester`.
 
@@ -391,6 +392,7 @@ data = load_season_data(2026)
 data['constraint_slack'] = {
     'EqualMatchUpSpacingConstraint': 3,
     'ClubGameSpread': 3,
+    'ClubNoConcurrentSlot': 3,
 }
 
 with open('checkpoints/latest/solution.pkl', 'rb') as f:

@@ -886,6 +886,10 @@ PENALTY_WEIGHTS = {
     # bye/spacing. Do not auto-tune. One unit = one concurrent (week, day_slot)
     # appearance of a declared conflict pair.
     'TeamConflict':                       200_000,
+    # spec-033 Unit E: ClubNoConcurrentSlot is now soft + slack. High weight —
+    # a physical clash (a club's parents pulled to two concurrent games). One
+    # unit = one game beyond the first in a (club, week, day, location, slot).
+    'ClubNoConcurrentSlot':               200_000,
     'PreferredTimesConstraint':           200_000,
     # ClubVsClubAlignmentField retained for legacy checkpoint compat; its former
     # superseding tester diagnostic was removed in spec-031.
