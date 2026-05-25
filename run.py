@@ -134,6 +134,12 @@ Examples:
     gen_parser.add_argument('--list-groups', action='store_true',
                             help='Print all known constraint group names (explicit tags + '
                                  'derived severity_N/default) and exit.')
+    gen_parser.add_argument('--no-symmetry-breakers', action='store_true',
+                            help='spec-032: suppress the always-on symmetry-breaker bundle '
+                                 '(NIHCFillWFBeforeEF, NIHCFillEFBeforeSF, SoftLexMatchupOrdering). '
+                                 'By default these tie-breakers are applied in EVERY solve '
+                                 'regardless of --groups; this flag drops them from both the '
+                                 '--groups path and the plain (no --groups) path.')
     gen_parser.add_argument('--regen-from', type=str, metavar='SOURCE',
                             help='Source draw JSON to freeze from (e.g. draws/2026/current.json). '
                                  'Presence of this flag enables regeneration mode: games outside '
@@ -654,21 +660,28 @@ def _resolve_solver_stages(args, season_config):
     return stages
 
 
-def _resolve_group_selection(groups_arg, exclude):
-    """spec-023: resolve a --groups selection to (group_names, constraint_names).
+def _resolve_group_selection(groups_arg, exclude, no_symmetry_breakers=False):
+    """spec-023/spec-032: resolve a --groups selection to (group_names, constraint_names).
 
     `groups_arg` is the raw `--groups` list (or None/empty when not passed);
-    `exclude` is the `--exclude` list. Returns:
+    `exclude` is the `--exclude` list; `no_symmetry_breakers` (spec-032) drops the
+    always-on tie-breaker bundle. Returns:
       - `group_names`: the requested group names, defaulting to ['default'] when
         none were passed (so metadata always records a selection).
       - `constraint_names`: the deduped UNION of those groups' canonical names,
         in canonical (registry insertion) order, MINUS any `--exclude`d name.
 
+    spec-032: the `symmetry_breakers` group (the three NIHCFill/SoftLex
+    tie-breakers) is ALWAYS unioned into the selection — even for `--groups core`,
+    which does not itself contain them — so the tie-breakers shape every solve.
+    `--no-symmetry-breakers` reverses this: it adds the three to the exclude set
+    so they are dropped even from the `default` group (which contains them).
+
     Exits with an error if a requested group name is unknown. This single
     resolution is shared by both dispatch paths so --groups selects identically
     in --simple and --staged.
     """
-    from constraints.registry import resolve_groups, list_group_names
+    from constraints.registry import resolve_group, resolve_groups, list_group_names
     group_names = list(groups_arg) if groups_arg else ['default']
     known = set(list_group_names())
     unknown_groups = [g for g in group_names if g not in known]
@@ -677,7 +690,16 @@ def _resolve_group_selection(groups_arg, exclude):
         print(f"  Known groups: {', '.join(list_group_names())}")
         sys.exit(1)
     exclude_set = set(exclude or [])
-    constraint_names = [c for c in resolve_groups(group_names) if c not in exclude_set]
+    # spec-032: always-on symmetry breakers. When suppressed, exclude the three
+    # (covers groups like `default` that already contain them). Otherwise add the
+    # `symmetry_breakers` group to the union so groups that lack it (e.g. `core`)
+    # still get the tie-breakers, in canonical registry order.
+    selected_groups = list(group_names)
+    if no_symmetry_breakers:
+        exclude_set |= resolve_group('symmetry_breakers')
+    elif 'symmetry_breakers' not in selected_groups:
+        selected_groups = selected_groups + ['symmetry_breakers']
+    constraint_names = [c for c in resolve_groups(selected_groups) if c not in exclude_set]
     return group_names, constraint_names
 
 
@@ -846,7 +868,9 @@ def run_generate(args):
         groups_arg = ['regen']
         print("[*] Regeneration: defaulting to the 'regen' constraint group "
               "(core-hard + regen-soft + soft).")
-    group_names, constraint_names = _resolve_group_selection(groups_arg, exclude)
+    no_symmetry_breakers = getattr(args, 'no_symmetry_breakers', False)
+    group_names, constraint_names = _resolve_group_selection(
+        groups_arg, exclude, no_symmetry_breakers)
     # Asymmetry note (intentional, not a behaviour difference): the simple path
     # always receives the resolved `constraint_names` (default group when no
     # --groups), whereas the staged path receives None when no --groups so it
@@ -857,7 +881,17 @@ def run_generate(args):
     # rather than routing it through the filter for a guaranteed no-op. The
     # equivalence is pinned by test_groups_cli_wiring.py
     # ::test_staged_none_equals_default_group_filter.
-    staged_constraint_filter = constraint_names if groups_arg else None
+    #
+    # spec-032 exception: with --no-symmetry-breakers and NO --groups, we must
+    # FORCE the staged filter non-None to `default`-minus-symmetry. Otherwise the
+    # plain path runs DEFAULT_STAGES untouched (which still contains the three
+    # symmetry atoms), so the flag would silently do nothing on the staged path.
+    # `constraint_names` already excludes the three here, so it is exactly the
+    # default-minus-symmetry filter the staged path needs.
+    if groups_arg or no_symmetry_breakers:
+        staged_constraint_filter = constraint_names
+    else:
+        staged_constraint_filter = None
 
     relax_config = None
     if getattr(args, 'relax', False):

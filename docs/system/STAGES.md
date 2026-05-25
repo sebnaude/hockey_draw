@@ -104,19 +104,46 @@ membership rather than trusting a duplicated table here. The legacy-named groups
 
 | Group name | Intent |
 |---|---|
-| `critical_feasibility` | Hard feasibility prerequisites for any valid draw — no team/field double-booking, every team plays its required games against the right opponents, season-wide PHL/2nd-grade concurrency at Broadmeadow, same-club PHL/2nd back-to-back at one venue or ≥3 h apart across venues, byes spread evenly, repeat-meeting spacing (hard since spec-017, `--slack` relief). spec-021 added `VenueEarliestSlotFill` (games pack into earliest slots — no gaps, earliest start, structurally avoids 7pm) and `ClubNoConcurrentSlot` (a club's games per timeslot/venue capped). Non-negotiable. |
+| `critical_feasibility` | Hard feasibility prerequisites for any valid draw — no team/field double-booking, every team plays its required games against the right opponents, season-wide PHL/2nd-grade concurrency at Broadmeadow, same-club PHL/2nd back-to-back at one venue or ≥3 h apart across venues, byes spread evenly. spec-021 added `VenueEarliestSlotFill` (games pack into earliest slots — no gaps, earliest start, structurally avoids 7pm) and `ClubNoConcurrentSlot` (a club's games per timeslot/venue capped). Non-negotiable. (spec-032: repeat-meeting spacing, `EqualMatchUpSpacing`, was peeled out of `critical_feasibility`/`core` into its own lonesome `spacing` group — see below.) |
 | `home_away_balance` | Home/away fairness for clubs whose home venue is not Broadmeadow — per-pair and per-team aggregate balance, per-club season home-weekend totals. |
 | `club_alignment` | Cross-grade same-club / same-opponent alignment at Broadmeadow — which weekends two clubs' grades stack, and how they co-locate. Order-sensitive: stacking decision before the co-location decision that reads its helpers. |
 | `club_day` | Per-club day-of-week preferences — participation, intra-club matchups, opponent routing, field consistency, slot contiguity. spec-021 moved `ClubGameSpread` here (its hard part was dead in `soft_optimisation`). |
-| `soft_optimisation` | Soft penalties / optimisation only — preferred & avoided dates/weekends, preferred times, multiple clubs per Broadmeadow timeslot without monopolising a field, alphabetical matchup tie-break, NIHC fill order WF→EF→SF (soft symmetry-breaker), per-team-pair no-concurrency requests. |
-| `core` | The deduped union of every constraint a normal full build needs hard+soft (overlaps the four feasibility/balance/alignment/day groups). |
-| `soft` | The soft-optimisation constraints (overlaps `soft_optimisation`). |
-| `default` / `all` / `production` | Every production constraint — the no-`--groups` selection. |
+| `soft_optimisation` | Soft penalties / optimisation only — preferred & avoided dates/weekends, preferred times, multiple clubs per Broadmeadow timeslot without monopolising a field, per-team-pair no-concurrency requests. (spec-032: the alphabetical matchup tie-break and the NIHC WF→EF→SF fill-order symmetry-breakers moved out into the dedicated `symmetry_breakers` group.) |
+| `core` | The deduped union of every constraint a normal full build needs hard+soft (overlaps the feasibility/balance/alignment/day groups). spec-032: no longer includes `EqualMatchUpSpacing` (now in `spacing`). |
+| `soft` | The soft-optimisation constraints (overlaps `soft_optimisation`). spec-032: no longer includes the three symmetry-breakers (now in `symmetry_breakers`). |
+| `spacing` | **spec-032 — explicit, lonesome.** Just `EqualMatchUpSpacing` (repeat-meeting spacing; hard since spec-017, `--slack EqualMatchUpSpacingConstraint N` relief). Peeled out of `core` so the convenor can select or drop it independently. Still in `severity_1` (severity unchanged) and in `default` (via the widened `_is_fresh_build` predicate). |
+| `symmetry_breakers` | **spec-032 — explicit, always-on.** The three objective-shaping tie-breakers `NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`, `SoftLexMatchupOrdering`. The CLI unions this group into **every** solve regardless of `--groups` (so `--groups core` still gets them), unless `--no-symmetry-breakers` is passed. Also reaches `regen` (widened regen predicate) and `default`. |
+| `default` / `all` / `production` | Every production constraint — the no-`--groups` selection. spec-032: still the full set (`core ∪ soft ∪ spacing ∪ symmetry_breakers`); the retag is membership-preserving via the widened `_is_fresh_build` predicate. |
 | `severity_1` … `severity_5` | Derived: constraints at each severity level. |
 
 Season configs may still override the legacy stage list by setting
 `'solver_stages'` in `SEASON_CONFIG` (full replace, no merge) — those names are
 treated as group names.
+
+### Always-on symmetry breakers + `--no-symmetry-breakers` (spec-032)
+
+The `symmetry_breakers` group is a pure objective-shaping bundle (three
+tie-breakers, no feasibility effect), so it should shape **every** solve. Rather
+than rely on it being in whatever `--groups` you picked, `run.py`'s
+`_resolve_group_selection` **always unions `resolve_group('symmetry_breakers')`
+into the selection** — even `--groups core` (which does not itself contain them)
+comes out with the three tie-breakers applied. The metadata `groups_selected` /
+`constraints_applied` reflect them.
+
+`--no-symmetry-breakers` reverses this in **both** dispatch paths:
+
+- **`--groups` path:** the three names are added to the exclude set, so they are
+  dropped even from groups that carry them (e.g. `default`).
+- **Plain (no `--groups`) path:** that path normally runs `DEFAULT_STAGES`
+  untouched (staged filter `None`), and `DEFAULT_STAGES` still contains all three
+  tie-breakers — so suppression must **force** the staged filter non-`None` to
+  `default`-minus-symmetry. `run.py` does this when `--no-symmetry-breakers` is
+  set with no `--groups`. Without the flag, the plain path is byte-for-byte the
+  legacy behaviour (symmetry breakers applied via `DEFAULT_STAGES`).
+
+Note `DEFAULT_STAGES` itself is unchanged — spacing and the symmetry atoms still
+live in it, so a plain solve still applies them; the only lever on the plain path
+is `--no-symmetry-breakers`.
 
 ## Dispatch
 

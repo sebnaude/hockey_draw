@@ -257,6 +257,20 @@ class TestCLIIntegration:
         captured = capsys.readouterr()
         assert 'year' in captured.out.lower()
 
+    def test_generate_help_documents_no_symmetry_breakers(self, capsys):
+        """spec-032: the generate subparser registers --no-symmetry-breakers, so
+        it appears in `generate --help` (proving it parses)."""
+        old_argv = sys.argv
+        try:
+            sys.argv = ['run.py', 'generate', '--help']
+            with pytest.raises(SystemExit):
+                run.main()
+        finally:
+            sys.argv = old_argv
+
+        captured = capsys.readouterr()
+        assert '--no-symmetry-breakers' in captured.out
+
     def test_data_loading_integrates_with_config(self):
         """Test that CLI data loading uses config module."""
         data = run.load_data_for_year(2025)

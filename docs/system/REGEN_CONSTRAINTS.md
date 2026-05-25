@@ -97,19 +97,25 @@ normalised per-bucket by variable count.
 ## The `regen` group definition
 
 ```
-regen = core_hard ∪ regen_soft ∪ soft
+regen = core_hard ∪ regen_soft ∪ soft ∪ symmetry_breakers
 ```
 
 **Predicate (DERIVED_GROUPS in `constraints/registry.py`):** a constraint is in
 `regen` iff its `ConstraintInfo.groups` set intersects
-`{'core_hard', 'regen_soft', 'soft'}`.
+`{'core_hard', 'regen_soft', 'soft', 'symmetry_breakers'}`. (spec-032 widened this
+to include `symmetry_breakers`: the three tie-breakers used to carry `soft` and
+were selected through it; they now carry `symmetry_breakers` only, so the regen
+predicate was widened to keep them in the regen set — regen output is unchanged.)
 
 This resolves to **31 constraints** currently:
 
 - 11 `core_hard` entries (the physical-impossibility set above — stay hard; spec-030 deleted `PHLAnd2ndConcurrencyAtBroadmeadow`, 12→11).
 - 13 `regen_soft` entries (the new penalty atoms — replace the softened hard rules).
-- 7 `soft` entries (the normal soft-optimisation atoms — unchanged, always run in
+- 4 `soft` entries (the normal soft-optimisation atoms — unchanged, always run in
   any sensible solve).
+- 3 `symmetry_breakers` entries (`NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`,
+  `SoftLexMatchupOrdering` — spec-032 moved them out of `soft`; the always-on CLI
+  union applies them in a regen run too, unless `--no-symmetry-breakers`).
 
 The hard rules that `regen` does NOT select (because the regen-soft analogue
 replaces them):

@@ -43,10 +43,12 @@ def _simple_skip_for(constraint_names):
 # ============== --groups resolution ==============
 
 def test_groups_core_selects_only_core_canonical_names():
-    """Given --groups core,
+    """Given --groups core (spec-032: with --no-symmetry-breakers to isolate the
+    pure core selection from the always-on tie-breaker union),
     When resolved,
     Then constraint_names == resolve_group('core') in registry order, no extras."""
-    group_names, constraint_names = run._resolve_group_selection(['core'], [])
+    group_names, constraint_names = run._resolve_group_selection(
+        ['core'], [], no_symmetry_breakers=True)
     assert group_names == ['core']
     # Same membership as resolve_group('core'); ordered = resolve_groups(['core']).
     assert set(constraint_names) == resolve_group('core')
@@ -71,8 +73,9 @@ def test_two_adhoc_groups_yield_deduped_union():
         reg.DERIVED_GROUPS['test-1'] = lambda info, _m=test1_members: (
             CONSTRAINT_REGISTRY_NAME(info) in _m
         )
+        # spec-032: suppress the always-on tie-breakers to isolate dedup mechanics.
         group_names, constraint_names = run._resolve_group_selection(
-            ['test', 'test-1'], []
+            ['test', 'test-1'], [], no_symmetry_breakers=True
         )
         assert group_names == ['test', 'test-1']
         # Deduped union: 3 distinct names, EqualMatchUpSpacing once.
@@ -106,11 +109,89 @@ def test_exclude_subtracts_from_resolved_set():
     """Given --exclude ClubGameSpread --groups core,
     When resolved,
     Then ClubGameSpread is absent and everything else in core remains."""
-    _, base = run._resolve_group_selection(['core'], [])
+    # spec-032: suppress the always-on tie-breakers to isolate exclude mechanics.
+    _, base = run._resolve_group_selection(['core'], [], no_symmetry_breakers=True)
     assert 'ClubGameSpread' in base  # precondition
-    _, constraint_names = run._resolve_group_selection(['core'], ['ClubGameSpread'])
+    _, constraint_names = run._resolve_group_selection(
+        ['core'], ['ClubGameSpread'], no_symmetry_breakers=True)
     assert 'ClubGameSpread' not in constraint_names
     assert set(constraint_names) == resolve_group('core') - {'ClubGameSpread'}
+
+
+# ============== spec-032: always-on symmetry breakers + --no-symmetry-breakers ==============
+
+SYMMETRY_ATOMS = {'NIHCFillWFBeforeEF', 'NIHCFillEFBeforeSF', 'SoftLexMatchupOrdering'}
+
+
+def test_symmetry_breakers_unioned_into_groups_core():
+    """Given --groups core with NO suppression (the default),
+    When resolved,
+    Then the three symmetry breakers are unioned in even though `core` does not
+    itself contain them, AND every core constraint is still present, in canonical
+    registry order. (DoD 6: tie-breakers shape EVERY solve.)"""
+    _, constraint_names = run._resolve_group_selection(['core'], [])
+    names = set(constraint_names)
+    assert SYMMETRY_ATOMS <= names, SYMMETRY_ATOMS - names
+    assert resolve_group('core') <= names
+    # Hand oracle: core (19) + 3 symmetry = 22 distinct, none doubled.
+    assert len(constraint_names) == len(set(constraint_names))
+    assert len(constraint_names) == 22
+    # Canonical (registry) order preserved across the union.
+    index = {n: i for i, n in enumerate(CONSTRAINT_REGISTRY)}
+    idxs = [index[n] for n in constraint_names]
+    assert idxs == sorted(idxs)
+
+
+def test_no_symmetry_breakers_drops_them_from_groups_path():
+    """Given --groups core --no-symmetry-breakers,
+    When resolved,
+    Then NONE of the three tie-breakers appear, and the selection is exactly
+    `core` (19). (DoD 7: --groups-path suppression.)"""
+    _, constraint_names = run._resolve_group_selection(
+        ['core'], [], no_symmetry_breakers=True)
+    assert not (SYMMETRY_ATOMS & set(constraint_names))
+    assert set(constraint_names) == resolve_group('core')
+    assert len(constraint_names) == 19
+
+
+def test_no_symmetry_breakers_drops_them_from_default_group():
+    """Given NO --groups (the `default` group, which DOES contain the three
+    tie-breakers) plus --no-symmetry-breakers,
+    When resolved,
+    Then the three are excluded even though `default` carries them — proving the
+    suppression excludes, not merely 'declines to add'. (DoD 7.)"""
+    _, default_with = run._resolve_group_selection(None, [])
+    assert SYMMETRY_ATOMS <= set(default_with)  # default carries them by default
+    _, default_without = run._resolve_group_selection(None, [], no_symmetry_breakers=True)
+    assert not (SYMMETRY_ATOMS & set(default_without))
+    # Hand oracle: default (27) minus the 3 tie-breakers = 24.
+    assert len(default_without) == 24
+    assert set(default_without) == resolve_group('default') - SYMMETRY_ATOMS
+
+
+def test_no_symmetry_breakers_forces_plain_path_staged_filter():
+    """Given the plain (no --groups) path with --no-symmetry-breakers,
+    When DEFAULT_STAGES is filtered to the resolved (default-minus-symmetry) set —
+    the exact filter run_generate forces non-None in this case,
+    Then the three tie-breakers are dropped from the applied stage atoms, whereas
+    the unsuppressed plain path (legacy None filter) keeps them via DEFAULT_STAGES.
+    (DoD 7: plain-path suppression must force a non-None filter.)"""
+    from constraints.stages import load_solver_stages
+
+    base = load_solver_stages({})
+    all_default_stage_atoms = {a for s in base for a in s.get('atoms', [])}
+    # Precondition: DEFAULT_STAGES itself still contains all three tie-breakers,
+    # so the legacy None plain path (no flag) applies them.
+    assert SYMMETRY_ATOMS <= all_default_stage_atoms
+
+    # The filter run_generate forces when no --groups + --no-symmetry-breakers:
+    _, suppressed = run._resolve_group_selection(None, [], no_symmetry_breakers=True)
+    keep = set(suppressed)
+    applied = {a for s in base for a in s.get('atoms', []) if a in keep}
+    # The three tie-breakers are filtered out; everything else in DEFAULT_STAGES
+    # that is also in the default group survives.
+    assert not (SYMMETRY_ATOMS & applied)
+    assert (all_default_stage_atoms - SYMMETRY_ATOMS) <= applied
 
 
 def test_unknown_group_name_exits():

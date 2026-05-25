@@ -237,10 +237,22 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 - `--groups NAME...` is the selector (deduped union, minus `--exclude`). No
   `--groups` flag selects the `default` group (every production constraint),
   identical to the legacy full build. Group names include `core`, `soft`,
-  `severity_1`..`severity_5`, `default`/`all`/`production`, and the legacy stage
+  `spacing`, `symmetry_breakers`, `severity_1`..`severity_5`,
+  `default`/`all`/`production`, and the legacy stage
   names (`critical_feasibility`, `home_away_balance`, `club_alignment`,
   `club_day`, `soft_optimisation`) which keep `--stage-only`/`--skip-stage`
   working — they overlap freely now.
+- **spec-032 — three-group cleanup + always-on tie-breakers.** `EqualMatchUpSpacing`
+  was peeled out of `core` into its own lonesome **`spacing`** group (select/drop
+  it independently of core; it stays in `severity_1` and `default`, and
+  `--slack EqualMatchUpSpacingConstraint N` still works). The three objective-shaping
+  tie-breakers (`NIHCFillWFBeforeEF`, `NIHCFillEFBeforeSF`, `SoftLexMatchupOrdering`)
+  moved out of `soft` into **`symmetry_breakers`**, which the CLI unions into
+  **every** solve regardless of `--groups` (so `--groups core` still gets them).
+  Pass **`--no-symmetry-breakers`** to drop them — it suppresses on both the
+  `--groups` path and the plain no-`--groups` path. `DEFAULT_STAGES` is unchanged,
+  so a plain solve still applies spacing + the tie-breakers unless that flag is set.
+  The four atoms still reach `default` via the widened `_is_fresh_build` predicate.
 - `--slack` is orthogonal: it loosens *within* a constraint and is unaffected by
   group selection.
 - Severity levels below are still real (`severity_N` groups resolve over
@@ -436,6 +448,10 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 # constraint). Works on both --simple and --staged. --list-groups to enumerate.
 .\.venv\Scripts\python.exe run.py generate --year 2026 --groups core soft
 .\.venv\Scripts\python.exe run.py generate --year 2026 --groups core --exclude ClubGameSpread
+
+# spec-032: symmetry breakers (NIHC fill order + lexicographical matchup ordering)
+# are applied in EVERY solve by default. Drop them with --no-symmetry-breakers.
+.\.venv\Scripts\python.exe run.py generate --year 2026 --no-symmetry-breakers
 
 # Generate with slack (loosens constraints)
 .\.venv\Scripts\python.exe run.py generate --year 2026 --simple --slack 3
