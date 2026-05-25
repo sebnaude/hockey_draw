@@ -1,10 +1,17 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- reviewed: adversarial Sonnet review 2026-05-25 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-033 -->
 <!-- owner: session=opus-5989004-20260525T083142Z claimed=2026-05-25T08:31:42Z -->
 <!-- note 2026-05-25: prior 'session=slack' owner stamp cleared — orphaned claim, no worktree/branch/claim-commit existed. -->
+<!-- done: 2026-05-25 — all 3 units merged into final-form + /adversarial Mode B verified.
+     Unit A f4205a9 (single-solve default + flag remap) + severity-ordering fix 1c87d62 + baseline ed35167;
+     Unit B 6cbbdf0/312bdf0 (deleted legacy _club_alignment_* engine path, superseded by spec-005 stacked cluster; registry 49 unchanged);
+     Unit C 3323270/f353c3f/e378d8f (docs + skill + CLI-test cleanup to the three-mode model).
+     Discovered+fixed in-flight (S1): severity_solver_stages() ordered atoms alphabetically, crashing --severity on the stacked pair — now ordered by canonical_index.
+     Post-merge: no-flag single solve applies the full 5-stage/15-atom set + enters solver; --severity dispatches clean (severity_3 stacked pair applies, no RuntimeError); 252 passed/1 skipped across changed areas.
+     Convenor note: the no-flag default now applies the COMPLETE modern set and is INFEASIBLE at slack 0 on the 2026 production config (forced games + spec-033 hard caps) — same documented state as spec-033; slack is the release; the forced-free real solve is spec-035. --> 
 
 # spec-036 — Default = single-solve full modern set; remap solve-mode flags; delete legacy alignment path
 
