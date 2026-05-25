@@ -121,7 +121,11 @@ CONSTRAINT_DEFAULTS = {
     'spacing_base_slack': 0,
     # spec-008 Part B: bye-spacing base slack (own knob, separate from
     # matchup `spacing_base_slack`). Loosens the per-team bye spread.
-    'bye_spacing_base_slack': 0,
+    # spec-033 Unit B: 0 -> 2 — the raw ideal_bye_gap hard floor risks
+    # infeasibility ("if we hard-floor the ideal we will not get a draw").
+    # The hard floor is now S = max(0, ideal_bye_gap(R,b) - 2 - config_slack),
+    # sitting 2 rounds below the raw ideal; the soft term pushes toward ideal.
+    'bye_spacing_base_slack': 2,
     # Friday-night game counts
     'max_friday_broadmeadow': 3,
     'gosford_friday_games': 8,

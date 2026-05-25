@@ -322,7 +322,7 @@ Two HARD spacing atoms each own an independent slack channel:
 | Slack key (used in `constraint_slack` and `--slack N`) | Atom | Default base slack (in `CONSTRAINT_DEFAULTS`) | Effect |
 |---|---|---|---|
 | `EqualMatchUpSpacingConstraint` | `EqualMatchUpSpacing` (legacy class name preserved) | `spacing_base_slack` (default 0) | Each unit reduces S (the "free rounds between meetings" threshold) by 1, clamped at 0. |
-| `BalancedByeSpacing` | `BalancedByeSpacing` (spec-008 Part B atom) | `bye_spacing_base_slack` (default 0) | Each unit reduces S for the bye-rounds threshold by 1, clamped at 0. |
+| `BalancedByeSpacing` | `BalancedByeSpacing` (spec-008 Part B atom) | `bye_spacing_base_slack` (default 2) | Each unit reduces S for the bye-rounds threshold by 1, clamped at 0. spec-033 Unit B raised the base 0→2 (the raw `ideal_bye_gap` floor risked infeasibility) and added a normal-mode soft push (`PENALTY_WEIGHTS['BalancedByeSpacing']`) toward even bye spread. |
 
 The CLI `--slack N` flag (see `run.py::run_generate`) writes `N` into both keys
 (and into every other slack-aware constraint's key). Set just one of them in

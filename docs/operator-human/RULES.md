@@ -211,17 +211,25 @@ gets three byes in a row early then has to play every round after.
 
 **Enforcement:** For each team in each grade, the rounds in which the team
 doesn't play must sit at least `S` rounds apart, where
-`S = ideal_bye_gap(R, byes) = max(0, R // byes - 1)`. E.g. a 20-round
-season with 2 byes per team forces those byes at least 9 rounds apart.
+`S = max(0, ideal_bye_gap(R, byes) - bye_spacing_base_slack - config_slack)`
+and `ideal_bye_gap(R, byes) = max(0, R // byes - 1)`. E.g. a 20-round
+season with 2 byes per team has a raw ideal of 9 rounds apart, but with the
+default `bye_spacing_base_slack = 2` (spec-033) the enforced hard floor is
+`max(0, 9 - 2 - 0) = 7` rounds apart — the floor sits 2 below the ideal so
+the draw stays feasible, while a SOFT penalty (spec-033) still pushes byes
+toward the 9-round ideal spread.
 
 **Slack:** Use `--slack N` from the CLI to loosen by `N` rounds, or set a
-permanent default via `CONSTRAINT_DEFAULTS['bye_spacing_base_slack']`.
-The slack key `BalancedByeSpacing` is independent of matchup spacing —
-you can loosen one without touching the other.
+permanent default via `CONSTRAINT_DEFAULTS['bye_spacing_base_slack']`
+(default 2; spec-033 raised it from 0 because hard-flooring the raw ideal
+risked an unsolvable draw). The slack key `BalancedByeSpacing` is
+independent of matchup spacing — you can loosen one without touching the
+other.
 
 **Rationale:** Convenor request — byes are part of the schedule too;
 spreading them prevents stretches of "play every weekend" or "bye every
-weekend" pile-ups.
+weekend" pile-ups. spec-033 added the soft push toward the ideal and the
+base slack 2 so the hard floor never forces an infeasible draw.
 
 ---
 

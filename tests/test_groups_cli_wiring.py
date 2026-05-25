@@ -133,9 +133,10 @@ def test_symmetry_breakers_unioned_into_groups_core():
     names = set(constraint_names)
     assert SYMMETRY_ATOMS <= names, SYMMETRY_ATOMS - names
     assert resolve_group('core') <= names
-    # Hand oracle: core (19) + 3 symmetry = 22 distinct, none doubled.
+    # Hand oracle: core (18 after spec-033 Unit B peeled BalancedByeSpacing ->
+    # bye_spacing) + 3 symmetry = 21 distinct, none doubled.
     assert len(constraint_names) == len(set(constraint_names))
-    assert len(constraint_names) == 22
+    assert len(constraint_names) == 21
     # Canonical (registry) order preserved across the union.
     index = {n: i for i, n in enumerate(CONSTRAINT_REGISTRY)}
     idxs = [index[n] for n in constraint_names]
@@ -146,12 +147,13 @@ def test_no_symmetry_breakers_drops_them_from_groups_path():
     """Given --groups core --no-symmetry-breakers,
     When resolved,
     Then NONE of the three tie-breakers appear, and the selection is exactly
-    `core` (19). (DoD 7: --groups-path suppression.)"""
+    `core` (18 after spec-033 Unit B peeled BalancedByeSpacing -> bye_spacing).
+    (DoD 7: --groups-path suppression.)"""
     _, constraint_names = run._resolve_group_selection(
         ['core'], [], no_symmetry_breakers=True)
     assert not (SYMMETRY_ATOMS & set(constraint_names))
     assert set(constraint_names) == resolve_group('core')
-    assert len(constraint_names) == 19
+    assert len(constraint_names) == 18
 
 
 def test_no_symmetry_breakers_drops_them_from_default_group():

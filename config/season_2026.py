@@ -785,6 +785,9 @@ GRADE_SCHEDULING_METHOD = {
 
 CONSTRAINT_DEFAULTS = {
     'spacing_base_slack': 2,               # EqualMatchUpSpacing: additional base slack (0 = start at ideal)
+    # spec-033 Unit B: bye-spacing base slack 0 -> 2. Hard floor sits 2 rounds
+    # below the raw ideal_bye_gap (avoids infeasibility); soft term pushes to ideal.
+    'bye_spacing_base_slack': 2,           # BalancedByeSpacing: base slack below ideal_bye_gap
     # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs removed
     # (venue-sequencing rules deleted).
     # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.
@@ -874,6 +877,9 @@ PENALTY_WEIGHTS = {
     'ClubVsClubAlignment':                 50_000,
     'EqualMatchUpSpacing':                100_000,
     'ClubGameSpread':                     100_000,
+    # spec-033 Unit B: normal-mode bye-spacing soft push, parity with the
+    # other spacing soft weights. One unit = one closer-than-ideal bye pair.
+    'BalancedByeSpacing':                 100_000,
     'PreferredTimesConstraint':           200_000,
     # ClubVsClubAlignmentField retained for legacy checkpoint compat; its former
     # superseding tester diagnostic was removed in spec-031.
