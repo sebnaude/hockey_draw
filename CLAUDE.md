@@ -237,7 +237,7 @@ selected groups** in one canonical (registry-insertion) order. Key points:
 - `--groups NAME...` is the selector (deduped union, minus `--exclude`). No
   `--groups` flag selects the `default` group (every production constraint),
   identical to the legacy full build. Group names include `core`, `soft`,
-  `spacing`, `symmetry_breakers`, `severity_1`..`severity_5`,
+  `spacing`, `symmetry_breakers`, `bye_spacing`, `severity_1`..`severity_5`,
   `default`/`all`/`production`, and the legacy stage
   names (`critical_feasibility`, `home_away_balance`, `club_alignment`,
   `club_day`, `soft_optimisation`) which keep `--stage-only`/`--skip-stage`
@@ -253,6 +253,14 @@ selected groups** in one canonical (registry-insertion) order. Key points:
   `--groups` path and the plain no-`--groups` path. `DEFAULT_STAGES` is unchanged,
   so a plain solve still applies spacing + the tie-breakers unless that flag is set.
   The four atoms still reach `default` via the widened `_is_fresh_build` predicate.
+- **spec-033 Unit B — bye-spacing soft + own group.** `BalancedByeSpacing` was peeled
+  out of `core`/`critical_feasibility` into its own lonesome **`bye_spacing`** group
+  (mirrors EqualMatchUpSpacing→`spacing`); `_is_fresh_build` was further widened to
+  include `bye_spacing` so it still reaches `default`/`all`/`production`. It also
+  gained a normal-mode SOFT push toward even bye spread (`PENALTY_WEIGHTS['BalancedByeSpacing']`)
+  and its base slack rose 0→2 (the raw `ideal_bye_gap` hard floor risked infeasibility).
+  `severity_level=2` and `slack_key='BalancedByeSpacing'` unchanged; NOT in `regen`
+  (its `BalancedByeSpacingRegenSoft` sibling covers regen).
 - `--slack` is orthogonal: it loosens *within* a constraint and is unaffected by
   group selection.
 - Severity levels below are still real (`severity_N` groups resolve over

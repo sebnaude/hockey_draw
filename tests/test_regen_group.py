@@ -180,11 +180,14 @@ def test_default_group_excludes_core_hard_only_and_regen_soft():
     for name in ('TeamConflict', 'ForcedGames', 'BlockedGames', 'LockedPairings'):
         assert name not in default, f"{name} must not be in the fresh-build default group"
     # default is still exactly the fresh-build set. spec-032 widened
-    # _is_fresh_build to {core, soft, spacing, symmetry_breakers}, so the union
-    # must include all four dimensions (membership unchanged — still 27 atoms).
+    # _is_fresh_build to {core, soft, spacing, symmetry_breakers}; spec-033
+    # Unit B appended `bye_spacing` (BalancedByeSpacing peeled core->bye_spacing),
+    # so the union must include all five dimensions (membership unchanged — still
+    # 27 atoms; the tag moved, not the count).
     assert default == (
         resolve_group('core') | resolve_group('soft')
         | resolve_group('spacing') | resolve_group('symmetry_breakers')
+        | resolve_group('bye_spacing')
     )
 
 

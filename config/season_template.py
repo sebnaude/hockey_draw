@@ -219,6 +219,10 @@ SEASON_CONFIG = {
     # Base limits for slack-aware constraints (see CONSTRAINT_DEFAULTS in season_2026.py for docs)
     'constraint_defaults': {
         'spacing_base_slack': 0,
+        # spec-033 Unit B: bye-spacing base slack. Default 2 keeps the hard
+        # floor 2 rounds below the raw ideal_bye_gap (avoids infeasibility);
+        # the soft term pushes byes toward the ideal spread.
+        'bye_spacing_base_slack': 2,
         # spec-018: maitland_max_consecutive_home / away_maitland_max_clubs
         # removed — the venue-sequencing rules that read them were deleted.
         # spec-024: max_clubs_per_field removed with MinimiseClubsOnAFieldBroadmeadow.

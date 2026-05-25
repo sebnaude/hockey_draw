@@ -32,10 +32,14 @@ from constraints.registry import (
 #    breakers peeled soft->{symmetry_breakers}. core 20->19, soft 7->4, so the
 #    core∪soft union drops from 27 to 23. The four atoms still reach `default`
 #    via the widened _is_fresh_build predicate, but are NOT in core or soft.)
+#   (spec-033 Unit B: BalancedByeSpacing peeled core->{bye_spacing}. core
+#    19->18, so the core∪soft union drops from 23 to 22. It still reaches
+#    `default` via the further-widened _is_fresh_build predicate, but is NOT
+#    in core or soft.)
 #   critical_feasibility (core): NoDoubleBookingTeams, NoDoubleBookingFields,
 #       EqualGamesAndBalanceMatchUps, PHLAnd2ndAdjacency,
 #       PHLConcurrencyAtBroadmeadow,
-#       BalancedByeSpacing, SameGradeSameClubNoConcurrency,
+#       SameGradeSameClubNoConcurrency,
 #       ClubNoConcurrentSlot, VenueEarliestSlotFill
 #   home_away_balance (core): AwayClubHomeWeekendsCount,
 #       AwayClubPerOpponentAndAggregateHomeBalance
@@ -55,7 +59,6 @@ ORACLE_CORE_PLUS_SOFT: List[str] = [
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'PHLAnd2ndAdjacency',
     'PHLConcurrencyAtBroadmeadow',
-    'BalancedByeSpacing',
     'ClubDayParticipation',
     'ClubDayIntraClubMatchup',
     'ClubDayOpponentMatchup',
@@ -83,9 +86,10 @@ def test_resolve_groups_core_soft_equals_hand_oracle():
     assert result == ORACLE_CORE_PLUS_SOFT
     # No duplicates.
     assert len(result) == len(set(result))
-    # 19 core + 4 soft = 23 (spec-032: was 27 before peeling EqualMatchUpSpacing
-    # to {spacing} and the three symmetry breakers to {symmetry_breakers}).
-    assert len(result) == 23
+    # 18 core + 4 soft = 22 (spec-032 peeled EqualMatchUpSpacing -> {spacing}
+    # and three symmetry breakers -> {symmetry_breakers}: 27->23; spec-033
+    # Unit B peeled BalancedByeSpacing -> {bye_spacing}: 23->22).
+    assert len(result) == 22
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +101,9 @@ ORACLE_SYMMETRY_BREAKERS = {
     'SoftLexMatchupOrdering',
 }
 
-# core after spec-030 (removed PHLAnd2ndConcurrencyAtBroadmeadow) and spec-032
-# (removed EqualMatchUpSpacing -> {spacing}): 19 members, hand-listed.
+# core after spec-030 (removed PHLAnd2ndConcurrencyAtBroadmeadow), spec-032
+# (removed EqualMatchUpSpacing -> {spacing}) and spec-033 Unit B (removed
+# BalancedByeSpacing -> {bye_spacing}): 18 members, hand-listed.
 ORACLE_CORE_AFTER_RETAG = {
     'NoDoubleBookingTeams',
     'NoDoubleBookingFields',
@@ -107,7 +112,6 @@ ORACLE_CORE_AFTER_RETAG = {
     'AwayClubPerOpponentAndAggregateHomeBalance',
     'PHLAnd2ndAdjacency',
     'PHLConcurrencyAtBroadmeadow',
-    'BalancedByeSpacing',
     'ClubDayParticipation',
     'ClubDayIntraClubMatchup',
     'ClubDayOpponentMatchup',
@@ -142,13 +146,29 @@ def test_resolve_group_spacing():
     assert 'EqualMatchUpSpacing' in resolve_group('severity_1')
 
 
+def test_resolve_group_bye_spacing():
+    """Given the spec-033 Unit B retag,
+    When resolve_group('bye_spacing') is called,
+    Then it equals exactly {'BalancedByeSpacing'}, which is no longer in `core`,
+    but is still selected by the derived `default`/`production` builds (via the
+    widened _is_fresh_build) and the derived `severity_2` group (sev unchanged)."""
+    assert resolve_group('bye_spacing') == {'BalancedByeSpacing'}
+    assert 'BalancedByeSpacing' not in resolve_group('core')
+    assert 'BalancedByeSpacing' in resolve_group('default')
+    assert 'BalancedByeSpacing' in resolve_group('production')
+    assert 'BalancedByeSpacing' in resolve_group('severity_2')
+    # NOT in regen — its RegenSoft analogue covers the regen path.
+    assert 'BalancedByeSpacing' not in resolve_group('regen')
+
+
 def test_core_after_retag_equals_hand_oracle():
     """Given the spec-032 retag,
     When resolve_group('core') is called,
-    Then it equals the hand-listed 19-member post-retag core set
-    (no EqualMatchUpSpacing, no PHLAnd2ndConcurrencyAtBroadmeadow)."""
+    Then it equals the hand-listed 18-member post-retag core set
+    (no EqualMatchUpSpacing, no PHLAnd2ndConcurrencyAtBroadmeadow,
+    no BalancedByeSpacing)."""
     assert resolve_group('core') == ORACLE_CORE_AFTER_RETAG
-    assert len(ORACLE_CORE_AFTER_RETAG) == 19
+    assert len(ORACLE_CORE_AFTER_RETAG) == 18
 
 
 def test_overlapping_groups_yield_one_copy_each():
@@ -208,29 +228,31 @@ def test_default_group_is_every_production_constraint():
     """Given the derived 'default'/'all'/'production' groups,
     When resolved,
     Then each equals every FRESH-SEASON-BUILD constraint
-    = exactly core ∪ soft ∪ spacing ∪ symmetry_breakers.
+    = exactly core ∪ soft ∪ spacing ∪ symmetry_breakers ∪ bye_spacing.
 
     spec-027 changed default/all/production from `bool(info.groups)` to
     `core ∪ soft`, keeping the `core_hard`-only freeze pins + TeamConflict and the
     `regen_soft` atoms OUT of a fresh build. spec-032 then widened the predicate
     to also include `spacing` and `symmetry_breakers`, because EqualMatchUpSpacing
-    moved core->spacing and the three symmetry breakers moved soft->symmetry_breakers
-    — without the widening they would silently drop from a fresh build. The
-    membership is unchanged from before the retag (still 27 atoms); only the tag
-    routing moved."""
+    moved core->spacing and the three symmetry breakers moved soft->symmetry_breakers.
+    spec-033 Unit B widened it again to include `bye_spacing`, because
+    BalancedByeSpacing moved core->bye_spacing — without each widening they would
+    silently drop from a fresh build. The membership is unchanged from before any
+    retag (still 27 atoms); only the tag routing moved."""
     production = {
         name for name, info in CONSTRAINT_REGISTRY.items()
-        if {'core', 'soft', 'spacing', 'symmetry_breakers'} & info.groups
+        if {'core', 'soft', 'spacing', 'symmetry_breakers', 'bye_spacing'} & info.groups
     }
     assert resolve_group('default') == production
     assert resolve_group('all') == production
     assert resolve_group('production') == production
-    # And it is exactly core ∪ soft ∪ spacing ∪ symmetry_breakers.
+    # And it is exactly core ∪ soft ∪ spacing ∪ symmetry_breakers ∪ bye_spacing.
     assert production == (
         resolve_group('core') | resolve_group('soft')
         | resolve_group('spacing') | resolve_group('symmetry_breakers')
+        | resolve_group('bye_spacing')
     )
-    # spec-032: the retag is membership-preserving — still 27 fresh-build atoms.
+    # spec-032/033: the retags are membership-preserving — still 27 fresh-build atoms.
     assert len(production) == 27
 
 
@@ -242,7 +264,7 @@ def test_list_group_names_includes_explicit_and_derived():
     assert len(names) == len(set(names))
     for explicit in ('core', 'soft', 'critical_feasibility', 'club_day',
                      'home_away_balance', 'club_alignment', 'soft_optimisation',
-                     'spacing', 'symmetry_breakers'):
+                     'spacing', 'symmetry_breakers', 'bye_spacing'):
         assert explicit in names
     for derived in ('severity_1', 'severity_5', 'default', 'all', 'production'):
         assert derived in names

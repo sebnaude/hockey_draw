@@ -48,6 +48,28 @@ Returns 0 (no constraints added) when:
 - A grade has byes_per_team <= 1 (no pairwise check possible).
 - All byes are zero (every team plays every round → ideal_bye_gap=0).
 - Slack zeroes S for every grade.
+
+Normal-mode soft analogue (spec-033 Unit B):
+- The hard floor above forbids bye pairs with gap <= S. Because S now
+  sits ``bye_spacing_base_slack`` (=2 for 2026) rounds *below* the raw
+  ideal ``S_base = ideal_bye_gap(R, byes)``, the hard rule tolerates bye
+  pairs in the band ``(S, S_base]`` — closer than ideal but not forbidden.
+- This atom adds a SOFT penalty pushing those tolerated-but-suboptimal
+  pairs toward the ideal: for every (r1, r2) with ``S < gap <= S_base``
+  it emits a penalty BoolVar ``p`` that fires iff BOTH rounds are byes,
+  using the same three-inequality channelling the regen-soft sibling uses
+  (``p >= B_r1 + B_r2 - 1``, ``p <= B_r1``, ``p <= B_r2``). Each firing =
+  one closer-than-ideal bye pair for that team.
+- It REUSES the very same per-round ``bye_var`` indicators the hard clause
+  builds (no second variable family) and appends to the bucket keyed
+  exactly ``'BalancedByeSpacing'`` (NOT the regen atom's
+  ``'regen_balanced_bye_spacing'``). The weight is read via the direct-dict
+  pattern ``data.get('penalty_weights', {}).get('BalancedByeSpacing', …)``.
+- The soft term adds ONLY sub-threshold pressure on gaps the hard floor
+  already permits — it NEVER relaxes the hard floor ``S``. When
+  ``S >= S_base`` (impossible while base_slack/config_slack are >= 0, since
+  S = max(0, S_base - base - cfg) <= S_base) the soft band is empty and no
+  penalties are emitted.
 """
 from __future__ import annotations
 
@@ -56,6 +78,13 @@ from typing import Dict, List, Tuple
 
 from constraints.atoms.base import Atom
 from constraints.atoms._spacing import ideal_bye_gap
+
+
+# Default normal-mode soft penalty weight for BalancedByeSpacing.
+# Parity with the EqualMatchUpSpacing / ClubGameSpread soft weights
+# (100_000) — set in config PENALTY_WEIGHTS; this is the fallback when the
+# config key is absent.
+BALANCED_BYE_SPACING_DEFAULT_WEIGHT = 100_000
 
 
 class BalancedByeSpacing(Atom):
@@ -75,6 +104,19 @@ class BalancedByeSpacing(Atom):
         base_slack = int(defaults.get('bye_spacing_base_slack', 0) or 0)
 
         locked_weeks = set(data.get('locked_weeks', set()))
+
+        # Normal-mode soft analogue (spec-033 Unit B). Weight read via the
+        # direct-dict pattern atoms use (NOT the engine-only _get_penalty_weight).
+        # weight==0 disables the soft term entirely (the hard clause is unaffected).
+        soft_weight = data.get('penalty_weights', {}).get(
+            'BalancedByeSpacing', BALANCED_BYE_SPACING_DEFAULT_WEIGHT
+        )
+        soft_bucket = None
+        if soft_weight:
+            soft_bucket = data.setdefault('penalties', {}).setdefault(
+                'BalancedByeSpacing',
+                {'weight': soft_weight, 'penalties': []},
+            )
 
         # Per-team list of (round_no, var) for non-dummy real games.
         per_team_round_vars: Dict[Tuple[str, str], Dict[int, List]] = defaultdict(
@@ -121,7 +163,15 @@ class BalancedByeSpacing(Atom):
                 continue
             S_base = ideal_bye_gap(R, byes_per_team)
             S = max(0, S_base - base_slack - config_slack)
-            if S <= 0:
+            # The soft band is the gap range the hard floor TOLERATES but
+            # the ideal does not: (S, S_base]. Penalising it pushes byes
+            # toward the ideal spread without relaxing the hard floor.
+            # When S >= S_base the band is empty (no soft penalties).
+            soft_active = soft_bucket is not None and S_base > S
+            # Pairwise iteration must reach the largest enforced gap, which
+            # is max(S, S_base when the soft band is active).
+            max_gap = S_base if soft_active else S
+            if S <= 0 and not soft_active:
                 continue
 
             # For each team in this grade build per-round bye indicators
@@ -150,19 +200,36 @@ class BalancedByeSpacing(Atom):
                         model.Add(bv + sum(vars_in_round) == 1)
                         bye_var[r] = bv
 
-                # Pairwise check on the bye-rounds.
+                # Pairwise check on the bye-rounds. The hard clause covers
+                # gap <= S; the soft band covers S < gap <= S_base.
                 for i, r1 in enumerate(rounds_sorted):
                     locked1 = r1 in locked_weeks
                     for r2 in rounds_sorted[i + 1:]:
                         gap = r2 - r1
-                        if gap > S:
+                        if gap > max_gap:
                             break
                         locked2 = r2 in locked_weeks
                         if locked1 and locked2:
                             # Both fixed by the locked draw — nothing to enforce.
                             continue
-                        model.Add(bye_var[r1] + bye_var[r2] <= 1)
-                        n_constraints += 1
+                        if gap <= S:
+                            # HARD: forbid both being byes within the floor.
+                            model.Add(bye_var[r1] + bye_var[r2] <= 1)
+                            n_constraints += 1
+                        elif soft_active:
+                            # SOFT band (S < gap <= S_base): penalise (not
+                            # forbid) byes that are closer than ideal. Same
+                            # channelling the regen-soft sibling uses, but the
+                            # normal-mode bucket key and the SAME bye_var
+                            # indicators built above (no second var family).
+                            #   p == 1  iff  bye_var[r1] == 1 AND bye_var[r2] == 1
+                            p = model.NewBoolVar(
+                                f'u_bye_soft_pen_{team_name}_{grade_name}_r{r1}_r{r2}'
+                            )
+                            model.Add(p >= bye_var[r1] + bye_var[r2] - 1)
+                            model.Add(p <= bye_var[r1])
+                            model.Add(p <= bye_var[r2])
+                            soft_bucket['penalties'].append(p)
         return n_constraints
 
     @staticmethod

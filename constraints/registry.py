@@ -178,6 +178,13 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
     # across the season using the same `_spacing.ideal_bye_gap` math as
     # repeat matchups. HARD severity 2; separate slack key
     # `BalancedByeSpacing` so the convenor can loosen one without the other.
+    # spec-033 Unit B: now carries a normal-mode soft analogue (push toward
+    # even spread) — `has_soft_component=True`. Bye spacing is a distinct
+    # concern from matchup spacing, so it lives in its own lonesome
+    # `bye_spacing` group (peeled out of `core`, mirroring how spec-032 peeled
+    # EqualMatchUpSpacing into `spacing`). severity_level=1? No — stays 2; and
+    # slack_key is unchanged. Reaches `default` via the widened _is_fresh_build.
+    # NOT in `regen` (its RegenSoft analogue covers the regen path).
     'BalancedByeSpacing': ConstraintInfo(
         canonical_name='BalancedByeSpacing',
         solver_class_names=['BalancedByeSpacing'],
@@ -185,7 +192,8 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_violation_names=['BalancedByeSpacing'],
         severity_level=2,
         slack_key='BalancedByeSpacing',
-        groups=frozenset({'core', 'critical_feasibility'}),
+        has_soft_component=True,
+        groups=frozenset({'bye_spacing'}),
     ),
     'ClubDay': ConstraintInfo(
         canonical_name='ClubDay',
@@ -896,8 +904,13 @@ def _is_fresh_build(info: 'ConstraintInfo') -> bool:
     # lonesome `spacing` group, and the three symmetry breakers from `soft` into
     # `symmetry_breakers`; without this widening all four would silently drop out
     # of default/all/production. The result set is byte-identical to before the
-    # retag (same 27 fresh-build atoms) — the tags moved, the membership did not.
-    return bool(info.groups & {'core', 'soft', 'spacing', 'symmetry_breakers'})
+    # retag — the tags moved, the membership did not.
+    # spec-033 Unit B: APPEND `bye_spacing` (NOT overwrite the post-032 set).
+    # BalancedByeSpacing was peeled from `core` into its lonesome `bye_spacing`
+    # group; without this widening it would silently drop out of
+    # default/all/production (the exact trap spec-032's review caught for
+    # `spacing`). Membership stays identical to before the retag — the tag moved.
+    return bool(info.groups & {'core', 'soft', 'spacing', 'symmetry_breakers', 'bye_spacing'})
 
 
 DERIVED_GROUPS: Dict[str, Callable[[ConstraintInfo], bool]] = {
