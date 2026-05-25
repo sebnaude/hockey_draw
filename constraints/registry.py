@@ -342,7 +342,11 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_club_vs_club_alignment'],
         tester_violation_names=['ClubVsClubAlignment'],
         severity_level=3,
-        slack_key='ClubVsClubAlignment',
+        # spec-033 Unit A: slack_key removed. ClubVsClubAlignment is a fixed
+        # hard rule with no slack (convenor decision). The slack was dead in the
+        # solver (this engine key has no `groups=` so it is never dispatched) but
+        # was still applied by the tester — net effect was loosening the checker
+        # against a rule the solver enforced strictly.
     ),
     # The four Phase-3c atoms split from ClubVsClubAlignment (Coincidence,
     # FieldLimit, DeficitPenalty, PHLAnd2ndBackToBackSameField) were DELETED
@@ -367,7 +371,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_club_vs_club_alignment'],
         tester_violation_names=['ClubVsClubAlignment'],
         severity_level=3,
-        slack_key='ClubVsClubAlignment',
+        # spec-033 Unit A: slack_key removed — alignment is fixed-hard, no slack.
         atom_group='ClubVsClubStackedAlignment',
         required_helpers=['cvc_stack_play'],
         groups=frozenset({'core', 'club_alignment'}),
@@ -378,7 +382,7 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         tester_check_methods=['_check_club_vs_club_alignment'],
         tester_violation_names=['ClubVsClubAlignment'],
         severity_level=3,
-        slack_key='ClubVsClubAlignment',
+        # spec-033 Unit A: slack_key removed — alignment is fixed-hard, no slack.
         atom_group='ClubVsClubStackedAlignment',
         required_helpers=[
             'cvc_stack_play', 'cvc_stack_field_used', 'cvc_stack_slot_used',

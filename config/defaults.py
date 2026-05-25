@@ -135,8 +135,8 @@ CONSTRAINT_DEFAULTS = {
     # Club game spread
     'club_game_spread_max_gap': 2,
     'club_game_spread_max_overlap': 0,
-    # Club-vs-club alignment
-    'club_vs_club_alignment_base_slack': 0,
+    # spec-033 Unit A: club_vs_club_alignment_base_slack removed — alignment is
+    # a fixed hard rule with no slack.
     # spec-014: PHL/2nd same-club adjacency. The same-venue rule is a
     # slot-adjacency rule (no minute threshold); the cross-venue rule requires
     # this minimum start-time gap in REAL minutes (game length + warm-down +

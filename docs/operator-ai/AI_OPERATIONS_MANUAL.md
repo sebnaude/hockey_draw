@@ -460,7 +460,9 @@ FIELD_UNAVAILABILITIES = {
 
 The `--slack` flag loosens specific constraints (different from `--relax` which drops entire severity groups):
 - `EqualMatchUpSpacingConstraint`: widens spacing window
-- `ClubVsClubAlignment`, `ClubGameSpread`: loosens limits
+- `ClubGameSpread`: loosens limits
+<!-- spec-033 Unit A: ClubVsClubAlignment removed — alignment is a fixed hard rule with no slack. -->
+- `BalancedByeSpacing`: loosens bye-spacing floor
 
 ### Key Constraint Details
 
