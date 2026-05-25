@@ -17,8 +17,9 @@ Tested at the right seams with REAL objects:
 NOT covered here (delegated to post-merge DoD #8 verification):
   - "solver runs to feasible + frozen pairings preserved in OUTPUT" — a full
     real CP-SAT solve takes hours and cannot run in pytest. The orchestrator
-    runs `run.py generate --regen-from ... --regen-grades 6th --year 2026
-    --simple` in the background per the spec. Everything UP TO the solve is
+    runs `run.py generate --regen-from ... --regen-grades 6th --year 2026`
+    in the background per the spec (regen ignores the solve-mode flags and
+    always uses the staged dispatcher). Everything UP TO the solve is
     exercised here with real objects (no mocks).
 """
 

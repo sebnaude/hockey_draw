@@ -3,8 +3,9 @@
 No mocks/patches/monkeypatch: real `load_season_data(2026)`, a real CP-SAT model,
 real `generate_X`, and a direct atom `apply()`. Confirms:
   - the atom populates `data['penalties']['ClubNoConcurrentSlot']` (the soft bucket
-    that the staged objective reads — the atom is non-engine so `--simple` does NOT
-    dispatch it; this direct apply is the build/dispatch smoke), and
+    that the objective reads — the atom is non-engine but is part of the full
+    constraint set, so the no-flag single solve dispatches it via the staged path;
+    this direct apply is the build/dispatch smoke), and
   - the hard cap constraints are added to the model.
 
 The unit-level pigeonhole/penalty hand-oracles (2 games/1 slot, 3 games/2 slots)

@@ -12,8 +12,8 @@ Covers Unit C DoD-7:
   - `--exclude X --groups core` removes X.
   - `--staged` still produces severity-ordered selections (severity_solver_stages
     unchanged from baseline).
-  - simple path honours the selection: `--simple --groups core` derives a
-    skip_constraints that excludes every non-core engine key (incl. the soft
+  - the single-solve (no-flag) path honours the selection: `--groups core` derives
+    a skip_constraints that excludes every non-core engine key (incl. the soft
     PreferredTimesConstraint), and that selection is IDENTICAL to the engine keys
     the staged path applies for the same group.
 """
@@ -288,24 +288,26 @@ def test_severity_stages_are_ordered_and_non_overlapping():
         seen |= atoms
 
 
-# ============== DoD-7: simple path honours the selection ==============
+# ============== DoD-7: single-solve path honours the selection ==============
 
 def test_simple_path_skip_constraints_for_core():
-    """Given --simple --groups core,
-    When the simple path derives engine skip_constraints from the resolved set,
+    """Given `--groups core` (no mode flag => single full solve),
+    When the single-solve path derives engine skip_constraints from the resolved set,
     Then it skips every engine key NOT in core — including the soft-only
-    PreferredTimesConstraint — so the simple path applies only core's engine
+    PreferredTimesConstraint — so the single-solve path applies only core's engine
     constraints."""
     _, core_names = run._resolve_group_selection(['core'], [])
     skip = _simple_skip_for(core_names)
     # core is hard-feasibility; it does NOT include the soft PreferredTimes.
     assert 'PreferredTimesConstraint' in skip
     # Engine keys not in the `core` group are skipped under a --groups core
-    # selection. FiftyFiftyHomeandAway / ClubVsClubAlignment are obsolete (no
-    # production-group atom maps to them); TeamConflict is now a SOFT atom
-    # (spec-033 Unit C) so it is not in `core` (it is in `soft`) and is likewise
-    # skipped for a core-only solve.
-    for skipped in ('FiftyFiftyHomeandAway', 'ClubVsClubAlignment', 'TeamConflict'):
+    # selection. FiftyFiftyHomeandAway is obsolete (no production-group atom
+    # maps to it); TeamConflict is now a SOFT atom (spec-033 Unit C) so it is
+    # not in `core` (it is in `soft`) and is likewise skipped for a core-only
+    # solve. (spec-036 Unit B: ClubVsClubAlignment was removed from the ENGINE
+    # key sets entirely, so it is no longer an engine key and never appears in
+    # this skip set.)
+    for skipped in ('FiftyFiftyHomeandAway', 'TeamConflict'):
         assert skipped in skip
     # The engine keys actually applied = core's engine keys.
     applied = ALL_ENGINE_KEYS - skip
@@ -438,34 +440,40 @@ def test_simple_applied_engine_keys_match_hand_oracle():
         assert simple_applied == staged_applied, groups
 
 
-def test_default_simple_selection_excludes_obsolete_pair_by_design():
+def test_default_simple_selection_excludes_obsolete_key_by_design():
     """Given NO --groups (default selection),
-    When the production simple path derives skip_constraints
+    When the production single-solve path derives skip_constraints
     (ALL_ENGINE_KEYS - collect_engine_keys(default-group names)),
-    Then it skips EXACTLY {FiftyFiftyHomeandAway, ClubVsClubAlignment}.
+    Then it skips EXACTLY {FiftyFiftyHomeandAway}.
 
-    This pins the intended default-`--simple` behaviour at the SELECTION level.
-    The two skipped engine keys are obsolete legacy entries that map to NO
-    production-group atom: per spec-023 §1 they "get no production group" because
-    they are superseded by atoms AwayClubHomeWeekendsCount /
-    AwayClubPerOpponentAndAggregateHomeBalance (replacing FiftyFiftyHomeandAway)
-    and ClubVsClubStackedWeekends / ClubVsClubStackedCoLocation (replacing
-    ClubVsClubAlignment).
+    This pins the intended default single-solve (no-flag) behaviour at the SELECTION level.
+    The skipped engine key is an obsolete legacy entry that maps to NO
+    production-group atom: per spec-023 §1 it "gets no production group" because
+    it is superseded by atoms AwayClubHomeWeekendsCount /
+    AwayClubPerOpponentAndAggregateHomeBalance (replacing FiftyFiftyHomeandAway).
 
-    spec-033 Unit C: TeamConflict USED to be the third skipped engine key (it was
+    spec-033 Unit C: TeamConflict USED to be a skipped engine key (it was
     core_hard-only, not in any fresh-build group). It is now a SOFT atom in `soft`
     and was moved to ENGINE_SOFT_KEYS, so it maps to an applied default engine key
-    and is NO LONGER skipped — the obsolete TRIO is now an obsolete PAIR.
+    and is NO LONGER skipped.
 
-    Per the convenor's RESOLVED Option B, default `--simple` selects the `default`
-    group (production constraints)."""
+    spec-036 Unit B: ClubVsClubAlignment USED to be the other skipped engine key
+    (obsolete legacy alignment, superseded by ClubVsClubStackedWeekends /
+    ClubVsClubStackedCoLocation). Unit B removed it from ENGINE_HARD_KEYS /
+    ENGINE_SOFT_KEYS entirely, so it is no longer an engine key and no longer
+    appears in ALL_ENGINE_KEYS or this skip set — the obsolete PAIR is now a
+    single obsolete key.
+
+    Per the convenor's RESOLVED Option B, the default single solve (no mode flag)
+    selects the `default` group (production constraints)."""
     group_names, default_names = run._resolve_group_selection(None, [])
     assert group_names == ['default']  # no --groups => default group
     selected_engine_keys, _ = collect_engine_keys(default_names)
     skip = ALL_ENGINE_KEYS - selected_engine_keys
-    # Hand-computed oracle: exactly the obsolete pair, nothing else. spec-033
-    # Unit C removed TeamConflict from this skip set (softened into `default`).
-    assert skip == {'FiftyFiftyHomeandAway', 'ClubVsClubAlignment'}
+    # Hand-computed oracle: exactly the one obsolete key, nothing else. spec-033
+    # Unit C removed TeamConflict (softened into `default`); spec-036 Unit B
+    # removed ClubVsClubAlignment from the engine key sets.
+    assert skip == {'FiftyFiftyHomeandAway'}
 
 
 def test_staged_none_equals_default_group_filter():

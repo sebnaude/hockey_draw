@@ -391,8 +391,6 @@ class TestCLIArgumentParsing:
         # Generate
         gen_parser = subparsers.add_parser('generate')
         gen_parser.add_argument('--year', type=int, required=True)
-        gen_parser.add_argument('--simple', action='store_true')
-        gen_parser.add_argument('--unified', action='store_true')
         gen_parser.add_argument('--low-memory', action='store_true')
         gen_parser.add_argument('--minimal-memory', action='store_true')
         gen_parser.add_argument('--high-performance', action='store_true')
@@ -405,6 +403,7 @@ class TestCLIArgumentParsing:
         gen_parser.add_argument('--run-id', type=str)
         gen_parser.add_argument('--resume', nargs='*')
         gen_parser.add_argument('--staged', action='store_true')
+        gen_parser.add_argument('--severity', action='store_true')
         gen_parser.add_argument('--relax', action='store_true')
         gen_parser.add_argument('--relax-timeout', type=float, default=30.0)
         gen_parser.add_argument('--fix-round-1', action='store_true')
@@ -471,11 +470,26 @@ class TestCLIArgumentParsing:
 
         return parser.parse_args(argv)
 
-    def test_generate_simple_mode(self):
-        args = self._parse_args(['generate', '--year', '2026', '--simple'])
+    def test_generate_staged_mode(self):
+        args = self._parse_args(['generate', '--year', '2026', '--staged'])
         assert args.command == 'generate'
         assert args.year == 2026
-        assert args.simple is True
+        assert args.staged is True
+        assert args.severity is False
+
+    def test_generate_severity_mode(self):
+        args = self._parse_args(['generate', '--year', '2026', '--severity'])
+        assert args.command == 'generate'
+        assert args.year == 2026
+        assert args.severity is True
+        assert args.staged is False
+
+    def test_generate_default_single_solve(self):
+        """spec-036: no mode flag => single full solve (the old --simple removed)."""
+        args = self._parse_args(['generate', '--year', '2026'])
+        assert args.command == 'generate'
+        assert args.staged is False
+        assert args.severity is False
 
     def test_generate_slack(self):
         args = self._parse_args(['generate', '--year', '2026', '--slack', '3'])
@@ -483,7 +497,7 @@ class TestCLIArgumentParsing:
 
     def test_generate_exclude_constraints(self):
         args = self._parse_args([
-            'generate', '--year', '2026', '--simple',
+            'generate', '--year', '2026',
             '--exclude', 'VenueEarliestSlotFill', 'ClubGameSpread',
         ])
         assert args.exclude == ['VenueEarliestSlotFill', 'ClubGameSpread']
@@ -553,9 +567,12 @@ class TestCLIArgumentParsing:
         args = self._parse_args(['generate', '--year', '2026', '--run-id', 'my_run'])
         assert args.run_id == 'my_run'
 
-    def test_generate_unified(self):
-        args = self._parse_args(['generate', '--year', '2026', '--unified'])
-        assert args.unified is True
+    def test_generate_rejects_removed_simple_unified(self):
+        """spec-036: --simple and --unified were removed (forward-only, no alias)."""
+        with pytest.raises(SystemExit):
+            self._parse_args(['generate', '--year', '2026', '--simple'])
+        with pytest.raises(SystemExit):
+            self._parse_args(['generate', '--year', '2026', '--unified'])
 
     def test_generate_memory_flags(self):
         args = self._parse_args(['generate', '--year', '2026', '--low-memory'])

@@ -151,7 +151,6 @@ class TestRunGenerate:
         args = argparse.Namespace(
             year=2025,
             resume=None,
-            simple=False,
             run_id=None,
             locked=None,
             lock_weeks='',
@@ -163,25 +162,27 @@ class TestRunGenerate:
             exclude=None,
             hint=None,
             staged=False,
+            severity=False,
             relax=False,
             relax_timeout=30.0,
             fix_round_1=False,
             slack=None,
             description='',
-            unified=False,
             stages=None,
         )
 
         assert args.year == 2025
-        assert args.simple is False
+        # spec-036: no mode flag => single full solve (default).
+        assert args.staged is False
+        assert args.severity is False
         assert args.low_memory is False
 
-    def test_generate_args_with_simple_mode(self):
-        """Test that --simple flag is properly represented in args."""
+    def test_generate_args_with_severity_mode(self):
+        """spec-036: --severity flag is properly represented in args
+        (the old --simple flag was removed; no-flag is now the single solve)."""
         args = argparse.Namespace(
             year=2025,
             resume=None,
-            simple=True,
             run_id=None,
             locked=None,
             lock_weeks='',
@@ -193,16 +194,17 @@ class TestRunGenerate:
             exclude=[],
             hint=None,
             staged=False,
+            severity=True,
             relax=False,
             relax_timeout=30.0,
             fix_round_1=False,
             slack=None,
             description='',
-            unified=False,
             stages=None,
         )
 
-        assert args.simple is True
+        assert args.severity is True
+        assert args.staged is False
 
 
 # ============== run_list_constraints Tests ==============
