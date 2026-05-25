@@ -117,7 +117,9 @@ export column, `c077c28`).
 
 - **spec-033** (`depends_on: spec-032` now satisfied — spec-030, spec-031 and spec-032 are all
   `done` and merged into final-form). This is the next startable node in the serial chain.
-  (Claimed by session=slack per its plan header.)
+  (Claimed 2026-05-25 by session=opus-s033 — status `building`. The prior `session=slack` owner
+  stamp on spec-033 and spec-036 was orphaned — no worktree/branch/claim-commit existed — and was
+  cleared.)
 - spec-036 unblocks when spec-033 is `done`. The chain is serial, so at most one is startable at
   a time.
 - **spec-034 and spec-035 are NOT startable yet** — they are the deliberately end-of-line special
