@@ -291,3 +291,33 @@ def test_dispatch_predicate_single_solve_default():
     assert takes_single(True, False, False) is False    # regen => staged
     assert takes_single(True, True, False) is False     # regen wins over staged
     assert takes_single(True, False, True) is False     # regen wins over severity
+
+
+def test_severity_stages_order_producer_before_consumer():
+    """Given --severity staging builds stages from registry severity groups,
+    When severity_3 contains both ClubVsClubStackedWeekends (registers the play
+    indicator) and ClubVsClubStackedCoLocation (consumes it, raising RuntimeError
+    if it runs first),
+    Then the producer must be ordered strictly before the consumer.
+
+    Regression: severity_solver_stages() previously sorted members
+    ALPHABETICALLY, placing 'ClubVsClubStackedCoLocation' (C) before
+    'ClubVsClubStackedWeekends' (W) -> CoLocation.apply() raised RuntimeError,
+    crashing every --severity solve whose selection includes the stacked pair
+    (e.g. the default --groups core). Fixed by ordering members by
+    canonical_index (registry-insertion / global apply order).
+
+    Oracle (hand-computed): canonical_index('ClubVsClubStackedWeekends')==24 <
+    canonical_index('ClubVsClubStackedCoLocation')==25, so Weekends must precede
+    CoLocation in whichever severity stage carries them."""
+    from constraints.stages import severity_solver_stages
+
+    found = False
+    for stage in severity_solver_stages():
+        atoms = stage['atoms']
+        if 'ClubVsClubStackedWeekends' in atoms and 'ClubVsClubStackedCoLocation' in atoms:
+            found = True
+            assert atoms.index('ClubVsClubStackedWeekends') < atoms.index(
+                'ClubVsClubStackedCoLocation'
+            ), f"producer must precede consumer in {stage['name']}: {atoms}"
+    assert found, "expected a severity stage carrying both stacked atoms"

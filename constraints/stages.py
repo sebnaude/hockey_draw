@@ -225,7 +225,7 @@ def severity_solver_stages() -> List[Dict[str, Any]]:
     stages_override=...)` when the user opts into severity-based staging via
     `--staged`.
     """
-    from constraints.registry import resolve_group
+    from constraints.registry import resolve_group, canonical_index
 
     # Names of atom_groups whose atoms cover them (skip the combined name so
     # the dispatcher uses atoms instead of legacy classes).
@@ -251,7 +251,16 @@ def severity_solver_stages() -> List[Dict[str, Any]]:
 
     stages: List[Dict[str, Any]] = []
     for level in range(1, 6):
-        members = sorted(n for n in resolve_group(f'severity_{level}') if _keep(n))
+        # Order by canonical (registry-insertion) index — the global apply order
+        # that places helper-var PRODUCERS before CONSUMERS. Plain alphabetical
+        # sorting reorders e.g. ClubVsClubStackedCoLocation (consumer) ahead of
+        # ClubVsClubStackedWeekends (producer of its play indicator), which makes
+        # CoLocation raise RuntimeError. canonical_index matches DEFAULT_STAGES /
+        # apply_constraint_set ordering, so --severity dispatches identically.
+        members = sorted(
+            (n for n in resolve_group(f'severity_{level}') if _keep(n)),
+            key=canonical_index,
+        )
         if not members:
             continue
         stages.append({
