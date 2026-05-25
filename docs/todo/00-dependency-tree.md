@@ -36,7 +36,16 @@ restructure, cut into three serialised specs:
   `ClubNoConcurrentSlot` → soft+slack (hard ≤1 overlap, push→0; drops capacity-aware floor +
   `core_hard`; covers cross-field non-overlap). `depends_on: spec-032` (shares `registry.py`/
   `run.py`/`config/season_2026.py`/`analytics/tester.py`/`CONSTRAINT_INVENTORY.md`/`CLAUDE.md`).
-  Five units A→B→C→D→E (strictly serial, shared files), S3. Status: `review_pending`.
+  Five units A→B→C→D→E (strictly serial, shared files), S3. Status: **`done`** (2026-05-25 —
+  all 5 units merged into final-form + /adversarial Mode B verified; archived to `done/`). Each
+  unit also got a Mode-B-driven fix applied inline (Unit A stale slack-dict tests; Unit C
+  TeamConflict soft-pressure tester test + a default-stages parity repair `89fdfd6` for a Unit-C
+  regression caught during Unit D; Unit D perennial-defaults guard keys; Unit E registry-count
+  narrative 38→49 + stale ClubNoConcurrentSlot comments). Surfaced for the convenor: TeamConflict &
+  ClubNoConcurrentSlot are no longer feasibility blockers (intended), ClubNoConcurrentSlot left the
+  `regen` group entirely (no regen-soft analogue), and the hard ≤1+slack overlap cap makes a venue
+  with fewer slots than a club's games infeasible at slack 0 — slack is the release; first real
+  full solve is spec-035.
 
 - **spec-036** — default solve = single-solve over the FULL modern set (no-flag), and remap the
   solve-mode flags: no-flag → single solve (was DEFAULT_STAGES staged), `--staged` → DEFAULT_STAGES
@@ -71,10 +80,10 @@ single-solve e2e depends on the no-flag/single-solve path being correct (its `de
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
 spec-031  ──depends_on──▶  spec-030                             [done — merged into final-form 2026-05-24]
 spec-032  ──depends_on──▶  spec-031                             [done — merged into final-form 2026-05-25 (A 9efee82, B 2b39008)]
-spec-033  ──depends_on──▶  spec-032                             [review_pending]   (NOW UNBLOCKED — spec-032 done)
-spec-036  ──depends_on──▶  spec-033                             [review_pending]   (single-solve default + mode remap)
-spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [review_pending]   (PENULTIMATE)
-spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [review_pending]   (ULTIMATE — last; needs 036's single-solve)
+spec-033  ──depends_on──▶  spec-032                             [done — merged into final-form 2026-05-25 (A 6037235, B c4af289, C b3a15c1, D f760896, E 8316911)]
+spec-036  ──depends_on──▶  spec-033                             [review_pending]   (NOW UNBLOCKED — spec-033 done)
+spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [review_pending]   (PENULTIMATE — NOW UNBLOCKED: 030-033 all done)
+spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [review_pending]   (ULTIMATE — last; still blocked on 034 + 036)
 ```
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
@@ -86,6 +95,17 @@ time to avoid registry/count/doc conflicts. The registry count test moves 51 →
 after which the `final-form` plan line is fully drained.**
 
 Most recently completed:
+
+- **spec-033** — uniform soft+slack treatment of deviation-tolerant constraints. **Done**
+  (2026-05-25, all 5 units A–E merged into final-form, each /adversarial Mode B verified).
+  Unit A `6037235` (ClubVsClubAlignment slack removed → fixed hard rule); Unit B `c4af289`
+  (BalancedByeSpacing normal-mode soft analogue + base slack 0→2 + own `bye_spacing` group);
+  Unit C `b3a15c1` (TeamConflict → soft-only) + parity repair `89fdfd6`; Unit D `f760896`
+  (ClubGameSpread hard ≤2-field concentration cap); Unit E `8316911` (ClubNoConcurrentSlot →
+  soft + slack, hard ≤1 overlap push→0). Convenor-facing consequences (intended): TeamConflict
+  & ClubNoConcurrentSlot stop being feasibility blockers; ClubNoConcurrentSlot leaves the `regen`
+  group; the ≤1+slack overlap cap makes an under-slotted venue infeasible at slack 0 (slack
+  releases it; first real solve = spec-035). `depends_on: spec-032`.
 
 - **spec-032** — constraint group restructure. **Done** (2026-05-25, Units A `9efee82`
   + B `2b39008` merged into final-form). Peeled `EqualMatchUpSpacing` into a lonesome
@@ -115,13 +135,15 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-033** (`depends_on: spec-032` now satisfied — spec-030, spec-031 and spec-032 are all
-  `done` and merged into final-form). This is the next startable node in the serial chain.
-  (Claimed 2026-05-25 by session=opus-s033 — status `building`. The prior `session=slack` owner
-  stamp on spec-033 and spec-036 was orphaned — no worktree/branch/claim-commit existed — and was
-  cleared.)
-- spec-036 unblocks when spec-033 is `done`. The chain is serial, so at most one is startable at
-  a time.
-- **spec-034 and spec-035 are NOT startable yet** — they are the deliberately end-of-line special
-  plans. spec-034 (penultimate) unblocks only when 030-033 are all `done`; spec-035 (ultimate)
-  unblocks only when 030-034 are all `done`. They run last, in that order.
+- **spec-036** (`depends_on: spec-033` now satisfied — spec-033 is `done` and merged). Single-solve
+  default + solve-mode flag remap; must apply spec-033's FINAL constraint shapes. Status
+  `review_pending` — its `<!-- reviewed: -->` stamp is present, so it is implementable once a human
+  gives the go-ahead. Unowned (the orphaned `session=slack` stamp was cleared 2026-05-25).
+- **spec-034 — PENULTIMATE** (`depends_on: spec-030, spec-031, spec-032, spec-033` — ALL now
+  `done`, so it is UNBLOCKED). Green test suite + honest coverage + real-data assurances. Status
+  `review_pending`, unowned. It is the penultimate plan; per the run instruction it should only be
+  picked up once it "makes sense" (its deps satisfied — now true).
+- **spec-035 — ULTIMATE** is still blocked: `depends_on` includes spec-034 AND spec-036, neither
+  `done`. It runs last; after it lands the `final-form` plan line is fully drained.
+- Ordering note: spec-036 and spec-034 are now independently startable (different concerns), but
+  spec-035 needs both. One plan per session; stamp `owner` before building.
