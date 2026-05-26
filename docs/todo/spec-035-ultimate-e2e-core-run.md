@@ -1,9 +1,9 @@
 <!-- status: ready -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
-<!-- depends_on: spec-030, spec-031, spec-032, spec-033, spec-034 -->
+<!-- depends_on: spec-030, spec-031, spec-032, spec-033, spec-034, spec-036 -->
 <!-- owner: session=none claimed=none -->
-<!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
+<!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline. 2026-05-25: added intermediate ClubGameSpread-excluded run + cross-run symmetry comparison (Unit A gains an exclude param, Unit C runs both solves) — incremental scope, no re-review. 2026-05-25 (convenor): RUN ORDER SWAPPED — the `--exclude ClubGameSpread` run is now Run 1, the full core run is Run 2. Baseline framing unchanged (full core remains the recorded reference); only execution order moved. No re-review (operational ordering only). -->
 
 # spec-035 — ULTIMATE: raw `--core` e2e solve on the forced-free test config + remaining-symmetry readout
 
@@ -47,6 +47,26 @@ Two concrete goals:
    unrelated `scripts/_search_results.txt`). So the deliverable is the **current** model's symmetry
    readout, recorded as the *first* baseline for any future comparison — not a delta.
 
+3. **Cross-run symmetry comparison (intermediate phase — convenor request 2026-05-25):** run the raw
+   `--core` solve in two variants — **Run 1 with the entire `ClubGameSpread` method excluded**
+   (`--exclude ClubGameSpread`) and **Run 2 the full core** (no exclude) — capture each run's
+   `[Symmetry]` stats, and **diff the two readouts**.
+   The hypothesis being tested: whether the `ClubGameSpread` atoms strip exploitable symmetry from the
+   model (i.e. whether their presence changes the generator/orbit counts CP-SAT's presolve detects).
+   Because the full-core run (Goal 2) and this excluded run differ by exactly the ClubGameSpread method
+   and nothing else, any change in the symmetry readout is attributable to those atoms. This gives us a
+   *within-session* comparison ("across the runs") even though no historical baseline exists.
+   **Scope of the exclusion:** the `ClubGameSpread` canonical name covers **both** atoms of the method —
+   `UnifiedConstraintEngine._club_game_spread_hard()` (`unified.py:382`, guarded by
+   `'ClubGameSpread' not in _skip`) **and** `_club_game_spread_soft()` (`unified.py:782`, same guard).
+   A single `--exclude ClubGameSpread` skips both (verified: `--exclude` → `_resolve_group_selection`
+   → `skip_constraints` → both unified-engine guards). **Do NOT also exclude `ClubNoConcurrentSlot`:**
+   although it was historically *extracted from* ClubGameSpread's lower no-double-up bound (spec-021),
+   it is now a **separate `core_hard` canonical constraint** (`registry.py:397`,
+   `groups={core, critical_feasibility, core_hard}`) and is **not** part of "the ClubGameSpread method."
+   Dropping it would relax physical slot-concurrency feasibility and confound the comparison — both runs
+   must keep it. The only delta between the two runs is `ClubGameSpread` (hard + soft).
+
 A subtlety this plan must fix first: **CP-SAT's presolve symmetry stats are not currently captured.**
 The solver sets `log_search_progress=True` (`main_staged.py:1294`, `solver_diagnostics.py:288`), but
 the saved `logs/*.log` files contain only the Python-side `solver` logger output (MONITOR / MODEL
@@ -84,25 +104,42 @@ A second wiring fact: the forced-free test config **already exists** — `config
    code review — there is NO `--round1-symmetry` flag; the "fix the first week" lever is
    `--fix-round-1`) (review fix — C1: wrong flag name corrected), **no `--locked` /
    `--lock-weeks`** (raw), and **no forced games** (inherent to `season_test`). The launcher records
-   the exact resolved flag set into the run metadata/log so the profile is auditable.
+   the exact resolved flag set into the run metadata/log so the profile is auditable. The launcher
+   takes an **optional exclude list** so the identical profile can be re-run with
+   `--exclude ClubGameSpread` for the intermediate phase (DoD-2b) — exclusion is the *only* permitted
+   delta between the two runs.
+2b. **Intermediate ClubGameSpread-excluded profile.** A second profile, identical to DoD-2 in every
+   respect **except** `--exclude ClubGameSpread` (which skips both `_club_game_spread_hard` and
+   `_club_game_spread_soft` — DoD asserts both engine guards are skipped and that `ClubNoConcurrentSlot`
+   is **still applied**). `--workers 10`, `--groups core`, `symmetry_breakers` on, no `--fix-round-1`,
+   no locks, no forced games — same as DoD-2. The launcher's recorded flag set proves the two runs
+   differ only by the exclude.
 3. **CP-SAT presolve output captured.** The run's log file contains CP-SAT's own presolve section,
    including the `[Symmetry]` lines (generators / orbits / variable+constraint reduction), by
    redirecting the CP-SAT solver stdout/log stream into the run log (it currently is not — only the
    Python `solver` logger is). Observable: `grep -i symmetry <logfile>` returns the presolve symmetry
    block.
-4. **Liveness reached.** The run **gets through presolve** (model built; presolve completes; search
-   starts — evidenced by a CP-SAT `#1`/`best:`/objective progress line or an explicit search-start
-   marker in the captured log) **and survives ≥30 minutes of search**. The process is **killed at the
-   30-minute mark regardless of whether a feasible solution was found** (wall-clock; clean kill of
-   the background ortools process on Windows). Success criterion = *reached search* **and** *30 min
-   elapsed without crash or presolve-time infeasibility*. (Finding a solution is a bonus, not
-   required; not finding one is not a failure.)
-5. **Remaining-symmetry readout.** A short readout artifact (e.g. `scripts/e2e_symmetry_readout.md`
-   or a printed+saved summary) parses the captured `[Symmetry]` stats and states the **current**
-   model's remaining symmetry (number of generators, orbit count/sizes, and the var/constraint
-   reduction presolve reports). It explicitly records: "**no historical baseline exists** (filesystem
-   + checkpoint scan, spec-035 build) — these numbers are recorded as the first baseline." If a
-   baseline *is* discovered during the build-time re-scan, the readout diffs against it instead.
+4. **Liveness reached (both runs).** Each run **gets through presolve** (model built; presolve
+   completes; search starts — evidenced by a CP-SAT `#1`/`best:`/objective progress line or an
+   explicit search-start marker in the captured log) **and survives ≥30 minutes of search**. Each
+   process is **killed at the 30-minute mark regardless of whether a feasible solution was found**
+   (wall-clock; clean kill of the background ortools process on Windows). Success criterion per run =
+   *reached search* **and** *30 min elapsed without crash or presolve-time infeasibility*. (Finding a
+   solution is a bonus, not required; not finding one is not a failure.) The ClubGameSpread-excluded
+   run (DoD-2b, **Run 1**) and the full-core run (DoD-2, **Run 2**) are each held to this bar. They run
+   **sequentially, not concurrently** — two simultaneous `--workers 10` ortools solves would contend
+   for memory and confound the liveness/OOM signal; run the excluded one (Run 1), kill at 30 min, then
+   run the full core (Run 2).
+5. **Cross-run remaining-symmetry readout + comparison.** A single readout artifact (e.g.
+   `scripts/e2e_symmetry_readout.md`) parses the captured `[Symmetry]` stats from **both** runs and
+   reports, side by side: number of generators, orbit count/sizes, and the var/constraint reduction
+   presolve reports for (a) the full `core` run and (b) the `core` − `ClubGameSpread` run. It states a
+   **conclusion on Goal 3**: whether excluding the ClubGameSpread atoms changed the model's exploitable
+   symmetry (more generators/larger orbits when excluded ⇒ ClubGameSpread was suppressing symmetry; no
+   change ⇒ it is symmetry-neutral). It explicitly records: "**no historical baseline exists**
+   (filesystem + checkpoint scan, spec-035 build) — the full-core numbers are recorded as the first
+   baseline, and the excluded run is compared against it within this session." If a historical baseline
+   *is* discovered during the build-time re-scan, the readout diffs against it too.
 6. **Debugging to the liveness state.** If the model fails to reach search (presolve blowup, OOM at
    `--workers 10`, immediate infeasibility), it is **debugged to the DoD-4 state on the assumption
    that the core constraints are correct** — i.e. fixes target model construction / presolve /
@@ -110,20 +147,22 @@ A second wiring fact: the forced-free test config **already exists** — `config
    readout. If the obstruction turns out to be a genuine *constraint-semantic* bug (core constraint
    actually wrong), that is **out of scope** → file a new spec per `/basic`, do not patch semantics
    here.
-7. **Run executed in background, killed at 30 min, artifacts saved.** The solve runs via Bash
-   `run_in_background`, capped/killed at 30 minutes (Monitor or a timeout wrapper). `--workers 10`
-   only. The log and the symmetry readout are saved under `logs/`/`scripts/` and referenced from the
-   readout.
+7. **Runs executed in background, killed at 30 min, artifacts saved.** **Both** solves
+   (core−ClubGameSpread first, then full core) run via Bash `run_in_background`, each capped/killed at
+   30 minutes (Monitor or a timeout wrapper), **sequentially** (DoD-4). `--workers 10` only. Each run gets its own
+   captured log; both logs and the single comparison readout are saved under `logs/`/`scripts/` and
+   referenced from the readout.
 8. **Gates:** launcher + log-capture code type-checks clean; changed-file lint clean; AST sweep clean
    (no dead launcher branches, presolve-fail path logged at INFO via the project logger, never
    silently swallowed); spec-034's suite stays green after the Unit A/B code changes.
 
 ## Implementation units
 
-Three units. A and B touch disjoint code (A: a new launcher script + possibly a `--config`/string
-path in `run.py`'s arg layer; B: the CP-SAT stdout/log capture in `solver_diagnostics.py` /
-`main_staged.py`) and can run in parallel. C is the actual run + readout + debugging and depends on
-both.
+Three units. A and B touch disjoint code (A: a new launcher script — now with an optional exclude
+param — + possibly a `--config`/string path in `run.py`'s arg layer; B: the CP-SAT stdout/log capture
+in `solver_diagnostics.py` / `main_staged.py`) and can run in parallel. C is the actual **two** runs
+(the intermediate `core`−`ClubGameSpread` run first, then full core) + the comparison readout +
+debugging, and depends on both.
 
 ### Unit A — Forced-free test-config launcher + raw core flag profile
 - **Files touched:** new `scripts/run_core_e2e.(py|ps1)`; verification of `config/season_test.py`
@@ -132,7 +171,10 @@ both.
   script (executor's call — prefer the script to avoid widening CLI surface, since `season_test`'s
   own docs already prescribe the programmatic path).
 - **Change summary:** one-command launch of the raw core solve on the forced-free config with the
-  exact DoD-2 flag profile, flags recorded to metadata.
+  exact DoD-2 flag profile, flags recorded to metadata. The launcher accepts an **optional exclude
+  list** (default empty) threaded straight to the solve entry point's `--exclude`, so the same command
+  produces both the DoD-2 (no exclude) and DoD-2b (`--exclude ClubGameSpread`) runs with no other
+  difference.
 - **Depends on:** spec-032 done (the `core` group + always-on `symmetry_breakers` must exist); spec-034
   done (don't e2e a red suite).
 - **Executor model:** Opus (must thread the exact flag profile through the real solve entry point and
@@ -140,10 +182,14 @@ both.
   `--fix-round-1`, NOT `--round1-symmetry` — review fix C1).
 - **No-mock test outline:** *Given* data loaded via the chosen path (`get_season_data()` or
   `load_season_data('test')`), *then* `forced_games == []` and team set == the 2026 base team set
-  (oracle: hand-listed from `season_2026.py`). *Given* the launcher's resolved config, *then* the
-  recorded flag set contains `groups=['core']`, `workers==10`, `fix_round_1` falsy (NOT
-  `round1_symmetry` — the actual solver attribute is `fix_round_1`; review fix C1), no locked weeks
-  (oracle: the DoD-2 profile, asserted field-by-field).
+  (oracle: hand-listed from `season_2026.py`). *Given* the launcher's resolved config with no exclude,
+  *then* the recorded flag set contains `groups=['core']`, `workers==10`, `fix_round_1` falsy (NOT
+  `round1_symmetry` — the actual solver attribute is `fix_round_1`; review fix C1), no locked weeks,
+  `exclude == []` (oracle: the DoD-2 profile, asserted field-by-field). *Given* the launcher invoked
+  with `exclude=['ClubGameSpread']`, *then* the recorded flag set is identical except
+  `exclude == ['ClubGameSpread']`, and the constructed engine's `skip_constraints` contains
+  `'ClubGameSpread'` while NOT containing `'ClubNoConcurrentSlot'` (oracle: the DoD-2b profile — the
+  exclude is the only delta and ClubNoConcurrentSlot stays in).
 
 ### Unit B — Capture CP-SAT presolve stdout (incl. `[Symmetry]`) into the run log
 - **Files touched:** `solver_diagnostics.py` and/or `main_staged.py` — redirect/duplicate the CP-SAT
@@ -164,33 +210,44 @@ both.
   toy where the expected generator count is computable). *Given* a log with no symmetry block, *then*
   the parser returns an explicit "not present" sentinel, logged at INFO — never a silent `None`.
 
-### Unit C — The raw e2e run + 30-min kill + remaining-symmetry readout + debugging
+### Unit C — The two raw e2e runs + 30-min kills + cross-run symmetry comparison readout + debugging
 - **Files touched:** new `scripts/e2e_symmetry_readout.md` (the artifact), plus any
   model-construction/presolve/resourcing fix that DoD-6 turns out to require (re-graded per `/basic`
   if it grows).
-- **Change summary:** execute the launcher in the background at `--workers 10`, kill at 30 min, parse
-  + record remaining symmetry, re-scan for any baseline, and debug to the liveness state if presolve
-  doesn't clear.
-- **Depends on:** Unit A (launcher) and Unit B (symmetry capture + parser).
+- **Change summary:** execute the launcher in the background at `--workers 10` **twice, sequentially**
+  — (1) `core` with `--exclude ClubGameSpread`, (2) full `core` — killing each at 30 min, parse the
+  `[Symmetry]` stats from both captured logs, write the side-by-side comparison readout with the Goal-3
+  conclusion, re-scan for any historical baseline, and debug to the liveness state if presolve doesn't
+  clear (construction/resourcing only). Run 2 only starts after Run 1's process is confirmed killed (no
+  concurrent solves — DoD-4).
+- **Depends on:** Unit A (launcher, incl. the exclude param) and Unit B (symmetry capture + parser).
 - **Executor model:** Opus.
-- **No-mock test outline:** this unit's "test" is the e2e run itself (real solve, no mocks):
-  *Given* the launcher run in background with `--workers 10`, *when* 30 minutes elapse, *then* the
-  captured log shows presolve completed + at least one search/progress line before the kill (oracle:
-  presence of a CP-SAT search-start/`#1` marker), and the kill is clean (no orphaned ortools
-  process). *Given* the captured log, *then* `parse_symmetry_stats` yields the readout numbers and
-  the readout records "no baseline / first baseline."
+- **No-mock test outline:** this unit's "test" is the two e2e runs themselves (real solves, no mocks):
+  *Given* each launcher run in background with `--workers 10`, *when* 30 minutes elapse, *then* that
+  run's captured log shows presolve completed + at least one search/progress line before the kill
+  (oracle: presence of a CP-SAT search-start/`#1` marker), and the kill is clean (no orphaned ortools
+  process). *Given* both captured logs, *then* `parse_symmetry_stats` yields numbers for each and the
+  readout records the side-by-side comparison + the Goal-3 conclusion + "no baseline / first baseline."
+  *Given* the two runs' resolved flag sets, *then* they are byte-identical except Run 1 carries
+  `exclude=['ClubGameSpread']` (oracle: the only-delta invariant — guards against an accidental second
+  difference that would confound the comparison).
 
 ## Doc registry
 
-- `docs/system/SOLVER_E2E.md` *(new — register in the CLAUDE.md doc-index table AND in
-  `docs/README.md` master doc-index under `docs/system/`)* — how to run the raw core e2e on the
-  forced-free test config, the 30-min-kill protocol, `--workers 10`, the symmetry-capture mechanism,
-  and where the readout lands. [Unit C, with the capture mechanism from Unit B] (review fix — M1:
-  `docs/README.md` added — the master doc index must also list new `docs/system/` docs.)
+- `docs/system/SOLVER_E2E.md` *(new — register per the canonical convention: a one-line entry in
+  `docs/README.md`'s master file-tree under `docs/system/` AND in the per-category
+  `docs/system/README.md`. Both are mandatory/exhaustive. A row in the CLAUDE.md "Additional
+  Documentation" per-file table is OPTIONAL — that table is curated, not exhaustive, and niche docs
+  like REGEN_CONSTRAINTS are intentionally absent; skip it for this operational e2e doc.)* — how to
+  run the raw core e2e on the forced-free test config, the 30-min-kill protocol, `--workers 10`, the
+  symmetry-capture mechanism, and where the readout lands. [Unit C, with the capture mechanism from
+  Unit B] (review fix — M1: `docs/README.md` added. Global cross-plan review 2026-05-24: aligned to
+  spec-034's convention — `docs/README.md` + `docs/system/README.md` mandatory, CLAUDE.md per-file
+  row optional — resolving the prior 034/035 contradiction over whether a CLAUDE.md row is required.)
 - `CLAUDE.md` (repo root) — (a) a "Quick Commands" entry for the e2e core run via
-  `scripts/run_core_e2e`; (b) a note that CP-SAT presolve symmetry is now captured to the log;
-  (c) add `docs/system/SOLVER_E2E.md` to the doc-index table (row: "how to run the raw core e2e + 30-
-  min-kill protocol; read when operating or reproducing a core e2e run"). [Unit C]
+  `scripts/run_core_e2e`; (b) a note that CP-SAT presolve symmetry is now captured to the log.
+  (c) DROPPED: a per-file row in the doc-index table is no longer required — see the convention note
+  above; the canonical index is `docs/README.md` + `docs/system/README.md`. [Unit C]
 - `config/season_test.py` — docstring touch *only if* Unit A changes how it's launched (e.g. to
   reference `get_season_data()` as the preferred path after the type-annotation fix). [Unit A]
 - `docs/todo/GOALS.md` — **spec-035 row already present** (line 171 as of plan authoring); update
@@ -205,8 +262,10 @@ both.
 
 - **Producing a publishable draw.** The run is killed at 30 minutes; optimality/feasibility-to-publish
   is explicitly *not* a goal.
-- **Comparing to an earlier main-branch run.** Dropped: no baseline exists (confirmed). We record the
-  first baseline instead.
+- **Comparing to an earlier main-branch / historical run.** Dropped: no historical baseline exists
+  (confirmed). We record the first baseline instead. NOTE: this is distinct from the **within-session**
+  comparison added 2026-05-25 (Goal 3 / DoD-5) — comparing the full-core run against the
+  `core`−`ClubGameSpread` run *is* in scope; only comparison against a *prior, stored* run is not.
 - **Tuning the solver** (workers beyond 10, parameter sweeps, warm-start hints) — `--workers 10` only,
   raw.
 - **Fixing constraint *semantics*.** If a core constraint is genuinely wrong, that is a new spec, not
@@ -216,9 +275,11 @@ both.
 
 ## Dependencies
 
-- **Other plans:** `depends_on: spec-030, spec-031, spec-032, spec-033, spec-034`. spec-032 supplies
-  the `core` group and always-on `symmetry_breakers`; spec-034 supplies a green suite (don't e2e a red
-  codebase). Per `/basic`, **not startable** until all five are `done` and merged.
+- **Other plans:** `depends_on: spec-030, spec-031, spec-032, spec-033, spec-034, spec-036`. spec-032
+  supplies the `core` group and always-on `symmetry_breakers`; spec-034 supplies a green suite (don't
+  e2e a red codebase); **spec-036 supplies the correct no-flag single-solve over the full set** (this
+  e2e is a raw single-solve, so it must run on the fixed default path, not the old incomplete
+  `--simple`). Per `/basic`, **not startable** until all six are `done` and merged.
 - **Within this plan:** Unit C depends on Units A and B. A and B are mutually independent (disjoint
   files) and run in parallel.
 
@@ -256,9 +317,15 @@ the script per `season_test.py`'s own documented programmatic usage.
    flag profile has `--fix-round-1` absent / `fix_round_1=False` and no locks — the flag is
    `--fix-round-1`, NOT `--round1-symmetry`; review fix C1). NEVER merge unverified.
 4. Merge A and B, push, post-merge-verify the spec-034 suite is still green.
-5. Run Unit C: launch `scripts/run_core_e2e` via Bash `run_in_background` at `--workers 10`; **kill at
-   30 minutes** (Monitor/timeout) regardless of solution state; parse + write the remaining-symmetry
-   readout; debug to the DoD-4 liveness state if presolve doesn't clear (construction/resourcing
-   only). If a constraint-semantic bug is the blocker, file a new spec and surface to the user.
+5. Run Unit C **as two sequential runs**: (5a) launch `scripts/run_core_e2e` with
+   `--exclude ClubGameSpread` via Bash `run_in_background` at `--workers 10`; **kill at 30 minutes**
+   (Monitor/timeout) regardless of solution state; confirm the process tree is dead. (5b) launch the
+   same launcher with **no exclude** (full core — the only delta), again `--workers 10`,
+   **kill at 30 minutes**. Do not run 5a and 5b concurrently (memory contention confounds liveness —
+   DoD-4). Then parse both captured
+   logs, write the side-by-side comparison readout with the Goal-3 conclusion (does ClubGameSpread
+   strip symmetry?), and debug to the DoD-4 liveness state if presolve doesn't clear
+   (construction/resourcing only). If a constraint-semantic bug is the blocker, file a new spec and
+   surface to the user.
 6. Tick checkboxes, stamp the plan `done`, move to `docs/todo/done/`, update the dependency tree —
    the `final-form` plan line is now fully drained.
