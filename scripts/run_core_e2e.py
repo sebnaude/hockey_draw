@@ -116,6 +116,10 @@ def _record_profile(cfg: dict, run_id: str) -> Path:
         'recorded_at': datetime.now().isoformat(timespec='seconds'),
         'run_id': run_id,
         'profile': cfg,
+        # Unit C: the solve log (with the CP-SAT [Symmetry] block) is created by
+        # main_simple under this glob. Exactly one file matches per run_id (the
+        # launcher no longer double-inits logging — review M1).
+        'solve_log_glob': f"logs/solver_*_{run_id}.log",
     }
     sidecar.write_text(json.dumps(payload, indent=2), encoding='utf-8')
     logger.info("[spec-035] resolved raw-core profile (%s): %s", run_id, cfg)
@@ -151,11 +155,17 @@ def main(exclude: Optional[list] = None, run_id: Optional[str] = None):
     here by design (Unit C owns it). On any presolve/launch failure the path is
     logged at INFO via the project logger and re-raised — never swallowed.
     """
-    from solver_diagnostics import setup_logging, SolverConfig
+    from solver_diagnostics import SolverConfig
 
     resolved_run_id = run_id or f"core_e2e_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    # Initialise the project's standard logger/handlers (file + console).
-    setup_logging(run_id=resolved_run_id)
+    # NOTE (spec-035 review M1): do NOT call setup_logging() here. main_simple()
+    # calls it with this same run_id, and setup_logging timestamps + clears
+    # handlers on every call — a second init here would create a SECOND log file,
+    # leaving the solve output (incl. the CP-SAT [Symmetry] block Unit C parses)
+    # in main_simple's file while the launcher's file holds only these preamble
+    # lines. Letting main_simple own logging yields exactly ONE
+    # `logs/solver_*_<run_id>.log` per run, which Unit C globs deterministically.
+    # The profile sidecar below is the authoritative auditable record regardless.
 
     cfg = build_run_config(exclude=exclude)
     sidecar = _record_profile(cfg, resolved_run_id)

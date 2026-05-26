@@ -128,8 +128,13 @@ def test_build_run_config_exclude_is_only_delta_and_skips_clubgamespread():
     assert 'ClubNoConcurrentSlot' in cn0
     assert 'ClubNoConcurrentSlot' in cn1
 
-    # Engine skip oracle (mirrors apply_constraint_set:
-    #   engine.skip_constraints = ALL_ENGINE_KEYS - selected_engine_keys).
+    # Engine skip oracle. NOTE (review L1): the single-solve path
+    # (_main_simple_unified) does NOT set engine.skip_constraints — it filters
+    # each stage against the resolved atom list. This block independently models
+    # the engine-key skip mapping (ALL_ENGINE_KEYS - selected_engine_keys) purely
+    # to corroborate that ClubGameSpread (an engine key) is dropped while
+    # ClubNoConcurrentSlot (a non-engine atom) is not; the load-bearing proof that
+    # ClubGameSpread won't apply is its absence from cn1 (asserted above).
     skip1 = ALL_ENGINE_KEYS - collect_engine_keys(cn1)[0]
     # ClubGameSpread IS an engine key — excluded => it lands in skip_constraints.
     assert 'ClubGameSpread' in skip1
