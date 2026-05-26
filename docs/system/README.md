@@ -18,6 +18,7 @@
 | `COUNT_ADJUSTERS.md` | FORCED/BLOCKED count adjuster formulas (Phase 4). |
 | `FORCED_GAMES_AS_COUNT_RULES.md` | Why per-venue Friday count atoms were retired in favour of `FORCED_GAMES`. |
 | `REGEN_CONSTRAINTS.md` | The `regen` constraint group (spec-027): core-hard set, 13 RegenSoft penalty atoms, group definition, dispatch wiring, and the engine-key design note for `EqualMatchUpSpacing`/`ClubGameSpread`. |
+| `TESTING.md` | The green test suite (spec-034): batched-run + coverage runner (`scripts/run_green_suite.py`), the no-mock policy, the three real-data assurances (atoms enforce / tester detects / soft measured), the assurance→test mapping, and the honest coverage numbers. |
 
 ## The atom registry rule
 

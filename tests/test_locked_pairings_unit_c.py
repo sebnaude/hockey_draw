@@ -212,11 +212,13 @@ def test_registry_has_locked_pairings_entry():
     assert info.solver_class_names == []
 
 
-def test_registry_count_is_50():
+def test_registry_count_is_49():
     """spec-025 adds LockedPairings: 37 -> 38.
     spec-027 adds 13 regeneration soft-analogue (`*RegenSoft`) atoms: 38 -> 51.
-    spec-030 deletes PHLAnd2ndConcurrencyAtBroadmeadow: 51 -> 50."""
-    assert len(CONSTRAINT_REGISTRY) == 50
+    spec-030 deletes PHLAnd2ndConcurrencyAtBroadmeadow: 51 -> 50.
+    spec-031 removes the ClubFieldConcentration tester-only diagnostic: 50 -> 49.
+    spec-032 retags only (49); spec-036 retains the ClubVsClubAlignment anchor (49)."""
+    assert len(CONSTRAINT_REGISTRY) == 49
 
 
 def test_check_method_is_registered():

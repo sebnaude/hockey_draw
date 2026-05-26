@@ -113,11 +113,24 @@ class TestRoundTrip:
         data = build_season_data(cfg)
         assert data['locked_pairings'] == []
 
-    def test_season_2026_has_migrated_pins(self):
-        """spec-025 Unit E: season_2026 carries the 246 migrated locked pins."""
+    def test_season_2026_locked_pairings_intentionally_empty(self):
+        """final-form (commit 5761e88) intentionally emptied season_2026's
+        LOCKED_PAIRINGS — the convenor edits that file directly for manual
+        draw-generation testing. The live config therefore carries ZERO pins.
+        The original 246-pin migration artefact is preserved (and its parity is
+        still validated) in tests/fixtures/locked_pairings_premigration_2026.json
+        — see tests/test_locked_pairings_migration_parity.py."""
+        import json
+        import os
         from config import load_season_data
         data = load_season_data(2026)
-        assert len(data['locked_pairings']) == 246
+        # Live config: intentionally empty.
+        assert data['locked_pairings'] == []
+        # Frozen artefact: still the migrated 246 pins (parity coverage preserved).
+        fixture = os.path.join(os.path.dirname(__file__), 'fixtures',
+                               'locked_pairings_premigration_2026.json')
+        with open(fixture) as f:
+            assert len(json.load(f)['locked_pairings']) == 246
 
 
 # ============== Forbidden-field FATAL (DoD 1, 6) ==============

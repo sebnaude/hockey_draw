@@ -72,7 +72,17 @@ single-solve e2e depends on the no-flag/single-solve path being correct (its `de
   failed constraint in a draw; soft constraints are measured via `soft_pressure`). `depends_on:
   spec-030, spec-031, spec-032, spec-033` — the suite shape (atom set, registry counts, group
   membership, tester checks) is only final once the whole chain lands. Five units (A fixtures/cov →
-  B/C/D assurances in parallel → E green-up). S3. Status: `review_pending`.
+  B/C/D assurances in parallel → E green-up). S3. Status: **`done`** (2026-05-26 — Unit A coverage
+  infra + real-data fixtures + `scripts/run_green_suite.py`; B enforce+violate for the 7 uncovered
+  atoms via the live engine; C detection for the 6 uncovered tester checks; D soft_pressure rollup;
+  E green-up + docs). Verified registry count 49 / default set 28 at build time (forward-note
+  honoured). Green-up also fixed 5 PRE-EXISTING failures left by the LOCKED_PAIRINGS removal
+  (commit 5761e88) + registry recounts: 2 stale-oracle bumps (registry 50→49, default 27→28) and
+  3 locked-pairings tests redirected to a frozen pre-removal artefact fixture
+  (`tests/fixtures/locked_pairings_premigration_2026.json`) since the convenor edits live
+  `season_2026.LOCKED_PAIRINGS` for manual testing. Coverage: honest 82.2% on the DoD-2 floor
+  surfaces (registry 92%, stages 93%, atoms strong; `analytics/tester.py` 73.1% — its report/export
+  surface isn't exercised by constraint tests; documented sub-floor per DoD-2, no padding).
 - **spec-035** — ULTIMATE: raw `--core` e2e solve on the forced-free `season_test` config
   (2026 base teams/fields, no forced games, **week 1 NOT fixed** — no `--fix-round-1`/locks,
   `--workers 10`). Goal: get through presolve + survive ≥30 min of search (killed at 30 min
@@ -87,8 +97,8 @@ spec-031  ──depends_on──▶  spec-030                             [done 
 spec-032  ──depends_on──▶  spec-031                             [done — merged into final-form 2026-05-25 (A 9efee82, B 2b39008)]
 spec-033  ──depends_on──▶  spec-032                             [done — merged into final-form 2026-05-25 (A 6037235, B c4af289, C b3a15c1, D f760896, E 8316911)]
 spec-036  ──depends_on──▶  spec-033                             [done — merged into final-form 2026-05-25 (A f4205a9, B 312bdf0, C e378d8f)]
-spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [review_pending]   (PENULTIMATE — UNBLOCKED: 030-033 all done)
-spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [review_pending]   (ULTIMATE — last; spec-036 now done, still blocked on spec-034)
+spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]   (PENULTIMATE)
+spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [ready — UNBLOCKED: all deps done]   (ULTIMATE — last; the only remaining startable plan)
 ```
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
@@ -149,12 +159,10 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-034 — PENULTIMATE** (`depends_on: spec-030, spec-031, spec-032, spec-033` — ALL `done`,
-  so it is UNBLOCKED). Green test suite + honest coverage + real-data assurances. Status
-  `review_pending`, unowned. It is the penultimate plan; per the run instruction it should only be
-  picked up once it "makes sense" (its deps satisfied — now true). **This is the only startable plan.**
-- **spec-035 — ULTIMATE** is still blocked: `depends_on` includes spec-034 (not yet `done`).
-  spec-036 — its other former blocker — is now `done`. spec-035 runs last; after it lands the
-  `final-form` plan line is fully drained.
-- Ordering note: with spec-036 `done`, spec-034 is the sole remaining startable plan; spec-035
-  then unblocks once spec-034 lands. One plan per session; stamp `owner` before building.
+- **spec-035 — ULTIMATE** (`depends_on: spec-030…033, spec-034, spec-036` — **ALL `done`**, so it is
+  now UNBLOCKED). Raw `--core` e2e solve on the forced-free `season_test` config + remaining-symmetry
+  readout (incl. the convenor's within-session ClubGameSpread-excluded comparison run). Status
+  `ready`, unowned. **This is the only remaining startable plan; after it lands the `final-form` plan
+  line is fully drained.** One plan per session; stamp `owner` before building.
+- **spec-034 — PENULTIMATE** is **`done`** (2026-05-26 — merged into final-form), which unblocked
+  spec-035.

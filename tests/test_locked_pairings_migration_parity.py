@@ -38,13 +38,30 @@ from ortools.sat.python import cp_model
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import json
+
 from config import load_season_data
-import config.season_2026 as s2026
 from utils import (
     generate_X,
     _build_scope_count_rules,
     _get_matching_forced_scopes,
 )
+
+# spec-034: the live `config/season_2026.py` LOCKED_PAIRINGS was intentionally
+# emptied on final-form (commit 5761e88 — the convenor edits that file directly for
+# manual draw-generation testing). This migration-parity suite therefore validates
+# the spec-025 FORCED↔LOCKED split against a FROZEN snapshot of the pre-removal
+# artefact (the 18 FORCED + 246 LOCKED entries exactly as they were when the
+# migration landed and these tests passed), not against the live config.
+_PREMIG_FIXTURE = os.path.join(
+    os.path.dirname(__file__), 'fixtures', 'locked_pairings_premigration_2026.json')
+
+
+def _premigration_lists():
+    """(forced_games, locked_pairings) frozen from season_2026.py @ git 5761e88^."""
+    with open(_PREMIG_FIXTURE) as f:
+        d = json.load(f)
+    return d['forced_games'], d['locked_pairings']
 
 # The qualification rule applied by Unit E: an entry is a pure pin (moved to
 # LOCKED_PAIRINGS) iff it has a pairing + grade + date, its description marks it
@@ -118,16 +135,16 @@ def _pinning_var_keysets(X, forced_games, locked_pairings, teams):
 
 class TestPartition:
     def test_migration_counts(self):
-        """The migrated season config has exactly the partition Unit E produced."""
-        moved = [e for e in (s2026.FORCED_GAMES + s2026.LOCKED_PAIRINGS)
-                 if _qualifies_as_pin(e)]
+        """The frozen migration artefact carries exactly the partition Unit E produced."""
+        forced, locked = _premigration_lists()
+        moved = [e for e in (forced + locked) if _qualifies_as_pin(e)]
         # 246 pins moved; FORCED retains 18 count/marquee/fixed entries.
-        assert len(s2026.LOCKED_PAIRINGS) == 246
-        assert len(s2026.FORCED_GAMES) == 18
+        assert len(locked) == 246
+        assert len(forced) == 18
         # Every LOCKED_PAIRINGS entry qualifies as a pure pin.
-        assert all(_qualifies_as_pin(e) for e in s2026.LOCKED_PAIRINGS)
-        # No surviving FORCED entry is a pure pin (none qualify).
-        assert not any(_qualifies_as_pin(e) for e in s2026.FORCED_GAMES)
+        assert all(_qualifies_as_pin(e) for e in locked)
+        # No FORCED entry is a pure pin (none qualify).
+        assert not any(_qualifies_as_pin(e) for e in forced)
         # The combined (pre-migration) list had 246 pins.
         assert len(moved) == 246
 
@@ -139,10 +156,13 @@ class TestMigrationParity:
         """A full 2026 generate_X with the migrated split config produces the SAME
         set of sum==1 pinning constraints as the pre-migration FORCED-only build."""
         # --- Migrated (split) build ---
+        # Use the real 2026 teams/timeslots, but inject the FROZEN pre-removal
+        # FORCED/LOCKED split (the live config's LOCKED_PAIRINGS is now empty).
+        forced_split, locked_split = _premigration_lists()
         data_split = load_season_data(2026)
         teams = data_split['teams']
-        forced_split = list(data_split['forced_games'])
-        locked_split = list(data_split['locked_pairings'])
+        data_split['forced_games'] = list(forced_split)
+        data_split['locked_pairings'] = list(locked_split)
         assert len(locked_split) == 246
         assert len(forced_split) == 18
 

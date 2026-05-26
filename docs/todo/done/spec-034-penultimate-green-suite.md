@@ -1,4 +1,5 @@
-<!-- status: in_progress -->
+<!-- status: done -->
+<!-- completed: 2026-05-26 — Units A-E delivered. A: .coveragerc + real-data fixtures + scripts/run_green_suite.py. B: tests/atoms/test_spec034_assurance_a_realdata.py (live-engine enforce+violate for the 7 atoms lacking a tests/atoms file). C: tests/test_tester_detects_failures.py (6 uncovered tester checks). D: tests/test_soft_pressure_realdata.py (soft_pressure rollup). E: green-up (fixed 5 PRE-EXISTING failures from the LOCKED_PAIRINGS removal 5761e88 + registry recounts — 2 stale-oracle bumps + 3 tests redirected to a frozen pre-removal artefact fixture) + docs (TESTING.md + indexes + CLAUDE.md). Coverage: honest 82.2% on DoD-2 floor surfaces (tester.py report/export surface 73.1% — documented sub-floor per DoD-2, no padding). -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->

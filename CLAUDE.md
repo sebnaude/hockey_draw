@@ -500,8 +500,13 @@ Three-tier override system in `utils.py::max_games_per_grade()`:
 # Swap games
 .\.venv\Scripts\python.exe run.py swap current G001 G002 --year 2026 --save
 
-# Run tests
-.\.venv\Scripts\python.exe -m pytest tests/ -v
+# Run tests — green suite + honest coverage (batched; Windows-safe).
+# The whole `pytest tests/` in ONE process segfaults on Windows/ortools, so this
+# runs the suite as fresh-subprocess batches + combines coverage. See docs/system/TESTING.md.
+.\.venv\Scripts\python.exe scripts\run_green_suite.py          # batched suite + coverage
+.\.venv\Scripts\python.exe scripts\run_green_suite.py --no-cov  # batches only (faster)
+# Single batch / file directly (also fine):
+.\.venv\Scripts\python.exe -m pytest tests/atoms -q
 
 # Export formatted schedule xlsx from DrawStorage
 python -c "from analytics.storage import DrawStorage; d=DrawStorage.load('draws/2026/current.json'); d.export_schedule_xlsx('output.xlsx')"
