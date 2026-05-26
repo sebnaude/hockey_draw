@@ -10,6 +10,7 @@ Provides:
 """
 
 import os
+import re
 import sys
 import logging
 import threading
@@ -385,6 +386,140 @@ class DiagnosticSolutionCallback:
         self.diag_logger.info(
             f"Solution #{solution_num}: objective={objective:.0f}, time={elapsed:.1f}s{mem_info}"
         )
+
+
+# ============== CP-SAT Log Capture (spec-035 Unit B) ==============
+
+# Prefix prepended to every CP-SAT C++ log line routed into the run log. Lets the
+# symmetry parser (and humans) distinguish CP-SAT's own presolve/search output from
+# the Python-side `solver` logger lines (MONITOR / MODEL STATISTICS / INFO).
+CPSAT_LOG_PREFIX = "CPSAT"
+
+
+def attach_cpsat_log_capture(solver, logger: logging.Logger = None) -> None:
+    """Route CP-SAT's own log stream into the run log file (spec-035 Unit B / DoD-3).
+
+    ``log_search_progress=True`` makes CP-SAT emit its presolve + search output —
+    including the ``[Symmetry]`` block (generators / orbits / variable+constraint
+    reduction) — to the C++ stdout stream, which is NOT captured by the Python
+    ``solver`` logger and therefore never reached the saved ``logs/*.log`` files.
+
+    OR-Tools' ``CpSolver.log_callback`` (available in ortools 9.x; verified on
+    9.15.6755) redirects those C++ log lines to a Python callable. We set it to a
+    function that writes every line into the SAME ``solver`` logger the rest of the
+    run uses, so the lines land in the same file handler. This does NOT interfere
+    with the solution callback / ResourceMonitor: ``log_callback`` is a distinct
+    hook from the ``CpSolverSolutionCallback`` passed to ``Solve`` and from the
+    background monitor thread.
+
+    Args:
+        solver: a ``cp_model.CpSolver`` instance (already configured; this only
+            sets ``log_callback`` and ensures ``log_search_progress`` is on).
+        logger: logger to write captured lines to. Defaults to the project's
+            standard ``solver`` logger so lines hit the run's file handler.
+    """
+    logger = logger or logging.getLogger("solver")
+
+    # Belt-and-suspenders: capture is meaningless unless CP-SAT actually logs.
+    try:
+        solver.parameters.log_search_progress = True
+    except Exception:  # pragma: no cover - parameters always present on CpSolver
+        pass
+
+    def _callback(message: str) -> None:
+        # CP-SAT may hand us either a single line or a multi-line chunk; split so
+        # each physical line is one log record (keeps the file readable + lets the
+        # parser work line-by-line). Drop trailing blank from a terminal newline.
+        for line in message.splitlines():
+            logger.info(f"{CPSAT_LOG_PREFIX} | {line}")
+
+    solver.log_callback = _callback
+    logger.info("CP-SAT log capture attached (log_callback -> 'solver' logger).")
+
+
+def parse_symmetry_stats(logpath) -> dict:
+    """Parse CP-SAT's presolve ``[Symmetry]`` block from a captured run log.
+
+    Reads the log written by :func:`attach_cpsat_log_capture` (CP-SAT lines are
+    prefixed with ``CPSAT``, but this parser matches the ``[Symmetry]`` content
+    regardless of prefix so it also works on a raw CP-SAT stdout dump).
+
+    CP-SAT emits the symmetry block multiple times during presolve (once per
+    detection pass). We report the LAST occurrence of each statistic, which
+    reflects the model state closest to the start of search.
+
+    Returns a dict. When a symmetry block is present::
+
+        {
+            'present': True,
+            'num_generators': int,        # from '#generators: N'
+            'num_orbits': int,            # from 'N orbits on M variables'
+            'num_variables_in_orbits': int | None,  # the M above, if present
+            'orbit_sizes': list[int] | None,        # 'with sizes: a, b, ...'
+        }
+
+    When NO symmetry block is found, returns the explicit sentinel
+    ``{'present': False}`` and LOGS that at INFO via the project ``solver``
+    logger (never a silent ``None``, never ``print``).
+
+    Args:
+        logpath: path to the captured log file.
+    """
+    logger = logging.getLogger("solver")
+    path = Path(logpath)
+
+    if not path.exists():
+        logger.info(
+            f"parse_symmetry_stats: log file not found ({path}); "
+            f"no symmetry block present."
+        )
+        return {'present': False}
+
+    text = path.read_text(encoding='utf-8', errors='replace')
+
+    # '[Symmetry] #generators: 8, average support size: 9.25'
+    gen_re = re.compile(r"#generators:\s*(\d+)")
+    # '[Symmetry] 1 orbits on 24 variables with sizes: 24'
+    orbit_re = re.compile(
+        r"(\d+)\s+orbits?\s+on\s+(\d+)\s+variables?"
+        r"(?:\s+with\s+sizes:\s*([0-9,\s]+))?"
+    )
+
+    num_generators = None
+    num_orbits = None
+    num_vars_in_orbits = None
+    orbit_sizes = None
+
+    for line in text.splitlines():
+        if "[Symmetry]" not in line:
+            continue
+        g = gen_re.search(line)
+        if g:
+            num_generators = int(g.group(1))
+        o = orbit_re.search(line)
+        if o:
+            num_orbits = int(o.group(1))
+            num_vars_in_orbits = int(o.group(2))
+            sizes_str = o.group(3)
+            if sizes_str:
+                orbit_sizes = [
+                    int(s) for s in sizes_str.split(",") if s.strip().isdigit()
+                ]
+
+    if num_generators is None and num_orbits is None:
+        logger.info(
+            f"parse_symmetry_stats: no [Symmetry] block found in {path}; "
+            f"returning not-present sentinel."
+        )
+        return {'present': False}
+
+    return {
+        'present': True,
+        'num_generators': num_generators,
+        'num_orbits': num_orbits,
+        'num_variables_in_orbits': num_vars_in_orbits,
+        'orbit_sizes': orbit_sizes,
+    }
 
 
 # ============== Utility Functions ==============

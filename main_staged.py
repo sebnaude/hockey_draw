@@ -36,7 +36,8 @@ from ortools.sat.python import cp_model
 from utils import generate_X
 from solver_diagnostics import (
     setup_logging, ResourceMonitor, SolverConfig, get_recommended_config,
-    log_system_info, log_model_info, log_solve_result, PSUTIL_AVAILABLE
+    log_system_info, log_model_info, log_solve_result, PSUTIL_AVAILABLE,
+    attach_cpsat_log_capture,
 )
 from constraints.stages import (
     apply_solver_stage,
@@ -655,7 +656,11 @@ class StagedScheduleSolver:
             log_search_progress=True
         )
         stage_specific_config.apply_to_solver(solver)
-        
+
+        # spec-035 Unit B (DoD-3): capture CP-SAT's own log stream (incl. the
+        # presolve [Symmetry] block) into the run log alongside the Python logger.
+        attach_cpsat_log_capture(solver, self.logger)
+
         self.logger.info(f"Solver configured: workers={stage_specific_config.num_workers}, "
                         f"linearization={stage_specific_config.linearization_level}")
         
@@ -1336,6 +1341,10 @@ def _main_simple_unified(model, X, data, solver_config, resource_monitor,
     if solver_config:
         solver_config.apply_to_solver(solver)
         print(f"  Solver configured: workers={solver_config.num_workers}")
+
+    # spec-035 Unit B (DoD-3): route CP-SAT's own log stream (incl. the presolve
+    # [Symmetry] block) into the run log alongside the Python `solver` logger.
+    attach_cpsat_log_capture(solver, logger)
 
     log_model_info(model, X, logger)
 
