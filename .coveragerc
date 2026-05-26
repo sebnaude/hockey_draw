@@ -1,0 +1,24 @@
+# Coverage config for the spec-034 green suite.
+#
+# `parallel = True` makes each batched pytest process write its own
+# `.coverage.<host>.<pid>` data file; `scripts/run_green_suite.py` runs the
+# batches then `coverage combine` + `coverage report` to produce one honest
+# total. The DoD-2 floor (>=85%) is measured against the four surfaces that
+# matter via the --include filter in the run script:
+#   constraints/atoms/*, constraints/registry.py, constraints/stages.py,
+#   analytics/tester.py
+[run]
+branch = True
+parallel = True
+source =
+    constraints
+    analytics
+omit =
+    tests/*
+    */__pycache__/*
+    */.venv/*
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1

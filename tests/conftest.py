@@ -12,6 +12,7 @@ This module provides:
 import pytest
 from ortools.sat.python import cp_model
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timedelta
 from itertools import combinations
 from typing import List, Dict, Tuple, Any
@@ -22,6 +23,60 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import PlayingField, Team, Club, Grade, Timeslot
+
+
+# ============== Real-data fixtures (spec-034 — no mocks, no patches) ==============
+#
+# These provide the *real* season models and a *real* committed draw that the
+# spec-034 assurance suites (atoms-enforce / tester-detects / soft-measured) build on.
+# No mocking, patching or monkeypatching — the convenor's hard requirement.
+#
+# `load_season_data(2026)` costs ~0.9s, so it is loaded ONCE per session and each test
+# receives a `deepcopy` (~0.007s). Atoms mutate `data['penalties']`/`data['constraint_slack']`
+# in place, so handing out copies keeps tests isolated while staying fast.
+
+# Path to the pre-committed real draw fixture (weeks 1,2,4,5,6 of the real 2026 draw,
+# sourced from draws/2026/current.json). Committed so the suite is deterministic and
+# never requires a solver run at test time.
+CLEAN_DRAW_FIXTURE = os.path.join(os.path.dirname(__file__), 'fixtures', 'draw_2026_first6weeks.json')
+
+
+@pytest.fixture(scope='session')
+def _season_2026_base():
+    """Session-cached real 2026 season data (loaded once). Do NOT mutate — use
+    the `real_2026_data` fixture, which hands out a fresh deepcopy per test."""
+    from config import load_season_data
+    return load_season_data(2026)
+
+
+@pytest.fixture(scope='session')
+def _season_test_base():
+    """Session-cached real forced-free `season_test` data (loaded once). Smaller than
+    2026 and carries zero forced games. Do NOT mutate — use `test_season_data`."""
+    from config import load_season_data
+    # `load_season_data` is type-hinted `year: int` but resolves 'test' via the
+    # f".season_{year}" import path; the duck-typed call is valid at runtime.
+    return load_season_data('test')  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def real_2026_data(_season_2026_base):
+    """A fresh, mutation-safe deepcopy of the real 2026 season data dict."""
+    return deepcopy(_season_2026_base)
+
+
+@pytest.fixture
+def test_season_data(_season_test_base):
+    """A fresh, mutation-safe deepcopy of the real forced-free `season_test` data dict."""
+    return deepcopy(_season_test_base)
+
+
+@pytest.fixture
+def clean_real_draw():
+    """A real, committed, clean draw (`DrawStorage`). Loaded fresh per test so a test
+    may corrupt a game in place (Assurance B) without affecting other tests."""
+    from analytics.storage import DrawStorage
+    return DrawStorage.load(CLEAN_DRAW_FIXTURE)
 
 
 # ============== Field Fixtures ==============
