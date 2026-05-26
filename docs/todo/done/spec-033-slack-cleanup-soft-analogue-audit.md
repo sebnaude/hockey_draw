@@ -1,4 +1,5 @@
-<!-- status: building -->
+<!-- status: done -->
+<!-- completed: 2026-05-25 — all 5 units (A-E) merged into final-form + /adversarial Mode B verified. A 6037235, B c4af289, C b3a15c1, D f760896, E 8316911. Plus a TeamConflict default-stages parity fix (89fdfd6) for a Unit-C regression caught during Unit D. -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 (v3, Unit B rework) — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
