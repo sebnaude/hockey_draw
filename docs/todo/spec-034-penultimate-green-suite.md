@@ -1,9 +1,9 @@
-<!-- status: ready -->
+<!-- status: in_progress -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-030, spec-031, spec-032, spec-033 -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-spec034-20260526 claimed=2026-05-26 -->
 
 # spec-034 — PENULTIMATE: green test suite, honest coverage, three real-data assurances
 
@@ -211,14 +211,21 @@ so two units never edit the same file. Unit E is the only cross-file unit and ru
   exists and contains other system docs, so this file simply needs to be created there)* —
   the three assurances (enforcement / detection / soft-measurement), the no-mock policy, the
   coverage floor, and the honest coverage numbers (incl. any sub-floor module + reason).
-  **Registration:** add an entry row to `docs/README.md`'s "At-a-glance file tree" under
-  `system/` (this is the canonical doc-index, not `CLAUDE.md`). Optionally add a reference in
-  `GOALS.md`'s doc-map paragraph if it points to specific system docs. The `CLAUDE.md` doc-index
-  section lists doc *categories*, not individual files — do NOT add a per-file row there.
-  (review fix — M3: the plan said "register it in the CLAUDE.md doc-index table" but the CLAUDE.md
-  table lists categories (`docs/system/` as one row), not individual files. The correct index is
-  `docs/README.md`'s file-tree block. `docs/system/README.md` (the per-category README) should
-  also get a one-line entry.)
+  **Registration (canonical convention — verified against the live repo):** the **mandatory,
+  exhaustive** doc index is `docs/README.md`'s "At-a-glance file tree" (every `docs/system/*.md`
+  is listed there) plus the per-category `docs/system/README.md` — add a one-line entry to BOTH.
+  Optionally add a reference in `GOALS.md`'s doc-map paragraph if it points to specific system docs.
+  The `CLAUDE.md` "Additional Documentation" per-file table (≈lines 680-695) is **curated, not
+  exhaustive** — it lists the high-traffic system docs (CONSTRAINT_INVENTORY, HARNESS, STAGES,
+  HELPER_VARS, COUNT_ADJUSTERS) but deliberately omits niche ones (REGEN_CONSTRAINTS,
+  FORCED_GAMES_AS_COUNT_RULES, SYSTEM_OVERVIEW). A per-file row there is **optional**; for a niche
+  testing doc, follow the niche-doc precedent and skip it.
+  (review fix — M3 SUPERSEDED by global cross-plan review 2026-05-24: the earlier note claimed
+  "CLAUDE.md lists categories, not individual files." That is wrong — CLAUDE.md has TWO tables: a
+  category table (≈line 25) AND a per-file "Additional Documentation" table (≈680-695) that does
+  list individual system docs. The accurate rule is the one above: `docs/README.md` + per-category
+  README are mandatory/exhaustive; the CLAUDE.md per-file table is curated/optional. spec-035 was
+  aligned to this same rule to resolve the prior contradiction.)
   [Unit E]
 - `docs/todo/GOALS.md` — add the spec-034 row to the `## Specifications` table. [Unit E]
 - `docs/todo/00-dependency-tree.md` — add the spec-034 node and mark it unblocked when 030-033 are
