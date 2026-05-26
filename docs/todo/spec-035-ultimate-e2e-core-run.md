@@ -1,8 +1,8 @@
-<!-- status: ready -->
+<!-- status: in_progress -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-030, spec-031, spec-032, spec-033, spec-034, spec-036 -->
-<!-- owner: session=none claimed=none -->
+<!-- owner: session=opus-spec035-20260526T000000Z claimed=2026-05-26T00:00:00Z -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline. 2026-05-25: added intermediate ClubGameSpread-excluded run + cross-run symmetry comparison (Unit A gains an exclude param, Unit C runs both solves) — incremental scope, no re-review. 2026-05-25 (convenor): RUN ORDER SWAPPED — the `--exclude ClubGameSpread` run is now Run 1, the full core run is Run 2. Baseline framing unchanged (full core remains the recorded reference); only execution order moved. No re-review (operational ordering only). -->
 
 # spec-035 — ULTIMATE: raw `--core` e2e solve on the forced-free test config + remaining-symmetry readout
