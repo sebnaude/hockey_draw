@@ -24,6 +24,11 @@ Loading:
 
 Note: run.py's --year flag is typed int, so the standard CLI cannot select
 this config as `--year test`; load it programmatically as shown above.
+
+For the spec-035 raw-core e2e solve, the preferred launch path is
+``get_season_data()`` (Option (b) — avoids the int-typed ``load_season_data``
+signature), driven by ``scripts/run_core_e2e.py`` which fixes the raw-core flag
+profile (groups=['core'], workers=10, no fix-round-1, no locks) in one place.
 """
 
 import copy
