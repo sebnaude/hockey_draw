@@ -217,6 +217,76 @@ NOT be baked into the constraint atoms.
 
 ---
 
+## 8b. The Friday-game interpretation + the proposed fix — BOTH UNVERIFIED
+
+> This section records, verbatim, (a) the agent's interpretation of the
+> Friday-game problem and (b) the convenor's instructed fix. **The convenor has
+> explicitly said NEITHER may be correct.** Do not treat either as established.
+> They are here so the next person can confirm or refute them, not adopt them.
+
+### (a) The agent's interpretation of the Friday-game problem (UNVERIFIED)
+
+Both culprit atoms compute their hard count targets by subtracting a *forced-Friday
+count read from the config*:
+
+- `AwayClubHomeWeekendsCount` pinned, per away-based club:
+  - `sum(friday_home_indicators) == phl_forced_friday_count(data, club)`
+  - `sum(sunday_home_indicators) == max(PHL_required − phl_forced_friday_count, max_other)`
+  - `sum(all_home_indicators)    == max(PHL_required, max_other)`
+- `ClubVsClubStackedWeekends` set its PHL Sunday stacking budget to
+  `total_phl_meetings(A,B) − phl_forced_friday_meetings(A,B)`.
+
+The agent's claim: on forced-free `season_test`, `forced_games == []` so
+`phl_forced_friday_count == 0` and `phl_forced_friday_meetings == 0`. That makes
+`AwayClubHomeWeekendsCount` hard-demand **`friday_home == 0` AND `sunday_home == 20`
+AND `total == 20`** for both Maitland and Gosford simultaneously — which the agent
+argued is physically unsatisfiable — and makes `ClubVsClubStackedWeekends` force
+ALL PHL pair-meetings onto Sundays. **Root-cause story (agent):** *these atoms
+bake production's forced-Friday structure into hard `==` constraints and therefore
+go infeasible whenever the config forces nothing.*
+
+**Why this may be WRONG (open):** the agent did NOT prove the `friday==0 +
+sunday==20` combination is actually unsatisfiable from first principles (capacity /
+EqualGames geometry) — it inferred it from the infeasibility verdict. It also did
+NOT explain why `ClubVsClubStackedWeekends` is infeasible forced-free *given* that
+the forced term is already 0 there (so "forced-Friday coupling" cannot be the
+forced-free cause for #2). The real mechanism behind constraint #124504's
+infeasibility was never traced to a specific contradiction.
+
+### (b) The convenor's instructed fix (UNVERIFIED / possibly wrong)
+
+Verbatim intent: forcing of a specific number of Friday games (e.g. "exactly 8
+PHL Friday games at Gosford/Central Coast") must be expressed in `FORCED_GAMES`
+as a partial-key COUNT rule — `{grade:'PHL', day:'Friday', field_location:'Central
+Coast Hockey Park', count:8, constraint:'equal'}` — and the constraint atoms
+should **no longer contain any forced-Friday awareness**. Instruction was:
+(1) verify FORCED_GAMES does the forcing (done — §8), (2) "flense the offending
+[forced-Friday] code from the constraints", (3) try again.
+
+**What the agent did with that instruction:** flensed `AwayClubHomeWeekendsCount`
+(removed equalities 1+2 and the `phl_forced_friday_count` /
+`away_club_required_sundays` calls; kept only `total == max(PHL, max_other)`).
+Committed `b6b7186` on `spec035-flense`.
+
+**Why the fix may be WRONG / incomplete (open):**
+- After flensing, `AwayClubHomeWeekendsCount` is feasible alone but still
+  infeasible together with `AwayClubPerOpponentAndAggregateHomeBalance` — so
+  removing the forced-Friday code did NOT by itself make the home/away pair
+  feasible. Something else is going on between those two atoms.
+- For `ClubVsClubStackedWeekends`, the forced-Friday term is already 0 on
+  forced-free, so "flensing the forced-Friday code" cannot change the forced-free
+  outcome at all — the instruction, taken literally, is a no-op for culprit #2.
+- Whether keeping `total == max(PHL, max_other)` as a hard `==` is even the right
+  surviving semantics is unconfirmed (it may need to be a bound, or the atom may
+  be redundant, or the forced-free config may simply be the wrong test input for
+  these atoms — none of these has been established).
+
+**Bottom line:** the *mechanical* facts (§3–§7) are solid; the *causal story* for
+why #124504 is infeasible — and therefore the correct fix — is NOT yet established
+by either party. Next step should be to actually trace the specific contradiction
+(e.g. dump the conflicting constraints / use an assumptions/IIS-style probe), not
+to act on (a) or (b).
+
 ## 9. What is DONE vs NOT DONE
 
 Done:
