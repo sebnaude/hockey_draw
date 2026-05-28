@@ -1,8 +1,9 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- reviewed: adversarial Sonnet review 2026-05-28 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
+<!-- owner: session=2026-05-28-spec038-build claimed=2026-05-28 -->
 
 # spec-038 — `ClubVsClubStackedWeekends` granularity: per-team-pair budget, `max(team_count) × per_matchup` aligned-weekend formula
 
