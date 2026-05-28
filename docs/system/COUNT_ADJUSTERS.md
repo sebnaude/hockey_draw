@@ -176,50 +176,48 @@ def test_adjuster_reduces_expected_meetings(self):
     assert out[('Maitland', 'Norths')]['PHL'] == total_meetings - 2
 ```
 
-## 6. FORCED-Friday helper (spec-004)
+## 6. Per-pair FORCED-Friday helper + AwayClub home-Sunday derived range (spec-005 + spec-037)
 
-`AwayClubHomeWeekendsCount` (and spec-005's PHL Sunday budget atom) do not
-register through the `forced_blocked_adjuster` callback because they need to
-be queryable from multiple call sites WITHOUT pre-running an engine-managed
-dispatch step. Instead they consume a shared, pure-function helper module:
-`constraints/atoms/_phl_forced_friday_helper.py`.
+`ClubVsClubStackedWeekends` (spec-005) and `AwayClubHomeWeekendsCount`
+(spec-004, redesigned in spec-037) consume a shared pure-function helper
+module: `constraints/atoms/_phl_forced_friday_helper.py`. The helper avoids
+the `forced_blocked_adjuster` callback because it needs to be queryable from
+multiple call sites WITHOUT pre-running an engine-managed dispatch step.
 
-The helper exports four functions:
+The helper now exports three functions:
 
 ```
-phl_forced_friday_count(data, club) -> int
-    Distinct count of PHL Friday games the club WILL play this season.
-    Multi-scope-safe: when one FORCED_GAMES entry's matched-set is a strict
-    subset of another's, the subset entry contributes 0. Implementation walks
-    candidate (game, timeslot) X-keys filtered to (PHL, Friday, club involved)
-    and greedy-partitions them by `_get_matching_forced_scopes` matched-set.
-
 phl_forced_friday_meetings(data, club_a, club_b) -> int     # spec-005
     Number of PHL Friday games FORCED to be played between this SPECIFIC pair
-    of clubs. Differs from `phl_forced_friday_count` in that umbrella scopes
-    (no `team1/team2/teams` filter naming both clubs) contribute 0 — they
-    don't guarantee any Friday is BETWEEN this pair, they only guarantee a
-    total per-club. The per-pair helper deliberately UNDER-counts (only
-    credits entries whose scope names both clubs) so spec-005's PHL Sunday
-    budget = `total_pair_meetings - phl_forced_friday_meetings` is a LOWER
-    bound on Sunday meetings — the solver may schedule MORE Sundays for the
-    pair, but not fewer.
+    of clubs. Umbrella scopes (no `team1/team2/teams` filter naming both
+    clubs) contribute 0 — they don't guarantee any Friday is BETWEEN this
+    pair, they only guarantee a total per-club. The per-pair helper
+    deliberately UNDER-counts (only credits entries whose scope names both
+    clubs) so spec-005's PHL Sunday budget
+    `total_pair_meetings - phl_forced_friday_meetings` is a LOWER bound on
+    Sunday meetings — the solver may schedule MORE Sundays for the pair, but
+    not fewer.
 
-away_club_required_sundays(data, club) -> int
-    max(phl_required - phl_forced_friday_count(data, club),
-        max(other_grade_required))
+away_club_min_sundays_home(data, club) -> int                # spec-037
+    max(num_rounds[g] // 2 for g in non-PHL grades the club fields),
+    or 0 if the club fields no non-PHL grade.
 
-    The CALCULATED number of Sundays the club needs at its home ground AFTER
-    subtracting FORCED PHL Fridays. Strictly <= away_club_total_weekends.
+    The floor of the derived Sunday-home weekend range for an away-based
+    club. Non-PHL grades have no Friday alternative — every home game must
+    land on a Sunday — so this is the strict minimum Sunday-home count.
 
-away_club_total_weekends(data, club) -> int
-    max(phl_required, max(other_grade_required))
+away_club_max_sundays_home(data, club) -> int                # spec-037
+    max(upper(g) for g in ALL grades the club fields),
+    where upper(g) = (num_rounds['PHL'] + 1) // 2 if g == 'PHL'
+                   = num_rounds[g] // 2           otherwise,
+    or 0 if the club has no teams.
 
-    The ORIGINAL (unadjusted) max games across grades, ignoring FORCED Fridays.
-    Total number of home-ground appearances (Friday + Sunday combined).
+    The ceiling of the derived Sunday-home weekend range. PHL can lend
+    Sundays to forced Fridays without pushing the total above its raw home
+    count, so the ceiling caps at the max across all grades.
 ```
 
-### spec-005 PHL Sunday budget formula
+### spec-005 PHL Sunday budget formula (unchanged)
 
 `ClubVsClubStackedWeekends` uses `phl_forced_friday_meetings` to compute
 the **per-pair** Sunday budget for PHL stacking:
@@ -238,7 +236,7 @@ where per_matchup = `num_rounds['PHL'] // (T-1)` for even T or `// T` for
 odd T). The atom pins `sum_w play[PHL, w] for Sunday vars == sunday_budget`
 HARD.
 
-### Why "count variables, NOT sum FORCED entry counts"
+### Why per-pair (NOT per-club) for the umbrella + per-pair entry case
 
 A convenor with these two FORCED entries:
 
@@ -249,25 +247,55 @@ A convenor with these two FORCED entries:
  'teams': ['Maitland', 'Tigers']},   # per-pair: 1 Mait-vs-Tigers Friday
 ```
 
-is committing to **2 Maitland Friday PHL games total** (not 3). The per-pair
-entry forces one specific matchup; that matchup is one of the umbrella's
-two. The helper's greedy algorithm walks the umbrella (largest matched-set
-first), claims its 2-var contribution, then walks the per-pair scope, sees
-its matched-set is fully covered, and contributes 0.
+has committed to **2 Maitland Friday PHL games total** (not 3). The
+per-pair entry forces one specific matchup; that matchup is one of the
+umbrella's two. `phl_forced_friday_meetings(data, 'Maitland', 'Tigers')`
+returns 1 — only the per-pair entry credits the (Maitland, Tigers) pair,
+since the umbrella doesn't guarantee any Tigers-vs-Maitland Friday. (The
+spec-037 redesign of `AwayClubHomeWeekendsCount` no longer reads FORCED
+config; FORCED_GAMES carries the per-club Friday count instead.)
 
-For disjoint scopes (e.g. Maitland Park count=2 + NIHC count=1 per-pair) the
-matched-sets don't overlap (different `field_location` slots), so both
-contribute: total = 2 + 1 = 3.
+### spec-037 AwayClub home-Sunday derived range
 
-### Edge case: PHL=18, 3rd=20
+`AwayClubHomeWeekendsCount` (spec-004, redesigned in spec-037) enforces a
+single two-sided range on the number of Sunday-home weekends for each
+away-based club:
 
-When another grade requires MORE games than PHL has, FORCED PHL Fridays don't
-reduce the Sunday count — they're absorbed into the same weekend total:
+```
+min_sundays_home(data, club) <= sum(sunday_home_indicators) <= max_sundays_home(data, club)
+```
 
-- `phl_required = 18`, `max_other = 20`, `phl_forced_friday_count = 2`
-- `away_club_required_sundays = max(18 - 2, 20) = 20`
-- `away_club_total_weekends   = max(18, 20) = 20`
+The atom previously pinned THREE hard equalities (Friday count, Sunday
+count, total weekends) and read FORCED_GAMES to compute the Friday side.
+That coupled two solver mechanisms encoding the same fact (FORCED_GAMES
+already enforces "exactly N Maitland-Park Fridays" via partial-key count
+entries) and over-constrained the model on forced-free configs. The
+redesign drops the Friday-side enforcement entirely and clamps Sunday-home
+to a derived range that PHL forced Fridays naturally fit beneath.
 
-The atom's three sums in this case land at: Friday-home=2, Sunday-home=20,
-all-home=20 — meaning the 2 Friday-home weeks must each have a Sunday-home
-game too (the OR-indicator collapses them to one weekend each).
+**Worked example — Maitland on `season_test` (forced-free):**
+
+`num_rounds`: PHL=20, 3rd=18, 4th=18, 5th=16, 6th=18. Maitland fields
+PHL/3rd/4th/5th/6th.
+
+| Grade | Home games (`num_rounds // 2`, PHL uses ceil) | Must be Sunday? |
+|---|---|---|
+| PHL | 10 (ceil(20/2)) | No (PHL has a Friday option) |
+| 3rd | 9 | Yes |
+| 4th | 9 | Yes |
+| 5th | 8 | Yes |
+| 6th | 9 | Yes |
+
+- `away_club_min_sundays_home = max(9, 9, 8, 9) = 9` (max across non-PHL — the floor)
+- `away_club_max_sundays_home = max(10, 9, 9, 8, 9) = 10` (max across all incl. PHL — the ceiling)
+
+With 0 forced Fridays, PHL's 10 home games land on 10 Sundays → total = 10.
+With 3 forced Fridays at MP via `FORCED_GAMES`, PHL contributes 7 home
+Sundays + 3 home Fridays → distinct home-Sunday weeks = max(9, 7) = 9 (the
+non-PHL floor binds). Both inside `[9, 10]`. ✓
+
+**Gosford special case** (PHL-only club): `min = 0` (no non-PHL grades),
+`max = 10`. The atom skips the lower bound when min == 0 (vacuous) and
+emits only `sum <= 10`. Forced Fridays from FORCED_GAMES (e.g. 8 PHL
+Fridays at CCHP) reduce PHL Sunday demand to 2; the atom still allows up
+to 10, no conflict.
