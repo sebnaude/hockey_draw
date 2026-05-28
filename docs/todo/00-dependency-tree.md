@@ -107,7 +107,7 @@ disjoint sets of functions) and run in parallel:
   `phl_forced_friday_count` / `away_club_required_sundays` / `away_club_total_weekends` deleted
   forward-only. Regen-soft twin updated in parallel. Supersedes the WIP `spec035-flense` branch
   (tears it down in Unit B). `depends_on: none`. Single S2 unit + a worktree-teardown unit.
-  Status: `review_pending` (auto-triggers `/adversarial` Mode A this session).
+  Status: **`building`** (2026-05-28 — user authorised this session; Mode A hardened earlier today).
 - **spec-038** — `ClubVsClubStackedWeekends` granularity rework: replaces `matchups × per_matchup`
   budget (game-count) with `max(team_count_A, team_count_B) × per_matchup` (aligned-weekend count);
   introduces a per-team-pair sub-budget + per-aligned-weekend cardinality (`min(a, b)` games per
@@ -115,8 +115,8 @@ disjoint sets of functions) and run in parallel:
   formula by construction (`a=b=1`). New helper-var key family `cvc_stack_team_pair_play`; existing
   `cvc_stack_play` key shape preserved (semantics shift transparently for the co-location consumer).
   `depends_on: none`. Four units A→B→C→D (A shared helpers, B atom rewrite, C co-location/regen-soft
-  parity, D bisect-harness acceptance + docs). S3. Status: `review_pending` (auto-triggers
-  `/adversarial` Mode A this session).
+  parity, D bisect-harness acceptance + docs). S3. Status: `ready` (2026-05-28 Mode A hardened;
+  awaits user go-ahead — spec-037 building first this session).
 
 ```
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
@@ -126,8 +126,8 @@ spec-033  ──depends_on──▶  spec-032                             [done 
 spec-036  ──depends_on──▶  spec-033                             [done — merged into final-form 2026-05-25 (A f4205a9, B 312bdf0, C e378d8f)]
 spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]   (PENULTIMATE)
 spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]   (ULTIMATE)
-spec-037  ──depends_on──▶  (none)                                          [review_pending — AwayClubHomeWeekendsCount redesign]
-spec-038  ──depends_on──▶  (none)                                          [review_pending — ClubVsClubStackedWeekends granularity rework]
+spec-037  ──depends_on──▶  (none)                                          [building — AwayClubHomeWeekendsCount redesign; user-authorised 2026-05-28]
+spec-038  ──depends_on──▶  (none)                                          [ready — ClubVsClubStackedWeekends granularity rework; awaits user go-ahead]
 ```
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
@@ -188,10 +188,9 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-037** and **spec-038** — once each finishes `/adversarial` Mode A hardening and lands at
-  `ready`, they are both implementable in parallel (no shared files at the unit-write granularity).
-  They block resumption of spec-035 Unit C. Neither is `ready` yet — both are `review_pending`
-  at authoring time (this session).
+- **spec-037** is `building` this session (user authorised the smaller S2 first; spec-038 stays
+  `ready` and runs separately when authorised). They share no files at unit-write granularity.
+  Both block resumption of spec-035 Unit C.
 - **spec-035 — ULTIMATE** is `in_progress` but its Unit C is **BLOCKED** on the presolve
   infeasibility documented in `docs/todo/spec-035-e2e-infeasibility-handoff.md`. Resumes when both
   spec-037 and spec-038 are `done`.

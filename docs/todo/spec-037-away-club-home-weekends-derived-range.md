@@ -1,8 +1,9 @@
-<!-- status: ready -->
+<!-- status: building -->
 <!-- reviewed: adversarial Sonnet review 2026-05-28 — fixes applied inline -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
+<!-- owner: session=2026-05-28-spec037-build claimed=2026-05-28 -->
 
 # spec-037 — `AwayClubHomeWeekendsCount` redesign: derived two-sided range, no forced-Friday awareness
 
