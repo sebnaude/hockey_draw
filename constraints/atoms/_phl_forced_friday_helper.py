@@ -25,8 +25,12 @@ where:
   min_sundays_home(club) = max(num_rounds[g] // 2 for g in non-PHL grades the club fields)
                          = 0 if the club fields no non-PHL grade.
 
-  max_sundays_home(club) = max(num_rounds[g] // 2 for g in ALL grades the club fields)
-                         = 0 if the club has no teams.
+  max_sundays_home(club) = max(upper(g) for g in ALL grades the club fields)
+                         = 0 if the club has no teams,
+    where upper(PHL) = (num_rounds[PHL] + 1) // 2 (ceil — PHL can lend Sundays
+    to forced Fridays, so its upper bound rounds up for odd num_rounds) and
+    upper(g) = num_rounds[g] // 2 for non-PHL grades (floor — those grades
+    have no Friday alternative, so their ceiling equals their exact home count).
 
 The floor is the strict number of Sundays demanded by non-PHL grades (those
 have no Friday alternative — every home game MUST land on a Sunday). The
