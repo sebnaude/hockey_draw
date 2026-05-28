@@ -384,7 +384,10 @@ CONSTRAINT_REGISTRY: Dict[str, ConstraintInfo] = {
         severity_level=3,
         # spec-033 Unit A: slack_key removed — alignment is fixed-hard, no slack.
         atom_group='ClubVsClubStackedAlignment',
-        required_helpers=['cvc_stack_play'],
+        # spec-038 Unit B: atom owns both helper kinds — it produces
+        # `cvc_stack_team_pair_play` from raw X-vars and `cvc_stack_play`
+        # from team-pair indicators (consumed by ClubVsClubStackedCoLocation).
+        required_helpers=['cvc_stack_play', 'cvc_stack_team_pair_play'],
         groups=frozenset({'core', 'club_alignment'}),
     ),
     'ClubVsClubStackedCoLocation': ConstraintInfo(
@@ -796,10 +799,16 @@ HELPER_VAR_CATALOG: Set[str] = {
     # spec-005 ClubVsClubStackedAlignment helpers. Parallel to the
     # `club_day_*` family but keyed per (club_pair, week) rather than
     # (club, ...) — different semantics, no collision.
-    'cvc_stack_play',         # (pair, grade, week) — does this grade play this Sunday for the pair?
+    'cvc_stack_play',         # (pair, grade, week) — does this grade play this Sunday for the pair? (spec-038: OR over team-pair indicators)
     'cvc_stack_field_used',   # (pair, week, field_name) — pair using this field this Sunday
     'cvc_stack_slot_used',    # (pair, week, day_slot) — pair using this slot this Sunday
     'cvc_stack_active',       # (pair, week) — stacking active this Sunday (≥ 2 grades coincide)
+    # spec-038 Unit B: per-team-pair Sunday play indicator. Key shape
+    # (team_pair, week) where team_pair is an unordered alphabetically-sorted
+    # (t1, t2) tuple. = OR over Sunday X-vars with (team1, team2) == tp at week.
+    # Produced and consumed by ClubVsClubStackedWeekends only; sits beneath
+    # cvc_stack_play (which is now an OR over team-pair indicators per pair-grade).
+    'cvc_stack_team_pair_play',  # (team_pair, week)
     # spec-021 shared contiguity primitive (constraints/atoms/_contiguity.py).
     # Anchored venue fill vs floating club spread use distinct kinds so their
     # slot_used indicators never collide.
@@ -1019,6 +1028,11 @@ HELPER_VAR_PRODUCER_CONSUMER: List[tuple] = [
     # spec-005: Weekends registers `cvc_stack_play`; CoLocation reads it (plus
     # its own kinds). Weekends must run first. (registry: 25 < 26.)
     ('ClubVsClubStackedWeekends', 'ClubVsClubStackedCoLocation', ['cvc_stack_play']),
+    # spec-038 Unit B: ClubVsClubStackedWeekends also produces & consumes
+    # `cvc_stack_team_pair_play` internally (per-team-pair Sunday play
+    # indicators sitting beneath `cvc_stack_play`). Self-producer/consumer —
+    # not listed here (would trip layer-1 self-precedence check); documented
+    # in HELPER_VAR_CATALOG comment and ConstraintInfo.required_helpers.
 ]
 
 

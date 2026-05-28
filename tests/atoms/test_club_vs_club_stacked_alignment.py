@@ -76,19 +76,44 @@ def _add_no_double_booking_fields(model, X):
             model.Add(sum(vars_list) <= 1)
 
 
+def _add_per_team_game_count(model, X, data):
+    """Inline EqualGames: each team plays exactly num_rounds[grade] games.
+
+    spec-038 added the BalancedMatchups [base, base+1] range to the stacked
+    atom; without the per-team count pinning each team to R games, the solver
+    is free to pick base+1 even when production never would. Add this here so
+    the tests exercise the production-realistic configuration.
+    """
+    from collections import defaultdict
+    num_rounds = data.get('num_rounds', {}) or {}
+    team_vars = defaultdict(list)
+    for key, var in X.items():
+        if len(key) < 11 or not key[3]:
+            continue
+        team_vars[(key[2], key[0])].append(var)
+        team_vars[(key[2], key[1])].append(var)
+    for (grade, _team), vars_list in team_vars.items():
+        R = num_rounds.get(grade, 0)
+        if R > 0:
+            model.Add(sum(vars_list) == R)
+
+
 def _solve_with_stacking(data):
-    """Apply both stacked atoms + field-uniqueness and solve.
+    """Apply both stacked atoms + field-uniqueness + per-team R, and solve.
 
     Field-uniqueness (NoDoubleBookingFields) is added so the co-location
     contiguity check is testing real solutions: without it the solver could
     stack 2+ games on the same (slot, field) which the production model
-    would never do.
+    would never do. Per-team R is added so the BalancedMatchups range
+    semantics of spec-038 collapse to the correct per_matchup value (without
+    it the solver may pick base+1 freely, which production EqualGames forbids).
 
     Returns (status, X, solver).
     """
     model, X = build_model_X(data)
     reg = _registry(model)
     _add_no_double_booking_fields(model, X)
+    _add_per_team_game_count(model, X, data)
     ClubVsClubStackedWeekends().apply(model, X, data, reg)
     ClubVsClubStackedCoLocation().apply(model, X, data, reg)
     status, solver = solve_with_timeout(model)
@@ -150,7 +175,11 @@ class TestScenarioOneStackingMath:
         )
 
     def test_per_grade_counts_pinned_exactly(self):
-        """Assert sum(play[g, w]) over w == grade_counts[g] in the solution."""
+        """Assert sum(play[g, w]) over w == grade_counts[g] in the solution.
+        With `_add_per_team_game_count` applied alongside the spec-038 range
+        budget, the per-team R constraint forces pair sums to exactly `base`
+        (extras=0 for T=2 fixture), so the active week counts must match
+        DEFAULT_GRADE_COUNTS exactly."""
         data = self._data()
         status, X, solver = _solve_with_stacking(data)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
@@ -191,7 +220,8 @@ class TestScenarioOneStackingMath:
     def test_peel_off_layout_exactly(self):
         """The 4 weeks with games have grade-set sizes [5, 4, 2, 1] in some
         order — matching the hand-computed peel-off layout. (Sizes uniquely
-        determine the structure because grades sort by count.)"""
+        determine the structure because grades sort by count.) With
+        `_add_per_team_game_count` applied, the range collapses to exact base."""
         data = self._data()
         status, X, solver = _solve_with_stacking(data)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
@@ -410,23 +440,33 @@ class TestScenarioFourCoLocation:
                 continue
             per_week.setdefault(key[6], []).append((key[2], key[4], key[9]))
 
-        # Each stacked week's slots must be contiguous (max - min + 1 == count).
+        # The co-location atom only enforces contiguity when ≥ 3 distinct
+        # slots are in play (see `club_vs_club_stacked_co_location.py` —
+        # `if len(slot_to_vars) >= 3`). For 2-game weeks the atom only
+        # forces same-field; slot choice is solver discretion. Check
+        # contiguity only on stacked weeks with ≥ 3 games.
+        contiguity_checked = 0
         for week, games in per_week.items():
             grades = {g for g, _s, _f in games}
-            if len(grades) < 2:
+            if len(grades) < 3:
                 continue
             slots = sorted([s for _g, s, _f in games])
             assert slots[-1] - slots[0] + 1 == len(slots), (
-                f'Stacked week {week} slots {slots} are NOT contiguous '
-                f'(span={slots[-1] - slots[0] + 1}, count={len(slots)}). '
-                f'Games: {games}'
+                f'Stacked week {week} (≥3 grades) slots {slots} are NOT '
+                f'contiguous (span={slots[-1] - slots[0] + 1}, '
+                f'count={len(slots)}). Games: {games}'
             )
-            # Adjacent-grade games (sorted by slot) have |slot_i - slot_j| == 1.
             for i in range(len(slots) - 1):
                 assert slots[i + 1] - slots[i] == 1, (
                     f'Stacked week {week}: gap between slots {slots[i]} and '
                     f'{slots[i + 1]} != 1; full slot list {slots}'
                 )
+            contiguity_checked += 1
+        # Fixture sized for at least 1 week with all 3 grades (PHL+2nd+3rd).
+        assert contiguity_checked >= 1, (
+            f'Expected ≥1 week with all 3 grades active to exercise '
+            f'contiguity; got {contiguity_checked}. Layout: {per_week}'
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -455,13 +495,19 @@ class TestStackedAtomSmoke:
         # When: the atom is applied.
         n = ClubVsClubStackedWeekends().apply(model, X, data, reg)
 
-        # Then: n == 29.
-        # Oracle (read straight from club_vs_club_stacked_weekends.py apply()):
-        #   1 pair × 5 grades with sunday_budget > 0 → 5 `sum == budget` constraints.
-        #   Implication chain: 5 grades sorted desc count → 4 consecutive pairs,
-        #     each × num_weeks (6) → 24 `lo_play <= hi_play` constraints.
-        #   Total: 5 + 24 = 29.
-        assert n == 29
+        # Then: n == 104 (spec-038 four-layer model with range Layer 2/5).
+        # Oracle (counts mirror club_vs_club_stacked_weekends.py `n += ...`):
+        #   1 pair × 5 grades with max_budget > 0. Each (pair, grade) is
+        #   1×1 (default fixture has 1 team per club per grade) → 1 team-pair.
+        #   Per (pair, grade) contributions:
+        #     Layer 2: 2 range constraints (>= tp_min, <= tp_max) per team-pair (1 tp) → 2
+        #     Layer 4: 2 OnlyEnforceIf constraints per Sunday week (6 weeks) → 12
+        #     Layer 5: 2 range constraints (>= min_budget, <= max_budget) → 2
+        #     Subtotal per pair-grade: 2 + 12 + 2 = 16.
+        #   5 grades × 16 = 80.
+        #   Layer 6: 4 consecutive (hi, lo) grade pairs × 6 weeks = 24.
+        #   Total: 80 + 24 = 104.
+        assert n == 104
 
         # And: the play indicator for PHL at week 1 is registered.
         ind = reg.get((STACK_PLAY_PREFIX, PAIR, 'PHL', 1))
