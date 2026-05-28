@@ -1,43 +1,47 @@
-"""AwayClubHomeWeekendsCount — pin away-club home weekend totals (spec-004).
+"""AwayClubHomeWeekendsCount — bound the Sunday-home weekend count for each
+away-based club to a derived two-sided range (spec-004, redesigned in spec-037).
 
 For each club whose home venue is NOT Broadmeadow (Maitland, Gosford, future
-expansions), force three counts:
+expansions), enforce:
 
-  1. sum(friday_home_indicators) == phl_forced_friday_count(data, club)
-       — each FORCED PHL Friday consumes a home Friday slot at the club's
-         venue, so the number of weeks with a Friday home game equals the
-         FORCED-Friday count exactly.
+    min_sundays_home(data, club) <= sum(sunday_home_indicators) <= max_sundays_home(data, club)
 
-  2. sum(sunday_home_indicators) == away_club_required_sundays(data, club)
-       — the FORCED-aware Sunday count: max(PHL - FORCED_Fridays, max_other).
+where the bounds come from the per-grade home-game demands the club fields
+(see ``constraints/atoms/_phl_forced_friday_helper.py``):
 
-  3. sum(all_home_indicators)    == away_club_total_weekends(data, club)
-       — total distinct weeks with a home game (Friday OR Sunday).
-         Equal to max(PHL_required, max_other_grade_games), the unadjusted max.
-         In the equality case (PHL >= max_other) this implies Friday/Sunday
-         home weekends are in DISJOINT weeks; in the other-grade-dominant case
-         (PHL < max_other), FORCED Fridays are absorbed into the same total.
+  * floor = max home-game count across NON-PHL grades the club fields (those
+    grades have no Friday alternative; every home game MUST land on a Sunday).
+    Zero when the club fields no non-PHL grade.
+  * ceiling = max home-game count across ALL grades incl. PHL. PHL can lend
+    Sundays to forced Fridays without pushing the total above its raw home
+    count.
 
-This atom replaces the home-weekend logic that was historically buried inside
-`FiftyFiftyHomeandAway` + the legacy `MaxMaitlandHomeWeekends` heuristic. Both
-of those are now obsolete for production (see CONSTRAINT_INVENTORY.md §5 and
-the `FiftyFiftyHomeandAway` row).
+Forced Fridays are NOT subtracted by this atom — ``FORCED_GAMES`` config
+already enforces the Friday count via partial-key entries (e.g. ``{count: N,
+constraint: 'equal', day: 'Friday', field_location: ...}``). Two solver
+mechanisms encoding the same fact were a forward-only smell; this atom now
+covers Sunday range only and lets PHL-Friday counts fall out of the FORCED
+config.
 
 ## Indicator construction
 
-For each (week, day) of (Friday, Sunday), collect the X-vars where the
-field_location equals the club's home venue AND the variable involves the club.
-The indicator is `OR(vars)` — represented in CP-SAT via NewBoolVar + AddMaxEquality.
-
-When a club has no candidate vars for a (week, day) bucket, the indicator is
-fixed to 0 (omitted from the sum).
+For each week, OR together the X-vars at the club's home venue on Sunday that
+involve the club. The indicator is `OR(vars)` via NewBoolVar +
+AddMaxEquality. If a week has no candidate Sunday-home vars, no indicator is
+created and the week contributes 0 to the sum.
 
 ## Locked-week handling
 
-Locked weeks contribute neither to the sum target nor to the indicators — the
-target counts are reduced by the number of locked weeks that ALREADY have a
-home game for the club (in the locked solution). This mirrors the pattern used
-by other atoms; see `_count_locked_home_weekends`.
+Locked weeks contribute neither to the sum nor to the indicators — the bounds
+are reduced by the number of locked weeks that ALREADY have a Sunday-home
+game for the club (in the locked solution), mirroring the pattern used by
+other atoms.
+
+## Feasibility-violating raise
+
+If ``min_sundays_home > max_sundays_home`` for a club, the atom raises
+``ValueError`` — this is mathematically impossible when ``num_rounds`` is
+consistent, but a config sanity error could trip it.
 """
 from __future__ import annotations
 
@@ -46,14 +50,13 @@ from typing import Dict, List, Set
 
 from constraints.atoms.base import Atom
 from constraints.atoms._phl_forced_friday_helper import (
-    away_club_required_sundays,
-    away_club_total_weekends,
-    phl_forced_friday_count,
+    away_club_max_sundays_home,
+    away_club_min_sundays_home,
 )
 
 
 class AwayClubHomeWeekendsCount(Atom):
-    """Pin Friday / Sunday / total home weekend counts for each away-based club."""
+    """Bound the Sunday-home-weekend count for each away-based club."""
 
     canonical_name = 'AwayClubHomeWeekendsCount'
     atom_group = ''
@@ -71,15 +74,12 @@ class AwayClubHomeWeekendsCount(Atom):
         for club, home_venue in home_field_map.items():
             # Skip clubs whose default home IS Broadmeadow (no "away" rule
             # applies). The map convention: only non-default-home clubs appear.
-            # We rely on the season config to omit Broadmeadow-default clubs.
             if not home_venue:
                 continue
 
-            # Collect candidate X vars per (week, day) at the club's venue.
+            # Collect candidate Sunday X vars per week at the club's venue.
             # Only vars involving the club itself contribute.
-            friday_vars_by_week: Dict[int, List] = defaultdict(list)
             sunday_vars_by_week: Dict[int, List] = defaultdict(list)
-            locked_friday_weeks: Set[int] = set()
             locked_sunday_weeks: Set[int] = set()
 
             for key, var in X.items():
@@ -87,6 +87,8 @@ class AwayClubHomeWeekendsCount(Atom):
                     continue  # dummy
                 if not key[3]:
                     continue  # no day
+                if key[3] != 'Sunday':
+                    continue  # only Sunday matters for the derived range
                 if key[10] != home_venue:
                     continue  # different venue
                 t1, t2 = key[0], key[1]
@@ -95,84 +97,51 @@ class AwayClubHomeWeekendsCount(Atom):
                 if club != club1 and club != club2:
                     continue
                 week = key[6]
-                day = key[3]
                 if week in locked_weeks:
-                    if day == 'Friday':
-                        locked_friday_weeks.add(week)
-                    elif day == 'Sunday':
-                        locked_sunday_weeks.add(week)
+                    locked_sunday_weeks.add(week)
                     continue
-                if day == 'Friday':
-                    friday_vars_by_week[week].append(var)
-                elif day == 'Sunday':
-                    sunday_vars_by_week[week].append(var)
+                sunday_vars_by_week[week].append(var)
 
-            # Compute the three targets via the shared helper.
-            forced_fridays = phl_forced_friday_count(data, club)
-            sundays_required = away_club_required_sundays(data, club)
-            total_weekends = away_club_total_weekends(data, club)
+            # Derived range bounds from per-grade home-game demand.
+            min_sundays = away_club_min_sundays_home(data, club)
+            max_sundays = away_club_max_sundays_home(data, club)
 
-            # Reduce targets by locked contribution so the sum constraint
-            # applies only to the unlocked horizon.
-            friday_target = max(0, forced_fridays - len(locked_friday_weeks))
-            sunday_target = max(0, sundays_required - len(locked_sunday_weeks))
-            total_locked_weeks = locked_friday_weeks | locked_sunday_weeks
-            total_target = max(0, total_weekends - len(total_locked_weeks))
+            if min_sundays > max_sundays:
+                raise ValueError(
+                    f'AwayClubHomeWeekendsCount: club {club!r} has '
+                    f'min_sundays_home={min_sundays} > '
+                    f'max_sundays_home={max_sundays} — config inconsistency.'
+                )
 
-            # Build OR-indicators per (week, day) and per (week, any-day).
-            friday_indicators = _build_week_indicators(
-                model, friday_vars_by_week, label=f'{club}_fri_home',
-            )
+            # Reduce bounds by locked Sunday-home contribution so the sum
+            # applies only to the unlocked horizon. Floor at 0.
+            locked_count = len(locked_sunday_weeks)
+            effective_min = max(0, min_sundays - locked_count)
+            effective_max = max(0, max_sundays - locked_count)
+
+            # Build one OR-indicator per non-empty week.
             sunday_indicators = _build_week_indicators(
                 model, sunday_vars_by_week, label=f'{club}_sun_home',
             )
 
-            # All-weekend indicators: OR(friday[w], sunday[w]) per week.
-            all_weeks = set(friday_vars_by_week.keys()) | set(sunday_vars_by_week.keys())
-            all_indicators: List = []
-            for week in sorted(all_weeks):
-                fri_vars = friday_vars_by_week.get(week, [])
-                sun_vars = sunday_vars_by_week.get(week, [])
-                week_vars = list(fri_vars) + list(sun_vars)
-                if not week_vars:
-                    continue
-                indicator = model.NewBoolVar(f'{club}_any_home_w{week}')
-                model.AddMaxEquality(indicator, week_vars)
-                all_indicators.append(indicator)
-
-            # Add the three sum constraints — only if there are indicators to
-            # constrain (otherwise the targets must be 0).
-            if friday_indicators:
-                model.Add(sum(friday_indicators) == friday_target)
+            # Lower bound: only emit when strictly positive (vacuous when 0).
+            if effective_min > 0:
+                if not sunday_indicators:
+                    # No Sunday vars exist but floor > 0 — infeasible by
+                    # construction; surface immediately (fixture sanity).
+                    raise ValueError(
+                        f'AwayClubHomeWeekendsCount: club {club!r} requires '
+                        f'>= {effective_min} Sunday home weekends but no '
+                        f'candidate Sunday variables exist at {home_venue!r}.'
+                    )
+                model.Add(sum(sunday_indicators) >= effective_min)
                 constraints_added += 1
-            elif friday_target > 0:
-                # No Friday vars exist but target > 0 — infeasible by
-                # construction; surface immediately. (Fixture sanity check.)
-                raise ValueError(
-                    f'AwayClubHomeWeekendsCount: club {club!r} requires '
-                    f'{friday_target} home Fridays but no candidate Friday '
-                    f'variables exist at {home_venue!r}.'
-                )
 
+            # Upper bound: always emit when there are indicators (even when
+            # effective_max == 0 — that pins them all to 0, the correct semantic).
             if sunday_indicators:
-                model.Add(sum(sunday_indicators) == sunday_target)
+                model.Add(sum(sunday_indicators) <= effective_max)
                 constraints_added += 1
-            elif sunday_target > 0:
-                raise ValueError(
-                    f'AwayClubHomeWeekendsCount: club {club!r} requires '
-                    f'{sunday_target} home Sundays but no candidate Sunday '
-                    f'variables exist at {home_venue!r}.'
-                )
-
-            if all_indicators:
-                model.Add(sum(all_indicators) == total_target)
-                constraints_added += 1
-            elif total_target > 0:
-                raise ValueError(
-                    f'AwayClubHomeWeekendsCount: club {club!r} requires '
-                    f'{total_target} home weekends but no candidate home '
-                    f'variables exist at {home_venue!r}.'
-                )
 
         return constraints_added
 
