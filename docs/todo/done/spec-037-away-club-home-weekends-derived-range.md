@@ -1,9 +1,12 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- reviewed: adversarial Sonnet review 2026-05-28 — fixes applied inline -->
+<!-- verified: adversarial Sonnet Mode B 2026-05-28 — PASS (1 Low docstring fix routed inline, b96a6aa) -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
 <!-- owner: session=2026-05-28-spec037-build claimed=2026-05-28 -->
+<!-- merged: 2026-05-28 into final-form — Unit A (a5f1685 + 976dcd4 + abc91b9 + b96a6aa) + Unit B (spec035-flense worktree + branch torn down) -->
+
 
 # spec-037 — `AwayClubHomeWeekendsCount` redesign: derived two-sided range, no forced-Friday awareness
 

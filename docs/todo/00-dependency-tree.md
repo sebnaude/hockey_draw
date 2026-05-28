@@ -95,23 +95,9 @@ single-solve e2e depends on the no-flag/single-solve path being correct (its `de
   identified as culprits: `AwayClubHomeWeekendsCount` (handled by spec-037) and
   `ClubVsClubStackedWeekends` (handled by spec-038). Resumes when both ship.
 
-Authored **2026-05-28** (this session) — the two atom redesigns surfaced by the spec-035 infeasibility
-handoff. Both are fully independent (different atoms, different helper functions, no shared file
-beyond a single `_phl_forced_friday_helper.py` where their changes are additive vs. subtractive on
-disjoint sets of functions) and run in parallel:
+Authored **2026-05-28** — one of two atom redesigns surfaced by the spec-035 infeasibility handoff
+still in flight (spec-037 the other half — already `done` 2026-05-28; see "Most recently completed"):
 
-- **spec-037** — `AwayClubHomeWeekendsCount` redesigned as a two-sided derived range bound on
-  Sunday-home weekends (`min = max(non-PHL home games)`, `max = max(all home games incl PHL)`),
-  replacing the three hard equalities. Forced-Friday awareness removed from the atom (handled by
-  `FORCED_GAMES` config per `memory/feedback_forcing_belongs_in_config`); orphan helpers
-  `phl_forced_friday_count` / `away_club_required_sundays` / `away_club_total_weekends`
-  (+ private `_entry_targets_club_phl_friday`, `_iter_candidate_friday_phl_keys`) deleted
-  forward-only. New per-club bounds helpers `away_club_min_sundays_home` /
-  `away_club_max_sundays_home` added. Regen-soft twin updated in parallel (single
-  deviation IntVar = `max(0, min - sum, sum - max)` per club). Supersedes the WIP
-  `spec035-flense` branch (tears it down in Unit B). `depends_on: none`. Single S2 unit +
-  a worktree-teardown unit. Status: **`building`** (2026-05-28 — user authorised this
-  session; Mode A hardened earlier today).
 - **spec-038** — `ClubVsClubStackedWeekends` granularity rework: replaces `matchups × per_matchup`
   budget (game-count) with `max(team_count_A, team_count_B) × per_matchup` (aligned-weekend count);
   introduces a per-team-pair sub-budget + per-aligned-weekend cardinality (`min(a, b)` games per
@@ -130,7 +116,7 @@ spec-033  ──depends_on──▶  spec-032                             [done 
 spec-036  ──depends_on──▶  spec-033                             [done — merged into final-form 2026-05-25 (A f4205a9, B 312bdf0, C e378d8f)]
 spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]   (PENULTIMATE)
 spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]   (ULTIMATE)
-spec-037  ──depends_on──▶  (none)                                          [building — AwayClubHomeWeekendsCount redesign; user-authorised 2026-05-28]
+spec-037  ──depends_on──▶  (none)                                          [done — merged into final-form 2026-05-28 (Unit A a5f1685+976dcd4+abc91b9+b96a6aa; Unit B spec035-flense torn down)]
 spec-038  ──depends_on──▶  (none)                                          [building — ClubVsClubStackedWeekends granularity rework; user-authorised 2026-05-28]
 ```
 
@@ -143,6 +129,20 @@ time to avoid registry/count/doc conflicts. The registry count test moves 51 →
 after which the `final-form` plan line is fully drained.**
 
 Most recently completed:
+
+- **spec-037** — `AwayClubHomeWeekendsCount` redesigned as a two-sided derived Sunday-home range
+  bound (floor = max non-PHL home games; ceiling = max all-grade home games with PHL ceil-rounded).
+  **Done** (2026-05-28, Unit A merged into final-form: `a5f1685` atom+helpers, `976dcd4` tests,
+  `abc91b9` docs, `b96a6aa` Mode-B-driven module-docstring fix; Unit B `spec035-flense` worktree
+  and local branch torn down). Forced-Friday awareness removed from the atom (handled by
+  `FORCED_GAMES` config); orphan helpers `phl_forced_friday_count` / `away_club_required_sundays` /
+  `away_club_total_weekends` (+ two private helpers) deleted forward-only; `_friday_phl_forced_entries`
+  kept (consumed by surviving `phl_forced_friday_meetings`). Regen-soft twin redesigned in parallel
+  (single deviation IntVar). Bisect probe DoD#7 hit `FEASIBLE/OPTIMAL` for both the alone and the
+  canonical pair (AwayClub + AwayClubBalance), confirming the joint feasibility that was the
+  spec-035 §6 blocker is resolved on the forced-free `season_test`. 28 atom-tests + 24 spec-038
+  shared-helper tests all green post-merge. /adversarial Mode B passed (1 Low docstring inconsistency
+  routed inline, no Critical/High/Medium). `depends_on: none`.
 
 - **spec-036** — single-solve default + solve-mode flag remap + legacy-alignment deletion. **Done**
   (2026-05-25, Units A `f4205a9`/`1c87d62`/`ed35167`, B `6cbbdf0`/`312bdf0`, C `3323270`/`f353c3f`/`e378d8f`
@@ -192,10 +192,11 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-037** and **spec-038** are both `building` this session under separate session-ids
-  (`2026-05-28-spec037-build` and `2026-05-28-spec038-build`). They share no files at unit-write
-  granularity. Both block resumption of spec-035 Unit C.
+- **spec-038** is `building` (session `2026-05-28-spec038-build`); Unit A already merged into
+  final-form. Once it lands `done`, spec-035 Unit C is unblocked (spec-037 — the other half of the
+  spec-035 §6 culprit pair — is now `done`).
 - **spec-035 — ULTIMATE** is `in_progress` but its Unit C is **BLOCKED** on the presolve
-  infeasibility documented in `docs/todo/spec-035-e2e-infeasibility-handoff.md`. Resumes when both
-  spec-037 and spec-038 are `done`.
+  infeasibility documented in `docs/todo/spec-035-e2e-infeasibility-handoff.md`. Resumes when
+  spec-038 is `done` (spec-037 ✅ already done 2026-05-28).
+- **spec-037** is **`done`** (2026-05-28 — merged into final-form; archived to `done/`).
 - **spec-034 — PENULTIMATE** is **`done`** (2026-05-26 — merged into final-form).
