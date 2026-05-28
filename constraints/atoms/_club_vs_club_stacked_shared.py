@@ -22,6 +22,28 @@ Shared building blocks (this module):
   phl_forced_friday_meetings(A,B)`; for any other grade: full matchup count
   (those grades only play Sundays so all meetings are Sunday-available).
 
+  NOTE: Use `pair_grade_sunday_aligned_weekends` for the stacking budget in
+  spec-038 onward; `pair_grade_sunday_meetings` returns game-counts (which
+  differs from weekend-counts when multi-team-per-club-per-grade).
+
+- `team_pair_counts(data, club_pair, grade)` — `(a, b)` where `a` = number
+  of teams club_A fields in `grade`, `b` = number for club_B. Order matches
+  `club_pair` tuple order — NOT sorted by magnitude.
+
+- `enumerate_team_pairs_in_pair_grade(data, club_pair, grade)` — every
+  unordered cross-club team-pair `(t1, t2)` with `{t1.club, t2.club} ==
+  set(club_pair)` and both teams in `grade`. Sorted deterministically.
+
+- `per_pair_grade_aligned_weekends(data, club_pair, grade)` — number of
+  distinct aligned weekends for this `(pair, grade)`: `max(a, b) * per_matchup`.
+  This is the correct stacking budget for multi-team-per-club-per-grade.
+
+- `pair_grade_sunday_aligned_weekends(data, club_pair, grade)` — like
+  `pair_grade_sunday_meetings` but uses the aligned-weekend formula (spec-038).
+  For non-PHL: returns `per_pair_grade_aligned_weekends`. For PHL: subtracts
+  forced Friday meetings. Returns 0 if budget is exhausted or either club
+  fields 0 teams in the grade.
+
 - `enumerate_club_pairs(data)` — every unordered (A,B) where at least one
   grade has matchups between them.
 
@@ -81,6 +103,9 @@ STACK_PLAY_PREFIX = 'cvc_stack_play'           # (pair, grade, week)
 STACK_FIELD_USED_PREFIX = 'cvc_stack_field_used'  # (pair, week, field_name)
 STACK_SLOT_USED_PREFIX = 'cvc_stack_slot_used'    # (pair, week, day_slot)
 STACK_ACTIVE_PREFIX = 'cvc_stack_active'        # (pair, week)
+# spec-038: per-team-pair play indicator key prefix. Key shape: (team_pair, week)
+# where team_pair is an unordered (t1, t2) tuple (internally sorted alphabetically).
+STACK_TEAM_PAIR_PLAY_PREFIX = 'cvc_stack_team_pair_play'  # (team_pair, week)
 
 
 def per_pair_grade_matchup_counts(
@@ -140,6 +165,13 @@ def per_pair_grade_meeting_counts(
     across all grades) for ALL grades because the legacy lower-grade block
     only enforced "at least N coincidences" loosely. spec-005 needs per-pair
     precision so we use per-grade `R`.
+
+    NOTE (spec-038): use `per_pair_grade_aligned_weekends` for the stacking
+    budget; this function returns the game-count which is a different quantity
+    when multi-team-per-club-per-grade (a×b matchups × per_matchup games each
+    ≠ max(a,b)×per_matchup aligned weekends). This function is correct for
+    grade enumeration (checking which grades have cross-club matchups) and for
+    per-season game-count totals, but NOT for the weekend stacking budget.
     """
     matchups = per_pair_grade_matchup_counts(data, club_pair)
     num_rounds = data.get('num_rounds', {}) or {}
@@ -186,6 +218,152 @@ def pair_grade_sunday_meetings(
     club_a, club_b = club_pair
     forced_fri = phl_forced_friday_meetings(data, club_a, club_b)
     return max(0, total - forced_fri)
+
+
+def team_pair_counts(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> Tuple[int, int]:
+    """Return `(a, b)` = (# teams of club_A in `grade`, # teams of club_B).
+
+    Order is preserved from `club_pair`: `a` counts teams belonging to
+    `club_pair[0]`, `b` counts teams belonging to `club_pair[1]`. The
+    result is NOT sorted by magnitude — `(a, b)` reflects `club_pair` order
+    so callers can determine which club contributes more teams.
+
+    Returns `(0, n)` or `(n, 0)` if one club fields no teams in the grade.
+
+    Example (season_test, PHL, ('Maitland', 'Gosford')):
+        Maitland fields 1 PHL team, Gosford fields 1 PHL team → (1, 1).
+    Example (season_test, 6th, ('Tigers', 'University')):
+        Tigers fields 2 6th teams, University fields 2 6th teams → (2, 2).
+    """
+    club_a, club_b = club_pair
+    teams = data.get('teams', []) or []
+
+    a = sum(1 for t in teams if t.club.name == club_a and t.grade == grade)
+    b = sum(1 for t in teams if t.club.name == club_b and t.grade == grade)
+    return (a, b)
+
+
+def enumerate_team_pairs_in_pair_grade(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> List[Tuple[str, str]]:
+    """Return every unordered cross-club team-pair `(t1, t2)` in `grade`.
+
+    Conditions:
+      - `{t1.club, t2.club} == set(club_pair)` (one team from each club).
+      - Both teams play in `grade`.
+
+    Each tuple is internally sorted so `t1 < t2` alphabetically (matching the
+    convention in `data['games']` where team1 < team2). The result list is
+    sorted by `(t1, t2)` string for deterministic iteration.
+
+    Returns an empty list if either club fields 0 teams in the grade.
+
+    Example (season_test, 6th, ('Tigers', 'University')):
+        Returns the 4 cross-club pairs (Tigers Black × Uni Gentlemen,
+        Tigers Black × Uni Seapigs, Tigers Yellow × Uni Gentlemen,
+        Tigers Yellow × Uni Seapigs) — exactly 2×2=4 pairs.
+    """
+    club_a, club_b = club_pair
+    teams = data.get('teams', []) or []
+
+    teams_a = sorted(t.name for t in teams if t.club.name == club_a and t.grade == grade)
+    teams_b = sorted(t.name for t in teams if t.club.name == club_b and t.grade == grade)
+
+    result: List[Tuple[str, str]] = []
+    for ta in teams_a:
+        for tb in teams_b:
+            # Internally sort alphabetically so t1 < t2.
+            t1, t2 = (ta, tb) if ta < tb else (tb, ta)
+            result.append((t1, t2))
+
+    return sorted(result)
+
+
+def _per_matchup_for_grade(data: Dict, grade: str) -> int:
+    """Return `per_matchup` for a grade: R//(T-1) if T even else R//T.
+
+    This is the same formula used in `per_pair_grade_meeting_counts`. Extracted
+    here so `per_pair_grade_aligned_weekends` can reuse it without re-deriving.
+    Returns 0 if the grade is not found or T <= 1.
+    """
+    num_rounds = data.get('num_rounds', {}) or {}
+    grade_objs = data.get('grades', []) or []
+    R_fallback = num_rounds.get('max', 0)
+
+    T = 0
+    for g in grade_objs:
+        if g.name == grade:
+            T = g.num_teams
+            break
+    if T <= 1:
+        return 0
+
+    R = num_rounds.get(grade, R_fallback)
+    return R // (T - 1) if T % 2 == 0 else R // T
+
+
+def per_pair_grade_aligned_weekends(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> int:
+    """Return the number of distinct aligned weekends for `(club_pair, grade)`.
+
+    Formula: `max(a, b) * per_matchup` where `a, b = team_pair_counts(...)`.
+
+    This is the CORRECT stacking budget for spec-038. It differs from
+    `per_pair_grade_meeting_counts()[grade]` (which returns `a*b*per_matchup`,
+    a game count) when `a != b` or `min(a,b) > 1`.
+
+    Case table:
+      1×1, per_matchup=1 → max(1,1)*1 = 1 weekend, 1 game/weekend.
+      1×1, per_matchup=2 → max(1,1)*2 = 2 weekends, 1 game/weekend.
+      2×2, per_matchup=1 → max(2,2)*1 = 2 weekends, 2 games/weekend.
+      2×2, per_matchup=2 → max(2,2)*2 = 4 weekends, 2 games/weekend.
+      1×2, per_matchup=1 → max(1,2)*1 = 2 weekends, 1 game/weekend.
+      1×2, per_matchup=2 → max(1,2)*2 = 4 weekends, 1 game/weekend.
+
+    Returns 0 if either `a` or `b` is 0, or if `per_matchup` is 0.
+    """
+    a, b = team_pair_counts(data, club_pair, grade)
+    if a == 0 or b == 0:
+        return 0
+    per_matchup = _per_matchup_for_grade(data, grade)
+    if per_matchup == 0:
+        return 0
+    return max(a, b) * per_matchup
+
+
+def pair_grade_sunday_aligned_weekends(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> int:
+    """Return the Sunday-available aligned-weekend count for `(pair, grade)`.
+
+    Replaces `pair_grade_sunday_meetings` as the stacking budget helper for
+    spec-038. Uses the aligned-weekend formula instead of the game-count
+    formula, which is correct when multi-team-per-club-per-grade.
+
+    For non-PHL grades: returns `per_pair_grade_aligned_weekends(data, pair, grade)`
+    directly (those grades only play Sundays, so all aligned weekends are
+    Sunday-available).
+
+    For PHL: subtracts FORCED-Friday meetings for the pair
+    (`phl_forced_friday_meetings(data, A, B)`), since those consume the pair's
+    matchup budget but cannot satisfy Sunday stacking.
+
+    Returns 0 if:
+      - Either club fields 0 teams in the grade (→ per_pair_grade_aligned_weekends == 0).
+      - per_matchup is 0 (→ per_pair_grade_aligned_weekends == 0).
+      - PHL budget is exhausted by FORCED Fridays (clamped to 0, not negative).
+    """
+    weekends = per_pair_grade_aligned_weekends(data, club_pair, grade)
+    if weekends == 0:
+        return 0
+    if grade != 'PHL':
+        return weekends
+    club_a, club_b = club_pair
+    forced_fri = phl_forced_friday_meetings(data, club_a, club_b)
+    return max(0, weekends - forced_fri)
 
 
 def enumerate_club_pairs(data: Dict) -> List[Tuple[str, str]]:
@@ -287,9 +465,14 @@ __all__ = [
     'STACK_FIELD_USED_PREFIX',
     'STACK_SLOT_USED_PREFIX',
     'STACK_ACTIVE_PREFIX',
+    'STACK_TEAM_PAIR_PLAY_PREFIX',
     'per_pair_grade_matchup_counts',
     'per_pair_grade_meeting_counts',
     'pair_grade_sunday_meetings',
+    'team_pair_counts',
+    'enumerate_team_pairs_in_pair_grade',
+    'per_pair_grade_aligned_weekends',
+    'pair_grade_sunday_aligned_weekends',
     'enumerate_club_pairs',
     'collect_pair_grade_week_vars',
     'collect_pair_week_sunday_vars',
