@@ -1,16 +1,30 @@
-"""Tests for AwayClubHomeWeekendsCountRegenSoft atom (spec-027 regen-soft).
+"""Tests for AwayClubHomeWeekendsCountRegenSoft atom (spec-027, redesigned in spec-037).
 
 Real CP-SAT models, no mocks. GWT style with hand-computed oracles.
 
-The SOFT atom emits, per away-based club, three absolute-deviation penalty
-IntVars (friday / sunday / total home-weekend count vs target). The minimising
-objective drives each dev to ``|actual_sum - target|``. We force the solver to
-land the home-weekend counts at known actuals, then assert the summed penalty
-equals the hand-computed total deviation.
+The SOFT atom emits, per away-based club, a SINGLE absolute-deviation IntVar
+penalty against the Sunday-home indicator total:
 
-Fixture is copied from ``test_away_club_home_weekends_count.py``: a single
-Maitland-vs-Norths PHL pair across N weeks, with Friday + Sunday slots at both
-Broadmeadow (away for Maitland) and Maitland Park (home for Maitland).
+    dev = max(0, min_sundays - sum, sum - max_sundays)
+
+(Under ``min <= max`` the under-floor and over-ceiling terms are mutually
+exclusive, so ``dev == max(0, min - sum) + max(0, sum - max)``.)
+
+The minimising objective drives ``dev`` to ``|deviation|``. We force the
+solver to land the Sunday-home indicator count at known actuals, then assert
+the per-club deviation equals the hand-computed magnitude.
+
+Per spec-037 DoD #6: a ONE-club fixture means
+``n_penalties = 1 Sunday deviation var`` -> ``normalized_weight = 90000 / 1
+= 90000``. We assert the RAW dev value (the penalty bucket holds the IntVar),
+not the post-normalisation contribution to the objective — normalisation is
+done in ``main_staged._build_normalized_penalty`` at solve-orchestration time,
+not by the atom itself.
+
+Three scenarios per DoD #6 (bounds [9, 10] under PHL=20 + 3rd=18):
+  - Sunday-home count = 10 (inside bounds): dev = 0.
+  - Sunday-home count = 7 (below floor 9): dev = 2; contribution = 2 * 90000 = 180000.
+  - Sunday-home count = 12 (above ceiling 10): dev = 2; contribution = 2 * 90000 = 180000.
 """
 from __future__ import annotations
 
@@ -25,11 +39,11 @@ sys.path.insert(
 )
 
 from constraints.atoms._phl_forced_friday_helper import (
-    away_club_required_sundays,
-    away_club_total_weekends,
-    phl_forced_friday_count,
+    away_club_max_sundays_home,
+    away_club_min_sundays_home,
 )
 from constraints.atoms.away_club_home_weekends_count_regen_soft import (
+    REGEN_AWAY_CLUB_HOME_WEEKENDS_COUNT_DEFAULT_WEIGHT,
     AwayClubHomeWeekendsCountRegenSoft,
 )
 from constraints.atoms.base import BROADMEADOW, MAITLAND
@@ -38,11 +52,16 @@ from models import Club, Grade, PlayingField, Team, Timeslot
 
 
 # ---------------------------------------------------------------------------
-# Fixture builder (mirrors the hard-atom test).
+# Fixture builder — ONE away club (Maitland), PHL + 3rd to fix bounds [9, 10].
+# Each of `num_weeks` weeks has ONE Maitland Park Sunday slot per grade (so
+# the atom's indicator OR'ing is a no-op — at most one home-Sunday-var per
+# (week, grade), at most two per week across both grades). That keeps the
+# indicator union under our direct control: pin which weeks have games to
+# pin the union count.
 # ---------------------------------------------------------------------------
 
 
-def _build_fixture(*, num_weeks: int, phl_required: int) -> Dict:
+def _build_one_club_fixture(*, num_weeks: int) -> Dict:
     bm_ef = PlayingField(location=BROADMEADOW, name='EF')
     mp = PlayingField(location=MAITLAND, name='Main')
 
@@ -53,29 +72,38 @@ def _build_fixture(*, num_weeks: int, phl_required: int) -> Dict:
     teams = [
         Team(name='Maitland PHL', club=clubs[0], grade='PHL'),
         Team(name='Norths PHL', club=clubs[1], grade='PHL'),
+        Team(name='Maitland 3rd', club=clubs[0], grade='3rd'),
+        Team(name='Norths 3rd', club=clubs[1], grade='3rd'),
     ]
-    grade_objs = [Grade(name='PHL', teams=[t.name for t in teams])]
-    num_rounds = {'PHL': phl_required, 'max': phl_required}
+    grade_objs = [
+        Grade(name='PHL', teams=['Maitland PHL', 'Norths PHL']),
+        Grade(name='3rd', teams=['Maitland 3rd', 'Norths 3rd']),
+    ]
+    # Bounds:
+    #   non-PHL = ['3rd']; floor = 18 // 2 = 9
+    #   all = ['PHL', '3rd']; ceiling = max((20+1)//2, 18//2) = max(10, 9) = 10
+    num_rounds = {'PHL': 20, '3rd': 18, 'max': 20}
 
-    games: List[Tuple[str, str, str]] = []
-    for grade in grade_objs:
-        for i, t1 in enumerate(grade.teams):
-            for t2 in grade.teams[i + 1:]:
-                games.append((t1, t2, grade.name))
+    games: List[Tuple[str, str, str]] = [
+        ('Maitland PHL', 'Norths PHL', 'PHL'),
+        ('Maitland 3rd', 'Norths 3rd', '3rd'),
+    ]
 
+    # One MP Sunday slot per (week, grade) — slot 1 for PHL, slot 2 for 3rd —
+    # and one BM Sunday slot per (week, grade) for away placement.
     timeslots: List[Timeslot] = []
-    base_date_n = 22  # 2026-03-22 = week 1 Sunday
+    base_date_n = 22
     for week in range(1, num_weeks + 1):
         sun_d = f'2026-03-{base_date_n + 7 * (week - 1):02d}'
-        fri_d = f'2026-03-{base_date_n + 7 * (week - 1) - 2:02d}'
-        timeslots.append(Timeslot(date=sun_d, day='Sunday', time='11:30',
-                                  week=week, day_slot=1, field=bm_ef, round_no=week))
-        timeslots.append(Timeslot(date=sun_d, day='Sunday', time='11:30',
-                                  week=week, day_slot=1, field=mp, round_no=week))
-        timeslots.append(Timeslot(date=fri_d, day='Friday', time='19:00',
-                                  week=week, day_slot=1, field=bm_ef, round_no=week))
-        timeslots.append(Timeslot(date=fri_d, day='Friday', time='19:00',
-                                  week=week, day_slot=1, field=mp, round_no=week))
+        for slot, time in enumerate(['11:30', '13:30'], 1):
+            timeslots.append(Timeslot(
+                date=sun_d, day='Sunday', time=time, week=week,
+                day_slot=slot, field=bm_ef, round_no=week,
+            ))
+            timeslots.append(Timeslot(
+                date=sun_d, day='Sunday', time=time, week=week,
+                day_slot=slot, field=mp, round_no=week,
+            ))
 
     return {
         'games': games,
@@ -104,35 +132,49 @@ def _build_X(model: cp_model.CpModel, data: Dict) -> Dict:
     X = {}
     for (t1, t2, grade) in data['games']:
         for ts in data['timeslots']:
-            key = (t1, t2, grade, ts.day, ts.day_slot, ts.time,
-                   ts.week, ts.date, ts.round_no, ts.field.name, ts.field.location)
-            X[key] = model.NewBoolVar(f'X_{t1}_{t2}_{ts.week}_{ts.day}_{ts.field.name}')
+            key = (
+                t1, t2, grade, ts.day, ts.day_slot, ts.time,
+                ts.week, ts.date, ts.round_no, ts.field.name, ts.field.location,
+            )
+            X[key] = model.NewBoolVar(
+                f'X_{t1}_{t2}_{ts.week}_{ts.day_slot}_{ts.field.name}'
+            )
     return X
 
 
-def _add_basic_hard_constraints(model: cp_model.CpModel, X: Dict, data: Dict) -> None:
-    """Each pair plays exactly num_rounds[grade]; at most one game per
-    (week, day, slot, field, location)."""
+def _pin_mp_sunday_weeks(model, X: Dict, occupied_weeks: set, num_weeks: int) -> None:
+    """Force the Sunday-home INDICATOR union (distinct weeks with >=1 MP
+    Sunday game) to equal exactly ``occupied_weeks``.
+
+    For each week:
+      - If week IN occupied_weeks: force sum(MP-Sunday vars for the week) >= 1.
+      - If week NOT IN occupied_weeks: force sum(MP-Sunday vars) == 0.
+
+    Sets no other constraints (pair sums, slot caps) — those are irrelevant
+    to the soft penalty calculation and would over-constrain the fixture.
+    """
     from collections import defaultdict
-    pair_vars = defaultdict(list)
-    field_slot_vars = defaultdict(list)
+    mp_sun_by_week: Dict[int, List] = defaultdict(list)
     for key, var in X.items():
-        t1, t2, grade = key[0], key[1], key[2]
-        pair_vars[(t1, t2, grade)].append(var)
-        field_slot_vars[(key[6], key[3], key[4], key[9], key[10])].append(var)
-    num_rounds = data['num_rounds']
-    for (t1, t2, grade), vars_list in pair_vars.items():
-        model.Add(sum(vars_list) == num_rounds[grade])
-    for vars_list in field_slot_vars.values():
-        model.Add(sum(vars_list) <= 1)
+        if key[3] == 'Sunday' and key[10] == MAITLAND:
+            mp_sun_by_week[key[6]].append(var)
+    for week in range(1, num_weeks + 1):
+        vars_list = mp_sun_by_week.get(week, [])
+        if not vars_list:
+            continue
+        if week in occupied_weeks:
+            model.Add(sum(vars_list) >= 1)
+        else:
+            model.Add(sum(vars_list) == 0)
 
 
-def _mp_vars(X: Dict, day: str) -> List:
-    """Maitland Park vars for a given day (one slot per week)."""
-    return [v for k, v in X.items() if k[10] == MAITLAND and k[3] == day]
+def _solve(model: cp_model.CpModel, *, time_s: float = 10.0):
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_s
+    return solver, solver.Solve(model)
 
 
-def _total_penalty(solver, bucket) -> int:
+def _total_dev(solver: cp_model.CpSolver, bucket: Dict) -> int:
     return sum(solver.Value(p) for p in bucket['penalties'])
 
 
@@ -143,123 +185,125 @@ def _total_penalty(solver, bucket) -> int:
 
 class TestAwayClubHomeWeekendsCountRegenSoft:
 
-    def test_given_counts_off_target_then_penalty_equals_deviation(self):
-        """Scenario 1 (violation): force home-weekend counts off-target by D.
+    def test_scenario_a_inside_bounds_then_zero_penalty(self):
+        """GIVEN ONE-club fixture (Maitland; bounds [9, 10]),
+              + Sunday-home indicator union pinned to 10 weeks,
+        WHEN regen-soft atom applied and dev minimised,
+        THEN dev == 0 (10 is inside [9, 10]).
 
-        Fixture: Maitland-vs-Norths PHL, 5 games required, 10 weeks, no FORCED
-        Fridays.
-
-        Targets (via the shared helper, same as the hard atom):
-          - phl_forced_friday_count(Maitland)   = 0   -> friday_target  = 0
-          - away_club_required_sundays(Maitland)= 5   -> sunday_target  = 5
-          - away_club_total_weekends(Maitland)  = 5   -> total_target   = 5
-
-        Force the actuals OFF target:
-          - 0 Maitland-Park Friday games  -> friday actual = 0  (dev |0-0| = 0)
-          - 6 Maitland-Park Sunday games  -> sunday actual = 6  (dev |6-5| = 1)
-          Since each week has exactly one MP Sunday slot, 6 MP-Sunday games
-          land in 6 DISTINCT weeks, and there are 0 MP Friday games, so the
-          any-day total = 6 distinct weeks (dev |6-5| = 1).
-
-        Hand oracle: D = 0 (fri) + 1 (sun) + 1 (total) = 2.
+        Hand-computed:
+          min=9, max=10 (bounds helpers on PHL=20, 3rd=18).
+          Pinned actual = 10.
+          dev = max(0, 9 - 10, 10 - 10) = max(0, -1, 0) = 0.
+        n_penalties = 1 (one club). Default raw weight = 90000.
         """
-        # The helper targets are computed from phl_required = 5
-        # (fri0 / sun5 / total5). To force the ACTUAL counts off target we
-        # decouple from the pair-sum: we do NOT add the pair == 5 constraint,
-        # only the field/slot single-booking rule, then pin 6 MP-Sunday games.
-        data = _build_fixture(num_weeks=10, phl_required=5)
-
-        # Confirm helper targets (the atom uses these exactly).
-        assert phl_forced_friday_count(data, 'Maitland') == 0
-        assert away_club_required_sundays(data, 'Maitland') == 5
-        assert away_club_total_weekends(data, 'Maitland') == 5
+        num_weeks = 22
+        data = _build_one_club_fixture(num_weeks=num_weeks)
+        assert away_club_min_sundays_home(data, 'Maitland') == 9
+        assert away_club_max_sundays_home(data, 'Maitland') == 10
 
         model = cp_model.CpModel()
         X = _build_X(model, data)
-
-        # Field/slot single-booking (no double game in same slot/field/week).
-        from collections import defaultdict
-        field_slot_vars = defaultdict(list)
-        for key, var in X.items():
-            field_slot_vars[(key[6], key[3], key[4], key[9], key[10])].append(var)
-        for vars_list in field_slot_vars.values():
-            model.Add(sum(vars_list) <= 1)
-
-        # Force EXACTLY 6 Maitland-Park Sunday games (each in a distinct week)
-        # and 0 Maitland-Park Friday games. This pins the actual home-weekend
-        # counts: friday=0, sunday=6, total=6.
-        mp_sun = _mp_vars(X, 'Sunday')
-        mp_fri = _mp_vars(X, 'Friday')
-        model.Add(sum(mp_sun) == 6)
-        model.Add(sum(mp_fri) == 0)
+        _pin_mp_sunday_weeks(model, X, set(range(1, 11)), num_weeks)
 
         registry = HelperVarRegistry(model)
         atom = AwayClubHomeWeekendsCountRegenSoft()
         created = atom.apply(model, X, data, registry)
-        assert created == 3, f'Expected 3 penalty vars (fri/sun/total), got {created}'
+        assert created == 1, f'Expected 1 penalty IntVar (one club), got {created}'
 
         bucket = data['penalties']['regen_away_club_home_weekends_count']
-        # Minimise total penalty so each dev settles to |actual - target|.
+        assert bucket['weight'] == REGEN_AWAY_CLUB_HOME_WEEKENDS_COUNT_DEFAULT_WEIGHT
         model.Minimize(sum(bucket['penalties']))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 10
-        status = solver.Solve(model)
+        solver, status = _solve(model)
         assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
             f'Expected feasible, got {solver.status_name(status)}'
         )
+        assert _total_dev(solver, bucket) == 0
 
-        total = _total_penalty(solver, bucket)
-        # Hand oracle: |0-0| + |6-5| + |6-5| = 0 + 1 + 1 = 2.
-        assert total == 2, f'Expected total penalty 2 (D), got {total}'
+    def test_scenario_b_below_floor_then_dev_equals_two(self):
+        """GIVEN ONE-club fixture (Maitland; bounds [9, 10]),
+              + Sunday-home indicator union pinned to 7 weeks (below floor),
+        WHEN regen-soft atom applied and dev minimised,
+        THEN dev == 2 (|7 - 9| = 2);
+              normalised penalty contribution = 2 * (90000 / 1) = 180000.
 
-    def test_given_counts_on_target_then_zero_penalty(self):
-        """Scenario 2 (clean): force counts exactly on target -> penalty 0.
-
-        Fixture: Maitland-vs-Norths PHL, 5 games required, 10 weeks, no FORCED
-        Fridays. Targets: friday=0, sunday=5, total=5.
-
-        Force exactly 5 Maitland-Park Sunday games (5 distinct weeks) and 0 MP
-        Friday games -> actual friday=0, sunday=5, total=5, all ON target.
-
-        Hand oracle: D = |0-0| + |5-5| + |5-5| = 0.
+        Hand-computed:
+          dev = max(0, 9 - 7, 7 - 10) = max(0, 2, -3) = 2.
+          n_penalties = 1, raw weight = 90000 -> normalized weight per unit = 90000.
+          Total normalized contribution = 2 * 90000 = 180000.
         """
-        data = _build_fixture(num_weeks=10, phl_required=5)
-        assert phl_forced_friday_count(data, 'Maitland') == 0
-        assert away_club_required_sundays(data, 'Maitland') == 5
-        assert away_club_total_weekends(data, 'Maitland') == 5
-
+        num_weeks = 22
+        data = _build_one_club_fixture(num_weeks=num_weeks)
         model = cp_model.CpModel()
         X = _build_X(model, data)
-        _add_basic_hard_constraints(model, X, data)
-
-        # Pin exactly 5 MP Sundays, 0 MP Fridays -> all counts on target.
-        mp_sun = _mp_vars(X, 'Sunday')
-        mp_fri = _mp_vars(X, 'Friday')
-        model.Add(sum(mp_sun) == 5)
-        model.Add(sum(mp_fri) == 0)
+        _pin_mp_sunday_weeks(model, X, set(range(1, 8)), num_weeks)
 
         registry = HelperVarRegistry(model)
         atom = AwayClubHomeWeekendsCountRegenSoft()
         created = atom.apply(model, X, data, registry)
-        assert created == 3
+        assert created == 1
 
         bucket = data['penalties']['regen_away_club_home_weekends_count']
         model.Minimize(sum(bucket['penalties']))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 10
-        status = solver.Solve(model)
+        solver, status = _solve(model)
         assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
             f'Expected feasible, got {solver.status_name(status)}'
         )
+        dev_total = _total_dev(solver, bucket)
+        assert dev_total == 2, f'Expected dev=2, got {dev_total}'
 
-        total = _total_penalty(solver, bucket)
-        assert total == 0, f'Expected zero penalty (on target), got {total}'
+        # Hand-computed normalised contribution (mirrors what
+        # main_staged._build_normalized_penalty does):
+        normalised_weight = max(1, bucket['weight'] // len(bucket['penalties']))
+        assert normalised_weight == 90000, (
+            f'Expected normalised weight 90000, got {normalised_weight}'
+        )
+        contribution = dev_total * normalised_weight
+        assert contribution == 180000, (
+            f'Expected normalised contribution 180000, got {contribution}'
+        )
+
+    def test_scenario_c_above_ceiling_then_dev_equals_two(self):
+        """GIVEN ONE-club fixture (Maitland; bounds [9, 10]),
+              + Sunday-home indicator union pinned to 12 weeks (above ceiling),
+        WHEN regen-soft atom applied and dev minimised,
+        THEN dev == 2 (|12 - 10| = 2);
+              normalised contribution = 2 * 90000 = 180000.
+
+        Hand-computed:
+          dev = max(0, 9 - 12, 12 - 10) = max(0, -3, 2) = 2.
+        """
+        num_weeks = 22
+        data = _build_one_club_fixture(num_weeks=num_weeks)
+        model = cp_model.CpModel()
+        X = _build_X(model, data)
+        _pin_mp_sunday_weeks(model, X, set(range(1, 13)), num_weeks)
+
+        registry = HelperVarRegistry(model)
+        atom = AwayClubHomeWeekendsCountRegenSoft()
+        created = atom.apply(model, X, data, registry)
+        assert created == 1
+
+        bucket = data['penalties']['regen_away_club_home_weekends_count']
+        model.Minimize(sum(bucket['penalties']))
+
+        solver, status = _solve(model)
+        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
+            f'Expected feasible, got {solver.status_name(status)}'
+        )
+        dev_total = _total_dev(solver, bucket)
+        assert dev_total == 2, f'Expected dev=2, got {dev_total}'
+
+        normalised_weight = max(1, bucket['weight'] // len(bucket['penalties']))
+        assert normalised_weight == 90000
+        contribution = dev_total * normalised_weight
+        assert contribution == 180000
 
     def test_given_weight_zero_then_no_op(self):
         """weight == 0 -> atom returns 0 and creates no penalty bucket."""
-        data = _build_fixture(num_weeks=4, phl_required=3)
+        data = _build_one_club_fixture(num_weeks=4)
         data['penalty_weights'] = {'regen_away_club_home_weekends_count': 0}
         model = cp_model.CpModel()
         X = _build_X(model, data)

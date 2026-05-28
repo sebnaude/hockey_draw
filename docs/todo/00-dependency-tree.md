@@ -104,10 +104,14 @@ disjoint sets of functions) and run in parallel:
   Sunday-home weekends (`min = max(non-PHL home games)`, `max = max(all home games incl PHL)`),
   replacing the three hard equalities. Forced-Friday awareness removed from the atom (handled by
   `FORCED_GAMES` config per `memory/feedback_forcing_belongs_in_config`); orphan helpers
-  `phl_forced_friday_count` / `away_club_required_sundays` / `away_club_total_weekends` deleted
-  forward-only. Regen-soft twin updated in parallel. Supersedes the WIP `spec035-flense` branch
-  (tears it down in Unit B). `depends_on: none`. Single S2 unit + a worktree-teardown unit.
-  Status: **`building`** (2026-05-28 — user authorised this session; Mode A hardened earlier today).
+  `phl_forced_friday_count` / `away_club_required_sundays` / `away_club_total_weekends`
+  (+ private `_entry_targets_club_phl_friday`, `_iter_candidate_friday_phl_keys`) deleted
+  forward-only. New per-club bounds helpers `away_club_min_sundays_home` /
+  `away_club_max_sundays_home` added. Regen-soft twin updated in parallel (single
+  deviation IntVar = `max(0, min - sum, sum - max)` per club). Supersedes the WIP
+  `spec035-flense` branch (tears it down in Unit B). `depends_on: none`. Single S2 unit +
+  a worktree-teardown unit. Status: **`building`** (2026-05-28 — user authorised this
+  session; Mode A hardened earlier today).
 - **spec-038** — `ClubVsClubStackedWeekends` granularity rework: replaces `matchups × per_matchup`
   budget (game-count) with `max(team_count_A, team_count_B) × per_matchup` (aligned-weekend count);
   introduces a per-team-pair sub-budget + per-aligned-weekend cardinality (`min(a, b)` games per
