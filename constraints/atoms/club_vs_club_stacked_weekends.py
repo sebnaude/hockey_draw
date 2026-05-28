@@ -199,13 +199,35 @@ class ClubVsClubStackedWeekends(Atom):
                         )
                         team_pair_play[cache_key] = ind
 
-            # LAYER 2: per-team-pair budget — each tp plays exactly per_matchup weekends.
-            # Sum over weeks of team_pair_play[tp, w] == per_matchup.
-            # Same per_matchup for every tp within a single (pair, grade).
-            for grade, _wbudget, per_matchup, _a, _b, team_pairs in pair_grade_specs:
+            # LAYER 2: per-team-pair Sunday budget — each tp plays exactly
+            # `tp_sunday_budget = weekends_budget / max(a, b)` Sundays.
+            #
+            # For non-PHL: weekends_budget = max(a,b)*per_matchup, so
+            # tp_sunday_budget = per_matchup (every team-pair plays its full
+            # season Sunday count).
+            #
+            # For PHL (always 1×1 in the current league): weekends_budget =
+            # per_matchup - phl_forced_friday_meetings, and max(a,b)=1, so
+            # tp_sunday_budget = per_matchup - forced_fri. Forced PHL Friday
+            # meetings consume the matchup count without contributing to
+            # Sunday team_pair_play — they're not in the OR.
+            #
+            # weekends_budget is always exactly divisible by max(a,b) by
+            # construction (max(a,b)*per_matchup case) except when the PHL
+            # forced-Friday subtraction kicks in — but PHL has max(a,b)=1
+            # so divisibility is trivial. Assert just to be safe.
+            for grade, weekends_budget, per_matchup, a, b, team_pairs in pair_grade_specs:
+                max_ab = max(a, b)
+                assert weekends_budget % max_ab == 0, (
+                    f'ClubVsClubStackedWeekends invariant: weekends_budget '
+                    f'({weekends_budget}) not divisible by max(a,b) ({max_ab}) '
+                    f'for pair={pair} grade={grade}. PHL forced-Friday '
+                    f'subtraction may be misaligned.'
+                )
+                tp_sunday_budget = weekends_budget // max_ab
                 for tp in team_pairs:
                     tp_play_vars = [team_pair_play[(tp, w)] for w in sunday_weeks]
-                    model.Add(sum(tp_play_vars) == per_matchup)
+                    model.Add(sum(tp_play_vars) == tp_sunday_budget)
                     n += 1
 
             # LAYER 3 + 4: per-pair-grade play_pg indicator + cardinality.
