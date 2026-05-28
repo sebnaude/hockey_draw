@@ -89,7 +89,34 @@ single-solve e2e depends on the no-flag/single-solve path being correct (its `de
   regardless of solution), and read out how much symmetry the model has left (CP-SAT presolve stats
   — **not currently captured to the log**, so Unit B wires that up; **no historical baseline exists**,
   confirmed by scan, so we record the first baseline). `depends_on: spec-030…033 + spec-034`. Three
-  units (A launcher ∥ B symmetry-capture → C run+readout). S3. Status: `review_pending`.
+  units (A launcher ∥ B symmetry-capture → C run+readout). S3. Status: `in_progress` —
+  Units A and B merged into `final-form`; Unit C (the actual solve) is BLOCKED on a presolve
+  infeasibility surfaced in the run (`docs/todo/spec-035-e2e-infeasibility-handoff.md`). Two atoms
+  identified as culprits: `AwayClubHomeWeekendsCount` (handled by spec-037) and
+  `ClubVsClubStackedWeekends` (handled by spec-038). Resumes when both ship.
+
+Authored **2026-05-28** (this session) — the two atom redesigns surfaced by the spec-035 infeasibility
+handoff. Both are fully independent (different atoms, different helper functions, no shared file
+beyond a single `_phl_forced_friday_helper.py` where their changes are additive vs. subtractive on
+disjoint sets of functions) and run in parallel:
+
+- **spec-037** — `AwayClubHomeWeekendsCount` redesigned as a two-sided derived range bound on
+  Sunday-home weekends (`min = max(non-PHL home games)`, `max = max(all home games incl PHL)`),
+  replacing the three hard equalities. Forced-Friday awareness removed from the atom (handled by
+  `FORCED_GAMES` config per `memory/feedback_forcing_belongs_in_config`); orphan helpers
+  `phl_forced_friday_count` / `away_club_required_sundays` / `away_club_total_weekends` deleted
+  forward-only. Regen-soft twin updated in parallel. Supersedes the WIP `spec035-flense` branch
+  (tears it down in Unit B). `depends_on: none`. Single S2 unit + a worktree-teardown unit.
+  Status: `review_pending` (auto-triggers `/adversarial` Mode A this session).
+- **spec-038** — `ClubVsClubStackedWeekends` granularity rework: replaces `matchups × per_matchup`
+  budget (game-count) with `max(team_count_A, team_count_B) × per_matchup` (aligned-weekend count);
+  introduces a per-team-pair sub-budget + per-aligned-weekend cardinality (`min(a, b)` games per
+  aligned weekend) so multi-team-per-club-per-grade cases stack correctly. PHL collapses to the old
+  formula by construction (`a=b=1`). New helper-var key family `cvc_stack_team_pair_play`; existing
+  `cvc_stack_play` key shape preserved (semantics shift transparently for the co-location consumer).
+  `depends_on: none`. Four units A→B→C→D (A shared helpers, B atom rewrite, C co-location/regen-soft
+  parity, D bisect-harness acceptance + docs). S3. Status: `review_pending` (auto-triggers
+  `/adversarial` Mode A this session).
 
 ```
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
@@ -98,7 +125,9 @@ spec-032  ──depends_on──▶  spec-031                             [done 
 spec-033  ──depends_on──▶  spec-032                             [done — merged into final-form 2026-05-25 (A 6037235, B c4af289, C b3a15c1, D f760896, E 8316911)]
 spec-036  ──depends_on──▶  spec-033                             [done — merged into final-form 2026-05-25 (A f4205a9, B 312bdf0, C e378d8f)]
 spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]   (PENULTIMATE)
-spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [ready — UNBLOCKED: all deps done]   (ULTIMATE — last; the only remaining startable plan)
+spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]   (ULTIMATE)
+spec-037  ──depends_on──▶  (none)                                          [review_pending — AwayClubHomeWeekendsCount redesign]
+spec-038  ──depends_on──▶  (none)                                          [review_pending — ClubVsClubStackedWeekends granularity rework]
 ```
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
@@ -159,10 +188,11 @@ export column, `c077c28`).
 
 ## Ready to start in parallel right now
 
-- **spec-035 — ULTIMATE** (`depends_on: spec-030…033, spec-034, spec-036` — **ALL `done`**, so it is
-  now UNBLOCKED). Raw `--core` e2e solve on the forced-free `season_test` config + remaining-symmetry
-  readout (incl. the convenor's within-session ClubGameSpread-excluded comparison run). Status
-  `ready`, unowned. **This is the only remaining startable plan; after it lands the `final-form` plan
-  line is fully drained.** One plan per session; stamp `owner` before building.
-- **spec-034 — PENULTIMATE** is **`done`** (2026-05-26 — merged into final-form), which unblocked
-  spec-035.
+- **spec-037** and **spec-038** — once each finishes `/adversarial` Mode A hardening and lands at
+  `ready`, they are both implementable in parallel (no shared files at the unit-write granularity).
+  They block resumption of spec-035 Unit C. Neither is `ready` yet — both are `review_pending`
+  at authoring time (this session).
+- **spec-035 — ULTIMATE** is `in_progress` but its Unit C is **BLOCKED** on the presolve
+  infeasibility documented in `docs/todo/spec-035-e2e-infeasibility-handoff.md`. Resumes when both
+  spec-037 and spec-038 are `done`.
+- **spec-034 — PENULTIMATE** is **`done`** (2026-05-26 — merged into final-form).
