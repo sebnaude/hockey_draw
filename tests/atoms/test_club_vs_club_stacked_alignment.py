@@ -455,13 +455,19 @@ class TestStackedAtomSmoke:
         # When: the atom is applied.
         n = ClubVsClubStackedWeekends().apply(model, X, data, reg)
 
-        # Then: n == 29.
-        # Oracle (read straight from club_vs_club_stacked_weekends.py apply()):
-        #   1 pair × 5 grades with sunday_budget > 0 → 5 `sum == budget` constraints.
-        #   Implication chain: 5 grades sorted desc count → 4 consecutive pairs,
-        #     each × num_weeks (6) → 24 `lo_play <= hi_play` constraints.
-        #   Total: 5 + 24 = 29.
-        assert n == 29
+        # Then: n == 94 (spec-038 four-layer model).
+        # Oracle (counts mirror club_vs_club_stacked_weekends.py `n += ...`):
+        #   1 pair × 5 grades with weekends_budget > 0. Each (pair, grade) is
+        #   1×1 (default fixture has 1 team per club per grade) → 1 team-pair.
+        #   Per (pair, grade) contributions:
+        #     Layer 2: 1 `sum == tp_sunday_budget` per team-pair (1 tp) → 1
+        #     Layer 4: 2 OnlyEnforceIf constraints per Sunday week (6 weeks) → 12
+        #     Layer 5: 1 `sum == weekends_budget` → 1
+        #     Subtotal per pair-grade: 1 + 12 + 1 = 14.
+        #   5 grades × 14 = 70.
+        #   Layer 6: 4 consecutive (hi, lo) grade pairs × 6 weeks = 24.
+        #   Total: 70 + 24 = 94.
+        assert n == 94
 
         # And: the play indicator for PHL at week 1 is registered.
         ind = reg.get((STACK_PLAY_PREFIX, PAIR, 'PHL', 1))
