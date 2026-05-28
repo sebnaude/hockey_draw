@@ -366,6 +366,84 @@ def pair_grade_sunday_aligned_weekends(
     return max(0, weekends - forced_fri)
 
 
+def pair_grade_sunday_aligned_weekend_range(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> Tuple[int, int]:
+    """Return `(min_aligned_weekends, max_aligned_weekends)` for `(pair, grade)`.
+
+    spec-038 fix: `EnsureEqualGamesAndBalanceMatchUps` enforces each per-team-pair
+    meeting count in `[base, base+1]` where `base = per_matchup` (R // (T-1) for
+    even T, R // T for odd T). When `extras = R - base * T_eff > 0` some pairs
+    MUST meet `base+1` times to satisfy the per-team total `sum_vars == R`. The
+    earlier exact `== per_matchup` budget under-counts those pairs and made the
+    atom INFEASIBLE on `season_test` for 5th (T=9 R=16 base=1, all pairs forced to
+    2 meetings) and similar for 3rd/4th.
+
+    The atom must therefore allow `sum_w play_pg ∈ [max(a,b)*base, max(a,b)*(base+1)]`
+    (mirroring BalancedMatchups), and per-tp `sum_w tp_play ∈ [base, base+1]`
+    (mirroring the per-tp BalancedMatchups bound).
+
+    For PHL: subtract `phl_forced_friday_meetings(A, B)` from BOTH ends, clamped
+    to ≥ 0 (forced Friday meetings consume matchup budget without contributing to
+    Sunday stacking).
+
+    For non-PHL: no Friday subtraction (those grades only play Sundays).
+
+    Returns `(0, 0)` if either club fields 0 teams in the grade, or if
+    per_matchup == 0, or if PHL forced Fridays consume the entire range.
+    """
+    a, b = team_pair_counts(data, club_pair, grade)
+    if a == 0 or b == 0:
+        return (0, 0)
+    base = _per_matchup_for_grade(data, grade)
+    if base == 0:
+        return (0, 0)
+
+    max_ab = max(a, b)
+    min_budget = max_ab * base
+    max_budget = max_ab * (base + 1)
+
+    if grade == 'PHL':
+        forced_fri = phl_forced_friday_meetings(data, club_pair[0], club_pair[1])
+        min_budget = max(0, min_budget - forced_fri)
+        max_budget = max(0, max_budget - forced_fri)
+
+    return (min_budget, max_budget)
+
+
+def team_pair_sunday_meetings_range(
+    data: Dict, club_pair: Tuple[str, str], grade: str,
+) -> Tuple[int, int]:
+    """Return `(min, max)` Sunday meetings PER team-pair for `(pair, grade)`.
+
+    Mirrors `EnsureEqualGamesAndBalanceMatchUps`'s `[base, base+1]` per-team-pair
+    bound, restricted to Sundays only (since non-PHL grades are Sunday-only and
+    PHL Friday meetings are forced via FORCED_GAMES, not chosen freely).
+
+    For non-PHL: `(base, base+1)`. For PHL: subtract `phl_forced_friday_meetings`
+    from both ends, clamped to ≥ 0 (PHL is always 1×1 in the current league so
+    per-tp and per-pair are the same).
+
+    Returns `(0, 0)` if base == 0 or PHL forced consumes the entire range.
+    """
+    a, b = team_pair_counts(data, club_pair, grade)
+    if a == 0 or b == 0:
+        return (0, 0)
+    base = _per_matchup_for_grade(data, grade)
+    if base == 0:
+        return (0, 0)
+
+    min_tp = base
+    max_tp = base + 1
+
+    if grade == 'PHL':
+        forced_fri = phl_forced_friday_meetings(data, club_pair[0], club_pair[1])
+        min_tp = max(0, min_tp - forced_fri)
+        max_tp = max(0, max_tp - forced_fri)
+
+    return (min_tp, max_tp)
+
+
 def enumerate_club_pairs(data: Dict) -> List[Tuple[str, str]]:
     """Return every unordered (club_a, club_b) appearing in `data['games']`
     as a cross-club matchup in at least one grade. Sorted for determinism."""
@@ -473,6 +551,8 @@ __all__ = [
     'enumerate_team_pairs_in_pair_grade',
     'per_pair_grade_aligned_weekends',
     'pair_grade_sunday_aligned_weekends',
+    'pair_grade_sunday_aligned_weekend_range',
+    'team_pair_sunday_meetings_range',
     'enumerate_club_pairs',
     'collect_pair_grade_week_vars',
     'collect_pair_week_sunday_vars',

@@ -298,10 +298,14 @@ class TestScenario3_2x2_LowerGrade:
 class TestScenario4_1x2_Asymmetric:
     """1×2 asymmetric: 1-team Maitland × 2-team Norths in 3rd grade.
 
-    Hand oracle: a=1 (Maitland), b=2 (Norths). T=3 (odd), R=3,
-    per_matchup=3//3=1. weekends_budget = max(1,2)*1 = 2. games/weekend =
-    min(1,2) = 1. Total games = 1*2*1 = 2. The single Maitland team plays
-    each of the 2 Norths teams on distinct Sundays.
+    Hand oracle (range semantics per spec-038 fix): a=1 (Maitland), b=2 (Norths).
+    T=3 (odd), R=3, base=3//3=1, base+1=2. Per BalancedMatchups, each team-pair
+    meets in [1, 2]. Layer 5: sum_w play_pg ∈ [max(a,b)*base, max(a,b)*(base+1)]
+    = [2, 4]. Layer 4 (1 tp per aligned weekend) → num_aligned = sum_tp_plays.
+
+    Maitland 3rd plays 2 opponents (the 2 Norths 3rd teams), sum to R=3:
+    one tp at 1 meeting + one tp at 2 meetings (BalancedMatchups + per-team
+    forces this distribution). Total tp-plays = 3 → 3 aligned weekends.
     """
 
     def test_1x2_solves_with_correct_layout(self):
@@ -310,8 +314,6 @@ class TestScenario4_1x2_Asymmetric:
             extra_teams_in_grade={'3rd': {'Norths': 1}},
             num_weeks=6,
         )
-        # T=3, R // T = per_matchup. We want per_matchup=1 so R=3 (3//3=1).
-        # build_stacked_fixture sets R = 1*T = 3 by default for odd-T → OK.
         model, X = build_model_X(data)
         reg = _registry(model)
         _add_no_double_booking_fields(model, X)
@@ -328,22 +330,30 @@ class TestScenario4_1x2_Asymmetric:
             k[6] for k in X if len(k) >= 11 and k[3] == 'Sunday'
         })
 
-        # Each team-pair plays exactly per_matchup=1 weekend.
+        # Each team-pair plays in [base, base+1] = [1, 2] Sundays.
+        tp_counts = []
         for tp in team_pairs:
             count = sum(
                 solver.Value(reg.lookup((STACK_TEAM_PAIR_PLAY_PREFIX, tp, w)))
                 for w in sunday_weeks
                 if reg.lookup((STACK_TEAM_PAIR_PLAY_PREFIX, tp, w)) is not None
             )
-            assert count == 1, f'tp {tp} played {count} weekends; expected 1'
+            assert 1 <= count <= 2, f'tp {tp} played {count} weekends; expected [1, 2]'
+            tp_counts.append(count)
 
-        # 2 distinct aligned weekends (one per team-pair, on distinct Sundays).
+        # Layer 5 range: sum_w play_pg ∈ [2, 4]. Solver's actual count = sum_tp_plays
+        # (since min(a,b)=1 game per aligned weekend).
         active_weeks = [
             w for w in sunday_weeks
             if reg.lookup((STACK_PLAY_PREFIX, pair, '3rd', w)) is not None
             and solver.Value(reg.lookup((STACK_PLAY_PREFIX, pair, '3rd', w))) == 1
         ]
-        assert len(active_weeks) == 2, f'expected 2 active weekends, got {len(active_weeks)}'
+        assert 2 <= len(active_weeks) <= 4, (
+            f'expected aligned weekends in [2, 4], got {len(active_weeks)}'
+        )
+        assert len(active_weeks) == sum(tp_counts), (
+            'aligned weekend count must equal total tp-plays for 1×2 (min=1 game/week)'
+        )
 
         # On each active weekend: exactly 1 team-pair plays (min(a,b)=1).
         for w in active_weeks:

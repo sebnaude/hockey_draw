@@ -68,9 +68,11 @@ from constraints.atoms._club_vs_club_stacked_shared import (
     _per_matchup_for_grade,
     enumerate_club_pairs,
     enumerate_team_pairs_in_pair_grade,
+    pair_grade_sunday_aligned_weekend_range,
     pair_grade_sunday_aligned_weekends,
     per_pair_grade_meeting_counts,
     team_pair_counts,
+    team_pair_sunday_meetings_range,
 )
 
 
@@ -129,28 +131,35 @@ class ClubVsClubStackedWeekends(Atom):
             # each grade comes from the aligned-weekend helper.
             grade_meetings_total = per_pair_grade_meeting_counts(data, pair)
 
-            # Build (grade, weekends_budget, per_matchup, a, b, team_pairs)
-            # tuples — but only for grades where the budget is non-zero.
-            pair_grade_specs: List[Tuple[str, int, int, int, int, List[Tuple[str, str]]]] = []
+            # Build per-pair-grade specs with BalancedMatchups-mirrored ranges
+            # (spec-038 fix): the atom budget is a RANGE `[base, base+1]` per
+            # team-pair (and `[max(a,b)*base, max(a,b)*(base+1)]` aggregate),
+            # mirroring `EnsureEqualGamesAndBalanceMatchUps`. The earlier exact
+            # `== per_matchup` made the atom INFEASIBLE on `season_test` for
+            # grades with extras > 0 (5th: T=9 R=16 → all 36 pairs MUST meet 2
+            # times to satisfy per-team total, but exact `== 1` forbade that).
+            #
+            # Tuple shape: (grade, min_budget, max_budget, tp_min, tp_max, a, b, team_pairs)
+            pair_grade_specs: List[Tuple[str, int, int, int, int, int, int, List[Tuple[str, str]]]] = []
             for grade in grade_meetings_total.keys():
-                weekends_budget = pair_grade_sunday_aligned_weekends(data, pair, grade)
-                if weekends_budget == 0:
+                min_budget, max_budget = pair_grade_sunday_aligned_weekend_range(
+                    data, pair, grade
+                )
+                if max_budget == 0:
                     # No budget — skip entirely (e.g. one side has 0 teams,
                     # or PHL forced-Fridays consume the whole budget).
                     continue
-                a, b = team_pair_counts(data, pair, grade)
-                per_matchup = _per_matchup_for_grade(data, grade)
-                if per_matchup == 0:
-                    # Defensive: weekends_budget > 0 implies per_matchup > 0,
-                    # but guard anyway. Skip silently — no constraints to add.
+                tp_min, tp_max = team_pair_sunday_meetings_range(data, pair, grade)
+                if tp_max == 0:
                     continue
+                a, b = team_pair_counts(data, pair, grade)
                 team_pairs = enumerate_team_pairs_in_pair_grade(data, pair, grade)
                 if not team_pairs:
-                    # Defensive: weekends_budget > 0 implies a*b > 0 which
+                    # Defensive: max_budget > 0 implies a*b > 0 which
                     # implies team_pairs non-empty. Guard for consistency.
                     continue
                 pair_grade_specs.append(
-                    (grade, weekends_budget, per_matchup, a, b, team_pairs)
+                    (grade, min_budget, max_budget, tp_min, tp_max, a, b, team_pairs)
                 )
 
             if not pair_grade_specs:
@@ -166,22 +175,20 @@ class ClubVsClubStackedWeekends(Atom):
             # by pair — which is impossible (a team-pair has exactly one
             # cross-club pair). So no de-dup concern across pair_grade_specs.
             team_pair_play: Dict[Tuple[Tuple[str, str], int], object] = {}
-            for grade, weekends_budget, per_matchup, a, b, team_pairs in pair_grade_specs:
-                # Early validation (DoD #7): the per-pair-grade budget cannot
-                # exceed the number of Sunday weeks where at least one team-pair
-                # in this pair-grade has Sunday vars. (If ALL team-pairs have
-                # vars on every Sunday this is simply len(sunday_weeks); if
-                # some team-pair has zero Sunday vars on every week, the budget
-                # check below catches that via the per-tp == per_matchup
-                # constraint becoming infeasible.)
+            for grade, min_budget, max_budget, _tp_min, _tp_max, a, b, team_pairs in pair_grade_specs:
+                # Early validation (DoD #7): the LOWER bound of the aligned-
+                # weekend budget cannot exceed the number of Sunday weeks where
+                # at least one team-pair has Sunday vars. (Range upper bound is
+                # allowed to exceed since the constraint is `<=`; only the lower
+                # bound `>=` would be unsatisfiable.)
                 available_weeks_with_vars = sum(
                     1 for w in sunday_weeks
                     if any(tp_week_vars.get((tp[0], tp[1], w)) for tp in team_pairs)
                 )
-                if weekends_budget > available_weeks_with_vars:
+                if min_budget > available_weeks_with_vars:
                     raise ValueError(
                         f'ClubVsClubStackedWeekends: pair={pair} grade={grade} '
-                        f'budget={weekends_budget} exceeds available Sunday weeks '
+                        f'min_budget={min_budget} exceeds available Sunday weeks '
                         f'with vars ({available_weeks_with_vars}). Check '
                         f'FORCED_GAMES and team data.'
                     )
@@ -199,43 +206,30 @@ class ClubVsClubStackedWeekends(Atom):
                         )
                         team_pair_play[cache_key] = ind
 
-            # LAYER 2: per-team-pair Sunday budget — each tp plays exactly
-            # `tp_sunday_budget = weekends_budget / max(a, b)` Sundays.
+            # LAYER 2: per-team-pair Sunday budget — RANGE mirroring
+            # `EnsureEqualGamesAndBalanceMatchUps` per-pair bound `[base, base+1]`,
+            # restricted to Sundays via PHL forced-Friday subtraction (PHL only).
             #
-            # For non-PHL: weekends_budget = max(a,b)*per_matchup, so
-            # tp_sunday_budget = per_matchup (every team-pair plays its full
-            # season Sunday count).
+            # For non-PHL: each tp plays `[base, base+1]` Sundays.
+            # For PHL 1×1: each tp plays `[base - forced_fri, base+1 - forced_fri]`
+            # Sundays (clamped ≥ 0).
             #
-            # For PHL (always 1×1 in the current league): weekends_budget =
-            # per_matchup - phl_forced_friday_meetings, and max(a,b)=1, so
-            # tp_sunday_budget = per_matchup - forced_fri. Forced PHL Friday
-            # meetings consume the matchup count without contributing to
-            # Sunday team_pair_play — they're not in the OR.
-            #
-            # weekends_budget is always exactly divisible by max(a,b) by
-            # construction (max(a,b)*per_matchup case) except when the PHL
-            # forced-Friday subtraction kicks in — but PHL has max(a,b)=1
-            # so divisibility is trivial. Assert just to be safe.
-            for grade, weekends_budget, per_matchup, a, b, team_pairs in pair_grade_specs:
-                max_ab = max(a, b)
-                assert weekends_budget % max_ab == 0, (
-                    f'ClubVsClubStackedWeekends invariant: weekends_budget '
-                    f'({weekends_budget}) not divisible by max(a,b) ({max_ab}) '
-                    f'for pair={pair} grade={grade}. PHL forced-Friday '
-                    f'subtraction may be misaligned.'
-                )
-                tp_sunday_budget = weekends_budget // max_ab
+            # Exact range (vs the earlier exact `== per_matchup`) is needed for
+            # grades with `extras > 0` (R - base*T_eff != 0): those grades require
+            # some pairs to land at `base+1` to satisfy the per-team total.
+            for grade, _min_b, _max_b, tp_min, tp_max, _a, _b, team_pairs in pair_grade_specs:
                 for tp in team_pairs:
                     tp_play_vars = [team_pair_play[(tp, w)] for w in sunday_weeks]
-                    model.Add(sum(tp_play_vars) == tp_sunday_budget)
-                    n += 1
+                    model.Add(sum(tp_play_vars) >= tp_min)
+                    model.Add(sum(tp_play_vars) <= tp_max)
+                    n += 2
 
             # LAYER 3 + 4: per-pair-grade play_pg indicator + cardinality.
             # play_pg[(pair, grade, w)] = OR over team_pair_play[tp, w] for tp
             # in this (pair, grade). Registered under STACK_PLAY_PREFIX
             # (existing key shape, new semantics — see module docstring).
             play_pg_by_grade_week: Dict[Tuple[str, int], object] = {}
-            for grade, _wbudget, _pm, a, b, team_pairs in pair_grade_specs:
+            for grade, _min_b, _max_b, _tp_min, _tp_max, a, b, team_pairs in pair_grade_specs:
                 min_ab = min(a, b)
                 for w in sunday_weeks:
                     tp_vars_for_week = [team_pair_play[(tp, w)] for tp in team_pairs]
@@ -262,19 +256,23 @@ class ClubVsClubStackedWeekends(Atom):
                     ).OnlyEnforceIf(play_pg.Not())
                     n += 2
 
-            # LAYER 5: per-pair-grade total aligned-weekend budget.
-            # sum_w play_pg[pair, grade, w] == weekends_budget.
-            for grade, weekends_budget, _pm, _a, _b, _tps in pair_grade_specs:
+            # LAYER 5: per-pair-grade total aligned-weekend budget — RANGE.
+            # `[min_budget, max_budget]` = `[max(a,b)*base, max(a,b)*(base+1)]`
+            # before PHL forced-Friday subtraction. Mirrors BalancedMatchups
+            # aggregate range so extras-receiving pairs (e.g. 5th grade where
+            # all pairs MUST meet `base+1` times) are satisfiable.
+            for grade, min_budget, max_budget, _tp_min, _tp_max, _a, _b, _tps in pair_grade_specs:
                 play_pg_vars = [play_pg_by_grade_week[(grade, w)] for w in sunday_weeks]
-                model.Add(sum(play_pg_vars) == weekends_budget)
-                n += 1
+                model.Add(sum(play_pg_vars) >= min_budget)
+                model.Add(sum(play_pg_vars) <= max_budget)
+                n += 2
 
             # LAYER 6: cross-grade nested-superset chain. Sort grades by
-            # weekends_budget descending; for each consecutive (hi, lo) pair
-            # and each week: play_pg[lo, w] <= play_pg[hi, w]. Tie-break alpha
-            # for determinism.
+            # max_budget descending (the upper bound of aligned weekends);
+            # for each consecutive (hi, lo) pair and each week:
+            # play_pg[lo, w] <= play_pg[hi, w]. Tie-break alpha for determinism.
             sorted_specs = sorted(
-                pair_grade_specs, key=lambda spec: (-spec[1], spec[0])
+                pair_grade_specs, key=lambda spec: (-spec[2], spec[0])
             )
             for i in range(len(sorted_specs) - 1):
                 hi_grade = sorted_specs[i][0]
