@@ -76,11 +76,20 @@ SEASON_YEAR_SENTINEL = 'test'
 
 
 def build_run_config(exclude: Optional[list] = None,
-                     workers: Optional[int] = None) -> dict:
+                     workers: Optional[int] = None,
+                     groups: Optional[list] = None) -> dict:
     """Resolve the raw-core flag profile into an auditable dict.
 
     `exclude` (default `[]`) is the ONLY permitted delta between the two
-    spec-035 runs. Everything else is fixed by the module constants above.
+    spec-035 Unit-C runs. Everything else is fixed by the module constants above.
+
+    `groups` (default `['core']` = `CORE_GROUPS`) is the spec-035 follow-on
+    (Units D/E) lever: the same raw profile can be launched as `core`,
+    `core,bye_spacing`, or `core,spacing` so the marginal liveness/symmetry
+    effect of the spacing-family groups (peeled out of `core` by spec-032/033)
+    can be measured. `symmetry_breakers` are still unioned in (spec-032). The
+    group set is recorded in the sidecar so it is the only delta between the
+    spacing-family runs and the full-core run.
 
     `workers` defaults to the DoD-2 value (`CORE_WORKERS` = 10). It is exposed
     as an override solely for the convenor-authorised DoD-6 resourcing path
@@ -97,7 +106,7 @@ def build_run_config(exclude: Optional[list] = None,
     """
     exclude_list = list(exclude) if exclude else []
     return {
-        'groups': list(CORE_GROUPS),
+        'groups': list(groups) if groups else list(CORE_GROUPS),
         'workers': int(workers) if workers else CORE_WORKERS,
         'fix_round_1': CORE_FIX_ROUND_1,
         'locked_weeks': list(CORE_LOCKED_WEEKS),
@@ -158,7 +167,7 @@ def _assert_season_test_is_forced_free() -> None:
 
 
 def main(exclude: Optional[list] = None, run_id: Optional[str] = None,
-         workers: Optional[int] = None):
+         workers: Optional[int] = None, groups: Optional[list] = None):
     """Launch the raw-core single solve on the forced-free test config.
 
     This starts a REAL `main_simple` solve (long-running). Unit C runs this in
@@ -178,7 +187,7 @@ def main(exclude: Optional[list] = None, run_id: Optional[str] = None,
     # `logs/solver_*_<run_id>.log` per run, which Unit C globs deterministically.
     # The profile sidecar below is the authoritative auditable record regardless.
 
-    cfg = build_run_config(exclude=exclude, workers=workers)
+    cfg = build_run_config(exclude=exclude, workers=workers, groups=groups)
     sidecar = _record_profile(cfg, resolved_run_id)
     logger.info("[spec-035] raw-core e2e launch; profile sidecar: %s", sidecar)
     print(f"[spec-035] raw-core e2e launch (run_id={resolved_run_id})")
@@ -254,9 +263,15 @@ def _parse_args(argv=None):
         help="Worker count override (default 10 = DoD-2). Convenor-authorised "
              "DoD-6 resourcing lever only (e.g. 8 on a RAM-constrained box); "
              "does not affect the model or its symmetry readout.")
+    parser.add_argument(
+        '--groups', type=str, default=None,
+        help="Comma-separated constraint group set (default 'core'). spec-035 "
+             "follow-on (Units D/E): e.g. 'core,bye_spacing' or 'core,spacing'. "
+             "symmetry_breakers are always unioned in.")
     return parser.parse_args(argv)
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    main(exclude=args.exclude, run_id=args.run_id, workers=args.workers)
+    groups = [g.strip() for g in args.groups.split(',')] if args.groups else None
+    main(exclude=args.exclude, run_id=args.run_id, workers=args.workers, groups=groups)
