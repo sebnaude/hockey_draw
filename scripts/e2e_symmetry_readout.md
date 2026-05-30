@@ -62,46 +62,121 @@ confirmed the fix: it ran the full 30 minutes at ~96% memory without crashing.
 
 ## Goal 2 / Goal 3 — Remaining symmetry, and the effect of `ClubGameSpread`
 
-CP-SAT runs presolve symmetry detection one or more times. The **full-model pass**
-(first detection, on the freshly-built model) is the inherent-symmetry headline;
-later passes run on the partially-presolved model. All passes are recorded below.
+**Methodology note (important):** CP-SAT runs symmetry detection *several times*
+during presolve, and the count changes between passes as presolve simplifies the
+model. The **first** pass is on a barely-presolved model and is NOT a fair
+cross-run number (different constraint sets leave different amounts of *transient*
+helper-variable symmetry that later presolve rounds then break). The fair,
+apples-to-apples figure is the **last / converged pass — closest to the start of
+search** — which is exactly what `parse_symmetry_stats` returns. All passes are
+listed per run below; the **converged pass is the one compared in the conclusion.**
 
 ### Run 1 — core − ClubGameSpread (the symmetry-rich model)
 
 | Pass | #generators | orbits | variables in orbits | orbit sizes |
 |---|---|---|---|---|
-| 1 (full model) | **16** | **10,804** | **97,530** | 16 |
+| 1 (first) | 16 | 10,804 | 97,530 | 16 |
 | 2 | 9 | 20,274 | 65,890 | 4 |
 | 3 | 11 | 20,274 | 76,026 | 6 |
-| 4 (nearest search) | 5 | 20,297 | 40,594 | 2 |
+| **4 (converged)** | **5** | **20,297** | **40,594** | 2 |
 
 ### Run 2 — full core, +ClubGameSpread (the symmetry-poor model)
 
 | Pass | #generators | orbits | variables in orbits | orbit sizes |
 |---|---|---|---|---|
-| 1 (only pass) | **1** | **24** | **48** | 2 |
+| **1 (only / converged)** | **1** | **24** | **48** | 2 |
+
+### Run 3 — full core + bye_spacing (DoD-10; see spacing-family section)
+
+| Pass | #generators | orbits | variables in orbits | orbit sizes |
+|---|---|---|---|---|
+| 1 (first, transient) | 1 | 6,491 | 12,982 | 2 |
+| **2 (converged)** | **1** | **24** | **48** | 2 |
 
 ### Conclusion (Goal 3): `ClubGameSpread` is a powerful symmetry-breaker
 
-Adding the `ClubGameSpread` atoms **collapses the model's exploitable symmetry to
-near-zero**:
+Compared at the **converged pass** (the only fair comparison):
 
-- full-model generators: **16 → 1**
-- orbits: **10,804 → 24**
-- variables sitting in symmetric orbits: **97,530 → 48** (≈ 99.95% reduction)
-- CP-SAT stops re-running symmetry detection entirely (4 passes → 1) — there is
-  essentially nothing left to exploit once `ClubGameSpread` is present.
+| Model | converged symmetric vars | converged orbits | generators |
+|---|---|---|---|
+| core − ClubGameSpread | **40,594** | 20,297 | 5 |
+| full core (+ClubGameSpread) | **48** | 24 | 1 |
+| full core + bye_spacing | **48** | 24 | 1 |
 
-This is the answer to the spec-035 Goal-3 hypothesis: **`ClubGameSpread` does NOT
-leave symmetry on the table — it strips almost all of it.** Mechanistically this is
-expected: `ClubGameSpread` pins how each club's games spread/concentrate across
-weeks and fields, which destroys the week/game interchangeability that produces the
-large size-16 and size-2…6 orbits seen in the core−ClubGameSpread model.
+Adding `ClubGameSpread` collapses the model's exploitable symmetry from ~40k
+variables-in-orbits down to **48** — a ~99.9% reduction — and drops the generator
+count from 5 to 1. This answers the Goal-3 hypothesis: **`ClubGameSpread` does NOT
+leave symmetry on the table — it strips almost all of it.** Mechanistically,
+`ClubGameSpread` pins how each club's games spread/concentrate across weeks and
+fields, destroying the week/game interchangeability that produces the large
+size-16 / size-2…6 orbits seen in the core−ClubGameSpread model.
+
+**On the apparent bye_spacing anomaly (first-pass 12,982 vars):** adding
+`bye_spacing` on top of full core looks, at the *first* symmetry pass, like it adds
+symmetry (1 gen / 6,491 orbits / 12,982 vars). It does not. That is a transient
+presolve artifact: `bye_spacing` adds barely any *raw* variables (+1,056 bools) but
+**prevents presolve from eliminating ~25k booleans early** (presolved bools
+51,140 → 76,436) that full-core-alone fixes outright — those surviving game-bools
+are interchangeable in pairs at the first pass. CP-SAT's later presolve rounds then
+break that symmetry, and Run 3's **converged pass returns to exactly 24 orbits / 48
+vars — identical to full core.** So a strict superset of full core does *not* end up
+with more residual symmetry, as expected; `ClubGameSpread`'s symmetry-stripping is
+intact and dominant.
 
 **Practical implication:** the dedicated symmetry-breaking atoms (lex ordering, NIHC
 fill order) matter most when `ClubGameSpread` is *absent* or relaxed. On the full
 production `core`, `ClubGameSpread` already removes the symmetry those breakers
 target — so symmetry-driven search blow-up is not a concern for the full set.
+
+---
+
+## Spacing-family follow-on (Units D/E — DoD-9…12)
+
+Per convenor request (2026-05-29), once core reached liveness the same raw harness
+was extended to the two spacing-family groups that spec-032/033 peeled out of
+`core`: first **add `bye_spacing`** (`BalancedByeSpacing`), then **swap to `spacing`**
+(`EqualMatchUpSpacing`). The launcher gained a `--groups` parameter (Unit D); the
+group set is the only delta from Run 2 (full core). The follow-on phase was gated
+behind Open Question FP (the `ClubVsClubStackedWeekends × ClubDayParticipation`
+hard conflict) — **resolved by spec-038 `6f4c0e5`**, the same fix that unblocked
+Unit C, so the phase proceeded.
+
+| | Run 2 (full core) | Run 3 (core,bye_spacing) | Run 4 (core,spacing) |
+|---|---|---|---|
+| Group set | `core` | `core,bye_spacing` | `core,spacing` |
+| Spacing atom asserted | — | `BalancedByeSpacing` PRESENT; `EqualMatchUpSpacing` absent ✅ | `EqualMatchUpSpacing` PRESENT; `BalancedByeSpacing` absent ✅ |
+| Workers | 8 | 8 | 8 |
+| Raw → presolved vars | 147,100 → 131,743 | 148,996 → 133,961 | 149,453 → 140,219 |
+| Search start | @114.8s | @182.2s | @112.3s |
+| Liveness (30-min) | ✅ survived (1892s, killed @cap) | ✅ survived (1802s, killed @cap) | ✅ survived (1809s, killed @cap) |
+| **Converged symmetry** | 1 gen / 24 orbits / **48 vars** | 1 gen / 24 orbits / **48 vars** | **0 gen / 0 orbits / 0 vars** |
+
+### Marginal symmetry effect of the spacing groups
+
+- **`bye_spacing`**: no net effect on residual symmetry (converged 48 vars, same as
+  full core). It adds a transient first-pass bump (6,491 orbits / 12,982 vars) by
+  keeping ~25k more bools alive through early presolve, which later rounds clear —
+  see the bye_spacing-anomaly note above. Liveness fine.
+- **`spacing` (`EqualMatchUpSpacing`)**: **removes the last residual symmetry.**
+  CP-SAT ran symmetry detection (built the symmetry graph: 534k nodes, 6.5M arcs,
+  ~4 passes) but found **zero generators** every pass — `parse_symmetry_stats`
+  returns `{present: False}`. `EqualMatchUpSpacing` constrains the gap between a
+  pair's repeated meetings, which breaks the final week-interchangeability that left
+  full core with 48 symmetric vars. With it on, the model has **no exploitable
+  symmetry at all**.
+
+### Full progression (converged-pass, the headline)
+
+| Model | symmetric vars | generators |
+|---|---|---|
+| core − ClubGameSpread | 40,594 | 5 |
+| full core | 48 | 1 |
+| full core + bye_spacing | 48 | 1 |
+| full core + spacing | **0** | **0** |
+
+`ClubGameSpread` does the heavy lifting (40,594 → 48); `bye_spacing` is symmetry-
+neutral; `EqualMatchUpSpacing` eliminates the remainder. All four models reach
+search and (at workers 8) sustain the 30-minute liveness bar.
 
 ---
 

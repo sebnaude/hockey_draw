@@ -42,21 +42,45 @@ LAUNCHER = REPO_ROOT / "scripts" / "run_core_e2e.py"
 
 
 def _tree_kill(proc: subprocess.Popen) -> None:
-    """Kill the child process and all its descendants (ortools workers)."""
+    """Kill the child process and every descendant (ortools workers).
+
+    `taskkill /F /T` alone proved unreliable here (spec-035 Run 2): the venv
+    python re-execs the real interpreter, and if the intermediate parent exits
+    first the actual solver child can be reparented and survive a tree-kill from
+    the original PID — leaving a multi-GB ortools orphan (`child_rc=None`). So we
+    enumerate the live descendants via psutil and kill each explicitly, then fall
+    back to taskkill / proc.kill, and finally VERIFY the tree is gone.
+    """
     if proc.poll() is not None:
         return
-    if os.name == "nt":
-        # /T = whole tree, /F = force. Required: a bare kill can leave ortools
-        # helper processes orphaned (spec-035 risk note).
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-            capture_output=True, text=True,
-        )
-    else:
-        proc.kill()
+    # 1. psutil-based recursive kill (reliable for reparented children).
+    try:
+        import psutil
+        parent = psutil.Process(proc.pid)
+        victims = parent.children(recursive=True) + [parent]
+        for v in victims:
+            try:
+                v.kill()
+            except psutil.NoSuchProcess:
+                pass
+        psutil.wait_procs(victims, timeout=20)
+    except Exception:
+        # 2. Fallback: OS tree-kill.
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, text=True)
+        else:
+            proc.kill()
     try:
         proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
+        pass
+    # 3. Verify no orphan survived (best-effort; log if one did).
+    try:
+        import psutil
+        if psutil.pid_exists(proc.pid) and proc.poll() is None:
+            print(f"[e2e-30min] WARNING: PID {proc.pid} still alive after tree-kill")
+    except Exception:
         pass
 
 
