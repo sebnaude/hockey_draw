@@ -62,6 +62,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 from constraints.atoms.base import Atom
+from constraints.atoms._club_day_shared import parse_club_day_entries
 from constraints.atoms._club_vs_club_stacked_shared import (
     STACK_PLAY_PREFIX,
     STACK_TEAM_PAIR_PLAY_PREFIX,
@@ -74,6 +75,7 @@ from constraints.atoms._club_vs_club_stacked_shared import (
     team_pair_counts,
     team_pair_sunday_meetings_range,
 )
+from utils import get_nearest_week_by_date
 
 
 class ClubVsClubStackedWeekends(Atom):
@@ -107,6 +109,22 @@ class ClubVsClubStackedWeekends(Atom):
         })
         if not sunday_weeks:
             return 0
+
+        # Club-day exemption (spec-038): on a club's club-day weekend the entire
+        # host roster is pinned to one Sunday (ClubDayParticipation), the
+        # multi-team grades turn inward (derbies) and the single-team grades must
+        # reach outside — so the cross-club same-opponent nesting (Layer 6) is
+        # structurally unsatisfiable there AND redundant (ClubDaySameField +
+        # ClubDayContiguousSlots already co-locate the whole roster that day).
+        # We therefore skip the Layer-6 implication for any pair whose member is
+        # a club-day host that week. Week-based and type-agnostic: covers both
+        # opponent (Type A) and no-opponent/derby (Type B) club days — Type A
+        # still drags the nesting via host's free second team. All other layers
+        # and all non-host pairs keep their nesting unchanged.
+        club_day_hosts_by_week: Dict[int, set] = defaultdict(set)
+        for club_name, date_str, _opponent in parse_club_day_entries(data):
+            cd_week = get_nearest_week_by_date(date_str, data.get('timeslots', []))
+            club_day_hosts_by_week[cd_week].add(club_name)
 
         # Pre-index Sunday X-vars by (team_pair, week) so we don't repeatedly
         # scan X for each team-pair we care about.
@@ -278,6 +296,10 @@ class ClubVsClubStackedWeekends(Atom):
                 hi_grade = sorted_specs[i][0]
                 lo_grade = sorted_specs[i + 1][0]
                 for w in sunday_weeks:
+                    # Exempt the host club's club-day weekend (see above).
+                    hosts = club_day_hosts_by_week.get(w)
+                    if hosts and (pair[0] in hosts or pair[1] in hosts):
+                        continue
                     hi_play = play_pg_by_grade_week[(hi_grade, w)]
                     lo_play = play_pg_by_grade_week[(lo_grade, w)]
                     model.Add(lo_play <= hi_play)

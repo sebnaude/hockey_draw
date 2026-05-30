@@ -563,3 +563,85 @@ class TestHelperVarRegistration:
         for w in range(1, 7):
             ind = reg.lookup((STACK_PLAY_PREFIX, pair, 'PHL', w))
             assert ind is not None
+
+
+# ---------------------------------------------------------------------------
+# spec-038 club-day fix: Layer-6 cross-club nesting is exempted on the host
+# club's club-day weekend. ClubDayParticipation pins the whole host roster to
+# one Sunday — multi-team grades turn inward (derbies), single-team grades
+# reach outside — so the per-week same-opponent nesting is structurally
+# unsatisfiable there. We verify by contrast: forcing a lower-budget grade
+# active on a week WITHOUT the higher-budget grade is INFEASIBLE on a normal
+# week (Layer 6 forbids it) but FEASIBLE on the host's club-day week (exempt).
+# ---------------------------------------------------------------------------
+
+
+class TestClubDayWeekendNestingExemption:
+    """The Layer-6 `play_pg[lo] <= play_pg[hi]` chain must NOT fire on the host
+    club's club-day weekend; it MUST still fire on every other weekend."""
+
+    # Clean weekly Sunday dates per week (the fixture's generated dates include
+    # invalid strings like 2026-02-29 that `get_nearest_week_by_date`'s strptime
+    # would reject — it parses every timeslot date).
+    _WEEK_DATES = {
+        1: '2026-03-01', 2: '2026-03-08', 3: '2026-03-15',
+        4: '2026-03-22', 5: '2026-03-29', 6: '2026-04-05',
+    }
+
+    def _build(self):
+        # PHL budget=4, 6th budget=2 → Layer 6 forces 6th-active ⊆ PHL-active.
+        data = build_stacked_fixture({'PHL': 4, '6th': 2}, num_weeks=6)
+        for t in data['timeslots']:
+            if t.day == 'Sunday':
+                t.date = self._WEEK_DATES[t.week]
+        return data
+
+    def _solve_forcing_inversion(self, club_days, force_week):
+        """Apply the atom (with `club_days`), force 6th active and PHL inactive
+        on `force_week`, and return the solve status."""
+        from datetime import datetime as _dt
+        data = self._build()
+        data['club_days'] = club_days
+        model, X = build_model_X(data)
+        reg = _registry(model)
+        _add_no_double_booking_fields(model, X)
+        _add_no_double_booking_teams(model, X)
+        ClubVsClubStackedWeekends().apply(model, X, data, reg)
+
+        pair = ('Maitland', 'Norths')
+        six = reg.lookup((STACK_PLAY_PREFIX, pair, '6th', force_week))
+        phl = reg.lookup((STACK_PLAY_PREFIX, pair, 'PHL', force_week))
+        assert six is not None and phl is not None
+        model.Add(six == 1)   # lower-budget grade active this week
+        model.Add(phl == 0)   # higher-budget grade NOT active this week
+        return solve_with_timeout(model)
+
+    def test_normal_week_inversion_is_infeasible(self):
+        # No club day → Layer 6 active everywhere → 6th cannot outrun PHL.
+        status, _ = self._solve_forcing_inversion(club_days={}, force_week=3)
+        assert status == cp_model.INFEASIBLE, (
+            f'Layer 6 should forbid 6th-without-PHL on a normal week; got {status}'
+        )
+
+    def test_club_day_week_inversion_is_feasible(self):
+        # Maitland (a club in the pair) hosts a club day on week-3's Sunday.
+        from datetime import datetime as _dt
+        club_days = {'Maitland': {'date': _dt(2026, 3, 15)}}  # → week 3
+        status, _ = self._solve_forcing_inversion(
+            club_days=club_days, force_week=3,
+        )
+        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
+            f'club-day weekend must be exempt from Layer 6; got {status}'
+        )
+
+    def test_club_day_does_not_exempt_other_weeks(self):
+        # Club day on week 3, but force the inversion on week 5 → still INFEASIBLE
+        # (only the host's club-day weekend is exempt, not the whole season).
+        from datetime import datetime as _dt
+        club_days = {'Maitland': {'date': _dt(2026, 3, 15)}}  # → week 3
+        status, _ = self._solve_forcing_inversion(
+            club_days=club_days, force_week=5,
+        )
+        assert status == cp_model.INFEASIBLE, (
+            f'non-club-day weeks must keep Layer 6; got {status}'
+        )
