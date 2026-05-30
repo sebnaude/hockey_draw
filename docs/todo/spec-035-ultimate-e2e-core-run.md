@@ -3,6 +3,13 @@
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-030, spec-031, spec-032, spec-033, spec-034, spec-036 -->
 <!-- owner: session=opus-spec035-20260526T000000Z claimed=2026-05-26T00:00:00Z -->
+<!-- 2026-05-29 STATUS: Unit C still BLOCKED. After spec-037+038 landed, core−ClubGameSpread is STILL
+     infeasible on forced-free season_test, with a NEW signature (exactly_one: empty or all false).
+     Re-bisected to a minimal HARD pair: ClubVsClubStackedWeekends × ClubDayParticipation (both club-day
+     dates are Sundays; neither atom is slackable). See spec-035-e2e-infeasibility-handoff.md §11. This is
+     a constraint-semantic conflict (DoD-6 OUT of scope) owned by spec-038 (building). A follow-on
+     spacing-family phase (Units D/E: add bye_spacing, then swap to spacing) was appended per convenor
+     request 2026-05-29 — it is `drafting` and blocked behind Unit C liveness + Open Question FP. -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline. 2026-05-25: added intermediate ClubGameSpread-excluded run + cross-run symmetry comparison (Unit A gains an exclude param, Unit C runs both solves) — incremental scope, no re-review. 2026-05-25 (convenor): RUN ORDER SWAPPED — the `--exclude ClubGameSpread` run is now Run 1, the full core run is Run 2. Baseline framing unchanged (full core remains the recorded reference); only execution order moved. No re-review (operational ordering only). -->
 
 # spec-035 — ULTIMATE: raw `--core` e2e solve on the forced-free test config + remaining-symmetry readout
@@ -329,3 +336,150 @@ the script per `season_test.py`'s own documented programmatic usage.
    surface to the user.
 6. Tick checkboxes, stamp the plan `done`, move to `docs/todo/done/`, update the dependency tree —
    the `final-form` plan line is now fully drained.
+
+---
+
+## FOLLOW-ON PHASE — spacing-family e2e validation (convenor request 2026-05-29)
+<!-- status: drafting — NOT yet adversarially reviewed; depends on Unit C liveness (core reaching search) -->
+<!-- 2026-05-29 finding: core−ClubGameSpread is STILL infeasible at HEAD (2ebe31e) — minimal pair
+     ClubVsClubStackedWeekends × ClubDayParticipation (see spec-035-e2e-infeasibility-handoff.md §11).
+     Units C, D, E are all BLOCKED until that hard-vs-hard conflict is resolved (a spec-038 / new-spec
+     decision — see Open Questions FP). This section is recorded per the user's explicit instruction to
+     "add to the plan"; it is `drafting` and must pass /adversarial Mode A before implementation. -->
+
+> **Convenor instruction (verbatim intent):** once the core run reaches the DoD-4 liveness bar
+> (Run 1 = core−ClubGameSpread surviving a 30-min run, Run 2 = full core), **then** extend the same
+> raw e2e harness to the two spacing-family groups that spec-032/033 peeled out of `core`:
+> first **add `bye_spacing`** (`BalancedByeSpacing`), then **remove `bye_spacing` and add `spacing`**
+> (`EqualMatchUpSpacing`) — and **get both debugged and working** (each reaching the same liveness bar).
+>
+> Group/atom mapping verified against `constraints/registry.py` (2026-05-29):
+> `bye_spacing` group ⇒ the single atom `BalancedByeSpacing`; `spacing` group ⇒ the single atom
+> `EqualMatchUpSpacing`. Both were peeled out of `core` (spec-032 → `spacing`; spec-033 Unit B →
+> `bye_spacing`), so the full set is `--groups core,<group>` (symmetry_breakers stay on; ClubGameSpread
+> handling unchanged from Run 2).
+
+### Additional Definition of Done (DoD-9 … DoD-12)
+
+9. **Launcher generalised to add a group.** `scripts/run_core_e2e.py` accepts the run's **group set**
+   (default `['core']`, the existing behaviour) so the identical raw profile (`--workers 10`,
+   `fix_round_1=False`, no locks, forced-free, symmetry_breakers on) can be launched as
+   `core`, `core,bye_spacing`, or `core,spacing`. The recorded profile sidecar shows the group set, and
+   the group set is the **only** delta between the spacing-family runs and Run 2. (No change to the
+   exclude param.)
+10. **Run 3 — `core,bye_spacing` reaches liveness.** A raw e2e run with `--groups core,bye_spacing`
+    (symmetry_breakers on, ClubGameSpread present, same as Run 2 otherwise) **gets through presolve and
+    survives ≥30 min of search**, killed at 30 min (process-tree kill). `BalancedByeSpacing` is confirmed
+    APPLIED in the resolved constraint set (assert it is present, not silently dropped). If it fails to
+    reach search, it is **debugged to working** — construction/resourcing per DoD-6; a genuine
+    `BalancedByeSpacing` *semantic* conflict is a new spec, not patched here.
+11. **Run 4 — `core,spacing` (bye_spacing removed) reaches liveness.** A raw e2e run with
+    `--groups core,spacing` and **`bye_spacing` NOT selected** (assert `BalancedByeSpacing` is ABSENT and
+    `EqualMatchUpSpacing` is PRESENT in the resolved set) **gets through presolve and survives ≥30 min of
+    search**, killed at 30 min. Debugged to working on the same DoD-6 terms. Run 3 and Run 4 are
+    **sequential, not concurrent** (memory — same rule as DoD-4), and run AFTER Runs 1+2.
+12. **Spacing-family readout.** `scripts/e2e_symmetry_readout.md` (or a sibling) is extended with the
+    Run 3 + Run 4 liveness outcomes and their captured `[Symmetry]` stats, side by side with Run 2
+    (full core), so the marginal effect of `bye_spacing` and of `spacing` on the model's remaining
+    symmetry is recorded. Any debugging done to reach liveness for either run is documented there.
+
+### Additional Implementation units
+
+#### Unit D — Generalise the launcher to add a group + run `core,bye_spacing` to liveness
+- **Files touched:** `scripts/run_core_e2e.py` (add a `groups` param, default `['core']`, threaded into
+  `build_run_config`/`_resolve_group_selection`; preserve the existing single-arg behaviour and tests);
+  `scripts/e2e_symmetry_readout.md` (append Run 3). Plus any construction/resourcing fix DoD-10 needs.
+- **Change summary:** launcher learns `--groups`; execute the `core,bye_spacing` raw run in the
+  background at `--workers 10`, kill at 30 min, capture symmetry, debug to liveness.
+- **Depends on:** Unit C reaching liveness (i.e. the §11 blocker resolved) + Unit A/B merged.
+- **Executor model:** Opus.
+- **No-mock test outline:** *Given* `build_run_config(groups=['core','bye_spacing'])`, *then* the
+  resolved set CONTAINS `BalancedByeSpacing` and the profile records `groups==['core','bye_spacing']`,
+  everything else byte-identical to Run 2 (oracle: only-delta invariant). *Given* the background run,
+  *when* 30 min elapse, *then* the captured log shows presolve cleared + a search/`#1` marker
+  (oracle: liveness).
+
+#### Unit E — Run `core,spacing` (bye_spacing removed) to liveness
+- **Files touched:** `scripts/e2e_symmetry_readout.md` (append Run 4); any construction/resourcing fix
+  DoD-11 needs. (No further launcher change — Unit D already generalised it.)
+- **Change summary:** execute `--groups core,spacing` raw run in the background at `--workers 10` AFTER
+  Run 3, kill at 30 min, capture symmetry, debug to liveness.
+- **Depends on:** Unit D (launcher generalisation) + Unit C liveness.
+- **Executor model:** Opus.
+- **No-mock test outline:** *Given* `build_run_config(groups=['core','spacing'])`, *then* the resolved
+  set CONTAINS `EqualMatchUpSpacing` and does NOT contain `BalancedByeSpacing` (oracle: the swap is
+  exact — bye_spacing out, spacing in). *Given* the background run, *when* 30 min elapse, *then* the log
+  shows presolve cleared + a search marker (oracle: liveness).
+
+### Additional Open Questions (block the whole follow-on phase AND Unit C)
+
+FP. **How should the `ClubVsClubStackedWeekends` × `ClubDayParticipation` hard conflict (handoff §11) be
+   resolved?** It blocks Unit C (core liveness) and therefore Units D/E. This is a constraint-semantic
+   decision, NOT spec-035 construction work — options the convenor must choose between are captured in
+   the session report (e.g. fix/loosen the spec-038 stacking model; exempt club-day Sundays from
+   stacking; make one atom soft; or run the e2e with `ClubVsClubStackedWeekends` excluded as a
+   documented partial-core liveness+symmetry run). Until answered, this whole phase stays `drafting`.
+
+### Execution protocol addendum (after step 6, only once DoD-9…12 are ready & the §11 blocker is resolved)
+7. Implement Unit D: generalise the launcher (`--groups`), re-run its Unit-A tests green, then run
+   `core,bye_spacing` in the background at `--workers 10`, kill at 30 min (process-tree kill), capture
+   symmetry, debug to liveness (construction/resourcing only — semantic conflict ⇒ new spec).
+8. Implement Unit E: run `core,spacing` (bye_spacing out, spacing in) sequentially AFTER Run 3, same
+   kill + capture + debug.
+9. Extend `scripts/e2e_symmetry_readout.md` with Runs 3 + 4 (liveness + symmetry, side by side with
+   Run 2). Tick the new checkboxes only when both runs hit the liveness bar.
+
+---
+
+## EXECUTION OUTCOME (2026-05-30) — Unit C + spacing follow-on + full sweep
+
+**Unblocked:** the §11 blocker (`ClubVsClubStackedWeekends × ClubDayParticipation`) was cleared by
+spec-038 `6f4c0e5`; a bisect probe then reached search, so Unit C + Units D/E + the appended full
+sweep were all executed this session. Open Question FP is therefore **resolved** (by the spec-038 fix).
+
+**Convenor decisions (2026-05-30):** after Run 1 OOM'd at `--workers 10` on a RAM-constrained box
+(15.6 GB total, ~4.5 GB free; the 110k-var solve grows past that), the convenor (a) **accepted Run 1
+as a liveness success** (it reached search), and (b) authorised **`--workers 8`** for all remaining
+runs (a DoD-6 resourcing override — worker count does not affect the model or its `[Symmetry]`
+readout). The launcher gained `--workers` and `--groups`; Unit C's 30-min kill is `scripts/run_e2e_30min.py`.
+
+**Full results** (forced-free `season_test`, raw, week-1 unfixed; converged-pass symmetry):
+
+| Run | Profile | Workers | Liveness (30-min) | Converged symmetry | Feasible soln |
+|---|---|---|---|---|---|
+| 1 | core − ClubGameSpread | 10 | reached search; OOM ~6.8 min (convenor: ✅) | 5 gen / 40,594 vars | none |
+| 2 | full core | 8 | ✅ survived (1892s) | 1 gen / 48 vars | none (`best:-inf`) |
+| 3 | core,bye_spacing | 8 | ✅ survived (1802s) | 1 gen / 48 vars | none |
+| 4 | core,spacing | 8 | ✅ survived (1809s) | **0 gen / 0 vars** | none |
+| 5 | core,bye_spacing,spacing (FULL SWEEP) | 8 | ✅ survived (1801s) | **0 gen / 0 vars** | none |
+
+Atom invariants asserted from logs: Run 3 BalancedByeSpacing present / EqualMatchUpSpacing absent;
+Run 4 the exact swap; Run 5 BOTH spacing atoms present. Full per-run detail + caveats in
+`scripts/e2e_symmetry_readout.md`.
+
+### DoD status
+- DoD-1…3 (launch path, raw profile, CP-SAT symmetry captured): ✅ (Units A+B, verified live).
+- DoD-4 (liveness, both core runs): ✅ — Run 2 full 30 min; Run 1 reached search, accepted by convenor.
+- DoD-5 (cross-run symmetry readout + Goal-3 conclusion): ✅ — `scripts/e2e_symmetry_readout.md`.
+- DoD-6 (debug to liveness via resourcing): ✅ — OOM resolved by workers 10→8 (no semantic change).
+- DoD-7 (background, killed at 30 min, artifacts saved): ✅ — `run_e2e_30min.py` (psutil tree-kill).
+- DoD-8 (gates): launcher/wrapper compile clean; changes are scripts only.
+- DoD-9…12 (spacing-family): ✅ — Runs 3/4 liveness + invariants + readout extended.
+
+### Findings (Goals 2/3 + the appended full sweep)
+- **`ClubGameSpread` strips ~all exploitable symmetry**: core−CGS 40,594 symmetric vars → full core 48
+  (~99.9% reduction). `bye_spacing` is symmetry-neutral (transient first-pass bump only).
+  **`EqualMatchUpSpacing` removes the remainder → 0 generators.** The **full sweep (Run 5) also has 0
+  symmetry** — the maximal model is fully symmetry-broken.
+- **Feasibility is hard, and it is NOT a symmetry problem** (symmetry is 0 with spacing on). No run
+  with the full constraint set found a feasible incumbent in 30 min (Run 2's escaped orphan ran ~66 min,
+  still `best:-inf`); bounds stay very loose (`next:[-4.1M, …]`). This matches the documented state that
+  the complete set is **infeasible at slack 0** — **slack is the release lever**, not week-1 fixing
+  (which here only removed symmetry that no longer exists and would risk over-constraining) and not more
+  workers (a feasibility-hardness, not throughput, issue; 16 workers would also OOM on this box).
+
+### Remaining closeout (NOT done this session — left per convenor instruction)
+- Plan status stamp → `done`, dep-tree + `GOALS.md` update.
+- Doc registry: new `docs/system/SOLVER_E2E.md`, CLAUDE.md quick-command + symmetry-capture note,
+  `docs/README.md` / `docs/system/README.md` registration.
+- Final `done`-stamp should follow **spec-038 going `done`** (spec-035 `depends_on` it; still `building`).

@@ -165,18 +165,40 @@ Unit C, so the phase proceeded.
   full core with 48 symmetric vars. With it on, the model has **no exploitable
   symmetry at all**.
 
+### Run 5 — full sweep: core + bye_spacing + spacing (everything on; convenor request 2026-05-30)
+
+The maximal model: full `core` (incl. ClubGameSpread) **plus both** spacing groups
+(`--groups core,bye_spacing,spacing`, workers 8). Both `BalancedByeSpacing` and
+`EqualMatchUpSpacing` confirmed present in the resolved set.
+
+- Raw → presolved vars: 151,349 → 142,040
+- Search start: @151.6s; **liveness: ✅ survived full 30 min** (1801s, killed @cap, no orphan)
+- **Converged symmetry: 0 generators / 0 orbits** (CP-SAT built the symmetry graph
+  ~4× but found nothing — `parse_symmetry_stats` → `{present: False}`)
+- Feasible solution: **none** (`best:-inf` throughout, last bound `next:[-4,090,222, -52]`)
+
 ### Full progression (converged-pass, the headline)
 
-| Model | symmetric vars | generators |
-|---|---|---|
-| core − ClubGameSpread | 40,594 | 5 |
-| full core | 48 | 1 |
-| full core + bye_spacing | 48 | 1 |
-| full core + spacing | **0** | **0** |
+| Model | symmetric vars | generators | feasible soln (30 min) |
+|---|---|---|---|
+| core − ClubGameSpread | 40,594 | 5 | none |
+| full core | 48 | 1 | none |
+| full core + bye_spacing | 48 | 1 | none |
+| full core + spacing | **0** | **0** | none |
+| full core + bye_spacing + spacing (full sweep) | **0** | **0** | none |
 
 `ClubGameSpread` does the heavy lifting (40,594 → 48); `bye_spacing` is symmetry-
-neutral; `EqualMatchUpSpacing` eliminates the remainder. All four models reach
-search and (at workers 8) sustain the 30-minute liveness bar.
+neutral; `EqualMatchUpSpacing` eliminates the remainder. The **full sweep is also
+fully symmetry-broken (0 generators)**. All five models reach search and (at workers
+8) sustain the 30-minute liveness bar.
+
+**Feasibility is not a symmetry problem.** With spacing on, the model has zero
+exploitable symmetry, yet no full-constraint-set run found a feasible incumbent in 30
+min (Run 2's escaped orphan ran ~66 min, still `best:-inf`) and bounds stay very loose
+(`next:[-4.1M, …]`). This is consistent with the documented state that the complete
+set is **infeasible at slack 0** — **slack**, not week-1 fixing or more workers, is the
+release lever. Week-1 fixing here would only remove symmetry that no longer exists,
+and on a tight slack-0 model would risk over-constraining into infeasibility.
 
 ---
 
