@@ -75,11 +75,21 @@ CORE_FORCED_GAMES: list = []      # inherent to season_test
 SEASON_YEAR_SENTINEL = 'test'
 
 
-def build_run_config(exclude: Optional[list] = None) -> dict:
+def build_run_config(exclude: Optional[list] = None,
+                     workers: Optional[int] = None) -> dict:
     """Resolve the raw-core flag profile into an auditable dict.
 
     `exclude` (default `[]`) is the ONLY permitted delta between the two
     spec-035 runs. Everything else is fixed by the module constants above.
+
+    `workers` defaults to the DoD-2 value (`CORE_WORKERS` = 10). It is exposed
+    as an override solely for the convenor-authorised DoD-6 resourcing path
+    (2026-05-30): on a RAM-constrained box a 10-worker 110k-var solve OOMs
+    before the 30-min liveness bar, so the convenor authorised dropping to 8
+    workers. Worker count does NOT affect the model or its presolve `[Symmetry]`
+    readout (symmetry is a property of the model, not the search threads), so
+    the cross-run symmetry comparison stays valid; the resolved profile records
+    the actual count used so any deviation from 10 is auditable.
 
     Returns a dict capturing the exact resolved profile — the same dict is
     written to the run's JSON sidecar (DoD-2: "records the exact resolved flag
@@ -88,7 +98,7 @@ def build_run_config(exclude: Optional[list] = None) -> dict:
     exclude_list = list(exclude) if exclude else []
     return {
         'groups': list(CORE_GROUPS),
-        'workers': CORE_WORKERS,
+        'workers': int(workers) if workers else CORE_WORKERS,
         'fix_round_1': CORE_FIX_ROUND_1,
         'locked_weeks': list(CORE_LOCKED_WEEKS),
         'forced_games': list(CORE_FORCED_GAMES),
@@ -147,7 +157,8 @@ def _assert_season_test_is_forced_free() -> None:
     logger.info("[spec-035] season_test forced-free check passed (forced_games == []).")
 
 
-def main(exclude: Optional[list] = None, run_id: Optional[str] = None):
+def main(exclude: Optional[list] = None, run_id: Optional[str] = None,
+         workers: Optional[int] = None):
     """Launch the raw-core single solve on the forced-free test config.
 
     This starts a REAL `main_simple` solve (long-running). Unit C runs this in
@@ -167,7 +178,7 @@ def main(exclude: Optional[list] = None, run_id: Optional[str] = None):
     # `logs/solver_*_<run_id>.log` per run, which Unit C globs deterministically.
     # The profile sidecar below is the authoritative auditable record regardless.
 
-    cfg = build_run_config(exclude=exclude)
+    cfg = build_run_config(exclude=exclude, workers=workers)
     sidecar = _record_profile(cfg, resolved_run_id)
     logger.info("[spec-035] raw-core e2e launch; profile sidecar: %s", sidecar)
     print(f"[spec-035] raw-core e2e launch (run_id={resolved_run_id})")
@@ -238,9 +249,14 @@ def _parse_args(argv=None):
     parser.add_argument(
         '--run-id', type=str, default=None,
         help="Optional run id (defaults to a timestamp).")
+    parser.add_argument(
+        '--workers', type=int, default=None,
+        help="Worker count override (default 10 = DoD-2). Convenor-authorised "
+             "DoD-6 resourcing lever only (e.g. 8 on a RAM-constrained box); "
+             "does not affect the model or its symmetry readout.")
     return parser.parse_args(argv)
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    main(exclude=args.exclude, run_id=args.run_id)
+    main(exclude=args.exclude, run_id=args.run_id, workers=args.workers)
