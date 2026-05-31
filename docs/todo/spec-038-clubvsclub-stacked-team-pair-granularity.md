@@ -238,13 +238,13 @@ In the asymmetric 1×2 case (e.g. Maitland fields 1 team in 4th, University fiel
 - **`ClubVsClubStackedCoLocation` co-location atom internals** — only the budget helper call is switched (DoD #19). The game-placement logic (same-field, contiguous-slots, gate via `registry.get`) is NOT modified. Its test oracles shift to match new aligned-weekend counts in multi-team scenarios.
 - **Symmetry-breaking of team-pair selection on aligned weekends** — when both clubs field 2 teams (2×2 case) and `min(a,b) = 2` team-pairs play on each aligned weekend, *which* permutation of team-pairs occurs on which weekend is left free (the convenor's "free to choose" note covers the asymmetric case; the symmetric case naturally permits any pairing). Adding a symmetry-breaking rule (e.g. lex-order on team names) is a separate concern, not in this spec.
 - **`per_matchup` semantics changes** — left as-is from `per_pair_grade_matchup_counts`/`per_pair_grade_meeting_counts`. If the convenor later wants per-grade scheduling-method tweaks (`grade_scheduling_method` already exists in `num_rounds`), that's a separate spec.
-- **The spec-035 ULTIMATE e2e run** — resumes after both spec-037 and spec-038 land. Not in scope here.
+- **The spec-035 e2e run** — resumes after both spec-037 and spec-038 land. Not in scope here.
 - **Production-config validation.** This spec validates against `season_test` (forced-free) via the bisect harness. Validating the full 2026 production config with real `FORCED_GAMES` happens via spec-035's eventual run.
 
 ## Dependencies
 
 - `depends_on: none`. spec-038 is independent of spec-037 — they touch different atoms, different shared helpers, and the only shared module (`_phl_forced_friday_helper.py`) sees spec-037 *remove* per-club functions while spec-038 *keeps* the per-pair `phl_forced_friday_meetings` it uses; no merge contention.
-- spec-035 (ULTIMATE) implicitly depends on both this spec and spec-037 landing before its e2e probe will pass — but spec-035's `depends_on` should be updated when its next edit happens, not by us. spec-035 is `in_progress` and not implementable until its handoff is acted on.
+- spec-035  implicitly depends on both this spec and spec-037 landing before its e2e probe will pass — but spec-035's `depends_on` should be updated when its next edit happens, not by us. spec-035 is `in_progress` and not implementable until its handoff is acted on.
 
 ## Risks & blast radius
 

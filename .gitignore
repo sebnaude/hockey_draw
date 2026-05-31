@@ -57,3 +57,7 @@ _legacy/
 .coverage
 .coverage.*
 htmlcov/
+
+# Working artifacts / scratch logs
+_*.log
+scripts/_*.txt

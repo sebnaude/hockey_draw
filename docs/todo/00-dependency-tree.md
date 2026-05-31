@@ -62,12 +62,12 @@ restructure, cut into three serialised specs:
   no-flag default now applies the COMPLETE set and is INFEASIBLE at slack 0 on the 2026 production
   config (same documented state as spec-033; slack releases it; forced-free real solve = spec-035).
 
-Two **special end-of-line plans** authored **2026-05-24** (this session). They are gated behind
+Two **end-of-line plans** authored **2026-05-24** (this session). They are gated behind
 *everything else* and run last, in order. **spec-035 now also sequences after spec-036** — its raw
 single-solve e2e depends on the no-flag/single-solve path being correct (its `depends_on` should add
 `spec-036` when next edited):
 
-- **spec-034** — PENULTIMATE: green test suite + honest coverage (≥85% on atoms/registry/stages/
+- **spec-034** — green test suite + honest coverage (≥85% on atoms/registry/stages/
   tester) + three real-data, no-mock assurances (atoms enforce on real data; `DrawTester` detects a
   failed constraint in a draw; soft constraints are measured via `soft_pressure`). `depends_on:
   spec-030, spec-031, spec-032, spec-033` — the suite shape (atom set, registry counts, group
@@ -83,7 +83,7 @@ single-solve e2e depends on the no-flag/single-solve path being correct (its `de
   `season_2026.LOCKED_PAIRINGS` for manual testing. Coverage: honest 82.2% on the DoD-2 floor
   surfaces (registry 92%, stages 93%, atoms strong; `analytics/tester.py` 73.1% — its report/export
   surface isn't exercised by constraint tests; documented sub-floor per DoD-2, no padding).
-- **spec-035** — ULTIMATE: raw `--core` e2e solve on the forced-free `season_test` config
+- **spec-035** — raw `--core` e2e solve on the forced-free `season_test` config
   (2026 base teams/fields, no forced games, **week 1 NOT fixed** — no `--fix-round-1`/locks,
   `--workers 10`). Goal: get through presolve + survive ≥30 min of search (killed at 30 min
   regardless of solution), and read out how much symmetry the model has left (CP-SAT presolve stats
@@ -108,17 +108,81 @@ still in flight (spec-037 the other half — already `done` 2026-05-28; see "Mos
   parity, D bisect-harness acceptance + docs). S3. Status: **`building`** (2026-05-28 — user
   authorised this session; Mode A hardened earlier today; owned by session `2026-05-28-spec038-build`).
 
+Authored **2026-05-30** (this session) — the **draw-analysis / reporting engine** plan-set, cut into
+four dependency-wired specs. Goal: every draw can be *verifiably* analysed (atom↔test alignment is a
+gate, not a vibe), soft-constraint outcomes are measured + scored, the whole thing runs automatically
+at end of draw creation into an HTML+JSON+Plotly report with per-team/club/rule breakdowns, and the
+analysis always runs at the draw's own effective slack so it never throws false violations.
+
+- **spec-039** — machine-checked **registry↔tester alignment gate**: a standing test asserts every
+  atom's `tester_check_methods`/`slack_key`/`has_soft_component` stays truthful against the live
+  `DrawTester`, the `run.py` slack-key set, and `PENALTY_WEIGHTS`; new `no_tester_check_reason`
+  registry field labels deliberately-unchecked soft atoms; shared `AlignmentReport` (`analytics/registry_audit.py`)
+  feeds both the gate and the report. `depends_on: none`. Two units (A registry+audit → B gate+doc), S2.
+  Status: `review_pending`.
+- **spec-040** — **slack & limit provenance**: persist the effective constraint config (CLI
+  `constraint_slack` + base `constraint_defaults`) into draw/checkpoint metadata; `analytics/slack_provenance.py`
+  reconstructs the slack a draw was solved at (stored provenance, else current-config fallback +
+  WARNING); `DrawTester` auto-replays faithfully. Closes the "throws errors when it shouldn't" gap.
+  `depends_on: none` (parallel-safe with spec-039 — no shared edited file). Two units (A persist → B
+  resolver+tester), S3. Status: `review_pending`.
+- **spec-041** — **soft-constraint outcome measurement**: per-rule 0–100 satisfaction score + raw
+  domain metric recomputed from draw geometry (penalty values are never persisted), filling the
+  unmeasured atoms (incl. the Maitland away-on-NRL-weekends `PreferredWeekendsAwayGround` flagship and
+  soft `AwayClubHomeWeekendsCount`); per-team + per-club rollups; scored at the draw's effective slack.
+  `depends_on: spec-039, spec-040`. Two units (A layer+scoring+per-team → B gap-filling measurements), S3.
+  Status: `review_pending`.
+- **spec-042** — **auto-generated analysis report (HTML + JSON + Plotly)**: assembles
+  alignment + slack-provenance + hard violations + soft scores into per-team/club/rule breakdowns with
+  smart dense layouts (heatmaps + collapsibles); auto-runs at end of `save_solver_output` (non-fatal) +
+  `report --analysis` CLI; JSON `schema_version` is the forward contract for the eventual UI. Adds
+  `plotly` (only new dep). `depends_on: spec-039, spec-040, spec-041`. Three units (A assembly/JSON →
+  B HTML/Plotly/layout → C hook+CLI+docs), S3. Status: `review_pending`.
+
+- **spec-043** — **pre-draw venue-capacity feasibility precheck (UI-callable)**: standalone pure
+  `analyze_capacity` (config primitives in / structured dict out) + `run.py precheck` + auto-run gate
+  before `generate`. New diagnostics = away-venue **per-day floor** (slots ≥ home teams) and
+  **Broadmeadow per-Sunday slot-need** with a headroom-aware "can the 19:00 slot be dropped?"
+  recommendation; reuses `generate_timeslots` + the `(rounds+1)//2` convention and leaves Phase-20
+  (`_check_scheduling_feasibility`) and `PreSeasonReport` untouched. `depends_on: none` (branches off
+  final-form). Units A→B→C (A core blocks B CLI + C generate-gate; B/C both edit `run.py` →
+  serialise B before C). S2. Status: `review_pending` (authored 2026-05-30; awaiting /adversarial
+  Mode A).
+
+- **spec-044** — **ClubVsClubStackedWeekends PHL Sunday FLOOR umbrella-Friday-aware**: fixes the
+  real-2026 `core` infeasibility (spec-035 stage-5 handoff's OPEN blocker). Exact cause = Layer 2
+  per-team-pair Sunday floor over-demands Gosford/Maitland Sunday capacity because the umbrella
+  `gosford_friday_games=8` / `maitland_friday_games=2` forced Fridays are subtracted from no pair
+  (`phl_forced_friday_meetings` credits only pair-named scopes). Fix = new helper
+  `club_umbrella_forced_friday_meetings` + subtract it from the LOWER bound of the two spec-038
+  `_range` helpers (ceiling untouched). `depends_on: spec-038` (shares `_club_vs_club_stacked_shared.py`
+  + `_phl_forced_friday_helper.py`). Units A (production+helper tests) → B (integration regression). S2.
+  Status: `review_pending` (authored 2026-05-31; awaiting /adversarial Mode A).
+
 ```
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
 spec-031  ──depends_on──▶  spec-030                             [done — merged into final-form 2026-05-24]
 spec-032  ──depends_on──▶  spec-031                             [done — merged into final-form 2026-05-25 (A 9efee82, B 2b39008)]
 spec-033  ──depends_on──▶  spec-032                             [done — merged into final-form 2026-05-25 (A 6037235, B c4af289, C b3a15c1, D f760896, E 8316911)]
 spec-036  ──depends_on──▶  spec-033                             [done — merged into final-form 2026-05-25 (A f4205a9, B 312bdf0, C e378d8f)]
-spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]   (PENULTIMATE)
-spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]   (ULTIMATE)
+spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]
+spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]
 spec-037  ──depends_on──▶  (none)                                          [done — merged into final-form 2026-05-28 (Unit A a5f1685+976dcd4+abc91b9+b96a6aa; Unit B spec035-flense torn down)]
 spec-038  ──depends_on──▶  (none)                                          [building — ClubVsClubStackedWeekends granularity rework; user-authorised 2026-05-28]
+
+spec-039  ──depends_on──▶  (none)                                          [review_pending — registry↔tester alignment gate]
+spec-040  ──depends_on──▶  (none)                                          [review_pending — slack/limit provenance + faithful replay]
+spec-041  ──depends_on──▶  spec-039, spec-040                              [review_pending — soft-outcome scores + raw metrics]
+spec-042  ──depends_on──▶  spec-039, spec-040, spec-041                    [review_pending — auto HTML+JSON+Plotly analysis report]
+spec-043  ──depends_on──▶  (none)                                          [review_pending — pre-draw venue-capacity precheck (away floor + BM drop-slot)]
+spec-044  ──depends_on──▶  spec-038                                        [review_pending — ClubVsClub PHL Sunday floor umbrella-Friday-aware (real-config core blocker)]
 ```
+
+The 039→…→042 chain is the **analysis-engine plan-set** (authored 2026-05-30, not yet implemented —
+awaiting user go-ahead). spec-039 and spec-040 are independent of each other and of the in-flight
+spec-038 (different files), so both are startable in parallel the moment the user authorises
+implementation. spec-041 gates on both 039+040; spec-042 gates on all three. The set does **not**
+depend on the spec-035 e2e line and can proceed independently of it.
 
 The 030→031→032 chain is a deliberate serialisation: all three edit `constraints/registry.py`
 and `docs/system/CONSTRAINT_INVENTORY.md` (032 also touches `CLAUDE.md`), so they merge one at a
@@ -195,8 +259,12 @@ export column, `c077c28`).
 - **spec-038** is `building` (session `2026-05-28-spec038-build`); Unit A already merged into
   final-form. Once it lands `done`, spec-035 Unit C is unblocked (spec-037 — the other half of the
   spec-035 §6 culprit pair — is now `done`).
-- **spec-035 — ULTIMATE** is `in_progress` but its Unit C is **BLOCKED** on the presolve
+- **spec-035** is `in_progress` but its Unit C is **BLOCKED** on the presolve
   infeasibility documented in `docs/todo/spec-035-e2e-infeasibility-handoff.md`. Resumes when
   spec-038 is `done` (spec-037 ✅ already done 2026-05-28).
 - **spec-037** is **`done`** (2026-05-28 — merged into final-form; archived to `done/`).
-- **spec-034 — PENULTIMATE** is **`done`** (2026-05-26 — merged into final-form).
+- **spec-034** is **`done`** (2026-05-26 — merged into final-form).
+- **spec-039** and **spec-040** (analysis-engine plan-set) are `review_pending` → once `/adversarial`
+  Mode A hardens them to `ready` and the user authorises implementation, BOTH are startable in
+  parallel (independent files, independent of spec-038). spec-041 then spec-042 follow in dependency
+  order. Not yet authorised to build.

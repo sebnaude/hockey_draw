@@ -12,10 +12,10 @@
      request 2026-05-29 — it is `drafting` and blocked behind Unit C liveness + Open Question FP. -->
 <!-- reviewed: adversarial Sonnet review 2026-05-24 — fixes applied inline. 2026-05-25: added intermediate ClubGameSpread-excluded run + cross-run symmetry comparison (Unit A gains an exclude param, Unit C runs both solves) — incremental scope, no re-review. 2026-05-25 (convenor): RUN ORDER SWAPPED — the `--exclude ClubGameSpread` run is now Run 1, the full core run is Run 2. Baseline framing unchanged (full core remains the recorded reference); only execution order moved. No re-review (operational ordering only). -->
 
-# spec-035 — ULTIMATE: raw `--core` e2e solve on the forced-free test config + remaining-symmetry readout
+# spec-035 — raw `--core` e2e solve on the forced-free test config + remaining-symmetry readout
 
-> **This is the *ultimate* plan — truly the last thing done.** It runs only after **every other
-> live spec is `done`, including the penultimate spec-034.** It is a real end-to-end solver run, not
+> **This is an end-of-line e2e validation plan.** It runs only after **every other
+> live spec is `done`, including spec-034.** It is a real end-to-end solver run, not
 > a unit test: it proves the assembled, post-atomization model actually builds, gets through CP-SAT
 > presolve, and survives a real search on the real 2026 teams/fields with nothing forced and week 1
 > *not* fixed.
@@ -278,7 +278,7 @@ debugging, and depends on both.
 - **Fixing constraint *semantics*.** If a core constraint is genuinely wrong, that is a new spec, not
   this run's job (this run assumes the core constraints are correct and debugs only construction /
   presolve / resourcing).
-- **The suite-green + coverage work** — that is spec-034 (the prerequisite penultimate plan).
+- **The suite-green + coverage work** — that is spec-034 (the prerequisite green-suite plan).
 
 ## Dependencies
 

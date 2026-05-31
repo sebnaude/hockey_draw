@@ -196,7 +196,7 @@ If a hypothetical setup gives PHL=18, 3rd=20 (3rd plays MORE than PHL):
   probe, DoD #7).
 - **`phl_forced_friday_meetings`** — STAYS as-is. spec-038 still uses it for the PHL Sunday-budget
   subtraction (PHL pairs are 1×1 so the per-club concept doesn't apply, but per-pair does).
-- **`spec-035` ULTIMATE e2e run** — the actual core+symmetry-readout run resumes only after BOTH
+- **`spec-035` e2e run** — the actual core+symmetry-readout run resumes only after BOTH
   spec-037 and spec-038 land. Not in scope here; tracked via spec-035's own status.
 - **Changing `num_rounds` semantics or the three-tier override** — the redesign reads
   `num_rounds[g]` exactly as the helper already did; no schema change.
@@ -206,7 +206,7 @@ If a hypothetical setup gives PHL=18, 3rd=20 (3rd plays MORE than PHL):
 ## Dependencies
 
 - `depends_on: none`. spec-037 is fully independent — it touches code spec-035 was investigating,
-  but spec-035's ULTIMATE run is itself blocked on this work + spec-038, so it depends on us,
+  but spec-035's run is itself blocked on this work + spec-038, so it depends on us,
   not the other way around. The `spec035-flense` WIP is superseded (deleted in Unit B), not
   depended on.
 - spec-038 runs in parallel; no shared files between the two specs (verified at plan time:

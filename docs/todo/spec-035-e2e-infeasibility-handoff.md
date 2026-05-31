@@ -1,6 +1,16 @@
 <!-- status: handoff -->
-<!-- spec: spec-035 (ULTIMATE e2e) — execution blocked on a model-infeasibility discovery -->
+<!-- spec: spec-035 (e2e) — execution blocked on a model-infeasibility discovery -->
 <!-- author: opus session 2026-05-26/27 -->
+<!-- UPDATE 2026-05-29: re-run after spec-037 + spec-038 landed. Failure mode CHANGED and was re-bisected to a NEW minimal infeasible pair — see §11 (supersedes the §6/§7 culprits, which spec-037/038 resolved). -->
+
+> **2026-05-29 — READ §11 FIRST.** spec-037 (AwayClubHomeWeekendsCount → derived
+> Sunday range) and spec-038 (ClubVsClubStackedWeekends → four-layer model) BOTH
+> landed since this handoff was written. They cleared the §6/§7 culprits, the var
+> count dropped 143k→121k, and the failure SIGNATURE changed from
+> `proven during initial copy of constraint #124504` to
+> `exactly_one: empty or all false`. A fresh full bisection (§11) localised the
+> remaining infeasibility to a DIFFERENT, minimal, hard-vs-hard pair. The §3–§8b
+> evidence below is now HISTORICAL (pre-037/038).
 
 # spec-035 e2e — INFEASIBILITY HANDOFF
 
@@ -14,7 +24,7 @@
 ## 1. What spec-035 is trying to do
 
 spec-035 (`docs/todo/spec-035-ultimate-e2e-core-run.md`, status `in_progress`,
-owned this session) is the ULTIMATE plan: a raw end-to-end CP-SAT solve of the
+owned this session) is the spec-035 plan: a raw end-to-end CP-SAT solve of the
 `core` constraint group (minus `ClubGameSpread` for one of the two runs) on the
 **forced-free `season_test` config** (`config/season_test.py` — 2026 base teams +
 field availability, but `forced_games == []`, `blocked_games == []`,
@@ -330,3 +340,91 @@ python -c "from config.season_test import get_season_data; from constraints.atom
 
 Venv lives ONLY in `draw\.venv`; scripts resolve their own repo root from
 `__file__`, so run that python against any worktree's script.
+
+---
+
+## 11. EVIDENCE — RE-BISECTION after spec-037 + spec-038 (2026-05-29)
+
+> This section supersedes §6/§7 as the *current* blocker. spec-037 + spec-038
+> are merged on `final-form` (HEAD `2ebe31e`); spec-038 is still `building`.
+
+### 11.1 New symptom
+
+`scripts/bisect_core_feasibility.py --max-time 120 --workers 10` (full
+`core − ClubGameSpread`) now fails with a NEW signature, ~33s into presolve
+(not ~2s into initial copy):
+
+```
+#Variables: 121'262   <- model builds (was 143k pre-037/038)
+Starting presolve at ...
+INFEASIBLE: 'exactly_one: empty or all false'
+  - rule 'at_most_one: empty or all false' was applied 3 times.
+status: INFEASIBLE
+```
+
+### 11.2 Fresh group bisection (each row = a real solve on forced-free season_test, workers 10)
+
+`core − ClubGameSpread` = 8 critical_feasibility fundamentals + 3 soft
+symmetry_breakers + **home_away_balance(2)** + **club_day(5)** + **club_alignment(2)**.
+
+| Probe | Set (on top of fundamentals + symmetry) | Verdict |
+|---|---|---|
+| A | fundamentals + symmetry only | ✅ REACHED_SEARCH |
+| B | + home_away_balance only | ✅ REACHED_SEARCH |
+| C | + club_day only | ✅ REACHED_SEARCH |
+| D | + club_alignment only | ✅ REACHED_SEARCH |
+| E | home_away + club_alignment (no club_day) | ✅ REACHED_SEARCH |
+| F | home_away + club_day (no club_alignment) | ✅ REACHED_SEARCH |
+| **G** | **club_day + club_alignment (no home_away)** | ❌ INFEASIBLE |
+| **H** | **ClubVsClubStackedWeekends + CoLocation + ClubDayParticipation** | ❌ INFEASIBLE |
+| **I** | **ClubVsClubStackedWeekends + ClubDayParticipation (no CoLocation)** | ❌ INFEASIBLE |
+
+**Conclusion (probe-backed, NOT a theory):** every group is feasible alone;
+the infeasibility is a cross-group INTERACTION whose **minimal pair** is
+`ClubVsClubStackedWeekends` × `ClubDayParticipation` (Probe I — CoLocation not
+required; home/away not involved). Both are HARD; **neither has a `slack_key`**
+(`slack` cannot release it — verified against the registry).
+
+### 11.3 Mechanism (evidence, with the open part flagged)
+
+- season_test has exactly **2 club-day entries** (`parse_club_day_entries`):
+  `('Crusaders', '2026-06-14', None)` and `('University', '2026-07-26', None)`.
+  **Both dates are Sundays** — i.e. inside `ClubVsClubStackedWeekends`'s
+  Sunday-only domain.
+- `ClubDayParticipation` posts, per club-day team, `sum(team's vars on that
+  date) >= 1` (`club_day_participation.py:31`). At CONSTRUCTION each such team
+  has 174–246 candidate vars across 7–10 opponents — the `>=1` is NOT empty
+  initially.
+- Therefore the all-false set is produced **during presolve**:
+  `ClubVsClubStackedWeekends`'s hard Layer-2/4/5/6 budgets (per-team-pair Sunday
+  range, per-aligned-weekend `==min_ab` cardinality, per-pair-grade total range,
+  cross-grade nesting) propagate to fix EVERY candidate var of some
+  Crusaders/University team on its club-day Sunday to 0 → the participation
+  `>=1` (an `exactly_one` once combined with `NoDoubleBookingTeams`' `<=1`)
+  becomes empty/all-false → INFEASIBLE.
+- **OPEN (not yet line-traced):** exactly which layer (the `==min_ab`
+  cardinality vs the budget range vs the nesting) forces the specific team idle
+  on the specific Sunday was NOT proven at line level. Distinguishing a genuine
+  over-rigid-cardinality BUG in the spec-038 model from an intended-but-
+  conflicting design choice needs either per-layer instrumentation or an
+  assumptions/IIS probe. This is the next diagnostic step IF the convenor wants
+  it traced before deciding the fix.
+
+### 11.4 Scope verdict
+
+This is a **constraint-semantic** conflict, which spec-035 DoD-6 explicitly
+scopes OUT ("if a core constraint is genuinely wrong, that is a new spec, not
+this run's job"). The atom `ClubVsClubStackedWeekends` is owned by **spec-038**,
+which is `building` (its stated purpose was feasibility-on-season_test; the
+rewrite changed the failure mode but did not clear it). spec-035 Unit C remains
+BLOCKED pending a resolution decision. Reproduce the minimal case:
+
+```powershell
+C:\Users\c3205\Documents\Code\python\draw\.venv\Scripts\python.exe `
+  C:\Users\c3205\Documents\Code\python\draw-final-form\scripts\bisect_core_feasibility.py `
+  --max-time 50 --workers 10 --exclude AwayClubHomeWeekendsCount `
+  AwayClubPerOpponentAndAggregateHomeBalance ClubDayContiguousSlots `
+  ClubDayIntraClubMatchup ClubDayOpponentMatchup ClubDaySameField `
+  ClubVsClubStackedCoLocation
+# -> INFEASIBLE_PRESOLVE ('exactly_one: empty or all false')
+```

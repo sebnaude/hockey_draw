@@ -6,11 +6,11 @@
 <!-- depends_on: spec-030, spec-031, spec-032, spec-033 -->
 <!-- owner: session=opus-spec034-20260526 claimed=2026-05-26 -->
 
-# spec-034 — PENULTIMATE: green test suite, honest coverage, three real-data assurances
+# spec-034 — green test suite, honest coverage, three real-data assurances
 
-> **This is one of two "special" end-of-line plans.** It is the *penultimate* gate: it runs only
+> **This is one of two end-of-line plans.** It runs only
 > after **every other live spec is `done`** (spec-030, spec-031, spec-032, spec-033 and anything
-> filed after them). The *ultimate* plan (spec-035) runs after this one. Nothing in `docs/todo/`
+> filed after them). spec-035 runs after this one. Nothing in `docs/todo/`
 > may be the last thing standing except spec-035.
 >
 > **Forward-looking note for reviewers/executors:** this plan describes the test suite *as it will
@@ -235,7 +235,7 @@ so two units never edit the same file. Unit E is the only cross-file unit and ru
 ## Out of scope
 
 - **The e2e solver run.** Proving the model builds, presolves, and survives 30 min of search on the
-  forced-free config is **spec-035** (the ultimate plan), which depends on this one. Not duplicated
+  forced-free config is **spec-035**, which depends on this one. Not duplicated
   here.
 - **Changing any constraint behaviour.** This plan *tests* the atoms; it does not re-scope them. If a
   test surfaces a genuine semantic bug in an atom, that is a discovered S2/S3 → file its own spec
