@@ -193,3 +193,23 @@ literal `e2e_real_config_solve.py` command, using the documented fallback.**)
 - core − ClubGameSpread 30 s: `logs/solver_20260531_160912_s044_coreNoCGS30.log` (UNKNOWN, mid-presolve)
 - core 300 s: `logs/solver_20260531_161025_s044_core300.log` (#Bound @74.51 s, best:-inf, UNKNOWN)
 - core − ClubGameSpread 300 s: `logs/solver_20260531_172143_s044_coreNoCGS300.log` (#Bound @68.24 s, best:-inf, UNKNOWN)
+
+## DoD-9 RE-VERIFICATION on merged final-form (2026-05-31, this session)
+
+The original DoD-9 logs were written in a concurrent session's torn-down worktree and
+were NOT preserved into final-form (only the summary above survived). Re-ran both 5-min
+solves on the MERGED final-form (`cea9aca`) so the artefacts persist. Setup identical:
+`scripts/bisect_realconfig_feasibility.py --probe --groups core [--exclude ClubGameSpread]
+--max-time 300 --workers 8`.
+
+| run | reached search | final status | best_bound | incumbent | verdict | log |
+|-----|----------------|--------------|------------|-----------|---------|-----|
+| core (with ClubGameSpread) | ✅ Starting search @73.65s | UNKNOWN | −2328 | none (`best:-inf`) | **PASS** | `logs/solver_20260531_200348_s044_core300_verify.log` |
+| core − ClubGameSpread | ✅ Starting search @40.57s | UNKNOWN | −5044 | none (`best:-inf`) | **PASS** | `logs/solver_20260531_200916_s044_coreNoCGS300_verify.log` |
+
+**Both PASS**: each cleared presolve and entered genuine search within the 5-min cap; neither
+returned INFEASIBLE. Pre-fix, both reached a proven INFEASIBLE at presolve (~94s/164s) — so the
+away-club Sunday-floor overflow is gone, independently reconfirmed against the merged code with
+saved logs. As before, no feasible incumbent in 5 min (`best:-inf`, UNKNOWN) — expected on the
+slack-0 real config; NOT claimed as a feasible flip. ClubGameSpread remains irrelevant to the
+blocker (both behave the same).
