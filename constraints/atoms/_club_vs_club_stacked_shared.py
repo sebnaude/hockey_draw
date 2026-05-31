@@ -44,6 +44,18 @@ Shared building blocks (this module):
   forced Friday meetings. Returns 0 if budget is exhausted or either club
   fields 0 teams in the grade.
 
+- `pair_grade_sunday_aligned_weekend_range(data, club_pair, grade)` and
+  `team_pair_sunday_meetings_range(data, club_pair, grade)` — the spec-038
+  `[base, base+1]` range variants. For PHL both subtract the exact per-pair
+  `phl_forced_friday_meetings` from BOTH bounds, and (spec-044) subtract the
+  per-club umbrella forced-Friday count
+  (`club_umbrella_forced_friday_meetings`, max over the two clubs) from the
+  LOWER bound ONLY. The umbrella is a club-level Friday lower bound spread
+  across some opponents, so it relaxes the Sunday floor but not the ceiling
+  (any specific pair may still meet the ceiling on Sunday). This fixes the
+  real-config away-club Sunday-capacity overflow that made the stage-5 `core`
+  model infeasible.
+
 - `enumerate_club_pairs(data)` — every unordered (A,B) where at least one
   grade has matchups between them.
 
@@ -91,6 +103,7 @@ from collections import defaultdict
 from typing import Dict, List, Set, Tuple
 
 from constraints.atoms._phl_forced_friday_helper import (
+    club_umbrella_forced_friday_meetings,
     phl_forced_friday_meetings,
 )
 
@@ -383,9 +396,15 @@ def pair_grade_sunday_aligned_weekend_range(
     (mirroring BalancedMatchups), and per-tp `sum_w tp_play ∈ [base, base+1]`
     (mirroring the per-tp BalancedMatchups bound).
 
-    For PHL: subtract `phl_forced_friday_meetings(A, B)` from BOTH ends, clamped
-    to ≥ 0 (forced Friday meetings consume matchup budget without contributing to
-    Sunday stacking).
+    For PHL: subtract `phl_forced_friday_meetings(A, B)` (the exact per-pair
+    count) from BOTH ends, clamped to ≥ 0. spec-044 additionally subtracts the
+    per-club umbrella forced-Friday term (`club_umbrella_forced_friday_meetings`,
+    max over both clubs) from the LOWER bound ONLY. The umbrella is a club-level
+    Friday lower bound spread across *some* opponents, so it relaxes how many
+    Sundays this pair is *required* to align, but any specific pair may still
+    align the full ceiling on Sunday — hence `max_budget` (the ceiling) is left
+    intact. (This is the fix that restores feasibility of the away-club Sunday
+    capacity in the real config.)
 
     For non-PHL: no Friday subtraction (those grades only play Sundays).
 
@@ -405,7 +424,11 @@ def pair_grade_sunday_aligned_weekend_range(
 
     if grade == 'PHL':
         forced_fri = phl_forced_friday_meetings(data, club_pair[0], club_pair[1])
-        min_budget = max(0, min_budget - forced_fri)
+        umb = max(
+            club_umbrella_forced_friday_meetings(data, club_pair[0]),
+            club_umbrella_forced_friday_meetings(data, club_pair[1]),
+        )
+        min_budget = max(0, min_budget - forced_fri - umb)
         max_budget = max(0, max_budget - forced_fri)
 
     return (min_budget, max_budget)
@@ -420,9 +443,15 @@ def team_pair_sunday_meetings_range(
     bound, restricted to Sundays only (since non-PHL grades are Sunday-only and
     PHL Friday meetings are forced via FORCED_GAMES, not chosen freely).
 
-    For non-PHL: `(base, base+1)`. For PHL: subtract `phl_forced_friday_meetings`
-    from both ends, clamped to ≥ 0 (PHL is always 1×1 in the current league so
-    per-tp and per-pair are the same).
+    For non-PHL: `(base, base+1)`. For PHL: subtract the exact per-pair
+    `phl_forced_friday_meetings` from BOTH ends, clamped to ≥ 0 (PHL is always
+    1×1 in the current league so per-tp and per-pair are the same). spec-044
+    additionally subtracts the per-club umbrella forced-Friday term
+    (`club_umbrella_forced_friday_meetings`, max over both clubs) from the LOWER
+    bound ONLY: it relaxes the Sunday floor for the club's pairs without lowering
+    how many times any specific pair *may* still meet on Sunday, so the upper
+    bound (ceiling) is left intact. This is what restores away-club Sunday
+    capacity feasibility on the real config.
 
     Returns `(0, 0)` if base == 0 or PHL forced consumes the entire range.
     """
@@ -438,7 +467,11 @@ def team_pair_sunday_meetings_range(
 
     if grade == 'PHL':
         forced_fri = phl_forced_friday_meetings(data, club_pair[0], club_pair[1])
-        min_tp = max(0, min_tp - forced_fri)
+        umb = max(
+            club_umbrella_forced_friday_meetings(data, club_pair[0]),
+            club_umbrella_forced_friday_meetings(data, club_pair[1]),
+        )
+        min_tp = max(0, min_tp - forced_fri - umb)
         max_tp = max(0, max_tp - forced_fri)
 
     return (min_tp, max_tp)

@@ -59,6 +59,30 @@ games could all be vs Tigers). Only entries whose scope names BOTH clubs
 contribute. This deliberately UNDER-counts vs over-counting, so spec-005's
 PHL Sunday budget `total_pair_meetings - phl_forced_friday_meetings` stays
 a LOWER bound on pair Sundays (more is fine; fewer would break alignment).
+
+## Per-club umbrella forced Fridays (spec-044)
+
+``club_umbrella_forced_friday_meetings(data, club)`` returns a SOUND LOWER
+BOUND on the number of Friday games a club is forced to play at its home
+away-venue via venue-wide ("umbrella") FORCED_GAMES entries that name no
+specific pair. Unlike ``phl_forced_friday_meetings`` (which deliberately
+ignores umbrella scopes for per-pair soundness), this helper credits the
+umbrella scopes — but only at the CLUB level. It is subtracted from the
+per-pair Sunday meeting LOWER bound only (never the ceiling). Contract:
+
+* **Max-per-away-venue** — the count is the MAX ``_entry_count`` over the
+  club's away-venue umbrella entries (NOT the sum), so subset scopes (e.g. the
+  seven date-specific CCHP ``count==1`` entries) are dominated by the
+  ``count==8`` CCHP umbrella rather than double-counted.
+* **Home-club attribution** — each away-venue umbrella is attributed to its
+  home club via ``home_field_map`` (oriented club -> away venue:
+  Gosford -> Central Coast Hockey Park, Maitland -> Maitland Park).
+* **equal-only** — only ``constraint in (None, 'equal')`` entries count toward
+  the floor; ``lesse``/``greatere`` etc. do not guarantee a hard floor.
+* **NIHC / Broadmeadow skipped** — central-venue umbrellas name no single home
+  club, so they are not attributed to any club. A central club (whose home
+  venue does not appear in ``home_field_map``) therefore returns 0. This keeps
+  the result a sound lower bound.
 """
 from __future__ import annotations
 
@@ -332,8 +356,78 @@ def away_club_max_sundays_home(data: Dict, club: str) -> int:
     return max(_upper(g) for g in grades)
 
 
+def _entry_is_pair(entry: Dict) -> bool:
+    """True if ``entry`` names a specific pair (two sides), else umbrella.
+
+    An entry is a "pair" entry iff it names two specific teams/clubs: either a
+    ``teams`` list/tuple of length >= 2, or BOTH ``team1`` and ``team2``.
+    Anything else (no team naming, or only one side named) is an umbrella scope.
+    """
+    if not isinstance(entry, dict):
+        return False
+    teams = entry.get('teams')
+    if isinstance(teams, (list, tuple)) and len(teams) >= 2:
+        return True
+    if entry.get('team1') and entry.get('team2'):
+        return True
+    return False
+
+
+def _entry_field_locations(entry: Dict) -> Set[str]:
+    """Return the set of field_location spellings on an entry (scalar or list)."""
+    if not isinstance(entry, dict):
+        return set()
+    loc = entry.get('field_location')
+    if loc is None:
+        return set()
+    if isinstance(loc, (list, tuple, set)):
+        return {str(x) for x in loc if x is not None}
+    return {str(loc)}
+
+
+def club_umbrella_forced_friday_meetings(data: Dict, club: str) -> int:
+    """Sound lower bound on a club's umbrella-forced PHL Friday games.
+
+    Counts the MAX forced ``count`` over PHL-Friday ``FORCED_GAMES`` umbrella
+    (non-pair) entries with ``constraint in (None, 'equal')`` that map to the
+    club's home away-venue (via ``home_field_map``, oriented club -> away
+    venue). Central-venue (NIHC / Broadmeadow) umbrellas name no single home
+    club and are skipped, so a central club returns 0. Max-per-away-venue
+    de-duplicates subset scopes (e.g. seven date-specific CCHP ``count==1``
+    entries are dominated by the ``count==8`` CCHP umbrella). Returns 0 if the
+    club has no away-venue umbrella entries.
+
+    See module docstring "Per-club umbrella forced Fridays (spec-044)" for the
+    full contract. This term is subtracted from the per-pair Sunday meeting
+    LOWER bound only (spec-044) — never the ceiling.
+    """
+    if not club:
+        return 0
+    home_field_map = (data or {}).get('home_field_map') or {}
+    # home_field_map is oriented club -> away venue. Clubs whose home venue is
+    # the central/NIHC venue do not appear here -> no away-venue umbrella to
+    # attribute -> 0 (keeps the count a sound lower bound).
+    away_venue = home_field_map.get(club)
+    if not away_venue:
+        return 0
+    away_venue = str(away_venue)
+    forced_games = data.get('forced_games') or []
+    best = 0
+    for entry in _friday_phl_forced_entries(forced_games):
+        if _entry_is_pair(entry):
+            continue
+        constraint = entry.get('constraint')
+        if constraint not in (None, 'equal'):
+            continue
+        if away_venue not in _entry_field_locations(entry):
+            continue
+        best = max(best, _entry_count(entry))
+    return best
+
+
 __all__ = [
     'phl_forced_friday_meetings',
+    'club_umbrella_forced_friday_meetings',
     'away_club_min_sundays_home',
     'away_club_max_sundays_home',
 ]
