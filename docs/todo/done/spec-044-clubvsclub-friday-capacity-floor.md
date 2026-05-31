@@ -1,9 +1,11 @@
-<!-- status: ready -->
+<!-- status: done -->
 <!-- severity: S2 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: spec-038 -->
-<!-- owner: none -->
+<!-- owner: session=2026-05-31-spec044-finish (co-built with a concurrent session) -->
 <!-- reviewed: adversarial Sonnet review 2026-05-31 — fixes applied inline -->
+<!-- done: 2026-05-31 — Unit A merged b833dc9, Unit B merged 2eda1dc (both /adversarial Mode B verified). DoD-5 capacity proof green for all 6 PHL clubs (Maitland Σ tp_min=7); DoD-6 reproduce flip OK at max_layer 2 & 5; DoD-8/9 solver evidence in scripts/e2e_real_readout.md (30s probes inconclusive mid-presolve, 5-min runs reach search, pre-fix proven INFEASIBLE — floor overflow gone, no fabricated flip). 64 atom tests pass. -->
+<!-- moved to docs/todo/done/ 2026-05-31 -->
 
 # spec-044 — ClubVsClubStackedWeekends: make the PHL Sunday FLOOR umbrella-Friday-aware
 

@@ -157,8 +157,13 @@ analysis always runs at the draw's own effective slack so it never throws false 
   `club_umbrella_forced_friday_meetings` + subtract it from the LOWER bound of the two spec-038
   `_range` helpers (ceiling untouched). `depends_on: spec-038` (shares `_club_vs_club_stacked_shared.py`
   + `_phl_forced_friday_helper.py`). Units A (production+helper tests) → B (integration regression). S2.
-  Status: **`building`** (Mode-A hardened to `ready` 2026-05-31; user-authorised this session; Unit A
-  already committed on branch `spec044-unitA`, unmerged — picking up the WIP).
+  Status: **`done`** (2026-05-31 — Unit A `b833dc9`, Unit B `2eda1dc`, both /adversarial Mode B verified;
+  archived to `done/`). Real-config `core` infeasibility (spec-035 stage-5 blocker) cleared: DoD-5
+  capacity proof green for all 6 PHL clubs (Maitland Σ tp_min=7, Gosford 0); DoD-6 reproduce flip OK
+  at max_layer 2 & 5; DoD-8/9 in `scripts/e2e_real_readout.md` (5-min runs reach search vs pre-fix
+  proven INFEASIBLE — no fabricated feasible flip). Co-built with a concurrent session (which added the
+  DoD-8/9 readout); branches merged as clean linear history, no work lost. Stage-5 still awaits the
+  separate out-of-scope BalancedByeSpacing fix before a fully feasible real solve.
 
 ```
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
@@ -176,7 +181,7 @@ spec-040  ──depends_on──▶  (none)                                     
 spec-041  ──depends_on──▶  spec-039, spec-040                              [ready — soft-outcome scores + raw metrics]
 spec-042  ──depends_on──▶  spec-039, spec-040, spec-041                    [ready — auto HTML+JSON+Plotly analysis report]
 spec-043  ──depends_on──▶  (none)                                          [ready — pre-draw venue-capacity precheck (away floor + BM drop-slot)]
-spec-044  ──depends_on──▶  spec-038 ✅                                      [building — ClubVsClub PHL Sunday floor umbrella-Friday-aware (real-config core blocker); 2026-05-31]
+spec-044  ──depends_on──▶  spec-038 ✅                                      [done — ClubVsClub PHL Sunday floor umbrella-Friday-aware; Unit A b833dc9, Unit B 2eda1dc; real-config core blocker cleared 2026-05-31]
 ```
 
 The 039→…→042 chain is the **analysis-engine plan-set** (authored 2026-05-30, not yet implemented —
