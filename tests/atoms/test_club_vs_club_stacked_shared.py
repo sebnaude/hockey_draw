@@ -34,10 +34,17 @@ sys.path.insert(
 
 from config import load_season_data
 from constraints.atoms._club_vs_club_stacked_shared import (
+    _per_matchup_for_grade,
     enumerate_team_pairs_in_pair_grade,
+    pair_grade_sunday_aligned_weekend_range,
     pair_grade_sunday_aligned_weekends,
     per_pair_grade_aligned_weekends,
     team_pair_counts,
+    team_pair_sunday_meetings_range,
+)
+from constraints.atoms._phl_forced_friday_helper import (
+    club_umbrella_forced_friday_meetings,
+    phl_forced_friday_meetings,
 )
 from constraints.atoms.base import MAITLAND
 from tests.atoms.club_vs_club_stacked_fixture import build_stacked_fixture
@@ -499,3 +506,132 @@ class TestPairGradeSundayAlignedWeekends:
         }]
         result = pair_grade_sunday_aligned_weekends(data, ('Maitland', 'Norths'), '3rd')
         assert result == 2  # max(1,1)*2 unchanged — non-PHL never subtracts
+
+
+# ---------------------------------------------------------------------------
+# spec-044 Unit A: umbrella-forced-Friday-aware PHL Sunday FLOOR
+# ---------------------------------------------------------------------------
+#
+# All oracles below use the REAL 2026 config (the authoritative source).
+# PHL has T=6, R=20 → per_matchup base = 20 // (6-1) = 4 → range [4, 5].
+# Live-config FORCED_GAMES PHL Friday entries are all venue-wide umbrellas:
+#   - Central Coast Hockey Park (Gosford home venue): count==8 umbrella +
+#     7 date-specific count==1 entries (dominated by the 8) → U(Gosford) = 8.
+#   - Maitland Park (Maitland home venue): count==2 umbrella → U(Maitland) = 2.
+# No pair-named PHL Friday entries exist, so phl_forced_friday_meetings == 0
+# for every PHL pair.
+
+
+@pytest.fixture(scope='module')
+def real_data():
+    """Load the real 2026 config once — the authoritative oracle source."""
+    return load_season_data(2026)
+
+
+class TestClubUmbrellaForcedFridayMeetings:
+    """Tests for `club_umbrella_forced_friday_meetings(data, club)` (spec-044)."""
+
+    def test_gosford_is_eight(self, real_data):
+        # CCHP count==8 umbrella dominates the 7 date-specific count==1 entries
+        # (max-per-away-venue de-dup). Oracle: max(8, 1, 1, 1, 1, 1, 1, 1) = 8.
+        assert club_umbrella_forced_friday_meetings(real_data, 'Gosford') == 8
+
+    def test_maitland_is_two(self, real_data):
+        # Maitland Park PHL Friday umbrella count==2.
+        assert club_umbrella_forced_friday_meetings(real_data, 'Maitland') == 2
+
+    def test_central_club_is_zero(self, real_data):
+        # Norths' home venue is the central NIHC venue → not a key in
+        # home_field_map (club -> away venue) → no away-venue umbrella → 0.
+        assert club_umbrella_forced_friday_meetings(real_data, 'Norths') == 0
+
+    def test_unknown_or_empty_club_is_zero(self, real_data):
+        assert club_umbrella_forced_friday_meetings(real_data, '') == 0
+        assert club_umbrella_forced_friday_meetings(real_data, None) == 0
+        assert club_umbrella_forced_friday_meetings(real_data, 'NoSuchClub') == 0
+
+
+class TestSpec044RealConfigHasNoPairNamedFriday:
+    """Documented invariant the umbrella oracles rely on."""
+
+    def test_no_pair_named_phl_fridays(self, real_data):
+        # The live 2026 config's PHL Friday forced entries are all venue-wide
+        # umbrellas (no pair naming). So pair-named counts are 0 and the range
+        # ceilings are NOT reduced by a pair term.
+        assert phl_forced_friday_meetings(real_data, 'Gosford', 'Norths') == 0
+        assert phl_forced_friday_meetings(real_data, 'Gosford', 'Souths') == 0
+        assert phl_forced_friday_meetings(real_data, 'Maitland', 'Norths') == 0
+
+
+class TestSpec044TeamPairSundayMeetingsRange:
+    """`team_pair_sunday_meetings_range` umbrella-aware floor (spec-044)."""
+
+    def test_phl_base_is_four(self, real_data):
+        # PHL T=6, R=20 → base = 20 // 5 = 4. Sanity anchor for the oracles.
+        assert _per_matchup_for_grade(real_data, 'PHL') == 4
+
+    def test_gosford_souths_floor_clamped_to_zero(self, real_data):
+        # Gosford umbrella=8, pair-named=0:
+        #   tp_min = max(0, 4 - 0 - 8) = 0 ; tp_max = 4 + 1 - 0 = 5  → (0, 5).
+        rng = team_pair_sunday_meetings_range(real_data, ('Gosford', 'Souths'), 'PHL')
+        assert rng == (0, 5)
+
+    def test_gosford_norths_real_config(self, real_data):
+        # Spec worked example assumed a pair-named Gosford/Norths Friday (=> (0,4)),
+        # but the LIVE config has no pair-named PHL Fridays, so pair term is 0:
+        #   tp_min = max(0, 4 - 0 - 8) = 0 ; tp_max = 5 - 0 = 5  → (0, 5).
+        rng = team_pair_sunday_meetings_range(real_data, ('Gosford', 'Norths'), 'PHL')
+        assert rng == (0, 5)
+
+    def test_maitland_norths_floor_two(self, real_data):
+        # Maitland umbrella=2, pair-named=0:
+        #   tp_min = max(0, 4 - 0 - 2) = 2 ; tp_max = 5  → (2, 5).
+        rng = team_pair_sunday_meetings_range(real_data, ('Maitland', 'Norths'), 'PHL')
+        assert rng == (2, 5)
+
+    def test_central_pair_unchanged(self, real_data):
+        # Both central (umbrella=0), pair-named=0 → range unchanged (4, 5).
+        rng = team_pair_sunday_meetings_range(real_data, ('Norths', 'Souths'), 'PHL')
+        assert rng == (4, 5)
+
+
+class TestSpec044PairGradeSundayAlignedWeekendRange:
+    """`pair_grade_sunday_aligned_weekend_range` applies the same lower-bound
+    term (PHL is 1×1 → max_ab=1, so min_budget == tp_min, max_budget == tp_max)."""
+
+    def test_gosford_souths_floor_clamped(self, real_data):
+        rng = pair_grade_sunday_aligned_weekend_range(real_data, ('Gosford', 'Souths'), 'PHL')
+        assert rng == (0, 5)
+
+    def test_central_pair_unchanged(self, real_data):
+        rng = pair_grade_sunday_aligned_weekend_range(real_data, ('Norths', 'Souths'), 'PHL')
+        assert rng == (4, 5)
+
+
+class TestSpec044NonPhlByteIdentical:
+    """DoD-4 regression: non-PHL ranges are byte-identical pre/post fix.
+
+    The umbrella helper short-circuits on grade != 'PHL', so every non-PHL
+    pair's range equals the plain `(base, base+1)` formula — no umbrella term
+    is ever applied.
+    """
+
+    def test_non_phl_pairs_equal_base_ceiling(self, real_data):
+        for grade in ('2nd', '3rd', '4th', '5th', '6th'):
+            base = _per_matchup_for_grade(real_data, grade)
+            if base == 0:
+                continue
+            for club_pair in (('Gosford', 'Maitland'), ('Norths', 'Souths')):
+                a, b = team_pair_counts(real_data, club_pair, grade)
+                if a == 0 or b == 0:
+                    continue  # pair not present in this grade
+                tp = team_pair_sunday_meetings_range(real_data, club_pair, grade)
+                wk = pair_grade_sunday_aligned_weekend_range(real_data, club_pair, grade)
+                max_ab = max(a, b)
+                assert tp == (base, base + 1), (
+                    f'{club_pair} {grade}: tp {tp} != ({base},{base+1})'
+                )
+                assert wk == (max_ab * base, max_ab * (base + 1)), (
+                    f'{club_pair} {grade}: wk {wk} != '
+                    f'({max_ab*base},{max_ab*(base+1)})'
+                )
