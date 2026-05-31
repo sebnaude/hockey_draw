@@ -714,14 +714,17 @@ class TestSpec044RealConfigAwayClubFloorRegression:
       and 18 respectively → the documented INFEASIBLE blocker.
     """
 
-    @pytest.fixture(scope='class')
-    def real_X(self):
-        """Build the real 2026 config + X once for the class (slow: ~82k vars).
+    @staticmethod
+    def _build_real_data_and_X():
+        """Build a FRESH real 2026 config + model + X (slow: ~82k vars).
 
         Mirrors `isolate_clubvsclub_infeasibility.build_data_and_X`: run
         `generate_X`, stash conflicts, and materialise `data['games']` from the
         var-key dict (the helpers read `data['games']` as a list of
-        (t1, t2, grade) tuples).
+        (t1, t2, grade) tuples). Each caller gets its OWN model + X so a solve
+        that mutates the model cannot pollute another test (the X BoolVars are
+        bound to a specific CpModel, so they can never be shared across solves
+        anyway).
         """
         import contextlib
         import io
@@ -738,6 +741,11 @@ class TestSpec044RealConfigAwayClubFloorRegression:
             if isinstance(data['games'], dict) else data['games']
         )
         return data, model, X
+
+    @pytest.fixture(scope='class')
+    def real_X(self):
+        """One read-only build for the deterministic oracle test (no mutation)."""
+        return self._build_real_data_and_X()
 
     def test_helper_oracles_before_solve(self, real_X):
         """Deterministic hand oracles — the actual proof of the fix."""
@@ -776,19 +784,26 @@ class TestSpec044RealConfigAwayClubFloorRegression:
         assert _club_floor('Gosford') == 0, 'Gosford Σ tp_min must clamp to 0'
         assert _club_floor('Maitland') == 7, 'Maitland Σ tp_min must be 7'
 
-    def test_fundamentals_plus_alignment_not_infeasible(self, real_X):
-        """Solve fundamentals + the Layer-1..5 alignment replica on the real
-        config; assert the status is NOT INFEASIBLE.
+    @pytest.mark.parametrize('max_layer', [2, 5])
+    def test_fundamentals_plus_alignment_not_infeasible(self, max_layer):
+        """Solve fundamentals + the alignment replica on the real config; assert
+        the status is NOT INFEASIBLE. Run at BOTH `max_layer=2` (Layer 2 is the
+        minimal documented blocker — the per-team-pair Sunday floor) and
+        `max_layer=5` (adds the aggregate `min_budget` floor), per DoD-6.
 
         Why UNKNOWN is acceptable: the real model is ~82k vars and the only
         capacity contradiction this spec targets — the away-club Sunday-floor
         overflow — would, if it still existed, surface as a fast INFEASIBLE
-        (Layer-2/5 floors vs EqualGames are a pure counting contradiction the
-        solver proves without deep search; pre-fix the proof script flags it
-        deterministically). Its ABSENCE is the regression signal. A short cap
-        on a large model may legitimately return UNKNOWN/REACHED_SEARCH
-        without proving optimality — that is fine. INFEASIBLE is the ONLY
-        failure outcome this test forbids.
+        (the Layer-2/5 floors vs EqualGames are a pure counting contradiction
+        the solver proves at presolve without deep search; pre-fix the proof
+        script flags it deterministically). Its ABSENCE is the regression
+        signal. A short cap on a large model may legitimately return
+        UNKNOWN/REACHED_SEARCH without proving optimality — that is fine.
+        INFEASIBLE is the ONLY failure outcome this test forbids.
+
+        Each parametrisation builds its OWN fresh model + X (the BoolVars are
+        bound to a specific CpModel, and a solve mutates the model) so the two
+        layer cases — and the oracle test — never share mutable solver state.
         """
         import importlib.util
         import os
@@ -805,7 +820,7 @@ class TestSpec044RealConfigAwayClubFloorRegression:
             enumerate_club_pairs,
         )
 
-        # Load the faithful Layer-1..5 replica from the isolate diagnostic
+        # Load the faithful Layer-1..N replica from the isolate diagnostic
         # script (the documented reproduction recipe). The script lives under
         # scripts/ and is import-only here (we call apply_stacked directly).
         repo_root = os.path.dirname(
@@ -823,17 +838,19 @@ class TestSpec044RealConfigAwayClubFloorRegression:
         iso = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(iso)
 
-        data, model, X = real_X
+        # Fresh, isolated build per layer case (no shared mutable model state).
+        data, model, X = self._build_real_data_and_X()
 
         # Fundamentals (always-on critical stage).
         EnsureEqualGamesAndBalanceMatchUps().apply(model, X, data)
         NoDoubleBookingTeamsConstraint().apply(model, X, data)
         NoDoubleBookingFieldsConstraint().apply(model, X, data)
 
-        # Faithful alignment replica, Layers 1-5 (the capacity-floor layers).
+        # Faithful alignment replica up to `max_layer` (the capacity-floor
+        # layers live at 2 and 5).
         reg = HelperVarRegistry(model)
         pairs = enumerate_club_pairs(data)
-        n_added = iso.apply_stacked(model, X, data, reg, pairs, max_layer=5)
+        n_added = iso.apply_stacked(model, X, data, reg, pairs, max_layer=max_layer)
         assert n_added > 0, 'alignment replica added no constraints'
 
         solver = _cp.CpSolver()
@@ -842,7 +859,7 @@ class TestSpec044RealConfigAwayClubFloorRegression:
         status = solver.Solve(model)
 
         assert status != _cp.INFEASIBLE, (
-            'fundamentals + alignment(max_layer=5) is INFEASIBLE on the real '
-            '2026 config — the away-club Sunday-floor overflow (spec-044) was '
-            f'NOT fixed. status={solver.status_name(status)}'
+            f'fundamentals + alignment(max_layer={max_layer}) is INFEASIBLE on '
+            'the real 2026 config — the away-club Sunday-floor overflow '
+            f'(spec-044) was NOT fixed. status={solver.status_name(status)}'
         )

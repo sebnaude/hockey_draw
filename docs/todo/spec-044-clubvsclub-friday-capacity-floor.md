@@ -100,10 +100,16 @@ doesn't affect the 1×1 PHL production case.)
 
 Worked check after fix (verified by running `gosford_sunday_capacity_proof.py` logic
 against real config):
-- Gosford pairs: 4 pairs have `pair_named=0`, 1 pair (vs Norths) has `pair_named=1`.
-  `tp_min = max(0, 4−{0|1}−8) = 0` for all 5 → Σ = 0 ≤ 12 ✓.
-- Maitland pairs: 4 pairs have `pair_named=0` → `max(0,4−0−2)=2`; 1 pair (vs Souths,
-  NIHC pair entry) has `pair_named=1` → `max(0,4−1−2)=1`. Σ = 4×2 + 1×1 = 9 ≤ 18 ✓.
+- Gosford pairs (5): all 5 use `umb = max(umb(Gosford)=8, …) = 8`, so
+  `tp_min = max(0, 4 − {0|1} − 8) = 0` for every pair → Σ = 0 ≤ 12 ✓.
+- Maitland pairs (5): the **vs-Gosford** pair uses `umb = max(2, 8) = 8`
+  (more-constrained-club rule) → `max(0, 4−0−8) = 0`; the other 4 use
+  `umb = max(2, 0) = 2` → vs Norths/Tigers/Wests (`pair_named=0`) `= max(0,4−0−2) = 2`
+  each, vs Souths (`pair_named=1`) `= max(0,4−1−2) = 1`.
+  Σ = 0 + 2 + 1 + 2 + 2 = **7** ≤ 18 ✓.
+  (Corrected 2026-05-31: an earlier draft said Σ=9 by omitting the Maitland-vs-Gosford
+  pair, whose floor is driven to 0 by Gosford's dominating umb=8. The Unit B regression
+  test `TestSpec044RealConfigAwayClubFloorRegression` asserts Σ=7 against the live helpers.)
 - Norths, Souths, Tigers, Wests: `umb=0` → ranges unchanged, all ok.
 
 The atom no longer over-demands away-club Sunday capacity, while `tp_max` and the
