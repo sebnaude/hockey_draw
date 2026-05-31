@@ -61,3 +61,4 @@ htmlcov/
 # Working artifacts / scratch logs
 _*.log
 scripts/_*.txt
+_*.txt
