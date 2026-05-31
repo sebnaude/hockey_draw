@@ -105,8 +105,9 @@ still in flight (spec-037 the other half — already `done` 2026-05-28; see "Mos
   formula by construction (`a=b=1`). New helper-var key family `cvc_stack_team_pair_play`; existing
   `cvc_stack_play` key shape preserved (semantics shift transparently for the co-location consumer).
   `depends_on: none`. Four units A→B→C→D (A shared helpers, B atom rewrite, C co-location/regen-soft
-  parity, D bisect-harness acceptance + docs). S3. Status: **`building`** (2026-05-28 — user
-  authorised this session; Mode A hardened earlier today; owned by session `2026-05-28-spec038-build`).
+  parity, D bisect-harness acceptance + docs). S3. Status: **`done`** (all code units merged
+  2026-05-28: A `5391334`, B `2ebe31e`, club-day Layer-6 exemption `6f4c0e5`; status closeout
+  2026-05-31, archived to `done/`).
 
 Authored **2026-05-30** (this session) — the **draw-analysis / reporting engine** plan-set, cut into
 four dependency-wired specs. Goal: every draw can be *verifiably* analysed (atom↔test alignment is a
@@ -119,25 +120,25 @@ analysis always runs at the draw's own effective slack so it never throws false 
   `DrawTester`, the `run.py` slack-key set, and `PENALTY_WEIGHTS`; new `no_tester_check_reason`
   registry field labels deliberately-unchecked soft atoms; shared `AlignmentReport` (`analytics/registry_audit.py`)
   feeds both the gate and the report. `depends_on: none`. Two units (A registry+audit → B gate+doc), S2.
-  Status: `review_pending`.
+  Status: `ready` (Mode-A hardened 2026-05-30).
 - **spec-040** — **slack & limit provenance**: persist the effective constraint config (CLI
   `constraint_slack` + base `constraint_defaults`) into draw/checkpoint metadata; `analytics/slack_provenance.py`
   reconstructs the slack a draw was solved at (stored provenance, else current-config fallback +
   WARNING); `DrawTester` auto-replays faithfully. Closes the "throws errors when it shouldn't" gap.
   `depends_on: none` (parallel-safe with spec-039 — no shared edited file). Two units (A persist → B
-  resolver+tester), S3. Status: `review_pending`.
+  resolver+tester), S3. Status: `ready` (Mode-A hardened 2026-05-30).
 - **spec-041** — **soft-constraint outcome measurement**: per-rule 0–100 satisfaction score + raw
   domain metric recomputed from draw geometry (penalty values are never persisted), filling the
   unmeasured atoms (incl. the Maitland away-on-NRL-weekends `PreferredWeekendsAwayGround` flagship and
   soft `AwayClubHomeWeekendsCount`); per-team + per-club rollups; scored at the draw's effective slack.
   `depends_on: spec-039, spec-040`. Two units (A layer+scoring+per-team → B gap-filling measurements), S3.
-  Status: `review_pending`.
+  Status: `ready` (Mode-A hardened 2026-05-30).
 - **spec-042** — **auto-generated analysis report (HTML + JSON + Plotly)**: assembles
   alignment + slack-provenance + hard violations + soft scores into per-team/club/rule breakdowns with
   smart dense layouts (heatmaps + collapsibles); auto-runs at end of `save_solver_output` (non-fatal) +
   `report --analysis` CLI; JSON `schema_version` is the forward contract for the eventual UI. Adds
   `plotly` (only new dep). `depends_on: spec-039, spec-040, spec-041`. Three units (A assembly/JSON →
-  B HTML/Plotly/layout → C hook+CLI+docs), S3. Status: `review_pending`.
+  B HTML/Plotly/layout → C hook+CLI+docs), S3. Status: `ready` (Mode-A hardened 2026-05-30).
 
 - **spec-043** — **pre-draw venue-capacity feasibility precheck (UI-callable)**: standalone pure
   `analyze_capacity` (config primitives in / structured dict out) + `run.py precheck` + auto-run gate
@@ -146,8 +147,7 @@ analysis always runs at the draw's own effective slack so it never throws false 
   recommendation; reuses `generate_timeslots` + the `(rounds+1)//2` convention and leaves Phase-20
   (`_check_scheduling_feasibility`) and `PreSeasonReport` untouched. `depends_on: none` (branches off
   final-form). Units A→B→C (A core blocks B CLI + C generate-gate; B/C both edit `run.py` →
-  serialise B before C). S2. Status: `review_pending` (authored 2026-05-30; awaiting /adversarial
-  Mode A).
+  serialise B before C). S2. Status: `ready` (authored 2026-05-30; Mode-A hardened).
 
 - **spec-044** — **ClubVsClubStackedWeekends PHL Sunday FLOOR umbrella-Friday-aware**: fixes the
   real-2026 `core` infeasibility (spec-035 stage-5 handoff's OPEN blocker). Exact cause = Layer 2
@@ -157,7 +157,8 @@ analysis always runs at the draw's own effective slack so it never throws false 
   `club_umbrella_forced_friday_meetings` + subtract it from the LOWER bound of the two spec-038
   `_range` helpers (ceiling untouched). `depends_on: spec-038` (shares `_club_vs_club_stacked_shared.py`
   + `_phl_forced_friday_helper.py`). Units A (production+helper tests) → B (integration regression). S2.
-  Status: `review_pending` (authored 2026-05-31; awaiting /adversarial Mode A).
+  Status: **`building`** (Mode-A hardened to `ready` 2026-05-31; user-authorised this session; Unit A
+  already committed on branch `spec044-unitA`, unmerged — picking up the WIP).
 
 ```
 spec-030  ──depends_on──▶  (none)                              [done — merged 5362d41]
@@ -168,14 +169,14 @@ spec-036  ──depends_on──▶  spec-033                             [done 
 spec-034  ──depends_on──▶  spec-030, spec-031, spec-032, spec-033          [done — merged into final-form 2026-05-26]
 spec-035  ──depends_on──▶  spec-030…033, spec-034, spec-036                [in_progress — Units A+B done; C blocked on presolve infeasibility; resumes after 037+038]
 spec-037  ──depends_on──▶  (none)                                          [done — merged into final-form 2026-05-28 (Unit A a5f1685+976dcd4+abc91b9+b96a6aa; Unit B spec035-flense torn down)]
-spec-038  ──depends_on──▶  (none)                                          [building — ClubVsClubStackedWeekends granularity rework; user-authorised 2026-05-28]
+spec-038  ──depends_on──▶  (none)                                          [done — merged into final-form 2026-05-28 (5391334, 2ebe31e, 6f4c0e5); status closeout 2026-05-31]
 
-spec-039  ──depends_on──▶  (none)                                          [review_pending — registry↔tester alignment gate]
-spec-040  ──depends_on──▶  (none)                                          [review_pending — slack/limit provenance + faithful replay]
-spec-041  ──depends_on──▶  spec-039, spec-040                              [review_pending — soft-outcome scores + raw metrics]
-spec-042  ──depends_on──▶  spec-039, spec-040, spec-041                    [review_pending — auto HTML+JSON+Plotly analysis report]
-spec-043  ──depends_on──▶  (none)                                          [review_pending — pre-draw venue-capacity precheck (away floor + BM drop-slot)]
-spec-044  ──depends_on──▶  spec-038                                        [review_pending — ClubVsClub PHL Sunday floor umbrella-Friday-aware (real-config core blocker)]
+spec-039  ──depends_on──▶  (none)                                          [ready — registry↔tester alignment gate (Mode-A hardened 2026-05-30)]
+spec-040  ──depends_on──▶  (none)                                          [ready — slack/limit provenance + faithful replay]
+spec-041  ──depends_on──▶  spec-039, spec-040                              [ready — soft-outcome scores + raw metrics]
+spec-042  ──depends_on──▶  spec-039, spec-040, spec-041                    [ready — auto HTML+JSON+Plotly analysis report]
+spec-043  ──depends_on──▶  (none)                                          [ready — pre-draw venue-capacity precheck (away floor + BM drop-slot)]
+spec-044  ──depends_on──▶  spec-038 ✅                                      [building — ClubVsClub PHL Sunday floor umbrella-Friday-aware (real-config core blocker); 2026-05-31]
 ```
 
 The 039→…→042 chain is the **analysis-engine plan-set** (authored 2026-05-30, not yet implemented —

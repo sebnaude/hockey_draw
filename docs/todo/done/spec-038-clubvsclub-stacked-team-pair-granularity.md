@@ -1,9 +1,12 @@
-<!-- status: building -->
+<!-- status: done -->
 <!-- reviewed: adversarial Sonnet review 2026-05-28 — fixes applied inline -->
 <!-- severity: S3 -->
 <!-- open_questions: 0 -->
 <!-- depends_on: none -->
 <!-- owner: session=2026-05-28-spec038-build claimed=2026-05-28 -->
+<!-- done: 2026-05-31 — Units A/B/C + club-day Layer-6 exemption all merged to final-form (5391334, 2ebe31e, 6f4c0e5); status closeout was pending. -->
+<!-- moved to docs/todo/done/ 2026-05-31 -->
+<!-- end-of-line note: status was stale at `building`; all code units landed 2026-05-28 (see git log -- constraints/atoms/_club_vs_club_stacked_shared.py). -->
 
 # spec-038 — `ClubVsClubStackedWeekends` granularity: per-team-pair budget, `max(team_count) × per_matchup` aligned-weekend formula
 
