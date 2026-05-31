@@ -77,3 +77,119 @@ incumbent.
 - "reached search" / "final status" are read from each run's CP-SAT solver log
   (`CpSolverResponse status` + post-presolve `#Bound` lines), not the driver's looser keyword
   scan (whose interim "INFEASIBLE" matches were subsolver chatter).
+
+---
+
+# spec-044 acceptance evidence — umbrella-aware PHL Sunday floor (Unit B)
+
+Generated 2026-05-31 · year=**2026 (real production config)** · venv
+`C:\Users\c3205\Documents\Code\python\draw\.venv` · run from worktree
+`draw-s044-B` (branch `spec044-unitB`, with the Unit A fix landed).
+
+Records DoD-5 (deterministic capacity proof), DoD-8 (30 s quick re-probes) and
+DoD-9 (genuine 5-min solves) for the two `core` groups after the
+umbrella-Friday-aware floor fix. All four solver probes were run with
+`scripts/bisect_realconfig_feasibility.py --probe` (verdict from the script's own
+`_classify` on each child's CP-SAT log).
+
+## DoD-5 — deterministic capacity proof (post-fix)
+
+`scripts/gosford_sunday_capacity_proof.py` (builds X first, so the per-pair
+helpers see materialised `data['games']`). Every PHL club's atom Sunday floor
+(`Σ tp_min`) is now within its Sunday capacity (`R − forced Friday`):
+
+| club | Σ tp_min (atom floor) | forced Fri (min) | Sunday cap = R−Fri | verdict |
+|------|-----------------------|------------------|--------------------|---------|
+| **Gosford**  | **0**  | 8 | 12 | ok |
+| **Maitland** | **7**  | 2 | 18 | ok |
+| Norths   | 13 | 0 | 20 | ok |
+| Souths   | 13 | 0 | 20 | ok |
+| Tigers   | 13 | 0 | 20 | ok |
+| Wests    | 12 | 0 | 20 | ok |
+
+PHL: T=6, R=20 → base=4 (each pair meets in [4,5]). Pre-fix Gosford and Maitland
+both had Σ tp_min = 19 (no umbrella subtraction) → 19 > 12 and 19 > 18, the
+documented INFEASIBLE blocker. Post-fix the more-constrained-club umbrella term
+(`umb(Gosford)=8`, `umb(Maitland)=2`) is subtracted from the LOWER bound only,
+clamping the away clubs' floors to 0 / 7.
+
+Note on the Maitland Σ = 7 (the spec's stale worked example said 9): the
+per-pair breakdown is
+`Gosford 0, Norths 2, Souths 1, Tigers 2, Wests 2 → 7`.
+The Maitland-vs-Gosford pair's floor is driven to 0 by Gosford's dominating
+`umb=8` under the max-over-both-clubs rule (`max(0, 4−0−8)=0`), and the
+Maitland-vs-Souths pair has a pair-named NIHC Friday so its floor is 1 not 2
+(`max(0, 4−1−2)=1`). These two corrections (the spec missed the
+Gosford-dominated pair and the Souths pair-named entry) take 9 down to 7. This
+figure is recomputed by hand in the new regression test's class docstring and
+asserted there.
+
+## DoD-8 — quick 30 s re-probes (8 workers)
+
+`scripts/bisect_realconfig_feasibility.py --probe --groups core [--exclude
+ClubGameSpread] --max-time 30 --workers 8`. Verdict from the script's `_classify`.
+
+| probe | CLI flags | verdict |
+|-------|-----------|---------|
+| core (with ClubGameSpread)   | `--probe --groups core --max-time 30 --workers 8 --run-id s044_core30` | **UNKNOWN** |
+| core − ClubGameSpread        | `--probe --groups core --exclude ClubGameSpread --max-time 30 --workers 8 --run-id s044_coreNoCGS30` | **UNKNOWN** |
+
+**Honest deviation from the spec's DoD-8 expectation.** The spec predicted a
+clean `INFEASIBLE_PRESOLVE → REACHED_SEARCH` flip at 30 s. In practice **both
+30 s probes return UNKNOWN, both pre- and post-fix** — the 30 s cap is hit
+*mid-presolve* on the ~82k-var model (no `#Bound`/`Starting search` line is
+emitted before the cap), so the script cannot classify them as REACHED_SEARCH
+and there is no INFEASIBLE proof either. The capacity contradiction this spec
+fixes is **not** caught in fast presolve on the full model — it needs search the
+30 s cap can't reach. So the 30 s probe is inconclusive in BOTH directions; the
+honest post-fix signal is "no presolve-stage INFEASIBLE," which holds. The
+unambiguous before/after evidence is the deterministic DoD-5 capacity proof and
+the DoD-9 5-min runs below (which DO reach search). This matches the brief's
+finding (c).
+
+## DoD-9 — genuine 5-min solves (300 s, 8 workers)
+
+`scripts/bisect_realconfig_feasibility.py --probe --groups core [--exclude
+ClubGameSpread] --max-time 300 --workers 8`. (The `e2e_real_config_solve.py`
+launcher's fixed 5-profile wiring doesn't take ad-hoc `--exclude`; per the spec's
+own fallback note the bisect `--probe ... --max-time 300` gives the same real
+solve + verdict, so it was used for both runs. **Deviation from the spec's
+literal `e2e_real_config_solve.py` command, using the documented fallback.**)
+
+| run | CLI flags | reached search | best objective | final CP-SAT status |
+|-----|-----------|----------------|----------------|---------------------|
+| core (with ClubGameSpread) | `--probe --groups core --max-time 300 --workers 8 --run-id s044_core300` | ✅ `#Bound @74.51 s` | `best:-inf` (no incumbent) | **UNKNOWN** |
+| core − ClubGameSpread | `--probe --groups core --exclude ClubGameSpread --max-time 300 --workers 8 --run-id s044_coreNoCGS300` | ✅ `#Bound @68.24 s` | `best:-inf` (no incumbent) | **UNKNOWN** |
+
+## spec-044 findings
+
+1. **The alignment atom is no longer the `core` presolve/search blocker.** Both
+   5-min runs get past presolve into search (`#Bound` at 74.51 s / 68.24 s) and
+   run the full 300 s cap without proving INFEASIBLE. Contrast the **pre-fix**
+   `e2e_real_readout` runs 1 & 2 above, which both reached a **proven
+   INFEASIBLE** at ~94 s / ~164 s. The deterministic DoD-5 proof shows exactly
+   why: the away clubs' Sunday floor (`Σ tp_min`) is now within capacity for
+   every PHL club, where pre-fix Gosford (19 > 12) and Maitland (19 > 18)
+   overflowed.
+
+2. **No feasible incumbent in 5 minutes — recorded honestly, NOT a flip.** Both
+   runs stay `best:-inf` and end UNKNOWN. This is *not* a clean
+   INFEASIBLE→FEASIBLE flip and is not claimed as one. The remaining slack-0
+   tightness of the full real config (symmetry, spacing, and the separate
+   out-of-scope BalancedByeSpacing contradiction documented in the pre-fix
+   findings above) means a feasible incumbent needs `--slack` and/or longer
+   search than the 5-min probe allows. The DoD-9 evidence is "past presolve into
+   genuine search with the floor overflow gone," which both runs clear; the
+   deterministic DoD-5 capacity proof is the unambiguous before/after signal.
+
+3. **ClubGameSpread is irrelevant to this blocker.** With- and
+   without-ClubGameSpread runs behave identically (UNKNOWN at 30 s; reached
+   search + `best:-inf` + UNKNOWN at 300 s), confirming the spec's
+   "ClubGameSpread is a red herring" claim for the alignment floor.
+
+## spec-044 per-run solver logs
+
+- core 30 s: `logs/solver_20260531_160812_s044_core30.log` (UNKNOWN, mid-presolve)
+- core − ClubGameSpread 30 s: `logs/solver_20260531_160912_s044_coreNoCGS30.log` (UNKNOWN, mid-presolve)
+- core 300 s: `logs/solver_20260531_161025_s044_core300.log` (#Bound @74.51 s, best:-inf, UNKNOWN)
+- core − ClubGameSpread 300 s: `logs/solver_20260531_172143_s044_coreNoCGS300.log` (#Bound @68.24 s, best:-inf, UNKNOWN)
