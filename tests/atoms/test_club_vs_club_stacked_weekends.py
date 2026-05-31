@@ -600,7 +600,6 @@ class TestClubDayWeekendNestingExemption:
     def _solve_forcing_inversion(self, club_days, force_week):
         """Apply the atom (with `club_days`), force 6th active and PHL inactive
         on `force_week`, and return the solve status."""
-        from datetime import datetime as _dt
         data = self._build()
         data['club_days'] = club_days
         model, X = build_model_X(data)

@@ -80,11 +80,9 @@ from constraints.atoms._club_day_shared import parse_club_day_entries
 from constraints.atoms._club_vs_club_stacked_shared import (
     STACK_PLAY_PREFIX,
     STACK_TEAM_PAIR_PLAY_PREFIX,
-    _per_matchup_for_grade,
     enumerate_club_pairs,
     enumerate_team_pairs_in_pair_grade,
     pair_grade_sunday_aligned_weekend_range,
-    pair_grade_sunday_aligned_weekends,
     per_pair_grade_meeting_counts,
     team_pair_counts,
     team_pair_sunday_meetings_range,
