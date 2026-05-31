@@ -37,6 +37,7 @@ sys.path.insert(
 )
 
 from config import load_season_data
+from utils import generate_X
 from constraints.atoms.club_vs_club_stacked_weekends import (
     ClubVsClubStackedWeekends,
 )
@@ -599,7 +600,6 @@ class TestClubDayWeekendNestingExemption:
     def _solve_forcing_inversion(self, club_days, force_week):
         """Apply the atom (with `club_days`), force 6th active and PHL inactive
         on `force_week`, and return the solve status."""
-        from datetime import datetime as _dt
         data = self._build()
         data['club_days'] = club_days
         model, X = build_model_X(data)
@@ -644,4 +644,222 @@ class TestClubDayWeekendNestingExemption:
         )
         assert status == cp_model.INFEASIBLE, (
             f'non-club-day weeks must keep Layer 6; got {status}'
+        )
+
+
+# ---------------------------------------------------------------------------
+# spec-044 Unit B: real-config away-club Sunday-floor regression.
+#
+# This is the integration regression that proves the umbrella-Friday-aware
+# floor (Unit A) keeps the away clubs' aggregated Sunday floor within their
+# Sunday capacity on the REAL 2026 config, so the alignment atom is no longer
+# the `core` infeasibility blocker that the spec-035 stage-5 handoff left open.
+#
+# It mirrors `scripts/isolate_clubvsclub_infeasibility.py reproduce`:
+#   1. build `load_season_data(2026)` + `generate_X` (populating `data['games']`
+#      from the var-key list — phl_forced_friday_meetings only sees pairs once
+#      the games list is materialised),
+#   2. apply the always-on fundamentals (EqualGamesAndBalanceMatchUps +
+#      NoDoubleBookingTeams/Fields from constraints.archived.original),
+#   3. apply the faithful Layer-1..5 replica of `ClubVsClubStackedWeekends`
+#      capped at max_layer=5 (the layer the capacity contradiction lives in —
+#      Layer 2's per-team-pair floor + Layer 5's aggregate min_budget),
+#   4. solve with a short cap and assert the status is NOT INFEASIBLE.
+#
+# Layer 6 (the cross-grade nested chain) is excluded from the replica because
+# the capacity overflow lives entirely in the Layer-2/Layer-5 floors (spec-044
+# "Why"; the analytical mode finds 0 Layer-6 contradictions). max_layer=5
+# is the most faithful reproduction of the documented blocker.
+# ---------------------------------------------------------------------------
+
+
+class TestSpec044RealConfigAwayClubFloorRegression:
+    """Real 2026 config: the umbrella-aware floor keeps every PHL away club's
+    aggregated Sunday meeting floor within Sunday capacity, so fundamentals +
+    the alignment atom (Layers 1-5) is no longer INFEASIBLE.
+
+    Hand oracles (deterministic, asserted BEFORE the solver runs — these ARE
+    the proof; the solver step is corroboration):
+
+      PHL on 2026: T=6, R=20 → base = 20 // 5 = 4, so each pair's per-team-pair
+      Sunday floor is `tp_min = max(0, base - pair_named - umb)` where
+      `umb = max(umb(A), umb(B))` is the more-constrained club's umbrella term.
+
+      Umbrella forced-Friday counts (Unit A helper):
+        umb(Gosford)  = 8  (CCHP `sum==8` PHL-Friday umbrella)
+        umb(Maitland) = 2  (Maitland Park `sum==2` PHL-Friday umbrella)
+        every other (central) club = 0.
+
+      Gosford Σ_pairs tp_min = 0:
+        vs Maitland : umb=max(8,2)=8, pair_named=0 → max(0, 4-0-8) = 0
+        vs Norths   : umb=max(8,0)=8, pair_named=1 → max(0, 4-1-8) = 0
+        vs Souths   : umb=max(8,0)=8, pair_named=0 → max(0, 4-0-8) = 0
+        vs Tigers   : umb=max(8,0)=8, pair_named=0 → max(0, 4-0-8) = 0
+        vs Wests    : umb=max(8,0)=8, pair_named=0 → max(0, 4-0-8) = 0
+        → 0+0+0+0+0 = 0   (≤ Sunday capacity R-8 = 12 ✓)
+
+      Maitland Σ_pairs tp_min = 7:
+        vs Gosford  : umb=max(8,2)=8, pair_named=0 → max(0, 4-0-8) = 0
+        vs Norths   : umb=max(2,0)=2, pair_named=0 → max(0, 4-0-2) = 2
+        vs Souths   : umb=max(2,0)=2, pair_named=1 → max(0, 4-1-2) = 1
+        vs Tigers   : umb=max(2,0)=2, pair_named=0 → max(0, 4-0-2) = 2
+        vs Wests    : umb=max(2,0)=2, pair_named=0 → max(0, 4-0-2) = 2
+        → 0+2+1+2+2 = 7   (≤ Sunday capacity R-2 = 18 ✓)
+
+      NB: the spec's stale worked example said Maitland Σ=9 (4 pairs at 2 + 1
+      at 1). That omitted the Maitland-vs-Gosford pair, whose floor is driven
+      to 0 by Gosford's dominating umb=8 (more-constrained-club rule). The real
+      figure recomputed here is 7 (= 0+2+1+2+2). Pre-fix both Gosford and
+      Maitland had Σ tp_min = 19 (no umbrella subtraction), exceeding caps 12
+      and 18 respectively → the documented INFEASIBLE blocker.
+    """
+
+    @staticmethod
+    def _build_real_data_and_X():
+        """Build a FRESH real 2026 config + model + X (slow: ~82k vars).
+
+        Mirrors `isolate_clubvsclub_infeasibility.build_data_and_X`: run
+        `generate_X`, stash conflicts, and materialise `data['games']` from the
+        var-key dict (the helpers read `data['games']` as a list of
+        (t1, t2, grade) tuples). Each caller gets its OWN model + X so a solve
+        that mutates the model cannot pollute another test (the X BoolVars are
+        bound to a specific CpModel, so they can never be shared across solves
+        anyway).
+        """
+        import contextlib
+        import io
+        from ortools.sat.python import cp_model as _cp
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            data = load_season_data(2026)
+            model = _cp.CpModel()
+            X, conflicts = generate_X(model, data)
+        data['team_conflicts'] = conflicts
+        data['games'] = (
+            list(data['games'].keys())
+            if isinstance(data['games'], dict) else data['games']
+        )
+        return data, model, X
+
+    @pytest.fixture(scope='class')
+    def real_X(self):
+        """One read-only build for the deterministic oracle test (no mutation)."""
+        return self._build_real_data_and_X()
+
+    def test_helper_oracles_before_solve(self, real_X):
+        """Deterministic hand oracles — the actual proof of the fix."""
+        from constraints.atoms._club_vs_club_stacked_shared import (
+            enumerate_club_pairs,
+            team_pair_counts,
+            team_pair_sunday_meetings_range,
+        )
+        from constraints.atoms._phl_forced_friday_helper import (
+            club_umbrella_forced_friday_meetings,
+        )
+
+        data, _model, _X = real_X
+
+        # Umbrella forced-Friday counts (Unit A helper).
+        assert club_umbrella_forced_friday_meetings(data, 'Gosford') == 8
+        assert club_umbrella_forced_friday_meetings(data, 'Maitland') == 2
+        assert club_umbrella_forced_friday_meetings(data, 'Norths') == 0
+
+        # Aggregated per-team-pair Sunday floor for each away club.
+        def _club_floor(club):
+            total = 0
+            for pair in enumerate_club_pairs(data):
+                if club not in pair:
+                    continue
+                a, b = team_pair_counts(data, pair, 'PHL')
+                if a == 0 or b == 0:
+                    continue
+                tp_min, _tp_max = team_pair_sunday_meetings_range(
+                    data, pair, 'PHL'
+                )
+                total += tp_min
+            return total
+
+        # Hand oracles (see class docstring for the per-pair breakdown).
+        assert _club_floor('Gosford') == 0, 'Gosford Σ tp_min must clamp to 0'
+        assert _club_floor('Maitland') == 7, 'Maitland Σ tp_min must be 7'
+
+    @pytest.mark.parametrize('max_layer', [2, 5])
+    def test_fundamentals_plus_alignment_not_infeasible(self, max_layer):
+        """Solve fundamentals + the alignment replica on the real config; assert
+        the status is NOT INFEASIBLE. Run at BOTH `max_layer=2` (Layer 2 is the
+        minimal documented blocker — the per-team-pair Sunday floor) and
+        `max_layer=5` (adds the aggregate `min_budget` floor), per DoD-6.
+
+        Why UNKNOWN is acceptable: the real model is ~82k vars and the only
+        capacity contradiction this spec targets — the away-club Sunday-floor
+        overflow — would, if it still existed, surface as a fast INFEASIBLE
+        (the Layer-2/5 floors vs EqualGames are a pure counting contradiction
+        the solver proves at presolve without deep search; pre-fix the proof
+        script flags it deterministically). Its ABSENCE is the regression
+        signal. A short cap on a large model may legitimately return
+        UNKNOWN/REACHED_SEARCH without proving optimality — that is fine.
+        INFEASIBLE is the ONLY failure outcome this test forbids.
+
+        Each parametrisation builds its OWN fresh model + X (the BoolVars are
+        bound to a specific CpModel, and a solve mutates the model) so the two
+        layer cases — and the oracle test — never share mutable solver state.
+        """
+        import importlib.util
+        import os
+
+        from ortools.sat.python import cp_model as _cp
+
+        from constraints.helper_vars import HelperVarRegistry
+        from constraints.archived.original import (
+            EnsureEqualGamesAndBalanceMatchUps,
+            NoDoubleBookingTeamsConstraint,
+            NoDoubleBookingFieldsConstraint,
+        )
+        from constraints.atoms._club_vs_club_stacked_shared import (
+            enumerate_club_pairs,
+        )
+
+        # Load the faithful Layer-1..N replica from the isolate diagnostic
+        # script (the documented reproduction recipe). The script lives under
+        # scripts/ and is import-only here (we call apply_stacked directly).
+        repo_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        iso_path = os.path.join(
+            repo_root, 'scripts', 'isolate_clubvsclub_infeasibility.py'
+        )
+        if not os.path.exists(iso_path):
+            pytest.skip(
+                'isolate_clubvsclub_infeasibility.py not present (evidence '
+                'tooling is untracked); helper-oracle test carries the proof.'
+            )
+        spec = importlib.util.spec_from_file_location('_iso_s044', iso_path)
+        iso = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(iso)
+
+        # Fresh, isolated build per layer case (no shared mutable model state).
+        data, model, X = self._build_real_data_and_X()
+
+        # Fundamentals (always-on critical stage).
+        EnsureEqualGamesAndBalanceMatchUps().apply(model, X, data)
+        NoDoubleBookingTeamsConstraint().apply(model, X, data)
+        NoDoubleBookingFieldsConstraint().apply(model, X, data)
+
+        # Faithful alignment replica up to `max_layer` (the capacity-floor
+        # layers live at 2 and 5).
+        reg = HelperVarRegistry(model)
+        pairs = enumerate_club_pairs(data)
+        n_added = iso.apply_stacked(model, X, data, reg, pairs, max_layer=max_layer)
+        assert n_added > 0, 'alignment replica added no constraints'
+
+        solver = _cp.CpSolver()
+        solver.parameters.max_time_in_seconds = 30.0
+        solver.parameters.num_search_workers = 4
+        status = solver.Solve(model)
+
+        assert status != _cp.INFEASIBLE, (
+            f'fundamentals + alignment(max_layer={max_layer}) is INFEASIBLE on '
+            'the real 2026 config — the away-club Sunday-floor overflow '
+            f'(spec-044) was NOT fixed. status={solver.status_name(status)}'
         )

@@ -47,6 +47,20 @@ The PHL preservation test in
 `tests/atoms/test_club_vs_club_stacked_weekends.py` confirms no PHL behaviour
 change.
 
+## PHL Sunday floors are away-venue-umbrella-aware (spec-044)
+
+The per-team-pair Sunday floor (Layer 2) and the aggregate `min_budget`
+(Layer 5) are computed by `team_pair_sunday_meetings_range` /
+`pair_grade_sunday_aligned_weekend_range`. For PHL those LOWER bounds subtract
+not only the exact per-pair forced Fridays but also the away club's
+*umbrella*-forced PHL Fridays (`club_umbrella_forced_friday_meetings`, the
+more-constrained club of the pair). Without this, Gosford's `gosford_friday_games=8`
+and Maitland's `maitland_friday_games=2` venue-wide forced Fridays inflated those
+clubs' aggregate Sunday floor past their Sunday capacity (R − forced Fridays),
+making the real-2026 `core` model INFEASIBLE in presolve. The ceiling
+(`tp_max` / `max_budget`) is left intact, so any single pair may still align the
+full `base+1` on Sunday.
+
 ## Helper-var registry
 
 - `STACK_TEAM_PAIR_PLAY_PREFIX` (`cvc_stack_team_pair_play`): new in
@@ -66,11 +80,9 @@ from constraints.atoms._club_day_shared import parse_club_day_entries
 from constraints.atoms._club_vs_club_stacked_shared import (
     STACK_PLAY_PREFIX,
     STACK_TEAM_PAIR_PLAY_PREFIX,
-    _per_matchup_for_grade,
     enumerate_club_pairs,
     enumerate_team_pairs_in_pair_grade,
     pair_grade_sunday_aligned_weekend_range,
-    pair_grade_sunday_aligned_weekends,
     per_pair_grade_meeting_counts,
     team_pair_counts,
     team_pair_sunday_meetings_range,
