@@ -617,11 +617,23 @@ class TestSpec044NonPhlByteIdentical:
     """
 
     def test_non_phl_pairs_equal_base_ceiling(self, real_data):
+        # spec-044 review fix: the original loop paired Gosford WITH Maitland —
+        # but Gosford fields 0 non-PHL teams, so every pair was silently skipped
+        # and the umbrella clubs were never exercised in a non-PHL grade. Pair
+        # the umbrella club Maitland (umb('Maitland')==2 in PHL) against central
+        # clubs so the byte-identical assertion actually covers an umbrella club
+        # in non-PHL grades, where the helper must short-circuit to 0.
+        exercised = 0
+        umbrella_club_exercised = 0
         for grade in ('2nd', '3rd', '4th', '5th', '6th'):
             base = _per_matchup_for_grade(real_data, grade)
             if base == 0:
                 continue
-            for club_pair in (('Gosford', 'Maitland'), ('Norths', 'Souths')):
+            for club_pair in (
+                ('Maitland', 'Norths'),
+                ('Maitland', 'Souths'),
+                ('Norths', 'Souths'),
+            ):
                 a, b = team_pair_counts(real_data, club_pair, grade)
                 if a == 0 or b == 0:
                     continue  # pair not present in this grade
@@ -635,3 +647,12 @@ class TestSpec044NonPhlByteIdentical:
                     f'{club_pair} {grade}: wk {wk} != '
                     f'({max_ab*base},{max_ab*(base+1)})'
                 )
+                exercised += 1
+                if 'Maitland' in club_pair:
+                    umbrella_club_exercised += 1
+        # Guard the coverage so the silent-skip gap (review finding) cannot recur.
+        assert exercised > 0, 'no non-PHL pair was exercised — coverage gap'
+        assert umbrella_club_exercised > 0, (
+            'an umbrella club (Maitland) must be exercised in a non-PHL grade '
+            'to prove the umbrella term is not applied off-PHL'
+        )
